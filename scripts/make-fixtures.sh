@@ -11,8 +11,12 @@ set -euo pipefail
 out="${1:-app/src/androidTest/assets/fixtures}"
 mkdir -p "$out"
 ff=(ffmpeg -hide_banner -loglevel error -y)
+# The bitstream filter writes the full BT.709 colour description into the
+# SPS: the encoder flags alone left primaries and transfer "unspecified",
+# which Android's MediaMetadataRetriever then reads with the BT.601 matrix.
 x264=(-c:v libx264 -preset veryslow -crf 30 -pix_fmt yuv420p -profile:v main
-  -color_primaries bt709 -color_trc bt709 -colorspace bt709 -g 25 -bf 0)
+  -color_primaries bt709 -color_trc bt709 -colorspace bt709 -g 25 -bf 0
+  -bsf:v h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1)
 aac=(-c:a aac -b:a 48k -ar 44100)
 
 # Tones are drawn with aevalsrc at an exact amplitude of 0.1 (-20 dBFS) on
