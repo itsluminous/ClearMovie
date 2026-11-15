@@ -134,6 +134,50 @@ class KeyingRenderTest {
         )
     }
 
+    /**
+     * The two-form keyer (stored key and its BT.601-decoded form) must not
+     * widen the key into near-green frame artwork: five swatches 0.27-0.29
+     * from the key in Cb/Cr (just outside tolerance + softness), one of them
+     * nearest the BT.601 form, stay exactly as the frame shows them, while
+     * the window beside them is keyed to the photo under it.
+     */
+    @Test
+    fun nearGreenBorderSwatchesAreNotKeyed() {
+        val ids = SequentialIds("ng")
+        val project =
+            ProjectFactory
+                .fromPreset(
+                    ProjectId("near-green"),
+                    RenderHarness.preset,
+                    PresetMedia(introMs = 2000, frameMs = 4000, endingMs = 3000),
+                    ids,
+                ).addToMain(listOf(PhotoClip(ids.clipId(), fixture("photo_blue.png"), 3000)), ids = ids)
+        val plan = RenderPlanBuilder(RenderHarness.preset).build(project)
+        val out = RenderHarness.export(plan, "keying-near-green", RenderHarness.resolver(frame = "frame_neargreen.mp4"))
+        val failures = mutableListOf<String>()
+        val tUs = 3_500_000L
+        val f = frameAt(out.file, tUs)
+        savePng(f, "keying-near-green-t03.5")
+        val src = frameAt(java.io.File(RenderHarness.fixtureDir, "frame_neargreen.mp4"), tUs - 2_000_000)
+        val swatches = listOf("#90FC00" to 220, "#66BB6A" to 580, "#B2FF59" to 940, "#2E7D32" to 1300, "#78C800" to 1660)
+        for ((name, x) in swatches) {
+            val got = rgb(f, x / 1920.0, 970 / 1080.0, 4)
+            val want = rgb(src, x / 1920.0, 970 / 1080.0, 4)
+            val ok = close(got, want, 12)
+            report("near-green swatch $name = ${got.toList()} frame source ${want.toList()} ${if (ok) "ok" else "FAIL"}")
+            if (!ok) failures += "swatch $name was ${got.toList()}, frame shows ${want.toList()}"
+        }
+        val (wx, wy) = win(0.5, 0.5)
+        val window = rgb(f, wx, wy)
+        val windowOk = close(window, intArrayOf(32, 64, 224), 14)
+        report("near-green window centre = ${window.toList()} want photo blue ${if (windowOk) "ok" else "FAIL"}")
+        if (!windowOk) failures += "window ${window.toList()} is not the photo"
+        val green = countNear(f, keyGreen, 10.0)
+        report("near-green t=3.5 pixels within dE10 of #00D922: $green")
+        if (green != 0) failures += "$green key-green pixels"
+        assertWithMessage(failures.joinToString("\n")).that(failures).isEmpty()
+    }
+
     private fun close(
         a: IntArray,
         b: IntArray,
