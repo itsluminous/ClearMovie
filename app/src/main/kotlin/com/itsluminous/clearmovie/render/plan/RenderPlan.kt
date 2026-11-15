@@ -30,6 +30,26 @@ data class RenderPlan(
     val visual: List<VisualLayer>,
     val audio: List<AudioLayer>,
 ) {
+    /**
+     * The part of this plan from [fromUs] to [toUs], as a plan of its own that
+     * starts at 0: the "Play exactly as exported" draft around the playhead.
+     * Pictures and sounds cut at the front start later in their media and in
+     * their clip (so transitions and envelopes stay in step).
+     */
+    fun slice(
+        fromUs: Long,
+        toUs: Long,
+    ): RenderPlan {
+        val from = fromUs.coerceIn(0, durationUs)
+        val to = toUs.coerceIn(from, durationUs)
+        require(to > from) { "Empty slice" }
+        return copy(
+            durationUs = to - from,
+            visual = visual.map { layer -> layer.copy(segments = layer.segments.mapNotNull { it.sliced(from, to) }) },
+            audio = audio.map { layer -> layer.copy(segments = layer.segments.mapNotNull { it.sliced(from, to) }) },
+        )
+    }
+
     /** How many video files are decoded at [timeUs]: the decoder count risk 5 limits. */
     fun videoDecodersAt(timeUs: Long): Int =
         visual.count { layer -> layer.segmentAt(timeUs)?.let { it is VisualSegment.Picture && it.source is Source.Video } == true }
@@ -57,6 +77,20 @@ sealed interface VisualSegment {
         override val durationUs: Long,
     ) : VisualSegment
 
+    /** This segment's part of [fromUs]..[toUs], moved so [fromUs] is 0; null when outside. */
+    fun sliced(
+        fromUs: Long,
+        toUs: Long,
+    ): VisualSegment? {
+        val start = maxOf(startUs, fromUs)
+        val end = minOf(endUs, toUs)
+        if (end <= start) return null
+        return when (this) {
+            is Fill -> Fill(start - fromUs, end - start)
+            is Picture -> trimmedFront(start - startUs).copy(startUs = start - fromUs, durationUs = end - start)
+        }
+    }
+
     /**
      * A picture on the canvas. One timeline clip can become several
      * segments (a looped video, a repeated frame); [clipOffsetUs] is where
@@ -75,6 +109,18 @@ sealed interface VisualSegment {
     ) : VisualSegment {
         /** Opacity at [clipUs] of clip time. */
         fun alphaAt(clipUs: Long): Float = alpha.fold(1f) { acc, ramp -> acc * ramp.alphaAt(clipUs) }
+
+        /** The same picture with its first [frontUs] cut off: later in its clip and, for a video, in its file. */
+        fun trimmedFront(frontUs: Long): Picture {
+            if (frontUs <= 0) return this
+            val src =
+                if (source is Source.Video) {
+                    source.copy(clipStartUs = minOf(source.clipEndUs, source.clipStartUs + source.speed.sourceUs(frontUs)))
+                } else {
+                    source
+                }
+            return copy(startUs = startUs + frontUs, durationUs = durationUs - frontUs, source = src, clipOffsetUs = clipOffsetUs + frontUs)
+        }
     }
 }
 
@@ -174,6 +220,31 @@ sealed interface AudioSegment {
         override val startUs: Long,
         override val durationUs: Long,
     ) : AudioSegment
+
+    /** This segment's part of [fromUs]..[toUs], moved so [fromUs] is 0; null when outside. */
+    fun sliced(
+        fromUs: Long,
+        toUs: Long,
+    ): AudioSegment? {
+        val start = maxOf(startUs, fromUs)
+        val end = minOf(endUs, toUs)
+        if (end <= start) return null
+        return when (this) {
+            is Silence -> {
+                Silence(start - fromUs, end - start)
+            }
+
+            is Sound -> {
+                val front = start - startUs
+                copy(
+                    startUs = start - fromUs,
+                    durationUs = end - start,
+                    clipStartUs = minOf(clipEndUs, clipStartUs + speed.sourceUs(front)),
+                    gain = gain.slice(front, front + (end - start)),
+                )
+            }
+        }
+    }
 
     /**
      * [clipStartUs]..[clipEndUs] of a file at [speed]. [gain] is in this

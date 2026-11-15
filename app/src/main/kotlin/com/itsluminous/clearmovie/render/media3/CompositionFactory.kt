@@ -9,7 +9,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.SpeedParameters
 import androidx.media3.common.VideoCompositorSettings
-import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.ExperimentalApi
@@ -21,7 +20,6 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.render.plan.AudioSegment
-import com.itsluminous.clearmovie.render.plan.GainEnvelope
 import com.itsluminous.clearmovie.render.plan.Placement
 import com.itsluminous.clearmovie.render.plan.RenderPlan
 import com.itsluminous.clearmovie.render.plan.Source
@@ -29,9 +27,15 @@ import com.itsluminous.clearmovie.render.plan.VisualSegment
 import kotlin.math.roundToInt
 
 /**
- * Maps a [RenderPlan] to one Media3 [Composition] (ARCHITECTURE section 7),
- * used unchanged by `CompositionPlayer` for the preview and `Transformer` for
- * the export.
+ * Maps a [RenderPlan] to one Media3 [Composition] (ARCHITECTURE section 7)
+ * for `Transformer`: the export, and the short exact draft behind "Play
+ * exactly as exported" (a [RenderPlan.slice] at a low height).
+ *
+ * The live editor preview does NOT use this composition: the cm-render spike
+ * found that Media3's multi-input `CompositionPlayer` (1.11.1 and
+ * 1.12.0-beta01) shows no frame after a seek and freezes at a video-to-photo
+ * boundary in any lower layer, so the editor uses the layered preview
+ * (risk 2 fallback, chosen by the owner).
  *
  * Layer order: Media3's compositor draws the FIRST sequence on top and each
  * later one under it (DefaultVideoCompositor, verified by the render spike),
@@ -44,9 +48,6 @@ import kotlin.math.roundToInt
  * Every visual item ends in a [PlacementEffect], so every layer is a
  * canvas-sized frame that is transparent where it draws nothing.
  *
- * [gainProcessor] makes each item's gain processor; tests pass one that
- * records what Media3 tells it.
- *
  * @throws MediaUnavailableException from [build] when a clip's media is gone.
  */
 @OptIn(ExperimentalApi::class)
@@ -54,7 +55,6 @@ import kotlin.math.roundToInt
 class CompositionFactory(
     private val context: Context,
     private val resolver: MediaResolver,
-    private val gainProcessor: (GainEnvelope) -> AudioProcessor = ::GainEnvelopeAudioProcessor,
 ) {
     private val assets = RenderAssets(context)
     private val guard = UriGuard(context)
@@ -68,9 +68,10 @@ class CompositionFactory(
             val items = layer.segments.map { visualItem(plan, it, captions) }
             sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItems(items).build()
         }
-        // Always at least two visual sequences, so preview and export both run
-        // the multi-input graph and compositor (a single layer gets a
-        // transparent one under it): the same code path for every project.
+        // Always at least two visual sequences, so every export runs the same
+        // multi-input graph and compositor (Transformer refuses compositor
+        // settings for a single sequence): a lone layer gets a transparent one
+        // under it.
         if (plan.visual.size == 1) {
             val fill = visualItem(plan, VisualSegment.Fill(0, plan.durationUs), captions)
             sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItem(fill).build()
@@ -133,13 +134,8 @@ class CompositionFactory(
                     MediaItem
                         .Builder()
                         .setUri(uri(source.media))
-                        .setClippingConfiguration(
-                            MediaItem.ClippingConfiguration
-                                .Builder()
-                                .setStartPositionUs(source.clipStartUs)
-                                .setEndPositionUs(source.clipEndUs)
-                                .build(),
-                        ).build()
+                        .setClippingConfiguration(clipping(source.clipStartUs, source.clipEndUs, source.speed, segment.durationUs))
+                        .build()
                 EditedMediaItem
                     .Builder(item)
                     .setDurationUs(source.sourceDurationUs)
@@ -210,20 +206,32 @@ class CompositionFactory(
             MediaItem
                 .Builder()
                 .setUri(uri(segment.media))
-                .setClippingConfiguration(
-                    MediaItem.ClippingConfiguration
-                        .Builder()
-                        .setStartPositionUs(segment.clipStartUs)
-                        .setEndPositionUs(segment.clipEndUs)
-                        .build(),
-                ).build()
+                .setClippingConfiguration(clipping(segment.clipStartUs, segment.clipEndUs, segment.speed, segment.durationUs))
+                .build()
         return EditedMediaItem
             .Builder(item)
             .setDurationUs(segment.sourceDurationUs)
-            .setEffects(Effects(listOf(gainProcessor(segment.gain)), listOf()))
+            .setEffects(Effects(listOf(GainEnvelopeAudioProcessor(segment.gain)), listOf()))
             .apply { speedParameters(segment.speed)?.let { setSpeed(it) } }
             .build()
     }
+
+    /**
+     * Plays from [startUs] for exactly [lengthUs] of timeline at [speed], and
+     * never past [endUs]: an item is never longer than its segment, so every
+     * sequence stays exactly as long as the plan says.
+     */
+    private fun clipping(
+        startUs: Long,
+        endUs: Long,
+        speed: Speed,
+        lengthUs: Long,
+    ): MediaItem.ClippingConfiguration =
+        MediaItem.ClippingConfiguration
+            .Builder()
+            .setStartPositionUs(startUs)
+            .setEndPositionUs(minOf(endUs, startUs + lengthUs * speed.numerator / speed.denominator))
+            .build()
 
     private fun speedParameters(speed: Speed): SpeedParameters? {
         if (speed == Speed.X1) return null

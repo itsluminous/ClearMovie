@@ -77,6 +77,45 @@ class TransitionRenderTest {
         assertThat(RenderHarness.durationUs(out.file)).isIn(Range.closed(6_950_000L, 7_050_000L))
     }
 
+    /**
+     * The "Play exactly as exported" draft: 2 s around the second crossfade's
+     * midpoint, at 360p. The slice starts in the middle of both clips, so the
+     * blend at its 1 s mark must match the full export's 4.5 s.
+     */
+    @Test
+    fun draftSliceKeepsTheTransitionInStep() {
+        val ids = SequentialIds("y")
+        val a = ClipId("ya")
+        val b = ClipId("yb")
+        val project =
+            ProjectFactory
+                .blank(ProjectId("draft"), ids)
+                .addToMain(
+                    listOf(
+                        VideoClip(a, fixture("clip_dark.mp4"), sourceDurationMs = 3000),
+                        VideoClip(b, fixture("clip_light.mp4"), sourceDurationMs = 3000),
+                        VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 3000),
+                    ),
+                    ids = ids,
+                ).setTransition(a, Transition(TransitionKind.CROSSFADE, 1000))
+                .setTransition(b, Transition(TransitionKind.CROSSFADE, 1000))
+        val plan = RenderPlanBuilder().build(project, height = 360).slice(3_500_000, 5_500_000)
+        val out = RenderHarness.export(plan, "draft-slice")
+        val dark = luma(rgb(frameAt(File(RenderHarness.fixtureDir, "clip_dark.mp4"), 1_500_000), 0.5, 0.6))
+        val light = luma(rgb(frameAt(File(RenderHarness.fixtureDir, "clip_light.mp4"), 1_500_000), 0.5, 0.6))
+        val shares =
+            listOf(0.2, 1.0, 1.8).map { t ->
+                val f = frameAt(out.file, (t * 1_000_000).toLong())
+                savePng(f, "draft-slice-t%03.1f".format(java.util.Locale.ROOT, t))
+                (luma(rgb(f, 0.5, 0.6)) - dark) / (light - dark)
+            }
+        report("draft slice 3.5-5.5 s at 360p: light share at 0.2/1.0/1.8 s = $shares, ${out.wallMs} ms to render 2 s")
+        assertThat(shares[0]).isGreaterThan(0.9)
+        assertThat(shares[1]).isIn(Range.closed(0.4, 0.6))
+        assertThat(shares[2]).isLessThan(0.3)
+        assertThat(RenderHarness.durationUs(out.file)).isIn(Range.closed(1_950_000L, 2_050_000L))
+    }
+
     /** Speed 2x of a 3 s clip lasts 1.5 s; two loops of it 3 s; a photo its duration: 6.5 s in all. */
     @Test
     fun speedAndLoopsGiveThePlannedLength() {

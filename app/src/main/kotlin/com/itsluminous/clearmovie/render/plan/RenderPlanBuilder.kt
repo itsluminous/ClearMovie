@@ -657,8 +657,7 @@ internal class SegmentLane(
         val end = minOf(segment.endUs, totalUs)
         if (end <= start) return
         if (start > cursor) out += VisualSegment.Fill(cursor, start - cursor)
-        val trimmedFront = start - segment.startUs
-        out += segment.copy(startUs = start, durationUs = end - start, clipOffsetUs = segment.clipOffsetUs + trimmedFront)
+        out += segment.trimmedFront(start - segment.startUs).copy(durationUs = end - start)
         cursor = end
     }
 
@@ -680,15 +679,7 @@ internal class SoundLane(
         val end = minOf(segment.endUs, totalUs)
         if (end <= start) return
         if (start > cursor) out += AudioSegment.Silence(cursor, start - cursor)
-        val front = start - segment.startUs
-        out +=
-            segment.copy(
-                startUs = start,
-                durationUs = end - start,
-                clipStartUs = segment.clipStartUs + segment.speed.sourceUs(front),
-                clipEndUs = minOf(segment.clipEndUs, segment.clipStartUs + segment.speed.sourceUs(front + (end - start))),
-                gain = segment.gain.slice(front, front + (end - start)),
-            )
+        out += (segment.sliced(start, end) as AudioSegment.Sound).copy(startUs = start)
         cursor = end
     }
 

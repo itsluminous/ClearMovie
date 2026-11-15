@@ -22,7 +22,7 @@ import kotlin.math.roundToInt
  * are refused at configure time, so Media3 converts them first.
  */
 @UnstableApi
-open class GainEnvelopeAudioProcessor(
+class GainEnvelopeAudioProcessor(
     private val envelope: GainEnvelope,
 ) : BaseAudioProcessor() {
     private var positionUs = 0L
