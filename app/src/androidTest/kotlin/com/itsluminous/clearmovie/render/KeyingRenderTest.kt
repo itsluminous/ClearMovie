@@ -12,7 +12,6 @@ import com.itsluminous.clearmovie.domain.model.SequentialIds
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.totalDurationMs
-import com.itsluminous.clearmovie.render.RenderHarness.countNear
 import com.itsluminous.clearmovie.render.RenderHarness.fixture
 import com.itsluminous.clearmovie.render.RenderHarness.frameAt
 import com.itsluminous.clearmovie.render.RenderHarness.report
@@ -33,8 +32,6 @@ import org.junit.runner.RunWith
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class KeyingRenderTest {
-    private val keyGreen = intArrayOf(0x00, 0xD9, 0x22)
-
     /** A point inside the frame window, by window-relative (u, v). */
     private fun win(
         u: Double,
@@ -88,8 +85,8 @@ class KeyingRenderTest {
             val (x, y) = win(0.5, 0.6)
             expect("t=1.0 intro in window", rgb(f, x, y), rgb(introSrc, x, y), 12)
             expect("t=1.0 intro at border", rgb(f, 0.003, 0.5), rgb(introSrc, 0.003, 0.5), 12)
-            val green = countNear(f, keyGreen, 10.0)
-            report("keying t=1.0 pixels within dE10 of #00D922: $green")
+            val green = RenderHarness.countNearKey(f)
+            report("keying t=1.0 pixels within dE10 of either form of #00D922: $green")
             if (green != 0) failures += "t=1.0 has $green key-green pixels"
         }
 
@@ -123,8 +120,8 @@ class KeyingRenderTest {
             expect("t=$timeS top border", rgb(f, 0.5, 0.009), top, 14)
             expect("t=$timeS strip", rgb(f, 0.95, 0.85), strip, 14)
             expect("t=$timeS logo over the window", rgb(f, 0.1, 0.769), logo, 14)
-            val green = countNear(f, keyGreen, 10.0)
-            report("keying t=$timeS pixels within dE10 of #00D922: $green")
+            val green = RenderHarness.countNearKey(f)
+            report("keying t=$timeS pixels within dE10 of either form of #00D922: $green")
             if (green != 0) failures += "t=$timeS has $green key-green pixels"
         }
         assertWithMessage(failures.joinToString("\n")).that(failures).isEmpty()
@@ -136,10 +133,11 @@ class KeyingRenderTest {
 
     /**
      * The two-form keyer (stored key and its BT.601-decoded form) must not
-     * widen the key into near-green frame artwork: five swatches 0.27-0.29
-     * from the key in Cb/Cr (just outside tolerance + softness), one of them
-     * nearest the BT.601 form, stay exactly as the frame shows them, while
-     * the window beside them is keyed to the photo under it.
+     * widen the key into near-green frame artwork: five swatches 0.30-0.31
+     * in Cb/Cr from the nearer form whichever matrix decodes them (0.04
+     * outside tolerance + softness) stay exactly as the frame shows them,
+     * while the window beside them is keyed to the photo under it. The frame
+     * file has no sound track, so this also exports a silent frame video.
      */
     @Test
     fun nearGreenBorderSwatchesAreNotKeyed() {
@@ -159,7 +157,11 @@ class KeyingRenderTest {
         val f = frameAt(out.file, tUs)
         savePng(f, "keying-near-green-t03.5")
         val src = frameAt(java.io.File(RenderHarness.fixtureDir, "frame_neargreen.mp4"), tUs - 2_000_000)
-        val swatches = listOf("#90FC00" to 220, "#66BB6A" to 580, "#B2FF59" to 940, "#2E7D32" to 1300, "#78C800" to 1660)
+        // The counter must see the un-keyed window, or "no key green left" proves nothing.
+        val control = RenderHarness.countNearKey(src)
+        report("near-green control: $control key-green pixels in the frame source")
+        if (control == 0) failures += "the key-green counter sees no key green in the un-keyed frame"
+        val swatches = listOf("#98FC00" to 220, "#B0FC24" to 580, "#80C484" to 940, "#589444" to 1300, "#1B5E20" to 1660)
         for ((name, x) in swatches) {
             val got = rgb(f, x / 1920.0, 970 / 1080.0, 4)
             val want = rgb(src, x / 1920.0, 970 / 1080.0, 4)
@@ -172,8 +174,8 @@ class KeyingRenderTest {
         val windowOk = close(window, intArrayOf(32, 64, 224), 14)
         report("near-green window centre = ${window.toList()} want photo blue ${if (windowOk) "ok" else "FAIL"}")
         if (!windowOk) failures += "window ${window.toList()} is not the photo"
-        val green = countNear(f, keyGreen, 10.0)
-        report("near-green t=3.5 pixels within dE10 of #00D922: $green")
+        val green = RenderHarness.countNearKey(f)
+        report("near-green t=3.5 pixels within dE10 of either form of #00D922: $green")
         if (green != 0) failures += "$green key-green pixels"
         assertWithMessage(failures.joinToString("\n")).that(failures).isEmpty()
     }

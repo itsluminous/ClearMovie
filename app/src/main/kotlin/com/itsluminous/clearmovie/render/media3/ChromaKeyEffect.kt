@@ -20,8 +20,16 @@ import com.itsluminous.clearmovie.domain.model.KeySpec
  * honour the BT.709 tag: the emulator's decodes it as BT.601, which moves
  * the window green by Delta E 16 (KeyColourSpaceTest). So each pixel is
  * compared with both forms of the key, as decoded by either matrix
- * ([misdecodedAsBt601]), and the nearer one counts. The two forms are 0.055
- * apart in chroma, well inside the tolerance, so this only removes a bias.
+ * ([misdecodedAsBt601]), and the nearer one counts. The two forms are 0.057
+ * apart in chroma, inside the tolerance, so the keyed area grows by about
+ * 14%, and on any one device one of the two forms is spurious:
+ * - On a decoder that honours BT.709, the added form costs at most 0.003
+ *   alpha for colours the stored key alone leaves fully opaque; colours
+ *   already in the soft band lose a little more (#76FF03: 0.86 to 0.73).
+ * - On a decoder that uses BT.601, the stored form is the spurious one, as
+ *   it was before this form was added: mid and mint greens near the soft
+ *   band are partly keyed there (#4CAF50 alpha 0.55, #69F0AE 0.41).
+ * Keying one form chosen by measuring the decoder would remove both costs.
  *
  * Only chroma is compared, not brightness: a dark green in the frame's own
  * artwork close in hue to the key is keyed too. A preset frame is a flat key

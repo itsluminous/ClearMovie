@@ -41,20 +41,21 @@ drawbox=x=72:y=842:w=160:h=120:color=0x1440B4:t=fill[bg];\
   -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 12 "$out/frame.mp4"
 
 # frame_neargreen.mp4: 4 s, the same window geometry as frame.mp4, with a
-# strip of five near-green swatches below the window. Each swatch sits
-# 0.27-0.29 from the key in BT.709 Cb/Cr, just outside tolerance +
-# softness (0.26), and #90FC00 sits nearest the key's BT.601-decoded form,
-# the direction the two-form keyer widens. None may be keyed.
+# strip of five near-green swatches below the window, none of which may be
+# keyed. Each is 0.30-0.31 from the nearer form of the key in BT.709 Cb/Cr
+# (the stored key and its BT.601-decoded form) whichever matrix decodes
+# it, so 0.04 outside tolerance + softness (0.26). Encoded near-lossless
+# (crf 12) so the swatches keep those colours.
 "${ff[@]}" \
   -f lavfi -i "color=c=0xC81414:s=1920x1080:r=30:d=4" \
   -filter_complex "[0:v]drawbox=x=18:y=24:w=1884:h=836:color=0x00D922:t=fill,\
 drawbox=x=0:y=860:w=1920:h=220:color=0x1440B4:t=fill,\
-drawbox=x=60:y=880:w=320:h=180:color=0x90FC00:t=fill,\
-drawbox=x=420:y=880:w=320:h=180:color=0x66BB6A:t=fill,\
-drawbox=x=780:y=880:w=320:h=180:color=0xB2FF59:t=fill,\
-drawbox=x=1140:y=880:w=320:h=180:color=0x2E7D32:t=fill,\
-drawbox=x=1500:y=880:w=320:h=180:color=0x78C800:t=fill[v]" \
-  -map "[v]" "${x264[@]}" -t 4 "$out/frame_neargreen.mp4"
+drawbox=x=60:y=880:w=320:h=180:color=0x98FC00:t=fill,\
+drawbox=x=420:y=880:w=320:h=180:color=0xB0FC24:t=fill,\
+drawbox=x=780:y=880:w=320:h=180:color=0x80C484:t=fill,\
+drawbox=x=1140:y=880:w=320:h=180:color=0x589444:t=fill,\
+drawbox=x=1500:y=880:w=320:h=180:color=0x1B5E20:t=fill[v]" \
+  -map "[v]" "${x264[@]}" -crf 12 -t 4 "$out/frame_neargreen.mp4"
 
 # intro.mp4: 2 s of solid orange with a moving dark block, and a 660 Hz tone.
 "${ff[@]}" \

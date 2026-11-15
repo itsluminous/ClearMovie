@@ -108,9 +108,11 @@ class RealFrameKeyingTest {
                 report("real t=$t $name = ${got.toList()} frame source ${want.toList()} ${if (ok) "ok" else "FAIL"}")
                 if (!ok) failures += "t=$t $name ${got.toList()} vs ${want.toList()}"
             }
-            val near10 = countNear(f, keyGreen, 10.0, step = 1)
+            val near10 = RenderHarness.countNearKey(f, step = 1)
             val near20 = countNear(f, keyGreen, 20.0, step = 1)
-            report("real t=$t pixels within dE10 of #00D922: $near10 (within dE20: $near20) of ${f.width * f.height}")
+            report(
+                "real t=$t pixels within dE10 of either form of #00D922: $near10 (within dE20 of #00D922: $near20) of ${f.width * f.height}",
+            )
             if (near10 != 0) failures += "t=$t $near10 key-green pixels"
         }
         assertWithMessage(failures.joinToString("; ")).that(failures).isEmpty()

@@ -19,6 +19,7 @@ import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetParseResult
 import com.itsluminous.clearmovie.domain.model.PresetParser
 import com.itsluminous.clearmovie.domain.model.PresetSlot
+import com.itsluminous.clearmovie.render.media3.ChromaKeyEffect
 import com.itsluminous.clearmovie.render.media3.CompositionFactory
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
 import com.itsluminous.clearmovie.render.media3.FileMediaResolver
@@ -237,6 +238,42 @@ object RenderHarness {
 
         fun f(t: Double) = if (t > 0.008856) cbrt(t) else 7.787 * t + 16.0 / 116
         return doubleArrayOf(116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
+    }
+
+    /**
+     * Pixels within Delta E 10 of either form of the preset's key colour (as
+     * stored, and as a BT.601 decoder shows a BT.709 file of it), so leftover
+     * key green is counted whichever matrix decoded the export.
+     */
+    fun countNearKey(
+        bitmap: Bitmap,
+        step: Int = 2,
+    ): Int {
+        val key = preset.frame!!.key.color
+        val forms =
+            listOf(key, ChromaKeyEffect.misdecodedAsBt601(key)).map {
+                intArrayOf(
+                    ((it.argb shr 16) and 0xFF).toInt(),
+                    (
+                        (
+                            it.argb shr
+                                8
+                        ) and
+                            0xFF
+                    ).toInt(),
+                    (it.argb and 0xFF).toInt(),
+                )
+            }
+        var n = 0
+        for (y in 0 until bitmap.height step step) {
+            for (x in 0 until bitmap.width step step) {
+                val c = bitmap.getPixel(x, y)
+                if (Color.green(c) < 120 || Color.red(c) > 120) continue
+                val rgb = intArrayOf(Color.red(c), Color.green(c), Color.blue(c))
+                if (forms.any { deltaE(rgb, it) <= 10.0 }) n++
+            }
+        }
+        return n
     }
 
     /** Pixels within [maxDeltaE] of [key], scanning every [step] px. */
