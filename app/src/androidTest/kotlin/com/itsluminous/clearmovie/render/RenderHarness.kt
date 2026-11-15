@@ -67,7 +67,11 @@ object RenderHarness {
 
     /** The bundled generic preset, read the way the app reads it. */
     val preset: Preset by lazy {
-        val text = context.assets.open("presets/event-frame/preset.json").bufferedReader().use { it.readText() }
+        val text =
+            context.assets
+                .open("presets/event-frame/preset.json")
+                .bufferedReader()
+                .use { it.readText() }
         (PresetParser.parse(text) as PresetParseResult.Ok).preset
     }
 
@@ -228,6 +232,7 @@ object RenderHarness {
         val x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
         val y = 0.2126 * r + 0.7152 * g + 0.0722 * b
         val z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+
         fun f(t: Double) = if (t > 0.008856) cbrt(t) else 7.787 * t + 16.0 / 116
         return doubleArrayOf(116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
     }
@@ -260,7 +265,14 @@ object RenderHarness {
     fun decodeAudio(file: File): Pcm {
         val extractor = MediaExtractor()
         extractor.setDataSource(file.absolutePath)
-        val track = (0 until extractor.trackCount).first { extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)!!.startsWith("audio/") }
+        val track =
+            (0 until extractor.trackCount).first {
+                extractor
+                    .getTrackFormat(
+                        it,
+                    ).getString(MediaFormat.KEY_MIME)!!
+                    .startsWith("audio/")
+            }
         extractor.selectTrack(track)
         val format = extractor.getTrackFormat(track)
         val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)

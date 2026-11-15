@@ -95,8 +95,7 @@ class CompositionFactory(
     }
 
     /** The mix is resampled to the export's 48 kHz (section 7, Export). */
-    private fun outputRate(): SonicAudioProcessor =
-        SonicAudioProcessor().apply { setOutputSampleRateHz(OUTPUT_SAMPLE_RATE) }
+    private fun outputRate(): SonicAudioProcessor = SonicAudioProcessor().apply { setOutputSampleRateHz(OUTPUT_SAMPLE_RATE) }
 
     private companion object {
         const val OUTPUT_SAMPLE_RATE = 48_000
@@ -111,7 +110,12 @@ class CompositionFactory(
     ): EditedMediaItem =
         when (segment) {
             is VisualSegment.Fill -> {
-                image(assets.transparent(), segment.durationUs, plan.fps, listOf(PlacementEffect(Placement.FullFrame, plan.width, plan.height)))
+                image(
+                    assets.transparent(),
+                    segment.durationUs,
+                    plan.fps,
+                    listOf(PlacementEffect(Placement.FullFrame, plan.width, plan.height)),
+                )
             }
 
             is VisualSegment.Picture -> {
@@ -150,7 +154,12 @@ class CompositionFactory(
             }
 
             is Source.VideoFrame -> {
-                image(assets.videoFrame(uri(source.media), source.atUs, maxOf(plan.width, plan.height)), segment.durationUs, plan.fps, effects)
+                image(
+                    assets.videoFrame(uri(source.media), source.atUs, maxOf(plan.width, plan.height)),
+                    segment.durationUs,
+                    plan.fps,
+                    effects,
+                )
             }
 
             is Source.Caption -> {
@@ -161,7 +170,10 @@ class CompositionFactory(
 
             is Source.Card -> {
                 val (w, h) = boxPixels(segment.placement, plan)
-                val png = assets.png("card|${source.color}|${source.text}|${source.style}|${w}x$h") { captions.card(source.color, source.text, source.style, w, h) }
+                val png =
+                    assets.png("card|${source.color}|${source.text}|${source.style}|${w}x$h") {
+                        captions.card(source.color, source.text, source.style, w, h)
+                    }
                 image(png, segment.durationUs, plan.fps, effects)
             }
         }
@@ -264,4 +276,3 @@ internal class CanvasCompositorSettings(
         val DEFAULT_OVERLAY = object : OverlaySettings {}
     }
 }
-

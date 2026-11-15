@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -24,7 +26,7 @@ internal class RenderAssets(
     /** A 16x9 fully transparent PNG; `PlacementEffect` stretches it to the canvas. */
     fun transparent(): Uri =
         png("transparent-16x9") {
-            Bitmap.createBitmap(16, 9, Bitmap.Config.ARGB_8888)
+            createBitmap(16, 9)
         }
 
     /** The PNG for [key], drawn by [draw] only when it is not cached yet. */
@@ -73,7 +75,7 @@ internal class RenderAssets(
                     frame
                 } else {
                     val s = maxDimension.toFloat() / longSide
-                    Bitmap.createScaledBitmap(frame, (frame.width * s).toInt().coerceAtLeast(1), (frame.height * s).toInt().coerceAtLeast(1), true).also {
+                    frame.scale((frame.width * s).toInt().coerceAtLeast(1), (frame.height * s).toInt().coerceAtLeast(1)).also {
                         if (it !== frame) frame.recycle()
                     }
                 }

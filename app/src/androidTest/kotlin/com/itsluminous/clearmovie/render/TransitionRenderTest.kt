@@ -69,7 +69,16 @@ class TransitionRenderTest {
             savePng(f, "crossfade-t%03.1f".format(java.util.Locale.ROOT, t))
             val y = luma(rgb(f, 0.5, 0.6))
             val share = (y - dark) / (light - dark)
-            report("crossfade t=$t luma=%.1f dark=%.1f light=%.1f light share=%.3f (want %.1f)".format(java.util.Locale.ROOT, y, dark, light, share, want))
+            report(
+                "crossfade t=$t luma=%.1f dark=%.1f light=%.1f light share=%.3f (want %.1f)".format(
+                    java.util.Locale.ROOT,
+                    y,
+                    dark,
+                    light,
+                    share,
+                    want,
+                ),
+            )
             val ok = if (want == 0.5) share in 0.4..0.6 else kotlin.math.abs(share - want) < 0.08
             if (!ok) failures += "t=$t light share $share, want $want"
         }
@@ -126,7 +135,14 @@ class TransitionRenderTest {
                 .addToMain(
                     listOf(
                         VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 3000, speed = Speed.X2),
-                        VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 3000, trimStartMs = 500, trimEndMs = 2000, loops = 2),
+                        VideoClip(
+                            ids.clipId(),
+                            fixture("clip_light.mp4"),
+                            sourceDurationMs = 3000,
+                            trimStartMs = 500,
+                            trimEndMs = 2000,
+                            loops = 2,
+                        ),
                         PhotoClip(ids.clipId(), fixture("photo_blue.png"), 2000),
                     ),
                     ids = ids,

@@ -128,7 +128,10 @@ class KeyingRenderTest {
             if (green != 0) failures += "t=$timeS has $green key-green pixels"
         }
         assertWithMessage(failures.joinToString("\n")).that(failures).isEmpty()
-        assertThat(RenderHarness.durationUs(out.file)).isIn(com.google.common.collect.Range.closed(14_950_000L, 15_050_000L))
+        assertThat(RenderHarness.durationUs(out.file)).isIn(
+            com.google.common.collect.Range
+                .closed(14_950_000L, 15_050_000L),
+        )
     }
 
     private fun close(

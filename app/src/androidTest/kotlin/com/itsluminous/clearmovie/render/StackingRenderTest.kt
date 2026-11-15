@@ -52,8 +52,10 @@ class StackingRenderTest {
             ProjectFactory
                 .blank(ProjectId("stack"), ids)
                 .addToMain(listOf(VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 3000)), ids = ids)
-                .addTimedClip(PhotoClip(ids.clipId(), fixture("photo_blue.png"), 3000, pip = PipPlacement(Corner.TOP_RIGHT, 0.35)), ids = ids)
                 .addTimedClip(
+                    PhotoClip(ids.clipId(), fixture("photo_blue.png"), 3000, pip = PipPlacement(Corner.TOP_RIGHT, 0.35)),
+                    ids = ids,
+                ).addTimedClip(
                     TextClip(
                         ids.clipId(),
                         startMs = 0,
@@ -125,8 +127,15 @@ class StackingRenderTest {
                     VideoClip(ids.clipId(), fixture("intro.mp4"), sourceDurationMs = 2000, pip = PipPlacement(Corner.TOP_RIGHT, 0.25)),
                     ids = ids,
                 )
-        val big = base.tracks.single { t -> t.type == TrackType.VISUAL && t.clips.any { (it as VideoClip).media == fixture("clip_dark.mp4") } }
-        val small = base.tracks.single { t -> t.type == TrackType.VISUAL && t.clips.any { (it as VideoClip).media == fixture("intro.mp4") } }
+        val big =
+            base.tracks.single { t ->
+                t.type == TrackType.VISUAL &&
+                    t.clips.any { (it as VideoClip).media == fixture("clip_dark.mp4") }
+            }
+        val small =
+            base.tracks.single { t ->
+                t.type == TrackType.VISUAL && t.clips.any { (it as VideoClip).media == fixture("intro.mp4") }
+            }
         val plan = RenderPlanBuilder(RenderHarness.preset).build(base)
         report("rows: video decoders at t=1s: ${plan.videoDecodersAt(1_000_000)}; stacking=${base.stacking.map { it.value }}")
         assertThat(plan.videoDecodersAt(1_000_000)).isEqualTo(4)

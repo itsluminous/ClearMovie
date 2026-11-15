@@ -52,14 +52,34 @@ class SpikeLongTest {
                 .addToMain(
                     (0 until 20).map { i ->
                         if (i % 2 == 0) {
-                            VideoClip(ids.clipId(), fixture(if (i % 4 == 0) "clip_dark.mp4" else "clip_light.mp4"), sourceDurationMs = 3000, loops = 2)
+                            VideoClip(
+                                ids.clipId(),
+                                fixture(
+                                    if (i % 4 ==
+                                        0
+                                    ) {
+                                        "clip_dark.mp4"
+                                    } else {
+                                        "clip_light.mp4"
+                                    },
+                                ),
+                                sourceDurationMs = 3000,
+                                loops = 2,
+                            )
                         } else {
                             PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 6000)
                         }
                     },
                     ids = ids,
                 ).addTimedClip(
-                    VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 3000, loops = 20, startMs = 2000, pip = PipPlacement(Corner.TOP_RIGHT, 0.3)),
+                    VideoClip(
+                        ids.clipId(),
+                        fixture("clip_light.mp4"),
+                        sourceDurationMs = 3000,
+                        loops = 20,
+                        startMs = 2000,
+                        pip = PipPlacement(Corner.TOP_RIGHT, 0.3),
+                    ),
                     ids = ids,
                 )
         report("memory project: ${project.totalDurationMs()} ms")
@@ -104,7 +124,10 @@ class SpikeLongTest {
         val main = Handler(Looper.getMainLooper())
         val surface = android.media.ImageReader.newInstance(1920, 1080, android.graphics.ImageFormat.YUV_420_888, 2)
         val frames = AtomicLong()
-        surface.setOnImageAvailableListener({ r -> r.acquireLatestImage()?.close(); frames.incrementAndGet() }, main)
+        surface.setOnImageAvailableListener({ r ->
+            r.acquireLatestImage()?.close()
+            frames.incrementAndGet()
+        }, main)
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             player[0] =
                 ExoPlayer.Builder(RenderHarness.context).build().apply {

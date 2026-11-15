@@ -220,7 +220,13 @@ class RenderPlanBuilder(
         source: Source,
         placement: Placement,
         clipOffsetUs: Long = 0,
-    ) = VisualSegment.Picture(startUs = clipOffsetUs, durationUs = durationUs, source = source, placement = placement, clipOffsetUs = clipOffsetUs)
+    ) = VisualSegment.Picture(
+        startUs = clipOffsetUs,
+        durationUs = durationUs,
+        source = source,
+        placement = placement,
+        clipOffsetUs = clipOffsetUs,
+    )
 
     private fun videoSource(clip: VideoClip) =
         Source.Video(clip.media, clip.sourceDurationMs * US, clip.trimStartMs * US, clip.trimEndMs * US, clip.speed)
@@ -274,7 +280,9 @@ class RenderPlanBuilder(
 
                         is VideoClip -> {
                             videoCopies(clip, durUs).forEach { (offset, length) ->
-                                lane.add(VisualSegment.Picture(startUs + offset, length, videoSource(clip), placement, clipOffsetUs = offset))
+                                lane.add(
+                                    VisualSegment.Picture(startUs + offset, length, videoSource(clip), placement, clipOffsetUs = offset),
+                                )
                             }
                         }
                     }
@@ -366,7 +374,18 @@ class RenderPlanBuilder(
                 val durUs = clip.durationMs * US
                 val env = GainEnvelope.constant(clip.volumeDb) + speechDuck.shifted(-startUs)
                 val sound = VideoSound(clip)
-                sound.copies(durUs).forEach { (offset, length) -> lane.add(sound.segment(startUs + offset, length, env.slice(offset, offset + length))) }
+                sound.copies(durUs).forEach { (offset, length) ->
+                    lane.add(
+                        sound.segment(
+                            startUs + offset,
+                            length,
+                            env.slice(
+                                offset,
+                                offset + length,
+                            ),
+                        ),
+                    )
+                }
             }
             layers += AudioLayer(track.id, AudioLayerRole.CLIP, lane.finish())
         }
@@ -578,6 +597,7 @@ class RenderPlanBuilder(
             releaseUs: Long,
         ): GainEnvelope {
             if (intervals.isEmpty()) return GainEnvelope.UNITY
+
             fun level(
                 iv: DuckInterval,
                 t: Long,
@@ -598,14 +618,25 @@ class RenderPlanBuilder(
             return GainEnvelope(times.map { t -> GainPoint(t, intervals.minOf { level(it, t) }) }).simplified()
         }
 
-        private fun ampToDb(a: Double): Double = if (a <= 0.0) GainEnvelope.SILENT_DB else (20.0 * log10(a)).coerceAtLeast(GainEnvelope.SILENT_DB)
+        private fun ampToDb(a: Double): Double =
+            if (a <=
+                0.0
+            ) {
+                GainEnvelope.SILENT_DB
+            } else {
+                (20.0 * log10(a)).coerceAtLeast(GainEnvelope.SILENT_DB)
+            }
 
         private fun curve(
             fromUs: Long,
             lengthUs: Long,
             amp: (Double) -> Double,
         ): GainEnvelope =
-            GainEnvelope((0..CURVE_STEPS).map { k -> GainPoint(fromUs + lengthUs * k / CURVE_STEPS, ampToDb(amp(k.toDouble() / CURVE_STEPS))) })
+            GainEnvelope(
+                (0..CURVE_STEPS).map { k ->
+                    GainPoint(fromUs + lengthUs * k / CURVE_STEPS, ampToDb(amp(k.toDouble() / CURVE_STEPS)))
+                },
+            )
 
         /** Equal-power rise over the first [lengthUs] (the incoming clip of a crossfade). */
         internal fun equalPowerIn(lengthUs: Long) = curve(0, lengthUs) { sin(it * PI / 2) }

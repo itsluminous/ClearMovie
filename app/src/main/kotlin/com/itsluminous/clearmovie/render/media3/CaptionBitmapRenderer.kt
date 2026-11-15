@@ -9,6 +9,8 @@ import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.withClip
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.TextAlign
@@ -37,7 +39,7 @@ class CaptionBitmapRenderer(
         widthPx: Int,
         heightPx: Int,
     ): Bitmap {
-        val bitmap = Bitmap.createBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1))
         val canvas = Canvas(bitmap)
         style.background?.let { bg ->
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bg.color.toAndroid() }
@@ -55,7 +57,7 @@ class CaptionBitmapRenderer(
         widthPx: Int,
         heightPx: Int,
     ): Bitmap {
-        val bitmap = Bitmap.createBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1))
         val canvas = Canvas(bitmap)
         canvas.drawColor(color.toAndroid() or OPAQUE)
         if (!text.isNullOrBlank()) drawText(canvas, text, style.copy(sizePx = style.sizePx * 2), bitmap.width, bitmap.height)
@@ -82,6 +84,7 @@ class CaptionBitmapRenderer(
                 TextAlign.CENTER -> Layout.Alignment.ALIGN_CENTER
                 TextAlign.END -> Layout.Alignment.ALIGN_OPPOSITE
             }
+
         fun layout(p: TextPaint) =
             StaticLayout.Builder
                 .obtain(text, 0, text.length, p, layoutWidth)
@@ -90,9 +93,19 @@ class CaptionBitmapRenderer(
                 .build()
         val fill = layout(paint.apply { color = style.color.toAndroid() })
         val top = ((height - fill.height) / 2f).coerceAtLeast(0f)
-        canvas.save()
-        canvas.clipRect(0, 0, width, height)
-        canvas.translate(pad.toFloat(), top)
+        canvas.withClip(0, 0, width, height) {
+            translate(pad.toFloat(), top)
+            drawLayers(this, paint, style, fill, ::layout)
+        }
+    }
+
+    private fun drawLayers(
+        canvas: Canvas,
+        paint: TextPaint,
+        style: CaptionStyle,
+        fill: StaticLayout,
+        layout: (TextPaint) -> StaticLayout,
+    ) {
         style.outline?.takeIf { it.widthPx > 0 }?.let { o ->
             val stroke =
                 TextPaint(paint).apply {
@@ -104,7 +117,6 @@ class CaptionBitmapRenderer(
             layout(stroke).draw(canvas)
         }
         fill.draw(canvas)
-        canvas.restore()
     }
 
     private companion object {

@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertWithMessage
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.PresetMedia
+import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.SequentialIds
@@ -18,7 +19,6 @@ import com.itsluminous.clearmovie.render.RenderHarness.report
 import com.itsluminous.clearmovie.render.RenderHarness.rgb
 import com.itsluminous.clearmovie.render.RenderHarness.savePng
 import com.itsluminous.clearmovie.render.media3.FileMediaResolver
-import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -72,7 +72,14 @@ class RealFrameKeyingTest {
         val failures = mutableListOf<String>()
         // Inside the window, (u, v); outside it, canvas points on the border and the strip.
         val inside = listOf(0.25 to 0.25, 0.75 to 0.25, 0.75 to 0.75, 0.5 to 0.5)
-        val outside = listOf("left border" to (0.004 to 0.4), "right border" to (0.996 to 0.4), "top border" to (0.5 to 0.01), "strip" to (0.6 to 0.9), "logo" to (0.08 to 0.9))
+        val outside =
+            listOf(
+                "left border" to (0.004 to 0.4),
+                "right border" to (0.996 to 0.4),
+                "top border" to (0.5 to 0.01),
+                "strip" to (0.6 to 0.9),
+                "logo" to (0.08 to 0.9),
+            )
         val expectWindow =
             mapOf(
                 8.0 to listOf(intArrayOf(255, 0, 0), intArrayOf(0, 255, 0), intArrayOf(255, 255, 255), null),

@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.render.media3
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import java.io.File
@@ -34,7 +35,7 @@ class FileMediaResolver(
         when (ref) {
             is MediaRef.Store -> {
                 if (!MediaRef.isSafeContentUri(ref.uri)) throw MediaUnavailableException("Not a content uri")
-                Uri.parse(ref.uri)
+                ref.uri.toUri()
             }
 
             is MediaRef.Copied -> {

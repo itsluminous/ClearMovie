@@ -92,7 +92,7 @@ class DuckingRenderTest {
             if (kotlin.math.abs(got - want) > 2.0) failures += "$what was $got dB, want $want"
         }
         // Source tones are -20 dBFS; the frame music plays at its preset gain (-8 dB).
-        near("music alone", musicBase, -28.0)  // -20 dBFS tone at the preset's -8 dB
+        near("music alone", musicBase, -28.0) // -20 dBFS tone at the preset's -8 dB
         near("music after the clip recovers", musicBase2 - musicBase, 0.0)
         near("music under clip sound", musicUnderClip - musicBase, -12.0)
         near("music under voice", musicUnderVoice - musicBase, -20.0)
