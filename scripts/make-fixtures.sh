@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Generates the small synthetic media fixtures the render tests use
+# (TESTING-PROTOCOL section 1). Everything is drawn by ffmpeg from scratch:
+# nothing comes from anyone's real media. Re-running produces equivalent
+# files; each must stay under 300 KB.
+#
+# Usage: scripts/make-fixtures.sh [output-dir]
+# Default output: app/src/androidTest/assets/fixtures
+set -euo pipefail
+
+out="${1:-app/src/androidTest/assets/fixtures}"
+mkdir -p "$out"
+ff=(ffmpeg -hide_banner -loglevel error -y)
+x264=(-c:v libx264 -preset veryslow -crf 30 -pix_fmt yuv420p -profile:v main
+  -color_primaries bt709 -color_trc bt709 -colorspace bt709 -g 25 -bf 0)
+aac=(-c:a aac -b:a 48k -ar 44100)
+
+# frame.mp4: a 4 s 1920x1080 green-screen frame with the reference geometry
+# (ARCHITECTURE section 3): a red border, a #00D922 window at x 18-1901,
+# y 24-859, a blue strip below with a white band, and a white "logo" box
+# that overlaps the window's bottom-left corner (x 32-271, y 802-1059). A
+# white block moves along the strip so the frame is a real moving video
+# (overlay, because drawbox's "t" is its thickness, not the time).
+# Its soundtrack (the background music) is a 1 kHz tone at -20 dBFS.
+"${ff[@]}" \
+  -f lavfi -i "color=c=0xC81414:s=1920x1080:r=30:d=4" \
+  -f lavfi -i "sine=frequency=1000:sample_rate=44100:duration=4" \
+  -f lavfi -i "color=c=0xFFFFFF:s=120x100:r=30:d=4" \
+  -filter_complex "[0:v]drawbox=x=18:y=24:w=1884:h=836:color=0x00D922:t=fill,\
+drawbox=x=0:y=860:w=1920:h=180:color=0x1440B4:t=fill,\
+drawbox=x=0:y=1040:w=1920:h=40:color=0xF0F0F0:t=fill,\
+drawbox=x=32:y=802:w=240:h=258:color=0xFFFFFF:t=fill,\
+drawbox=x=72:y=842:w=160:h=120:color=0x1440B4:t=fill[bg];\
+[bg][2:v]overlay=x='400+mod(t*300\,1200)':y=900[v];\
+[1:a]volume=0.1,aformat=channel_layouts=stereo[a]" \
+  -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 4 "$out/frame.mp4"
+
+# intro.mp4: 2 s of solid orange with a moving dark block, and a 660 Hz tone.
+"${ff[@]}" \
+  -f lavfi -i "color=c=0xFF8000:s=1920x1080:r=30:d=2" \
+  -f lavfi -i "sine=frequency=660:sample_rate=44100:duration=2" \
+  -f lavfi -i "color=c=0x402000:s=200x200:r=30:d=2" \
+  -filter_complex "[0:v][2:v]overlay=x='100+t*600':y=100[v];\
+[1:a]volume=0.1,aformat=channel_layouts=stereo[a]" \
+  -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 2 "$out/intro.mp4"
+
+# clip_dark.mp4 / clip_light.mp4: 3 s, 1280x720 (not the canvas size, so
+# scaling is exercised), flat grey 60 and 200 for the crossfade luminance
+# check, with 440 Hz and 550 Hz tones as clip audio at -20 dBFS.
+for spec in "dark 0x3C3C3C 440" "light 0xC8C8C8 550"; do
+  set -- $spec
+  "${ff[@]}" \
+    -f lavfi -i "color=c=$2:s=1280x720:r=30:d=3" \
+    -f lavfi -i "sine=frequency=$3:sample_rate=44100:duration=3" \
+    -f lavfi -i "color=c=0x808080:s=60x40:r=30:d=3" \
+    -filter_complex "[0:v][2:v]overlay=x='mod(t*200\,1100)':y=20[v];\
+[1:a]volume=0.1,aformat=channel_layouts=stereo[a]" \
+    -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 3 "$out/clip_$1.mp4"
+done
+
+# speech.m4a: 3 s mono "speech-like" sound, a 300 Hz tone with a 4 Hz
+# syllable-rate tremolo, peaking near -14 dBFS.
+"${ff[@]}" \
+  -f lavfi -i "sine=frequency=300:sample_rate=44100:duration=3" \
+  -af "volume=0.2,tremolo=f=4:d=0.6" -c:a aac -b:a 48k -ac 1 "$out/speech.m4a"
+
+# photo_blue.png: a flat blue 800x450 picture (the picture-in-picture item).
+"${ff[@]}" -f lavfi -i "color=c=0x2040E0:s=800x450:d=1" -frames:v 1 "$out/photo_blue.png"
+
+# photo_quadrants.png: 640x360 with a red top-left, green top-right, blue
+# bottom-left and white bottom-right quadrant, to check orientation and
+# placement.
+"${ff[@]}" -f lavfi -i "color=c=0xFFFFFF:s=640x360:d=1" \
+  -vf "drawbox=x=0:y=0:w=320:h=180:color=0xFF0000:t=fill,\
+drawbox=x=320:y=0:w=320:h=180:color=0x00FF00:t=fill,\
+drawbox=x=0:y=180:w=320:h=180:color=0x0000FF:t=fill" \
+  -frames:v 1 "$out/photo_quadrants.png"
+
+for f in "$out"/*; do
+  size=$(wc -c < "$f")
+  if [ "$size" -ge 307200 ]; then
+    echo "error: $f is $size bytes (over 300 KB)" >&2
+    exit 1
+  fi
+  printf '%8d  %s\n' "$size" "$f"
+done

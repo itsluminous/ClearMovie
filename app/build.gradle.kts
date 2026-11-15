@@ -260,6 +260,13 @@ dependencies {
     // The project model is stored as JSON (ARCHITECTURE section 6, cm-storage keeps it in Room).
     implementation(libs.kotlinx.serialization.json)
 
+    // Media3: one Composition for preview (CompositionPlayer) and export (Transformer).
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
+    implementation(libs.media3.common)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.datasource)
+
     // Material Components: provides the XML Theme.Material3.* parent in themes.xml.
     implementation(libs.google.material)
 
