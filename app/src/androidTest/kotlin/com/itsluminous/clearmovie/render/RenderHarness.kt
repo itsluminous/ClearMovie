@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.transformer.Composition
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.test.platform.app.InstrumentationRegistry
@@ -107,22 +108,39 @@ object RenderHarness {
         resolver: MediaResolver = resolver(),
         timeoutMin: Long = 15,
     ): Exported {
+        // The device's colour handling, measured once (and cached) off the main thread.
+        val colour = ColourCalibration.of(context)
+        // The composition is built off the main thread (it reads files and
+        // draws bitmaps), as the factory requires; Transformer runs on main.
+        val composition = CompositionFactory(context, resolver, deviceColour = { colour }).build(plan)
+        return exportComposition(
+            composition,
+            name,
+            RenderExporter(context, plan.height, colour),
+            EncodeSpec.forHeight(plan.height),
+            timeoutMin,
+        )
+    }
+
+    /** Exports a built [composition] with [exporter] to `render-tests/<name>.mp4` and waits for it. */
+    fun exportComposition(
+        composition: Composition,
+        name: String,
+        exporter: RenderExporter,
+        spec: EncodeSpec,
+        timeoutMin: Long = 15,
+    ): Exported {
         val out = File(outDir, "$name.mp4").apply { delete() }
         val latch = CountDownLatch(1)
         val done = AtomicReference<ExportResult>()
         val failure = AtomicReference<Throwable>()
         val started = System.currentTimeMillis()
-        // The composition is built off the main thread (it reads files and
-        // draws bitmaps), as the factory requires; Transformer runs on main.
-        // The device's colour handling, measured once (and cached) off the main thread.
-        val colour = ColourCalibration.of(context)
-        val composition = CompositionFactory(context, resolver, deviceColour = { colour }).build(plan)
         Handler(Looper.getMainLooper()).post {
             try {
-                RenderExporter(context, plan.height, colour).start(
+                exporter.start(
                     composition,
                     out,
-                    EncodeSpec.forHeight(plan.height),
+                    spec,
                     object : RenderExporter.Listener {
                         override fun onCompleted(result: ExportResult) {
                             done.set(result)
