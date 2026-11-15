@@ -47,6 +47,16 @@ done
 universal="${universal[0]}"
 version="$(basename "$universal" | sed -E 's/^ClearMovie-(.+)-universal\.apk$/\1/')"
 
+# Only the APKs of the LAST build count: an APK left over from an earlier build
+# (say, per-ABI APKs from before splits were switched off) must not satisfy the
+# guard. AGP lists the outputs of the build in output-metadata.json.
+metadata="$dir/output-metadata.json"
+if [ -f "$metadata" ]; then
+  built="$(sed -nE 's/.*"outputFile": *"([^"]+)".*/\1/p' "$metadata" | sort)"
+  present="$(for apk in "${all[@]}"; do basename "$apk"; done | sort)"
+  [ "$built" = "$present" ] || fail "APKs in $dir do not match output-metadata.json (stale files from an earlier build?). Built: [$(echo $built)] present: [$(echo $present)]"
+fi
+
 # Every APK must be one of the five expected names; anything else means the
 # naming in app/build.gradle.kts changed.
 for apk in "${all[@]}"; do
