@@ -31,17 +31,20 @@ import com.itsluminous.clearmovie.render.plan.Source
 import com.itsluminous.clearmovie.render.plan.VisualSegment
 import kotlin.math.roundToInt
 
-/** What the factory needs to know about a media file before it uses it. */
-fun interface MediaProbe {
-    /** The file's real length in microseconds, or null when it can't be read. */
-    fun durationUs(uri: Uri): Long?
+/**
+ * What the factory reads from a media file before it uses it: its real
+ * length, and whether it has a sound track. A sound item from a file
+ * without one (a silent video, or a frame video with no music) fails the
+ * whole export in Media3, so the factory plays silence for it instead.
+ */
+data class SourceInfo(
+    val durationUs: Long,
+    val hasAudio: Boolean,
+)
 
-    /**
-     * Whether the file has a sound track. A sound item from a file without
-     * one (a silent video, or a frame video with no music) fails the whole
-     * export in Media3, so the factory plays silence for it instead.
-     */
-    fun hasAudio(uri: Uri): Boolean = true
+/** Reads a [SourceInfo], or null when the file can't be read. */
+fun interface SourceProbe {
+    fun probe(uri: Uri): SourceInfo?
 }
 
 /**
@@ -86,7 +89,7 @@ fun interface MediaProbe {
 class CompositionFactory(
     private val context: Context,
     private val resolver: MediaResolver,
-    private val probe: MediaProbe = RetrieverProbe(context),
+    private val probe: SourceProbe = RetrieverProbe(context),
 ) {
     private val assets = RenderAssets(context)
     private val guard = UriGuard(context)
@@ -107,8 +110,9 @@ class CompositionFactory(
             val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
             var sounds = 0
             for (segment in layer.segments) {
-                if (segment is AudioSegment.Sound && build.hasAudio(segment)) {
-                    builder.addItem(build.soundItem(segment))
+                val item = (segment as? AudioSegment.Sound)?.let { build.soundItem(it) }
+                if (item != null) {
+                    builder.addItem(item)
                     sounds++
                 } else {
                     builder.addGap(segment.durationUs)
@@ -128,29 +132,33 @@ class CompositionFactory(
     /** The mix is resampled to the export's 48 kHz (section 7, Export). */
     private fun outputRate(): SonicAudioProcessor = SonicAudioProcessor().apply { setOutputSampleRateHz(OUTPUT_SAMPLE_RATE) }
 
-    /** State for one [build]: resolved uris, probed lengths, and the images used. */
+    /** State for one [build]: resolved uris, probed files, and the images used. */
     private inner class Build(
         private val plan: RenderPlan,
     ) {
         private val captions = CaptionBitmapRenderer(plan.height)
         private val uris = mutableMapOf<MediaRef, Uri>()
-        private val lengths = mutableMapOf<Uri, Long?>()
-        private val audio = mutableMapOf<Uri, Boolean>()
+        private val infos = mutableMapOf<Uri, SourceInfo?>()
         val images = mutableSetOf<Uri>()
 
         private fun uri(ref: MediaRef): Uri = uris.getOrPut(ref) { guard.check(resolver.resolve(ref)) }
+
+        /** [ref]'s uri and what its file holds, after checking it holds [endUs] of media. */
+        private fun timedSource(
+            ref: MediaRef,
+            endUs: Long,
+        ): Pair<Uri, SourceInfo> {
+            val u = uri(ref)
+            val info = infos.getOrPut(u) { probe.probe(u) } ?: throw MediaUnavailableException("Could not read the media's length")
+            if (endUs > info.durationUs + LENGTH_TOLERANCE_US) throw MediaUnavailableException("A clip is longer than its file")
+            return u to info
+        }
 
         /** [ref]'s uri, after checking the file holds [endUs] of media. */
         private fun timedUri(
             ref: MediaRef,
             endUs: Long,
-        ): Uri {
-            val u = uri(ref)
-            val real =
-                lengths.getOrPut(u) { probe.durationUs(u) } ?: throw MediaUnavailableException("Could not read the media's length")
-            if (endUs > real + LENGTH_TOLERANCE_US) throw MediaUnavailableException("A clip is longer than its file")
-            return u
-        }
+        ): Uri = timedSource(ref, endUs).first
 
         private fun image(
             png: Uri,
@@ -254,17 +262,14 @@ class CompositionFactory(
             return w to h
         }
 
-        /** Whether [segment]'s file has a sound track to play. */
-        fun hasAudio(segment: AudioSegment.Sound): Boolean {
-            val u = uri(segment.media)
-            return audio.getOrPut(u) { probe.hasAudio(u) }
-        }
-
-        fun soundItem(segment: AudioSegment.Sound): EditedMediaItem {
+        /** [segment] as an item, or null when its file has no sound track (it plays as silence). */
+        fun soundItem(segment: AudioSegment.Sound): EditedMediaItem? {
+            val (u, info) = timedSource(segment.media, segment.clipEndUs)
+            if (!info.hasAudio) return null
             val item =
                 MediaItem
                     .Builder()
-                    .setUri(timedUri(segment.media, segment.clipEndUs))
+                    .setUri(u)
                     .setClippingConfiguration(clipping(segment.clipStartUs, segment.clipEndUs, segment.speed, segment.durationUs))
                     .build()
             return EditedMediaItem
@@ -314,23 +319,17 @@ class CompositionFactory(
     }
 }
 
-/** Reads a file's length and tracks with [MediaMetadataRetriever]. */
+/** Reads a file's length and tracks with one [MediaMetadataRetriever] pass. */
 internal class RetrieverProbe(
     private val context: Context,
-) : MediaProbe {
-    override fun durationUs(uri: Uri): Long? = read(uri, MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.times(1000)
-
-    /** An unreadable file counts as having sound, so its real error surfaces from the export. */
-    override fun hasAudio(uri: Uri): Boolean = read(uri, MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)?.let { it == "yes" } ?: true
-
-    private fun read(
-        uri: Uri,
-        key: Int,
-    ): String? {
+) : SourceProbe {
+    override fun probe(uri: Uri): SourceInfo? {
         val r = MediaMetadataRetriever()
         return try {
             r.setDataSource(context, uri)
-            r.extractMetadata(key)
+            val durationUs = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.times(1000) ?: return null
+            // The key is present ("yes") only when the file has a sound track.
+            SourceInfo(durationUs, r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes")
         } catch (e: RuntimeException) {
             null
         } finally {

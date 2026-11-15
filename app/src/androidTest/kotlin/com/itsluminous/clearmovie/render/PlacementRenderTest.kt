@@ -26,12 +26,14 @@ import com.itsluminous.clearmovie.render.RenderHarness.luma
 import com.itsluminous.clearmovie.render.RenderHarness.report
 import com.itsluminous.clearmovie.render.RenderHarness.rgb
 import com.itsluminous.clearmovie.render.RenderHarness.savePng
+import com.itsluminous.clearmovie.render.RenderHarness.toneDb
 import com.itsluminous.clearmovie.render.media3.CompositionFactory
 import com.itsluminous.clearmovie.render.media3.MediaUnavailableException
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.Locale
 
 /**
  * Placement and bitmap details the review asked to see in real exports:
@@ -154,8 +156,9 @@ class PlacementRenderTest {
 
     /**
      * A video without a sound track (a screen recording, a silent clip) on
-     * MAIN, between a clip with sound: the export must not fail, and must
-     * come out at the planned length with the other clip's sound.
+     * MAIN between two clips with sound: the export must not fail, must come
+     * out at the planned length, and must be silent exactly where the silent
+     * clip is, with each other clip's tone in its own place.
      */
     @Test
     fun silentVideoClipExports() {
@@ -165,16 +168,33 @@ class PlacementRenderTest {
                 .blank(ProjectId("silent"), ids)
                 .addToMain(
                     listOf(
-                        VideoClip(ids.clipId(), fixture("frame_neargreen.mp4"), sourceDurationMs = 2000),
                         VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 2000),
+                        VideoClip(ids.clipId(), fixture("frame_neargreen.mp4"), sourceDurationMs = 2000),
+                        VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 2000),
                     ),
                     ids = ids,
                 )
         val plan = RenderPlanBuilder().build(project)
+        assertThat(plan.durationUs).isEqualTo(6_000_000L)
         val out = RenderHarness.export(plan, "silent-video-clip")
         val lengthUs = RenderHarness.durationUs(out.file)
-        report("silent-video-clip: ${lengthUs}us of ${plan.durationUs}us planned, audio encoder ${out.result.audioEncoderName}")
+        val pcm = RenderHarness.decodeAudio(out.file)
+        val levels =
+            listOf(
+                "dark clip 440 Hz" to toneDb(pcm, 440.0, 0.3, 1.7),
+                "silent clip 440 Hz" to toneDb(pcm, 440.0, 2.3, 3.7),
+                "silent clip 550 Hz" to toneDb(pcm, 550.0, 2.3, 3.7),
+                "light clip 550 Hz" to toneDb(pcm, 550.0, 4.3, 5.7),
+            )
+        report(
+            "silent-video-clip: ${lengthUs}us of ${plan.durationUs}us; " +
+                levels.joinToString { (n, db) -> "$n %.1f dB".format(Locale.ROOT, db) },
+        )
         assertThat(lengthUs).isIn(Range.closed(plan.durationUs - 50_000L, plan.durationUs + 50_000L))
-        assertThat(out.result.audioEncoderName).isNotNull()
+        // The fixtures' tones are -20 dBFS peak; silence is far below.
+        assertThat(levels[0].second).isGreaterThan(-30.0)
+        assertThat(levels[1].second).isLessThan(-60.0)
+        assertThat(levels[2].second).isLessThan(-60.0)
+        assertThat(levels[3].second).isGreaterThan(-30.0)
     }
 }
