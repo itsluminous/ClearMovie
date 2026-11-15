@@ -138,11 +138,15 @@ class TracksTest {
         assertThat(kept.enabled).isFalse()
         assertThat(noFrame.stacking).contains(frame.id)
         assertThat(noFrame.setTrackEnabled(frame.id, true)).isEqualTo(p)
-        // If the user moved the frame off its row, the emptied row is switched off, not removed.
+        // The frame never leaves its row, so the row can't be left empty.
         val other = TrackId("other")
-        val moved = p.addRow(TrackType.OVERLAY, id = other).moveClip(frame.clips.single().id, 0, other, ids).assertValid()
-        assertThat(moved.requireTrack(frame.id).clips).isEmpty()
-        assertThat(moved.requireTrack(frame.id).enabled).isFalse()
+        assertThrows(IllegalArgumentException::class.java) {
+            p.addRow(TrackType.OVERLAY, id = other).moveClip(frame.clips.single().id, 0, other, ids)
+        }
+        // Moving it in time while it is switched off keeps it on its row, still off.
+        val shifted = noFrame.moveClip(frame.clips.single().id, 100, ids = ids).assertValid()
+        assertThat(shifted.trackOf(frame.clips.single().id)!!.id).isEqualTo(frame.id)
+        assertThat(shifted.requireTrack(frame.id).enabled).isFalse()
 
         // Deleting every MAIN item keeps MAIN.
         val emptyMain =

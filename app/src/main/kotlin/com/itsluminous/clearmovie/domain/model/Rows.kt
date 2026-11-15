@@ -76,7 +76,8 @@ internal fun Project.candidateTracks(
 ): List<Track> {
     val ofType = tracks.filter { it.type == type && it.enabled && it.presetRole == null }
     return if (type.isVisual) {
-        stackingTopFirst.mapNotNull { id -> ofType.firstOrNull { it.id == id } }
+        val byId = ofType.associateBy { it.id }
+        stackingTopFirst.mapNotNull { byId[it] }
     } else {
         ofType.filter { it.audioRole == role }
     }
@@ -84,19 +85,22 @@ internal fun Project.candidateTracks(
 
 /**
  * A row a preset manages (the frame, its music, the closing message) holds
- * only the preset's own media, so the user's items always go on rows of
- * their own and switching the frame off never hides them.
+ * only its managed clip, so the user's items always go on rows of their own
+ * and switching the frame off never hides them.
  */
-internal fun Track.takes(clip: Clip): Boolean {
-    if (presetRole == null) return true
-    val media =
-        when (clip) {
-            is OverlayClip -> clip.media
-            is AudioClip -> clip.media
-            else -> null
+internal fun Track.takes(clip: Clip): Boolean = presetRole == null || clip.isPresetManaged
+
+/**
+ * A clip the preset put in: one that plays a preset file or follows a span.
+ * (A frame replaced for one video keeps its span, so it still counts.)
+ */
+internal val Clip.isPresetManaged: Boolean
+    get() =
+        when (this) {
+            is OverlayClip -> media is MediaRef.Preset || anchor != null
+            is AudioClip -> media is MediaRef.Preset || anchor != null
+            else -> false
         }
-    return media is MediaRef.Preset
-}
 
 /** The row type a timed clip belongs on. */
 internal fun Clip.timedTrackType(): TrackType =

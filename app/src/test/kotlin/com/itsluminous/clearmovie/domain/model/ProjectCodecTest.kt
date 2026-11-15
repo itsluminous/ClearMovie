@@ -1,6 +1,7 @@
 package com.itsluminous.clearmovie.domain.model
 
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.domain.model.Fixtures.byRole
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -136,6 +137,66 @@ class ProjectCodecTest {
         assertThat(result.repaired).isTrue()
         assertThat(result.project).isEqualTo(Fixtures.richProject())
         assertThat(ok(rich).repaired).isFalse()
+    }
+
+    @Test
+    fun `loading never moves, adds or drops the user's items`() {
+        val blank = fixture("blank-v1.json")
+        // A caption stored on MAIN is refused, not quietly dropped.
+        val caption = "{\"type\": \"text\", \"id\": \"t9\", \"startMs\": 0, \"durationMs\": 1000, \"text\": \"x\"}"
+        val onMain =
+            blank.replace(
+                "\"type\": \"main\",\n            \"clips\": []",
+                "\"type\": \"main\",\n            \"clips\": [$caption]",
+            )
+        assertThat(onMain).isNotEqualTo(blank)
+        assertThat(failed(onMain)).isEqualTo(ProjectDecodeResult.Reason.INVALID)
+        // A stale frame that would now cover the user's overlay is refused rather than moving the overlay.
+        val p = Fixtures.presetProject()
+        val frameRow = p.byRole(PresetRole.FRAME)
+        val user = Fixtures.overlay("user", 7000, 1000)
+        val stale =
+            p.copy(
+                tracks =
+                    p.tracks.map {
+                        if (it.id ==
+                            frameRow.id
+                        ) {
+                            it.copy(clips = listOf(user) + it.clips.map { c -> c.withStartMs(9000) })
+                        } else {
+                            it
+                        }
+                    },
+            )
+        assertThat(failed(codec.encode(stale))).isEqualTo(ProjectDecodeResult.Reason.INVALID)
+    }
+
+    @Test(timeout = 20_000)
+    fun `repairing a hostile file stays cheap`() {
+        // Thousands of overlapping overlays next to an anchored frame: refused quickly.
+        val p = Fixtures.presetProject()
+        val frameRow = p.byRole(PresetRole.FRAME)
+        val crowd = (1..3000).map { Fixtures.overlay("o$it", 6500, 1000) }
+        val hostile =
+            p.copy(
+                tracks =
+                    p.tracks.map {
+                        if (it.id ==
+                            frameRow.id
+                        ) {
+                            it.copy(clips = it.clips.map { c -> c.withStartMs(0) } + crowd)
+                        } else {
+                            it
+                        }
+                    },
+            )
+        val text = codec.encode(hostile)
+        assertThat(text.length).isLessThan(ProjectCodec.MAX_CHARS)
+        assertThat(failed(text)).isEqualTo(ProjectDecodeResult.Reason.INVALID)
+        // And thousands of anchored clips are worked out in one pass.
+        val many = (1..3000).map { (frameRow.clips.single() as OverlayClip).copy(id = ClipId("f$it"), startMs = it.toLong()) }
+        val anchored = p.copy(tracks = p.tracks.map { if (it.id == frameRow.id) it.copy(clips = many) else it })
+        assertThat(failed(codec.encode(anchored))).isEqualTo(ProjectDecodeResult.Reason.INVALID)
     }
 
     @Test

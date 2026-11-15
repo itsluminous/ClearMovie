@@ -21,9 +21,17 @@ package com.itsluminous.clearmovie.domain.model
  * derived from the clip it holds), and idempotent: normalising a normalised
  * project changes nothing.
  */
-fun Project.normalized(): Project =
+fun Project.normalized(): Project = normalized(relocate = true)
+
+/**
+ * With [relocate] false, a clip an anchored clip would grow over is left
+ * where it is (so the result may still overlap and fail validation). Loading
+ * a stored project uses that: it may re-derive values, but never moves the
+ * user's clips, and it stays cheap on hostile input.
+ */
+internal fun Project.normalized(relocate: Boolean): Project =
     normalizeMain()
-        .normalizeAnchors()
+        .normalizeAnchors(relocate)
         .normalizeFits()
 
 /** Two neighbouring halves of one split, still continuous: the cut between them takes no transition. */
@@ -39,6 +47,8 @@ internal fun isContinuousSplit(
         a.trimEndMs == b.trimStartMs
 
 private fun Project.normalizeMain(): Project {
+    // Only MAIN-capable clips are fitted; anything else on MAIN is left for
+    // validate() to report, never dropped.
     val clips = main.clips.filterIsInstance<MainClip>()
     val forAll = transitionForAll?.takeUnless { it.kind == TransitionKind.NONE }
     val fixed =
@@ -54,7 +64,8 @@ private fun Project.normalizeMain(): Project {
             val placed = if (clip.startMs != 0L) clip.withStartMs(0) as MainClip else clip
             if (placed.transitionToNext == fitted) placed else placed.withTransition(fitted)
         }
-    return withTrackClips(main.id, fixed).copy(transitionForAll = forAll)
+    val byId = fixed.associateBy { it.id }
+    return withTrackClips(main.id, main.clips.map { byId[it.id] ?: it }).copy(transitionForAll = forAll)
 }
 
 private val Clip.anchor: SpanAnchor?
@@ -65,30 +76,41 @@ private val Clip.anchor: SpanAnchor?
             else -> null
         }
 
-private fun Project.normalizeAnchors(): Project {
-    var project = this
-    for (track in tracks) {
-        for (clip in track.clips) {
-            val anchor = clip.anchor ?: continue
-            val current = project.track(track.id) ?: continue
-            val span = project.anchorSpan(anchor)
-            if (span == null) {
-                val rest = current.clips.filterNot { it.id == clip.id }
-                project = project.withTrackClips(track.id, rest)
-                // Like any delete, a row it leaves empty goes too.
-                if (rest.isEmpty() && current.isRemovable) {
-                    project = project.copy(tracks = project.tracks.filterNot { it.id == track.id }, stacking = project.stacking - track.id)
+private fun Project.normalizeAnchors(relocate: Boolean): Project {
+    if (tracks.none { t -> t.clips.any { it.anchor != null } }) return this
+    // Spans depend only on MAIN, which this step never changes: work each out once.
+    val spans = SpanCache(this)
+    val anchored = mutableListOf<Pair<TrackId, Clip>>()
+    val newTracks =
+        tracks.mapNotNull { track ->
+            if (track.clips.none { it.anchor != null }) return@mapNotNull track
+            val kept =
+                track.clips.mapNotNull { clip ->
+                    val anchor = clip.anchor ?: return@mapNotNull clip
+                    val span = spans[anchor] ?: return@mapNotNull null
+                    clip.respanned(span.first, span.second).also { anchored += track.id to it }
                 }
-                continue
-            }
-            val respanned = clip.respanned(span.first, span.second)
-            if (respanned != clip) {
-                project = project.withTrackClips(track.id, current.clips.map { if (it.id == clip.id) respanned else it })
-            }
-            project = project.moveAsideFrom(track.id, respanned)
+            // Like any delete, a row left empty by a dropped clip goes too.
+            if (kept.isEmpty() && track.isRemovable) null else track.copy(clips = kept.sortedBy { it.startMs })
+        }
+    val remaining = newTracks.map { it.id }.toSet()
+    var project = copy(tracks = newTracks, stacking = stacking.filter { it in remaining })
+    if (relocate) {
+        for ((trackId, clip) in anchored) {
+            if (project.track(trackId) != null) project = project.moveAsideFrom(trackId, clip)
         }
     }
     return project
+}
+
+/** [Project.anchorSpan] worked out once per distinct anchor. */
+internal class SpanCache(
+    private val project: Project,
+) {
+    private val spans = HashMap<SpanAnchor, Pair<Long, Long>?>()
+
+    operator fun get(anchor: SpanAnchor): Pair<Long, Long>? =
+        if (spans.containsKey(anchor)) spans[anchor] else project.anchorSpan(anchor).also { spans[anchor] = it }
 }
 
 /** The clip moved to [start] and stretched to [end] (capped at its media when it does not repeat). */

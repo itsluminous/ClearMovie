@@ -158,6 +158,16 @@ class EdgeCasesTest {
         assertThrows(IllegalArgumentException::class.java) { captioned.setText(caption, "tab\there") }
         val badCard = CardClip(ClipId("card"), 3000, ArgbColor.BLACK, text = "\u202E")
         assertThrows(IllegalArgumentException::class.java) { p.addToMain(listOf(badCard), ids = ids) }
+        // Text checks at every way in: "+" on a text row and "Add here".
+        val row = captioned.trackOf(caption)!!.id
+        assertThrows(IllegalArgumentException::class.java) {
+            captioned.insertAt(row, caption, Side.AFTER, TextClip(ClipId("bad"), 0, 1000, "\u202E"), ids)
+        }
+        assertThrows(IllegalArgumentException::class.java) { captioned.addToTrack(row, TextClip(ClipId("b2"), 0, 1000, "x\t"), 5000, ids) }
+        // Names that show nothing are refused: only joiners, combining marks or tag characters.
+        for (blank in listOf("\u200D", "\u0301\u0301", "\uDB40\uDC41", " \u200C ")) {
+            assertThrows(IllegalArgumentException::class.java) { p.rename(blank) }
+        }
         // Emoji and punctuation make fine names.
         assertThat(p.rename("\uD83C\uDF82 Party!").name).isEqualTo("\uD83C\uDF82 Party!")
         assertThat(p.rename("!!!").name).isEqualTo("!!!")
@@ -221,6 +231,19 @@ class EdgeCasesTest {
         val frame = p.byRole(PresetRole.FRAME).id
         val q = p.sendToBottom(text1).addRow(TrackType.OVERLAY, id = TrackId("ov")).assertValid()
         assertThat(q.stacking).containsExactly(text1, q.main.id, frame, TrackId("ov"), TrackId("text2")).inOrder()
+    }
+
+    @Test
+    fun `a frame replaced for this video still counts as the preset's frame`() {
+        val p = Fixtures.presetProject()
+        val row = p.byRole(PresetRole.FRAME)
+        val replaced = (row.clips.single() as OverlayClip).copy(media = MediaRef.Copied("my_frame.mp4"))
+        val q = p.copy(tracks = p.tracks.map { if (it.id == row.id) it.copy(clips = listOf(replaced)) else it }).assertValid()
+        assertThat(q.requireTrack(row.id).takes(replaced)).isTrue()
+        val off = q.deleteClip(replaced.id).assertValid()
+        assertThat(off.requireTrack(row.id).clips).containsExactly(replaced)
+        assertThat(off.requireTrack(row.id).enabled).isFalse()
+        assertThat(q.requireTrack(row.id).takes(Fixtures.overlay("user", 0))).isFalse()
     }
 
     @Test

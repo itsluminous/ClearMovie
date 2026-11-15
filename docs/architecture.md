@@ -94,10 +94,11 @@ Android types, so all of it is tested on the JVM.
   MAIN. Inserting on MAIN shifts later clips; on any other row the clip goes at
   the item's edge, or onto the highest free row of that type, or a new row,
   when it would overlap. The rows a preset manages (its frame, the frame's
-  music, the closing message) hold only the preset's own media, so the
-  user's items always get rows of their own. A row emptied by a delete or
-  move is removed in the same step, except MAIN and the preset frame row;
-  deleting the preset frame switches its row off and keeps the frame.
+  music, the closing message) hold only the clip the preset put there, which
+  moves only in time on its own row, so the user's items always get rows of
+  their own. A row emptied by a delete or move is removed in the same step,
+  except MAIN and the preset frame row; deleting the preset frame switches
+  its row off and keeps the frame.
 - **Undo.** `ProjectEditor` applies one edit per undo step (50 kept), and
   accepts a result only if `validate()` finds no broken invariant.
 - **Presets.** `PresetParser` reads `preset.json` (schema 1) field by field,
@@ -109,9 +110,9 @@ Android types, so all of it is tested on the JVM.
 - **Storage format.** `ProjectCodec` writes canonical JSON with a
   `schemaVersion` and every value (defaults included, so a later change to a
   default never changes a saved project). On reading it works out stale
-  derived values again (spans and fits, flagged as `repaired`) and refuses
-  files that are too large, too deeply nested, from a newer app or otherwise
-  invalid. `ProjectMigrations` upgrades older
+  derived values again (spans and fits, flagged as `repaired`), never moving,
+  adding or dropping an item, and refuses files that are too large, too
+  deeply nested, from a newer app or otherwise invalid. `ProjectMigrations` upgrades older
   versions one step at a time (schema 1 is the first, so there are no steps
   yet). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.

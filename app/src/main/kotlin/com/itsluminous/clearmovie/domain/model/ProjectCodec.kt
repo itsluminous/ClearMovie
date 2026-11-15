@@ -131,11 +131,11 @@ class ProjectCodec(
         if (problems.isEmpty()) return ProjectDecodeResult.Ok(project, version)
         // Values the model derives (spans that follow MAIN, fitted transitions,
         // animations and fades) may be stale if an app update changed how they
-        // are worked out. Re-deriving them repairs that; anything else that is
-        // wrong is refused.
+        // are worked out. Re-deriving them repairs that. The repair never moves,
+        // adds or drops a row or clip; anything else that is wrong is refused.
         val repaired =
             try {
-                project.normalized().takeIf { it.validate().isEmpty() }
+                project.normalized(relocate = false).takeIf { it.validate().isEmpty() && it.sameItemsAs(project) }
             } catch (e: RuntimeException) {
                 null
             }
@@ -145,6 +145,9 @@ class ProjectCodec(
             failed(ProjectDecodeResult.Reason.INVALID, problems.joinToString { it.detail }.take(500))
         }
     }
+
+    private fun Project.sameItemsAs(other: Project): Boolean =
+        tracks.map { t -> t.id to t.clips.map { it.id } } == other.tracks.map { t -> t.id to t.clips.map { it.id } }
 
     private fun failed(
         reason: ProjectDecodeResult.Reason,

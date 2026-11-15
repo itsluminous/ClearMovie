@@ -110,6 +110,7 @@ private const val MAX_RAMP_MS = 5000L
 
 /** Anchored clips must already have the span they follow, so loading a file never moves them behind the user's back. */
 private fun Project.checkAnchors(fail: (Violation.Rule, String) -> Unit) {
+    val spans = SpanCache(this)
     for (track in tracks) {
         for (clip in track.clips) {
             val anchor =
@@ -118,7 +119,7 @@ private fun Project.checkAnchors(fail: (Violation.Rule, String) -> Unit) {
                     is AudioClip -> clip.anchor
                     else -> null
                 } ?: continue
-            val span = anchorSpan(anchor)
+            val span = spans[anchor]
             when {
                 span == null -> fail(Violation.Rule.ANCHOR, "${clip.id.value} follows an ending that is not there")
                 clip.respanned(span.first, span.second) != clip -> fail(Violation.Rule.ANCHOR, "${clip.id.value} does not follow its span")

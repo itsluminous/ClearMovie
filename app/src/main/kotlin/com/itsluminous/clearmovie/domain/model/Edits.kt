@@ -39,12 +39,23 @@ fun Project.addToMain(
     return withTrackClips(main.id, placed).normalized()
 }
 
+/** A caption's or card's text must pass [TextRules.isValidText] before it goes in. */
+private fun requireUsableText(clip: Clip) {
+    val text =
+        when (clip) {
+            is TextClip -> clip.text
+            is CardClip -> clip.text
+            else -> null
+        }
+    require(text == null || TextRules.isValidText(text)) { "That text can't be used" }
+}
+
 private fun requireContentClip(clip: Clip) {
     require(
         clip is PhotoClip || clip is VideoClip || clip is CardClip,
     ) { "Only photos, videos and cards go between the intro and the ending" }
     require(clip !is MediaClip || clip.pip == null) { "A MAIN item has no picture-in-picture placement" }
-    require(clip !is CardClip || clip.text == null || TextRules.isValidText(clip.text)) { "That text can't be used" }
+    requireUsableText(clip)
 }
 
 /**
@@ -104,6 +115,7 @@ fun Project.insertAt(
         return withTrackClips(trackId, placed).normalized()
     }
     require(track.accepts(clip)) { "That item does not go on this row" }
+    requireUsableText(clip)
     val start =
         when (side) {
             Side.BEFORE -> (anchor.startMs - clip.durationMs).coerceAtLeast(0)
@@ -127,7 +139,7 @@ fun Project.addTimedClip(
     val type = clip.timedTrackType()
     require(Track(TrackId("probe"), type).accepts(clip)) { "That item does not go on that kind of row" }
     require((type == TrackType.AUDIO) == (role != null)) { "Sound needs a role, other items none" }
-    require(clip !is TextClip || TextRules.isValidText(clip.text)) { "That text can't be used" }
+    requireUsableText(clip)
     return placeTimed(clip, preferred = null, role = role, ids = ids).first.normalized()
 }
 
@@ -163,6 +175,7 @@ fun Project.addToTrack(
     require(track.type.isTimed) { "Use addToMain for the MAIN row" }
     require(track.accepts(clip)) { "That item does not go on this row" }
     require(clip(clip.id) == null) { "Clip id already used" }
+    requireUsableText(clip)
     return placeTimed(clip.withStartMs(startMs), preferred = trackId, role = track.audioRole, ids = ids).first.normalized()
 }
 
@@ -178,7 +191,8 @@ fun Project.addToTrack(
 fun Project.deleteClip(clipId: ClipId): Project {
     val track = requireNotNull(trackOf(clipId)) { "No such clip" }
     val clip = requireClip(clipId)
-    if (track.presetRole == PresetRole.FRAME && clip is OverlayClip && clip.media == MediaRef.Preset(PresetSlot.FRAME)) {
+    if (track.presetRole == PresetRole.FRAME) {
+        // The frame row holds only the frame (see Track.takes).
         return setTrackEnabled(track.id, false)
     }
     var project = withTrackClips(track.id, track.clips.filterNot { it.id == clipId }).afterRemovingFrom(track.id)
@@ -225,8 +239,10 @@ private fun Project.dropTrack(trackId: TrackId): Project =
 /**
  * Moves a timed clip in time and, optionally, to another row of the same
  * type. When the target row is busy at that time, the clip goes on a new row
- * of that type (section 6.1). A row left empty is removed. Moving an anchored
- * clip by hand detaches it from the frame or ending.
+ * of that type (section 6.1). A row left empty is removed. A clip on a row
+ * the preset manages (the frame, its music, the closing message) moves only
+ * in time, on its own row, and moving it by hand detaches it from the span it
+ * followed.
  */
 fun Project.moveClip(
     clipId: ClipId,
@@ -240,6 +256,11 @@ fun Project.moveClip(
     require(target.type == source.type) { "A clip moves only to a row of the same kind" }
     require(source.type != TrackType.AUDIO || target.audioRole == source.audioRole) { "Sound moves only to a row of the same kind" }
     val clip = requireClip(clipId).detached().withStartMs(startMs)
+    if (source.presetRole != null) {
+        require(target.id == source.id) { "This item stays on its own row" }
+        require(startMs >= 0) { "A clip can't start before the video" }
+        return withTrackClips(source.id, source.clips.map { if (it.id == clipId) clip else it }).normalized()
+    }
     val without = withTrackClips(source.id, source.clips.filterNot { it.id == clipId })
     val (placed, landed) = without.placeTimed(clip, preferred = target.id, role = source.audioRole, ids = ids, allowExisting = false)
     val cleaned = if (landed == source.id) placed else placed.afterRemovingFrom(source.id)

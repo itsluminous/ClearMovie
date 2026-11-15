@@ -25,13 +25,24 @@ object TextRules {
     ): Boolean = text.none { c -> (c.isISOControl() && !(allowNewlines && c == '\n')) || c in invisible }
 
     /**
-     * A project name: one line of allowed characters, not blank, at most
+     * A project name: one line of allowed characters with at least one that
+     * shows (not only spaces, joiners or combining marks), at most
      * [Limits.MAX_NAME_LENGTH] characters. Emoji and punctuation are fine. It
      * is for display only; anything that turns it into a file name must still
      * make it safe.
      */
     fun isValidName(name: String): Boolean =
-        name.isNotBlank() && name.length <= Limits.MAX_NAME_LENGTH && isAllowed(name, allowNewlines = false)
+        name.length <= Limits.MAX_NAME_LENGTH && isAllowed(name, allowNewlines = false) && name.codePoints().anyMatch(::isVisible)
+
+    /** A code point that shows something: assigned, and not a control, format, space or combining character. */
+    private fun isVisible(codePoint: Int): Boolean =
+        when (Character.getType(codePoint).toByte()) {
+            Character.CONTROL, Character.FORMAT, Character.SPACE_SEPARATOR, Character.LINE_SEPARATOR,
+            Character.PARAGRAPH_SEPARATOR, Character.UNASSIGNED, Character.NON_SPACING_MARK,
+            -> false
+
+            else -> true
+        }
 
     /** Caption or card text: lines allowed, at most [Limits.MAX_TEXT_LENGTH] characters. */
     fun isValidText(text: String): Boolean = text.length <= Limits.MAX_TEXT_LENGTH && isAllowed(text, allowNewlines = true)

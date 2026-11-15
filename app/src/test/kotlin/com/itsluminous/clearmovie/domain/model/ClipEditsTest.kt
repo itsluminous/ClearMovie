@@ -284,6 +284,7 @@ class ClipEditsTest {
                 .single()
                 .id
         assertThrows(IllegalArgumentException::class.java) { p.moveClip(music, 0, TrackId("voice2"), ids) }
+        assertThrows(IllegalArgumentException::class.java) { p.moveClip(music, -1, ids = ids) }
     }
 
     @Test
