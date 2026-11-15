@@ -85,6 +85,20 @@ Emulators encode video in software, so export tests prove correctness, not speed
 Hardware encoding is checked on a real phone, where a dedicated test runs and the
 emulator skips it.
 
+The render tests (`app/src/androidTest/.../render/`) export small projects through
+the real Transformer and check pixels and sound levels in the output: keying, layer
+order, transitions, timing and ducking. Each export is also written to the app's
+external files folder, `render-tests/`, with the frames it checked, so you can look
+at them (`adb pull /sdcard/Android/data/com.itsluminous.ClearMovie/files/render-tests`)
+before the test run uninstalls the app. Two kinds of render test only run by hand:
+
+- `SpikeLongTest` (a 2-minute export watching memory, and frame-video seek times)
+  takes several minutes: add `-Pandroid.testInstrumentationRunnerArguments.cm.long=true`.
+- `RealFrameKeyingTest` checks keying against a real preset frame. Put `Intro.mp4`,
+  `Frame-White-20s.mp4` (16 s or more) and `speech_last.mp3` in the app's
+  external files folder under `realmedia/` first; without them it is skipped.
+  Never commit such media.
+
 ## Checking light and dark themes
 
 ClearMovie follows the system's light or dark setting (Settings → Theme can override
@@ -98,7 +112,12 @@ adb -s emulator-5584 shell cmd uimode night yes   # dark; "no" for light
 ## Test media
 
 Tests that need media use small synthetic clips generated with `ffmpeg` and committed
-under `app/src/test*/resources/fixtures` (the first arrive with the render milestone).
+under `app/src/androidTest/assets/fixtures`, each under 300 KB:
+
+```bash
+scripts/make-fixtures.sh    # regenerates every fixture; the script says what each one is
+```
+
 Personal media is never committed.
 
 ## Adding a language

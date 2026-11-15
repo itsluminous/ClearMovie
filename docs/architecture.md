@@ -11,6 +11,8 @@ their imports.
 | Package | Owns | May not import |
 | --- | --- | --- |
 | `domain.model` | The project and preset model (below), `ThemeMode`, `AppSettings`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
+| `render.plan` | `RenderPlanBuilder` and the `RenderPlan` it makes: pure Kotlin | `android.*`, `androidx.*`, Media3, or any other app layer but `domain` |
+| `render.media3` | The Media3 mapping: `CompositionFactory`, the GL effects, the gain processor, `RenderExporter` | |
 | `data.settings` | `SettingsRepository` and its DataStore implementation | `ui` |
 | `data.db` | The Room database `ClearMovieDatabase` (projects, session, preset bindings and definitions, persisted link grants) | `ui` |
 | `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard` | `ui` |
@@ -122,6 +124,44 @@ Android types, so all of it is tested on the JVM.
   versions one step at a time (schema 1 is the first, so there are no steps
   yet). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.
+
+## Rendering
+
+Rendering has two layers, both under `render`:
+
+- **`render.plan`** (pure Kotlin, JVM-tested). `RenderPlanBuilder` turns a
+  `Project` (and its `Preset`) into a `RenderPlan`: visual layers in
+  `stacking` order, bottom first, and audio layers. Every layer covers the
+  whole video, with transparent `Fill`s (or `Silence`) in its gaps, so an
+  empty stretch of a row never hides the rows below it. MAIN becomes two
+  lanes, A and B (B just above A), when it has a transition: the lane switches
+  at each transition so the two clips overlap, and the clip in lane B carries
+  an opacity ramp (a crossfade; other shapes come with the effects
+  milestone). Photos and videos go into the frame's window while the preset
+  frame row is on; picture in picture goes in its corner of the window. The
+  frame repeats and its last copy is cut. A spoken ending shows the last item's
+  last frame. Sound is planned per row with a `GainEnvelope` in each item's own
+  time: volume, loudness normalisation, fades, an equal-power crossfade, and
+  ducking computed from the timeline (music lowered under clip sound and under
+  voice, everything under the closing message, clip sound and voice never
+  lowered by music). `RenderPlan.slice` cuts a plan for a short exact draft.
+- **`render.media3`** maps a plan to one Media3 `Composition` for Transformer
+  (`CompositionFactory`, `RenderExporter`). Media3's compositor draws the
+  first sequence on top, so layers are emitted top first. Every picture ends
+  in `PlacementEffect`, which draws it onto a transparent canvas-sized frame
+  (cover crop, fit with bars, fit over a blurred copy, picture in picture with
+  a border, or a caption box); `ChromaKeyEffect` keys the frame's green;
+  `TransitionEffect` applies the opacity ramp; `GainEnvelopeAudioProcessor`
+  applies the sound envelope. Captions and cards are drawn as bitmaps by
+  `CaptionBitmapRenderer` and cached in `cacheDir/render/` by a hash of their
+  content. `FileMediaResolver` and `UriGuard` let the renderer read only
+  `content://` media and files inside the app's own folders.
+
+The live editor preview does not play this composition: Media3's multi-input
+`CompositionPlayer` (1.11.1) shows no frame after a seek and freezes when a
+lower layer goes from a video to a photo. The editor therefore previews MAIN
+in a plain player with the other rows drawn over it, and offers an exact draft
+(a sliced plan, exported at a low height) on request.
 
 ## Persistence
 
