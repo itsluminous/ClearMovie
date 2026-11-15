@@ -34,6 +34,16 @@ class SettingsRepositoryImpl
                     )
                 }.distinctUntilChanged()
 
+        override val mediaAccessAsked: Flow<Boolean> =
+            dataStore.data
+                .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+                .map { it[MEDIA_ACCESS_ASKED] == true }
+                .distinctUntilChanged()
+
+        override suspend fun setMediaAccessAsked() {
+            dataStore.edit { it[MEDIA_ACCESS_ASKED] = true }
+        }
+
         override suspend fun setThemeMode(mode: ThemeMode) {
             dataStore.edit { it[THEME_MODE] = mode.name }
         }
@@ -48,5 +58,6 @@ class SettingsRepositoryImpl
             // Stored by enum NAME, so reordering ThemeMode never changes a saved choice.
             val THEME_MODE = stringPreferencesKey("theme_mode")
             val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
+            val MEDIA_ACCESS_ASKED = booleanPreferencesKey("media_access_asked")
         }
     }

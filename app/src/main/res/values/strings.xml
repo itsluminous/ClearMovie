@@ -37,4 +37,62 @@
     <!-- The bundled generic preset's name. assets/presets/event-frame/preset.json
          refers to it by name (displayNameRes), which Lint can't see. -->
     <string name="preset_event_frame_name" tools:ignore="UnusedResources">Event frame</string>
+
+    <string name="action_cancel">Cancel</string>
+    <string name="action_replace">Replace</string>
+
+    <!-- Photo and video access: the one-time explanation before Android's own request. -->
+    <string name="media_access_title">Let ClearMovie see your photos and videos</string>
+    <string name="media_access_body">ClearMovie makes your video from the photos and videos in your gallery. Android will ask you next. Please allow all photos and videos.</string>
+    <string name="media_access_privacy">Your photos and videos stay on your phone. ClearMovie never sends them anywhere.</string>
+    <string name="media_access_continue">Continue</string>
+    <string name="media_access_not_now">Not now</string>
+    <string name="media_access_denied_title">ClearMovie can\'t see your photos yet</string>
+    <string name="media_access_denied_body">You can still choose photos and videos, but ClearMovie has to copy them, which uses more space on your phone.</string>
+    <string name="media_access_try_again">Try again</string>
+    <!-- "Permissions" and "Photos and videos" are the names Android's own settings screen shows. -->
+    <string name="media_access_blocked_body">Android won\'t ask again. Open Settings, tap Permissions, then Photos and videos, and allow all.</string>
+    <string name="media_access_open_settings">Open Settings</string>
+    <string name="media_access_partial">ClearMovie can see only the photos you chose. Other photos and videos you add are copied, which uses more space.</string>
+    <string name="media_access_allow_all">Allow all photos</string>
+
+    <!-- The copy budget: asked before copying more than 1 GB, or when the phone would be nearly full. -->
+    <string name="copy_budget_title">Copy these photos and videos?</string>
+    <!-- %1$d is the number of items, %2$s a size such as "1.4 GB". -->
+    <plurals name="copy_budget_body">
+        <item quantity="one">%1$d photo or video needs %2$s of space on your phone.</item>
+        <item quantity="other">These %1$d photos and videos need %2$s of space on your phone.</item>
+    </plurals>
+    <!-- %1$s is a size such as "3.2 GB". -->
+    <string name="copy_budget_free">Your phone has %1$s free.</string>
+    <string name="copy_budget_copy_anyway">Copy anyway</string>
+    <string name="copy_budget_choose_fewer">Choose fewer</string>
+    <string name="copy_no_space_title">Not enough space</string>
+    <!-- %1$s is the size needed, %2$s the free space, both such as "1.4 GB". -->
+    <string name="copy_no_space_body">These need %1$s, but your phone has only %2$s free. Free up some space, or choose fewer photos and videos.</string>
+    <string name="copy_progress_title">Copying your photos and videos</string>
+    <!-- %1$d is a whole percentage, 0 to 100. -->
+    <string name="copy_progress_percent">%1$d%% done</string>
+
+    <!-- Preset setup and repair: one row per preset file. -->
+    <string name="preset_setup_title">Set up your preset</string>
+    <string name="preset_setup_body">Choose each file from your phone once. ClearMovie keeps its own copy.</string>
+    <string name="preset_repair_title">A preset file needs fixing</string>
+    <string name="preset_repair_body">Your videos are safe. Choose the file again to keep using this preset.</string>
+    <string name="preset_slot_intro">Intro</string>
+    <string name="preset_slot_frame">Frame</string>
+    <string name="preset_slot_ending">Ending</string>
+    <string name="preset_slot_ready">Ready</string>
+    <string name="preset_slot_not_set">Not chosen yet</string>
+    <string name="preset_slot_missing">This file was moved or deleted. Choose it again.</string>
+    <string name="preset_slot_changed">This file has changed. Choose it again.</string>
+    <string name="preset_slot_frame_adjusted">Frame adjusted to this file</string>
+    <string name="preset_choose_file">Choose file</string>
+    <!-- For screen readers. %1$s is a part of the preset, such as "Intro". -->
+    <string name="preset_choose_file_for">Choose the file for %1$s</string>
+
+    <!-- A clip whose photo or video can't be opened. -->
+    <string name="media_missing_label">Missing</string>
+    <string name="media_missing_body">This photo or video was moved or deleted. Tap Replace to choose it again.</string>
+    <string name="media_no_access_body">ClearMovie can\'t open this photo or video. Allow access to photos and videos, or tap Replace.</string>
 </resources>

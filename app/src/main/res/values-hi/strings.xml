@@ -29,4 +29,52 @@
     <string name="settings_version">वर्शन %1$s</string>
 
     <string name="preset_event_frame_name">इवेंट फ़्रेम</string>
+
+    <string name="action_cancel">रद्द करें</string>
+    <string name="action_replace">बदलें</string>
+
+    <string name="media_access_title">ClearMovie को अपनी फ़ोटो और वीडियो देखने दें</string>
+    <string name="media_access_body">ClearMovie आपकी गैलरी की फ़ोटो और वीडियो से आपका वीडियो बनाता है। इसके बाद Android आपसे पूछेगा। कृपया सभी फ़ोटो और वीडियो की अनुमति दें।</string>
+    <string name="media_access_privacy">आपकी फ़ोटो और वीडियो आपके फ़ोन पर ही रहते हैं। ClearMovie इन्हें कहीं नहीं भेजता।</string>
+    <string name="media_access_continue">आगे बढ़ें</string>
+    <string name="media_access_not_now">अभी नहीं</string>
+    <string name="media_access_denied_title">ClearMovie अभी आपकी फ़ोटो नहीं देख सकता</string>
+    <string name="media_access_denied_body">आप फिर भी फ़ोटो और वीडियो चुन सकते हैं, पर ClearMovie को उनकी कॉपी बनानी होगी, जिससे फ़ोन में ज़्यादा जगह लगेगी।</string>
+    <string name="media_access_try_again">फिर से कोशिश करें</string>
+    <string name="media_access_blocked_body">Android अब दोबारा नहीं पूछेगा। सेटिंग्स खोलें, अनुमतियाँ पर टैप करें, फिर फ़ोटो और वीडियो में सभी की अनुमति दें।</string>
+    <string name="media_access_open_settings">सेटिंग्स खोलें</string>
+    <string name="media_access_partial">ClearMovie सिर्फ़ आपकी चुनी हुई फ़ोटो देख सकता है। बाकी जो फ़ोटो और वीडियो आप जोड़ेंगे, उनकी कॉपी बनेगी, जिससे ज़्यादा जगह लगेगी।</string>
+    <string name="media_access_allow_all">सभी फ़ोटो की अनुमति दें</string>
+
+    <string name="copy_budget_title">इन फ़ोटो और वीडियो की कॉपी बनाएँ?</string>
+    <plurals name="copy_budget_body">
+        <item quantity="one">%1$d फ़ोटो या वीडियो के लिए फ़ोन में %2$s जगह चाहिए।</item>
+        <item quantity="other">इन %1$d फ़ोटो और वीडियो के लिए फ़ोन में %2$s जगह चाहिए।</item>
+    </plurals>
+    <string name="copy_budget_free">आपके फ़ोन में %1$s जगह खाली है।</string>
+    <string name="copy_budget_copy_anyway">फिर भी कॉपी करें</string>
+    <string name="copy_budget_choose_fewer">कम चुनें</string>
+    <string name="copy_no_space_title">जगह कम है</string>
+    <string name="copy_no_space_body">इनके लिए %1$s जगह चाहिए, पर आपके फ़ोन में सिर्फ़ %2$s खाली है। थोड़ी जगह खाली करें, या कम फ़ोटो और वीडियो चुनें।</string>
+    <string name="copy_progress_title">आपकी फ़ोटो और वीडियो की कॉपी बन रही है</string>
+    <string name="copy_progress_percent">%1$d%% पूरा</string>
+
+    <string name="preset_setup_title">अपना प्रीसेट तैयार करें</string>
+    <string name="preset_setup_body">हर फ़ाइल अपने फ़ोन से एक बार चुनें। ClearMovie उसकी अपनी कॉपी रख लेता है।</string>
+    <string name="preset_repair_title">प्रीसेट की एक फ़ाइल ठीक करनी है</string>
+    <string name="preset_repair_body">आपके वीडियो सुरक्षित हैं। यह प्रीसेट इस्तेमाल करते रहने के लिए फ़ाइल फिर से चुनें।</string>
+    <string name="preset_slot_intro">इंट्रो</string>
+    <string name="preset_slot_frame">फ़्रेम</string>
+    <string name="preset_slot_ending">अंत</string>
+    <string name="preset_slot_ready">तैयार</string>
+    <string name="preset_slot_not_set">अभी नहीं चुनी गई</string>
+    <string name="preset_slot_missing">यह फ़ाइल हटा दी गई या कहीं और चली गई। इसे फिर से चुनें।</string>
+    <string name="preset_slot_changed">यह फ़ाइल बदल गई है। इसे फिर से चुनें।</string>
+    <string name="preset_slot_frame_adjusted">फ़्रेम इस फ़ाइल के हिसाब से ठीक किया गया</string>
+    <string name="preset_choose_file">फ़ाइल चुनें</string>
+    <string name="preset_choose_file_for">%1$s के लिए फ़ाइल चुनें</string>
+
+    <string name="media_missing_label">नहीं मिली</string>
+    <string name="media_missing_body">यह फ़ोटो या वीडियो हटा दी गई या कहीं और चली गई। इसे फिर से चुनने के लिए बदलें पर टैप करें।</string>
+    <string name="media_no_access_body">ClearMovie यह फ़ोटो या वीडियो नहीं खोल सकता। फ़ोटो और वीडियो की अनुमति दें, या बदलें पर टैप करें।</string>
 </resources>

@@ -1,0 +1,137 @@
+package com.itsluminous.clearmovie.di
+
+import android.content.Context
+import android.os.StatFs
+import androidx.room.Room
+import com.itsluminous.clearmovie.data.db.ClearMovieDatabase
+import com.itsluminous.clearmovie.data.files.AppFiles
+import com.itsluminous.clearmovie.data.files.StorageUsage
+import com.itsluminous.clearmovie.data.media.AndroidUriGrants
+import com.itsluminous.clearmovie.data.media.MediaAccess
+import com.itsluminous.clearmovie.data.media.MediaCopier
+import com.itsluminous.clearmovie.data.media.MediaResolver
+import com.itsluminous.clearmovie.data.media.MediaStoreGateway
+import com.itsluminous.clearmovie.data.media.UriGrants
+import com.itsluminous.clearmovie.data.preset.AndroidMediaProbe
+import com.itsluminous.clearmovie.data.preset.MediaProbe
+import com.itsluminous.clearmovie.data.preset.PresetStore
+import com.itsluminous.clearmovie.data.project.ProjectRepository
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import javax.inject.Qualifier
+import javax.inject.Singleton
+
+/** The app-wide coroutine scope: work that must outlive any screen, such as autosave. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope
+
+/** Free bytes in app storage, where copies go. */
+fun interface FreeSpace {
+    fun bytes(): Long
+}
+
+/** Projects, presets and media access (ARCHITECTURE sections 8 to 10). */
+@Module
+@InstallIn(SingletonComponent::class)
+object StorageModule {
+    @Provides
+    @Singleton
+    @ApplicationScope
+    fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Provides
+    @Singleton
+    fun provideDatabase(
+        @ApplicationContext context: Context,
+    ): ClearMovieDatabase =
+        Room
+            .databaseBuilder(context, ClearMovieDatabase::class.java, ClearMovieDatabase.FILE_NAME)
+            .addMigrations(*ClearMovieDatabase.MIGRATIONS)
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideAppFiles(
+        @ApplicationContext context: Context,
+    ): AppFiles = AppFiles(context.filesDir, context.cacheDir)
+
+    @Provides
+    fun provideFreeSpace(
+        @ApplicationContext context: Context,
+    ): FreeSpace = FreeSpace { runCatching { StatFs(context.filesDir.path).availableBytes }.getOrDefault(0L) }
+
+    @Provides
+    @Singleton
+    fun provideGateway(
+        @ApplicationContext context: Context,
+    ): MediaStoreGateway = MediaStoreGateway(context)
+
+    @Provides
+    @Singleton
+    fun provideGrants(
+        @ApplicationContext context: Context,
+    ): UriGrants = AndroidUriGrants(context.contentResolver)
+
+    @Provides
+    fun provideCopier(): MediaCopier = MediaCopier()
+
+    @Provides
+    @Singleton
+    fun provideProbe(): MediaProbe = AndroidMediaProbe()
+
+    @Provides
+    @Singleton
+    fun provideProjectRepository(
+        db: ClearMovieDatabase,
+        files: AppFiles,
+        grants: UriGrants,
+        @ApplicationScope scope: CoroutineScope,
+    ): ProjectRepository = ProjectRepository(db, files, scope, grants = grants)
+
+    @Provides
+    @Singleton
+    fun provideMediaAccess(
+        @ApplicationContext context: Context,
+        gateway: MediaStoreGateway,
+        grants: UriGrants,
+        copier: MediaCopier,
+        files: AppFiles,
+        db: ClearMovieDatabase,
+        freeSpace: FreeSpace,
+    ): MediaAccess =
+        MediaAccess(
+            resolver = context.contentResolver,
+            mediaResolver = MediaResolver(gateway, grants, ownAuthorityPrefix = context.packageName),
+            gateway = gateway,
+            grants = grants,
+            copier = copier,
+            files = files,
+            db = db,
+            freeBytes = freeSpace::bytes,
+        )
+
+    @Provides
+    @Singleton
+    fun providePresetStore(
+        @ApplicationContext context: Context,
+        gateway: MediaStoreGateway,
+        db: ClearMovieDatabase,
+        files: AppFiles,
+        copier: MediaCopier,
+        probe: MediaProbe,
+        freeSpace: FreeSpace,
+    ): PresetStore = PresetStore(context.assets, context.contentResolver, gateway, db, files, copier, probe, freeSpace::bytes)
+
+    @Provides
+    fun provideStorageUsage(
+        db: ClearMovieDatabase,
+        files: AppFiles,
+    ): StorageUsage = StorageUsage(db, files)
+}

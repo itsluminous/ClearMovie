@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "id": "event-frame",
+  "intro": {
+    "slot": "intro",
+    "kind": "video"
+  },
+  "ending": {
+    "slot": "ending",
+    "kind": "audio",
+    "visual": "holdLast"
+  },
+  "frame": {
+    "slot": "frame",
+    "keyColor": "#00D922",
+    "tolerance": 0.18,
+    "softness": 0.08,
+    "contentRect": {
+      "x": 0.0094,
+      "y": 0.0222,
+      "w": 0.9813,
+      "h": 0.7741
+    },
+    "startAfterIntro": true,
+    "coverEnding": "auto",
+    "repeat": true,
+    "music": {
+      "enabled": true,
+      "gainDb": -8,
+      "role": "MUSIC"
+    }
+  },
+  "caption": {
+    "box": {
+      "x": 0.16,
+      "y": 0.62,
+      "w": 0.81,
+      "h": 0.14
+    },
+    "align": "center",
+    "font": "noto_sans_devanagari_bold",
+    "sizePx": 64,
+    "color": "#FFFFFF",
+    "outline": {
+      "color": "#000000",
+      "widthPx": 4
+    },
+    "background": {
+      "color": "#99000000",
+      "cornerPx": 12
+    },
+    "defaultText": {
+      "en": "Hello",
+      "hi": "नमस्ते",
+      "hi-Latn": "Namaste"
+    }
+  },
+  "photoDurationMs": 3000,
+  "defaultFit": "fillCrop",
+  "effects": {
+    "photoDuring": "gentleZoomIn",
+    "mainTransition": "crossfade",
+    "transitionMs": 600,
+    "textStart": "fadeIn"
+  },
+  "ducking": {
+    "musicUnderClipDb": -12,
+    "musicUnderVoiceDb": -20,
+    "speechDuckDb": -20,
+    "attackMs": 300,
+    "releaseMs": 300
+  },
+  "export": {
+    "height": 1080,
+    "fps": 30,
+    "videoCodec": "h264",
+    "audioSampleRate": 48000,
+    "audioBitrate": 192000
+  },
+  "displayName": {
+    "en": "My channel",
+    "hi": "मेरा चैनल",
+    "hi-Latn": "Mera channel"
+  }
+}

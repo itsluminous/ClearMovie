@@ -165,6 +165,8 @@ android {
         }
         getByName("androidTest") {
             kotlin.srcDir("src/androidTest/kotlin")
+            // room-testing's MigrationTestHelper reads the exported schemas as test assets.
+            assets.srcDir("$projectDir/schemas")
         }
     }
 }
@@ -226,6 +228,8 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // ProcessLifecycleOwner: autosave flushes when the whole app goes to the background.
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.compose)
 
     // Compose (versions from the BOM)
@@ -245,7 +249,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
 
-    // Room (the project database arrives in cm-storage) and DataStore (settings)
+    // Room (projects, preset bindings, session) and DataStore (settings)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
@@ -274,6 +278,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.core.ktx)
     androidTestImplementation(libs.truth)
+    androidTestImplementation(libs.room.testing)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
 }

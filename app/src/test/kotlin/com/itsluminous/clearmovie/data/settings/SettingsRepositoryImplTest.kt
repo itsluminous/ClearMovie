@@ -56,4 +56,15 @@ class SettingsRepositoryImplTest {
             store.edit { it[stringPreferencesKey("theme_mode")] = "PURPLE" }
             assertThat(SettingsRepositoryImpl(store).settings.first().themeMode).isEqualTo(ThemeMode.SYSTEM)
         }
+
+    @Test
+    fun `whether photo access was asked for is remembered across launches`() =
+        runTest {
+            val job = Job()
+            val first = SettingsRepositoryImpl(dataStore(CoroutineScope(UnconfinedTestDispatcher(testScheduler) + job)))
+            assertThat(first.mediaAccessAsked.first()).isFalse()
+            first.setMediaAccessAsked()
+            job.cancelAndJoin()
+            assertThat(SettingsRepositoryImpl(dataStore(backgroundScope)).mediaAccessAsked.first()).isTrue()
+        }
 }

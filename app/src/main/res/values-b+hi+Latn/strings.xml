@@ -37,4 +37,52 @@
     <string name="settings_version">Version %1$s</string>
 
     <string name="preset_event_frame_name">Event frame</string>
+
+    <string name="action_cancel">Cancel karein</string>
+    <string name="action_replace">Replace</string>
+
+    <string name="media_access_title">ClearMovie ko apni photos aur videos dekhne dein</string>
+    <string name="media_access_body">ClearMovie aapki gallery ki photos aur videos se aapka video banata hai. Iske baad Android aapse poochega. Please sabhi photos aur videos ki permission dein.</string>
+    <string name="media_access_privacy">Aapki photos aur videos aapke phone me hi rehte hain. ClearMovie inhe kahin nahi bhejta.</string>
+    <string name="media_access_continue">Aage badhein</string>
+    <string name="media_access_not_now">Abhi nahi</string>
+    <string name="media_access_denied_title">ClearMovie abhi aapki photos nahi dekh sakta</string>
+    <string name="media_access_denied_body">Aap phir bhi photos aur videos chun sakte hain, par ClearMovie ko unki copy banani hogi, jisse phone me zyada jagah lagegi.</string>
+    <string name="media_access_try_again">Phir se try karein</string>
+    <string name="media_access_blocked_body">Android ab dobara nahi poochega. Settings kholein, Permissions par tap karein, phir Photos and videos me sabhi ki permission dein.</string>
+    <string name="media_access_open_settings">Settings kholein</string>
+    <string name="media_access_partial">ClearMovie sirf aapki chuni hui photos dekh sakta hai. Baaki jo photos aur videos aap jodenge, unki copy banegi, jisse zyada jagah lagegi.</string>
+    <string name="media_access_allow_all">Sabhi photos ki permission dein</string>
+
+    <string name="copy_budget_title">In photos aur videos ki copy banayein?</string>
+    <plurals name="copy_budget_body">
+        <item quantity="one">%1$d photo ya video ke liye phone me %2$s jagah chahiye.</item>
+        <item quantity="other">In %1$d photos aur videos ke liye phone me %2$s jagah chahiye.</item>
+    </plurals>
+    <string name="copy_budget_free">Aapke phone me %1$s jagah khaali hai.</string>
+    <string name="copy_budget_copy_anyway">Phir bhi copy karein</string>
+    <string name="copy_budget_choose_fewer">Kam chunein</string>
+    <string name="copy_no_space_title">Jagah kam hai</string>
+    <string name="copy_no_space_body">Inke liye %1$s jagah chahiye, par aapke phone me sirf %2$s khaali hai. Thodi jagah khaali karein, ya kam photos aur videos chunein.</string>
+    <string name="copy_progress_title">Aapki photos aur videos ki copy ban rahi hai</string>
+    <string name="copy_progress_percent">%1$d%% poora</string>
+
+    <string name="preset_setup_title">Apna preset taiyaar karein</string>
+    <string name="preset_setup_body">Har file apne phone se ek baar chunein. ClearMovie uski apni copy rakh leta hai.</string>
+    <string name="preset_repair_title">Preset ki ek file theek karni hai</string>
+    <string name="preset_repair_body">Aapke videos safe hain. Ye preset use karte rehne ke liye file phir se chunein.</string>
+    <string name="preset_slot_intro">Intro</string>
+    <string name="preset_slot_frame">Frame</string>
+    <string name="preset_slot_ending">Ending</string>
+    <string name="preset_slot_ready">Taiyaar</string>
+    <string name="preset_slot_not_set">Abhi nahi chuni gayi</string>
+    <string name="preset_slot_missing">Ye file hata di gayi ya kahin aur chali gayi. Ise phir se chunein.</string>
+    <string name="preset_slot_changed">Ye file badal gayi hai. Ise phir se chunein.</string>
+    <string name="preset_slot_frame_adjusted">Frame is file ke hisaab se theek kiya gaya</string>
+    <string name="preset_choose_file">File chunein</string>
+    <string name="preset_choose_file_for">%1$s ke liye file chunein</string>
+
+    <string name="media_missing_label">Nahi mili</string>
+    <string name="media_missing_body">Ye photo ya video hata di gayi ya kahin aur chali gayi. Ise phir se chunne ke liye Replace par tap karein.</string>
+    <string name="media_no_access_body">ClearMovie ye photo ya video nahi khol sakta. Photos aur videos ki permission dein, ya Replace par tap karein.</string>
 </resources>
