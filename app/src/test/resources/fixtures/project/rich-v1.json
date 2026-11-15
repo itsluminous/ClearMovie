@@ -1,0 +1,294 @@
+{
+    "schemaVersion": 1,
+    "id": "p1",
+    "tracks": [
+        {
+            "id": "voice",
+            "type": "audio",
+            "clips": [
+                {
+                    "type": "audio",
+                    "id": "hello",
+                    "media": {
+                        "type": "store",
+                        "uri": "content://media/external/images/media/hello"
+                    },
+                    "startMs": 9000,
+                    "durationMs": 2000,
+                    "sourceDurationMs": 2500,
+                    "fadeInMs": 200,
+                    "fadeOutMs": 300
+                }
+            ],
+            "audioRole": "voice"
+        },
+        {
+            "id": "g3",
+            "type": "text",
+            "clips": [
+                {
+                    "type": "text",
+                    "id": "g11",
+                    "startMs": 6500,
+                    "durationMs": 4000,
+                    "text": "Welcome",
+                    "style": {
+                        "align": "start",
+                        "sizePx": 72,
+                        "clearBackground": true
+                    },
+                    "animations": {
+                        "start": {
+                            "kind": "pop",
+                            "durationMs": 400
+                        }
+                    }
+                },
+                {
+                    "type": "text",
+                    "id": "g12",
+                    "startMs": 12000,
+                    "durationMs": 2500,
+                    "text": "Line one\nLine two"
+                }
+            ]
+        },
+        {
+            "id": "overlay",
+            "type": "overlay",
+            "clips": [
+                {
+                    "type": "overlay",
+                    "id": "sparkle",
+                    "media": {
+                        "type": "copied",
+                        "relPath": "sparkle.mp4"
+                    },
+                    "startMs": 10000,
+                    "durationMs": 3000,
+                    "sourceDurationMs": 1500,
+                    "key": {
+                        "color": "#00FF00",
+                        "tolerance": 0.2,
+                        "softness": 0.1
+                    }
+                }
+            ]
+        },
+        {
+            "id": "g6",
+            "type": "overlay",
+            "clips": [
+                {
+                    "type": "overlay",
+                    "id": "g5",
+                    "media": {
+                        "type": "preset",
+                        "slot": "frame"
+                    },
+                    "startMs": 6500,
+                    "durationMs": 27933,
+                    "sourceDurationMs": 304000,
+                    "key": {
+                        "color": "#00D922",
+                        "tolerance": 0.18,
+                        "softness": 0.08
+                    },
+                    "anchor": {
+                        "type": "frame",
+                        "startAfterIntro": true,
+                        "coverEnding": true
+                    }
+                }
+            ],
+            "presetRole": "frame"
+        },
+        {
+            "id": "pip",
+            "type": "visual",
+            "clips": [
+                {
+                    "type": "photo",
+                    "id": "pip1",
+                    "media": {
+                        "type": "store",
+                        "uri": "content://media/external/images/media/pip1"
+                    },
+                    "durationMs": 2500,
+                    "startMs": 8000,
+                    "pip": {
+                        "corner": "bottomLeft",
+                        "scale": 0.3
+                    }
+                }
+            ]
+        },
+        {
+            "id": "g4",
+            "type": "main",
+            "clips": [
+                {
+                    "type": "intro",
+                    "id": "g1",
+                    "durationMs": 6500
+                },
+                {
+                    "type": "photo",
+                    "id": "photo1",
+                    "media": {
+                        "type": "store",
+                        "uri": "content://media/external/images/media/photo1"
+                    },
+                    "durationMs": 4000,
+                    "rotation": "90",
+                    "fit": "fitBlur",
+                    "transitionToNext": {
+                        "kind": "crossfade",
+                        "durationMs": 800
+                    },
+                    "animations": {
+                        "during": {
+                            "kind": "gentleZoomIn",
+                            "seed": 7
+                        }
+                    }
+                },
+                {
+                    "type": "video",
+                    "id": "video1",
+                    "media": {
+                        "type": "copied",
+                        "relPath": "shared/clip_0001.mp4"
+                    },
+                    "sourceDurationMs": 12000,
+                    "trimStartMs": 1000,
+                    "trimEndMs": 9000,
+                    "speed": "1.5",
+                    "volumeDb": -3.5
+                },
+                {
+                    "type": "card",
+                    "id": "card1",
+                    "durationMs": 3000,
+                    "color": "#202040",
+                    "text": "Thank you",
+                    "transitionToNext": {
+                        "kind": "slideLeft",
+                        "durationMs": 600
+                    }
+                },
+                {
+                    "type": "video",
+                    "id": "video2",
+                    "media": {
+                        "type": "store",
+                        "uri": "content://media/external/images/media/video2"
+                    },
+                    "sourceDurationMs": 5000,
+                    "trimEndMs": 4000,
+                    "splitGroup": "video2",
+                    "fit": "fitBars"
+                },
+                {
+                    "type": "video",
+                    "id": "video2b",
+                    "media": {
+                        "type": "store",
+                        "uri": "content://media/external/images/media/video2"
+                    },
+                    "sourceDurationMs": 5000,
+                    "trimStartMs": 4000,
+                    "splitGroup": "video2",
+                    "fit": "fitBars",
+                    "animations": {
+                        "end": {
+                            "kind": "fadeOut",
+                            "durationMs": 700
+                        }
+                    }
+                },
+                {
+                    "type": "video",
+                    "id": "video3",
+                    "media": {
+                        "type": "store",
+                        "uri": "content://media/external/images/media/video3"
+                    },
+                    "sourceDurationMs": 2000,
+                    "loops": 3
+                },
+                {
+                    "type": "ending",
+                    "id": "g2",
+                    "durationMs": 6000,
+                    "kind": "audio"
+                }
+            ]
+        },
+        {
+            "id": "g8",
+            "type": "audio",
+            "clips": [
+                {
+                    "type": "audio",
+                    "id": "g7",
+                    "media": {
+                        "type": "preset",
+                        "slot": "frame"
+                    },
+                    "startMs": 6500,
+                    "durationMs": 27933,
+                    "sourceDurationMs": 304000,
+                    "repeat": true,
+                    "volumeDb": -8.0,
+                    "anchor": {
+                        "type": "frame",
+                        "startAfterIntro": true,
+                        "coverEnding": true
+                    }
+                }
+            ],
+            "audioRole": "music",
+            "presetRole": "frameMusic"
+        },
+        {
+            "id": "g10",
+            "type": "audio",
+            "clips": [
+                {
+                    "type": "audio",
+                    "id": "g9",
+                    "media": {
+                        "type": "preset",
+                        "slot": "ending"
+                    },
+                    "startMs": 28433,
+                    "durationMs": 6000,
+                    "sourceDurationMs": 6000,
+                    "anchor": {
+                        "type": "ending"
+                    }
+                }
+            ],
+            "audioRole": "voice",
+            "presetRole": "closingMessage"
+        }
+    ],
+    "stacking": [
+        "pip",
+        "g4",
+        "g6",
+        "overlay",
+        "g3"
+    ],
+    "name": "Family day",
+    "presetId": "event-frame",
+    "effectDefaults": {
+        "photoDuring": "gentleZoomIn",
+        "mainTransition": {
+            "kind": "crossfade",
+            "durationMs": 600
+        },
+        "textStart": "fadeIn"
+    }
+}

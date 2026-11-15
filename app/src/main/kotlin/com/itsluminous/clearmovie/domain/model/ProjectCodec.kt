@@ -1,0 +1,139 @@
+package com.itsluminous.clearmovie.domain.model
+
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+
+/**
+ * Upgrades stored project JSON from older schema versions, one version at a
+ * time: `steps[n]` turns version n into version n + 1. Schema 1 is the first
+ * shipped version, so the app has no steps yet; the chain exists from the
+ * start so a later version only has to add one (ARCHITECTURE section 6.3).
+ */
+class ProjectMigrations(
+    val currentVersion: Int = CURRENT_VERSION,
+    private val steps: Map<Int, (JsonObject) -> JsonObject> = emptyMap(),
+    val oldestVersion: Int = (steps.keys.minOrNull() ?: currentVersion).coerceAtMost(currentVersion),
+) {
+    init {
+        require((oldestVersion until currentVersion).all { it in steps }) { "every version from the oldest needs a step" }
+    }
+
+    /** [json] at [version], brought to [currentVersion]. */
+    fun upgrade(
+        json: JsonObject,
+        version: Int,
+    ): JsonObject {
+        require(version in oldestVersion..currentVersion) { "no migration from version $version" }
+        var result = json
+        for (v in version until currentVersion) result = steps.getValue(v)(result)
+        return result
+    }
+
+    companion object {
+        const val CURRENT_VERSION = 1
+    }
+}
+
+/** The outcome of reading stored project JSON. */
+sealed interface ProjectDecodeResult {
+    data class Ok(
+        val project: Project,
+        /** The version the JSON was written in, before any migration. */
+        val fromVersion: Int,
+    ) : ProjectDecodeResult
+
+    data class Failed(
+        val reason: Reason,
+        val detail: String,
+    ) : ProjectDecodeResult
+
+    enum class Reason {
+        /** Larger than any real project. */
+        TOO_LARGE,
+
+        /** Not JSON, or not shaped like a project. */
+        MALFORMED,
+
+        /** Written by a newer version of the app. */
+        NEWER_VERSION,
+
+        /** An old version with no migration path. */
+        UNSUPPORTED_VERSION,
+
+        /** Readable, but breaks an invariant (see `validate`). */
+        INVALID,
+    }
+}
+
+/**
+ * Project JSON (stored by cm-storage in Room). The form is canonical: keys in
+ * declaration order, default values left out, four-space indentation and
+ * `schemaVersion` first, so the same project always gives the same bytes and
+ * golden fixtures can be compared byte for byte. Optional fields may be
+ * absent and take their defaults; unknown fields are ignored. A project that
+ * is too large, malformed, from a newer app or invalid is refused with a
+ * reason, never half-loaded.
+ */
+class ProjectCodec(
+    private val migrations: ProjectMigrations = ProjectMigrations(),
+) {
+    fun encode(project: Project): String {
+        val body = json.encodeToJsonElement(Project.serializer(), project).jsonObject
+        val versioned = JsonObject(linkedMapOf<String, JsonElement>(VERSION_KEY to JsonPrimitive(migrations.currentVersion)) + body)
+        return json.encodeToString(JsonElement.serializer(), versioned) + "\n"
+    }
+
+    fun decode(text: String): ProjectDecodeResult {
+        if (text.length > MAX_CHARS) return failed(ProjectDecodeResult.Reason.TOO_LARGE, "${text.length} characters")
+        if (JsonGuard.nestsDeeperThan(text)) return failed(ProjectDecodeResult.Reason.MALFORMED, "nested too deeply")
+        val root =
+            try {
+                json.parseToJsonElement(text)
+            } catch (e: SerializationException) {
+                return failed(ProjectDecodeResult.Reason.MALFORMED, "not JSON")
+            }
+        if (root !is JsonObject) return failed(ProjectDecodeResult.Reason.MALFORMED, "not an object")
+        val version =
+            (root[VERSION_KEY] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+                ?: return failed(ProjectDecodeResult.Reason.MALFORMED, "no schemaVersion")
+        if (version > migrations.currentVersion) return failed(ProjectDecodeResult.Reason.NEWER_VERSION, "version $version")
+        if (version < migrations.oldestVersion) return failed(ProjectDecodeResult.Reason.UNSUPPORTED_VERSION, "version $version")
+        val project =
+            try {
+                val upgraded = migrations.upgrade(JsonObject(root - VERSION_KEY), version)
+                json.decodeFromJsonElement(Project.serializer(), upgraded)
+            } catch (e: IllegalArgumentException) {
+                // SerializationException is an IllegalArgumentException, and so are
+                // the checks in the model's constructors (ids, media references).
+                return failed(ProjectDecodeResult.Reason.MALFORMED, e.message.orEmpty().take(200))
+            }
+        val problems = project.validate()
+        if (problems.isNotEmpty()) return failed(ProjectDecodeResult.Reason.INVALID, problems.joinToString { it.detail }.take(500))
+        return ProjectDecodeResult.Ok(project, version)
+    }
+
+    private fun failed(
+        reason: ProjectDecodeResult.Reason,
+        detail: String,
+    ) = ProjectDecodeResult.Failed(reason, detail)
+
+    companion object {
+        /** A project with thousands of clips is still well under this. */
+        const val MAX_CHARS = 4 * 1024 * 1024
+        private const val VERSION_KEY = "schemaVersion"
+
+        internal val json =
+            Json {
+                prettyPrint = true
+                encodeDefaults = false
+                explicitNulls = false
+                ignoreUnknownKeys = true
+                classDiscriminator = "type"
+            }
+    }
+}

@@ -1,0 +1,275 @@
+package com.itsluminous.clearmovie.domain.model
+
+/** One broken invariant. [rule] lets tests and callers tell them apart. */
+data class Violation(
+    val rule: Rule,
+    val detail: String,
+) {
+    enum class Rule {
+        /** Exactly one MAIN row. */
+        ONE_MAIN,
+
+        /** Ids are unique across rows and across clips. */
+        UNIQUE_IDS,
+
+        /** `stacking` lists every visual row once, and no sound row. */
+        STACKING,
+
+        /** Each row holds only its own kinds of clip; MAIN has the intro first and the ending last. */
+        CLIP_KIND,
+
+        /** No two clips on a timed row overlap; MAIN clips carry no start time. */
+        OVERLAP,
+
+        /** Lengths, trims, speeds, loops, volumes and fades are in range. */
+        RANGE,
+
+        /** Transitions only on MAIN, never on the last item, fitted to their clips. */
+        TRANSITION,
+
+        /** Animations in their slots, on the right kind of clip, fitting the clip. */
+        ANIMATION,
+
+        /** Audio rows have a role; preset rows are the right type and appear once. */
+        TRACK_ROLE,
+
+        /** Names, captions and styles are within limits. */
+        TEXT,
+    }
+}
+
+/** True when [validate] finds nothing. */
+val Project.isValid: Boolean get() = validate().isEmpty()
+
+/**
+ * Checks every invariant of section 6. An empty list means the project is
+ * sound. `ProjectEditor` refuses an edit that breaks one, and `ProjectCodec`
+ * refuses to load a project that breaks one.
+ */
+fun Project.validate(): List<Violation> =
+    buildList {
+        fun fail(
+            rule: Violation.Rule,
+            detail: String,
+        ) = add(Violation(rule, detail))
+
+        val mains = tracks.count { it.type == TrackType.MAIN }
+        if (mains != 1) fail(Violation.Rule.ONE_MAIN, "found $mains MAIN rows")
+
+        val trackIds = tracks.map { it.id }
+        if (trackIds.toSet().size != trackIds.size) fail(Violation.Rule.UNIQUE_IDS, "two rows share an id")
+        val clipIds = tracks.flatMap { t -> t.clips.map { it.id } }
+        if (clipIds.toSet().size != clipIds.size) fail(Violation.Rule.UNIQUE_IDS, "two clips share an id")
+
+        val visual = tracks.filter { it.type.isVisual }.map { it.id }
+        if (stacking.size != visual.size || stacking.toSet() != visual.toSet()) {
+            fail(Violation.Rule.STACKING, "stacking must list each picture row exactly once")
+        }
+
+        for (role in PresetRole.entries) {
+            if (tracks.count { it.presetRole == role } > 1) fail(Violation.Rule.TRACK_ROLE, "more than one $role row")
+        }
+        for (track in tracks) checkTrack(track, ::fail)
+
+        name?.let {
+            if (it.isBlank() || it.length > Limits.MAX_NAME_LENGTH || it.any(Char::isISOControl)) fail(Violation.Rule.TEXT, "project name")
+        }
+        captionDefaults.problems().forEach { fail(Violation.Rule.TEXT, it) }
+        if (photoDurationMs !in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) fail(Violation.Rule.RANGE, "photo duration")
+        transitionForAll?.let {
+            if (it.kind == TransitionKind.NONE || it.durationMs !in Transition.MIN_MS..Transition.MAX_MS) {
+                fail(Violation.Rule.TRANSITION, "Apply to all transition")
+            }
+        }
+    }
+
+private fun Project.checkTrack(
+    track: Track,
+    fail: (Violation.Rule, String) -> Unit,
+) {
+    val where = "row ${track.id.value}"
+    when (track.presetRole) {
+        PresetRole.FRAME -> {
+            if (track.type != TrackType.OVERLAY) fail(Violation.Rule.TRACK_ROLE, "$where: the frame row is a frame row")
+        }
+
+        PresetRole.FRAME_MUSIC -> {
+            if (track.audioRole != AudioRole.MUSIC) fail(Violation.Rule.TRACK_ROLE, "$where: the frame music is a music row")
+        }
+
+        PresetRole.CLOSING_MESSAGE -> {
+            if (track.audioRole != AudioRole.VOICE) fail(Violation.Rule.TRACK_ROLE, "$where: the closing message is a voice row")
+        }
+
+        null -> {
+            Unit
+        }
+    }
+    if ((track.type == TrackType.AUDIO) != (track.audioRole != null)) {
+        fail(Violation.Rule.TRACK_ROLE, "$where: only sound rows have a role, and they need one")
+    }
+
+    track.clips.filterNot { track.accepts(it) }.forEach { fail(Violation.Rule.CLIP_KIND, "$where: ${it.id.value} does not belong here") }
+
+    if (track.type == TrackType.MAIN) {
+        checkMain(track, fail)
+    } else {
+        track.clips.forEach {
+            if (it is IntroClip || it is EndingClip ||
+                it is CardClip
+            ) {
+                fail(Violation.Rule.CLIP_KIND, "$where: MAIN-only item")
+            }
+        }
+        val sorted = track.clips.sortedBy { it.startMs }
+        if (sorted != track.clips) fail(Violation.Rule.OVERLAP, "$where: clips out of time order")
+        var reach: Clip? = null
+        for (clip in sorted.filter { it.durationMs > 0 }) {
+            val before = reach
+            if (before != null && clip.startMs < before.endMs) {
+                fail(Violation.Rule.OVERLAP, "$where: ${before.id.value} overlaps ${clip.id.value}")
+            }
+            if (before == null || clip.endMs > before.endMs) reach = clip
+        }
+        track.clips.forEach {
+            if (it.startMs !in 0..Limits.MAX_MEDIA_MS) fail(Violation.Rule.RANGE, "$where: ${it.id.value} start")
+            if (it is MainClip && it.transitionToNext != null) fail(Violation.Rule.TRANSITION, "$where: transitions are on MAIN only")
+        }
+    }
+    track.clips.forEach { clip ->
+        checkClipRanges(clip, fail)
+        checkAnimations(clip, fail)
+    }
+}
+
+private fun Project.checkMain(
+    track: Track,
+    fail: (Violation.Rule, String) -> Unit,
+) {
+    val clips = track.clips
+    clips.forEachIndexed { i, clip ->
+        if (clip.startMs != 0L) fail(Violation.Rule.OVERLAP, "MAIN item ${clip.id.value} has a start time")
+        if (clip is IntroClip && i != 0) fail(Violation.Rule.CLIP_KIND, "the intro must come first")
+        if (clip is EndingClip && i != clips.lastIndex) fail(Violation.Rule.CLIP_KIND, "the ending must come last")
+    }
+    val main = clips.filterIsInstance<MainClip>()
+    main.forEachIndexed { i, clip ->
+        val t = clip.transitionToNext ?: return@forEachIndexed
+        val next = main.getOrNull(i + 1)
+        when {
+            next == null -> {
+                fail(Violation.Rule.TRANSITION, "the last item has a transition")
+            }
+
+            t.kind == TransitionKind.NONE -> {
+                fail(Violation.Rule.TRANSITION, "${clip.id.value}: NONE is stored as no transition")
+            }
+
+            t.durationMs < Transition.MIN_MS || t.durationMs > Timeline.maxTransitionMs(clip.durationMs, next.durationMs) -> {
+                fail(Violation.Rule.TRANSITION, "${clip.id.value}: transition length does not fit")
+            }
+        }
+    }
+    transitionForAll?.let { all ->
+        main.zipWithNext().forEach { (a, b) ->
+            if (a.transitionToNext != Timeline.fit(all, a.durationMs, b.durationMs)) {
+                fail(Violation.Rule.TRANSITION, "${a.id.value}: Apply to all is set but this junction differs")
+            }
+        }
+    }
+}
+
+private fun inRange(ms: Long) = ms in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS
+
+private fun Project.checkClipRanges(
+    clip: Clip,
+    fail: (Violation.Rule, String) -> Unit,
+) {
+    val id = clip.id.value
+
+    fun bad(what: String) = fail(Violation.Rule.RANGE, "$id: $what")
+
+    val anchored = (clip is OverlayClip && clip.anchor != null) || (clip is AudioClip && clip.anchor != null)
+    if (!anchored && !inRange(clip.durationMs)) bad("length")
+    if (anchored && clip.durationMs !in 0..Limits.MAX_MEDIA_MS) bad("length")
+    when (clip) {
+        is VideoClip -> {
+            if (!inRange(clip.sourceDurationMs)) bad("media length")
+            if (clip.trimStartMs < 0 || clip.trimEndMs > clip.sourceDurationMs || clip.trimEndMs - clip.trimStartMs < Limits.MIN_CLIP_MS) {
+                bad("trim")
+            }
+            if (clip.loops !in 1..Limits.MAX_LOOPS) bad("loops")
+            if (!clip.volumeDb.isFinite() || clip.volumeDb !in Limits.MIN_VOLUME_DB..Limits.MAX_VOLUME_DB) bad("volume")
+            clip.splitGroup?.let { if (!ID_PATTERN.matches(it)) bad("split group") }
+        }
+
+        is AudioClip -> {
+            if (!inRange(clip.sourceDurationMs)) bad("media length")
+            if (clip.trimStartMs < 0 || clip.trimEndMs > clip.sourceDurationMs || clip.trimEndMs - clip.trimStartMs < Limits.MIN_CLIP_MS) {
+                bad("trim")
+            }
+            if (!clip.repeat && clip.durationMs > clip.trimEndMs - clip.trimStartMs) bad("longer than its media")
+            if (!clip.volumeDb.isFinite() || clip.volumeDb !in Limits.MIN_VOLUME_DB..Limits.MAX_VOLUME_DB) bad("volume")
+            if (clip.fadeInMs < 0 || clip.fadeOutMs < 0 || (clip.durationMs > 0 && clip.fadeInMs + clip.fadeOutMs > clip.durationMs)) {
+                bad("fades")
+            }
+        }
+
+        is OverlayClip -> {
+            if (!inRange(clip.sourceDurationMs)) bad("media length")
+            if (!clip.repeat && clip.durationMs > clip.sourceDurationMs) bad("longer than its media")
+            clip.key?.let { if (!(it.tolerance in 0.0..1.0 && it.softness in 0.0..1.0)) bad("key") }
+        }
+
+        is MediaClip -> {
+            Unit
+        }
+
+        is TextClip -> {
+            if (clip.text.length > Limits.MAX_TEXT_LENGTH || clip.text.any { it.isISOControl() && it != '\n' }) {
+                fail(Violation.Rule.TEXT, "$id: caption text")
+            }
+        }
+
+        is CardClip -> {
+            clip.text?.let {
+                if (it.length > Limits.MAX_TEXT_LENGTH ||
+                    it.any { c -> c.isISOControl() && c != '\n' }
+                ) {
+                    fail(Violation.Rule.TEXT, "$id: card text")
+                }
+            }
+        }
+
+        is IntroClip, is EndingClip -> {
+            Unit
+        }
+    }
+    if (clip is MediaClip) {
+        clip.pip?.let { if (!(it.scale.isFinite() && it.scale in PipPlacement.MIN_SCALE..PipPlacement.MAX_SCALE)) bad("picture size") }
+    }
+    val style =
+        when (clip) {
+            is TextClip -> clip.style
+            is CardClip -> clip.style
+            else -> null
+        }
+    style?.let { s -> s.resolve(captionDefaults).problems().forEach { fail(Violation.Rule.TEXT, "$id: $it") } }
+}
+
+private fun checkAnimations(
+    clip: Clip,
+    fail: (Violation.Rule, String) -> Unit,
+) {
+    val a = clip.animations
+    val id = clip.id.value
+    for (slot in AnimSlot.entries) {
+        val anim = a[slot] ?: continue
+        if (slot !in anim.kind.slots) fail(Violation.Rule.ANIMATION, "$id: ${anim.kind} is not a $slot animation")
+        if (anim.kind.textOnly && clip !is TextClip) fail(Violation.Rule.ANIMATION, "$id: ${anim.kind} is for captions")
+        if (anim.kind.photoOnly && clip !is PhotoClip) fail(Violation.Rule.ANIMATION, "$id: ${anim.kind} is for photos")
+        if (slot != AnimSlot.DURING && anim.durationMs !in Anim.MIN_MS..Anim.MAX_MS) fail(Violation.Rule.ANIMATION, "$id: $slot length")
+    }
+    val ends = (a.start?.durationMs ?: 0) + (a.end?.durationMs ?: 0)
+    if (ends > clip.durationMs) fail(Violation.Rule.ANIMATION, "$id: start and end animations are longer than the item")
+}

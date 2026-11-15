@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "min",
+  "tracks": [
+    {
+      "id": "m",
+      "type": "main",
+      "clips": [
+        { "type": "photo", "id": "p", "media": { "type": "store", "uri": "content://media/external/images/media/1" }, "durationMs": 3000 },
+        { "type": "video", "id": "v", "media": { "type": "copied", "relPath": "v.mp4" }, "sourceDurationMs": 5000 }
+      ]
+    },
+    {
+      "id": "t",
+      "type": "text",
+      "clips": [ { "type": "text", "id": "c", "startMs": 0, "durationMs": 1000, "text": "hi" } ]
+    }
+  ],
+  "stacking": [ "m", "t" ],
+  "addedByALaterVersion": { "anything": [ 1, 2, 3 ] }
+}

@@ -45,9 +45,10 @@ jobs:
 
       # ktlint; Android Lint (HardcodedText, MissingTranslation and
       # ExtraTranslation are errors, app/lint.xml); unit tests, including the
-      # convention tests (no literal UI text in Compose, string key parity).
-      - name: ktlint, Android Lint, unit tests
-        run: ./gradlew ktlintCheck lintDebug testDebugUnitTest
+      # convention tests (no literal UI text in Compose, string key parity);
+      # and the project model's line-coverage bound (90%, Kover).
+      - name: ktlint, Android Lint, unit tests, model coverage
+        run: ./gradlew ktlintCheck lintDebug testDebugUnitTest koverVerifyDebug
 
       - name: Upload test & lint reports
         if: failure()

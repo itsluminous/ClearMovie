@@ -10,7 +10,7 @@ their imports.
 
 | Package | Owns | May not import |
 | --- | --- | --- |
-| `domain.model` | `ThemeMode`, `AppSettings`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
+| `domain.model` | The project and preset model (below), `ThemeMode`, `AppSettings`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `data.settings` | `SettingsRepository` and its DataStore implementation | `ui` |
 | `di` | Hilt modules (the settings DataStore, repository bindings) | |
 | `ui.theme` | `ClearMovieTheme`, the branded fallback colour schemes, `MediaColors` | |
@@ -62,10 +62,59 @@ Lint makes `HardcodedText`, `MissingTranslation` and `ExtraTranslation` errors
 Compose code, and `StringKeyParityTest` checks that the three languages have
 the same keys and placeholders, with no Devanagari in Hinglish.
 
+## Project model
+
+`domain.model` holds the video being edited as immutable data, with no
+Android types, so all of it is tested on the JVM.
+
+- **Rows.** A `Project` has a list of `Track`s in **screen order** and a
+  separate `stacking` list, the **drawing order** of the picture rows (bottom
+  first). Moving a row on screen never changes the video; Show on top, Bring
+  forward, Send backward and Show at bottom change only `stacking`. Row types
+  are MAIN (exactly one: the photos and videos that set the video's length,
+  with the intro first and the ending last), VISUAL (picture in picture),
+  TEXT, OVERLAY (frames) and AUDIO (music, voice or effect), as many of each
+  as wanted. A new row goes on screen directly above the rows of its type, and
+  into `stacking` by type: text on top, frames under the lowest text row,
+  picture in picture just above MAIN.
+- **Clips.** MAIN clips (`PhotoClip`, `VideoClip`, `CardClip`, `IntroClip`,
+  `EndingClip`) have no start time: `Timeline` derives it from their order. Every
+  other clip has a start time, and clips on one row never overlap.
+  `MediaRef` points at a `content://` item, a file copied into the project's
+  own folder (a checked relative path), or a preset slot.
+- **Transitions** are stored on the leading MAIN clip and overlap the next, so
+  each one shortens the video by its length; `Timeline.fit` keeps it between
+  0.3 s and 2 s and at most half the shorter clip. **Apply to all** keeps every
+  junction, new ones included, on one transition. **Animations** are stored per
+  clip, by slot (start, end, during).
+- **Edits** (`Edits.kt`) are pure functions such as `insertAt`, `addText`,
+  `moveClip`, `splitClip`, `setTransition` and `bringForward`. Each returns a
+  normalised project (`normalized()`): transitions and animations refitted,
+  and the preset frame, its music and the closing message re-spanned to follow
+  MAIN. Inserting on MAIN shifts later clips; on any other row the clip goes at
+  the item's edge, or onto the highest free row of that type, or a new row,
+  when it would overlap. A row emptied by a delete or move is removed in the
+  same step, except MAIN and the preset frame row, which is switched off.
+- **Undo.** `ProjectEditor` applies one edit per undo step (50 kept), and
+  accepts a result only if `validate()` finds no broken invariant.
+- **Presets.** `PresetParser` reads `preset.json` (schema 1) field by field,
+  with size, nesting and range limits, because a user's own preset file is
+  untrusted; `ProjectFactory.fromPreset` builds the default rows (Text, Frame,
+  MAIN, Music, Closing message). The only preset in the repo is the generic
+  `assets/presets/event-frame/preset.json`, named through the
+  `preset_event_frame_name` string.
+- **Storage format.** `ProjectCodec` writes canonical JSON with a
+  `schemaVersion`, and on reading refuses files that are too large, too deeply
+  nested, from a newer app or invalid. `ProjectMigrations` upgrades older
+  versions one step at a time (schema 1 is the first, so there are no steps
+  yet). Golden files under `app/src/test/resources/fixtures/project/` must
+  round-trip byte for byte.
+
 ## Persistence
 
 DataStore Preferences holds the settings. Room is on the classpath (with KSP)
-for the project database, which arrives with the storage milestone.
+for the project database, which arrives with the storage milestone and will
+store each project as `ProjectCodec` JSON.
 
 ## Build and release
 

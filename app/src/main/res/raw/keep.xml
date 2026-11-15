@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources that code looks up by name, so the release resource shrinker
+     must keep them: bundled presets name themselves through displayNameRes
+     (assets/presets/*/preset.json). -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/preset_event_frame_name" />

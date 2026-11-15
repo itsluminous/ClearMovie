@@ -27,4 +27,6 @@
 
     <string name="settings_section_about">जानकारी</string>
     <string name="settings_version">वर्शन %1$s</string>
+
+    <string name="preset_event_frame_name">इवेंट फ़्रेम</string>
 </resources>

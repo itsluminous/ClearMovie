@@ -18,7 +18,7 @@ echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
 Run checks the same way CI does:
 
 ```bash
-./gradlew ktlintCheck lintDebug testDebugUnitTest
+./gradlew ktlintCheck lintDebug testDebugUnitTest koverVerifyDebug
 ```
 
 - **ktlint** uses the code style in `.editorconfig`. Run `./gradlew ktlintFormat` to fix formatting.
@@ -32,6 +32,10 @@ Run checks the same way CI does:
   the timeline and preview must keep enough contrast in light and dark themes. The
   Robolectric tests emulate Android 14 (SDK 34), because newer SDKs need Java 21 and the
   build uses JDK 17; real Android 10 and 16 are covered by the instrumented tests.
+- **Model coverage:** `koverVerifyDebug` fails if the unit tests cover less than 90% of
+  the lines in `domain.model` (the project and preset model). `./gradlew
+  koverHtmlReportDebug` writes a report under `app/build/reports/kover/` showing
+  which lines are missed.
 
 `./gradlew assembleRelease` produces release APKs under
 `app/build/outputs/apk/release/`: one per processor type (`arm64-v8a`,

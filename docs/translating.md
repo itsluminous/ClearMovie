@@ -119,7 +119,7 @@ partial one can live on a branch until then.
    script, read from your translation's `language_name_native` string.
 5. Run the checks exactly as CI will:
    ```bash
-   ./gradlew ktlintCheck lintDebug testDebugUnitTest
+   ./gradlew ktlintCheck lintDebug testDebugUnitTest koverVerifyDebug
    ```
 6. If the script is not Latin or Devanagari, say so in the PR, and a matching Noto font
    is added for captions.

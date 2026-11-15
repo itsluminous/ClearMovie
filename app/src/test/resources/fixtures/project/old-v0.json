@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 0,
+  "id": "old",
+  "rows": [
+    { "id": "m", "type": "main", "items": [ { "type": "photo", "id": "p", "media": { "type": "store", "uri": "content://media/external/images/media/9" }, "durationMs": 2000 } ] },
+    { "id": "t", "type": "text", "items": [] }
+  ],
+  "stacking": [ "m", "t" ]
+}

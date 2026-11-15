@@ -3,6 +3,8 @@ import com.android.build.api.variant.FilterConfiguration
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kover)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
@@ -195,6 +197,27 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// Line coverage of the pure project model (ROADMAP cm-model: at least 90%).
+// `./gradlew koverVerifyDebug` runs the debug unit tests and fails below the
+// bound; CI runs it with the other checks. `koverHtmlReportDebug` shows which
+// lines are missed.
+kover {
+    reports {
+        filters {
+            includes {
+                packages("com.itsluminous.clearmovie.domain.model")
+            }
+        }
+        variant("debug") {
+            verify {
+                rule("Project model line coverage") {
+                    minBound(90)
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     // Core AndroidX + lifecycle
     implementation(libs.androidx.core.ktx)
@@ -230,6 +253,8 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    // The project model is stored as JSON (ARCHITECTURE section 6, cm-storage keeps it in Room).
+    implementation(libs.kotlinx.serialization.json)
 
     // Material Components: provides the XML Theme.Material3.* parent in themes.xml.
     implementation(libs.google.material)

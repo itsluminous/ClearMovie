@@ -1,0 +1,131 @@
+package com.itsluminous.clearmovie.domain.model
+
+/**
+ * Lengths of the preset files bound on this phone (known after setup, from
+ * cm-storage). A null length means that file is not there or is skipped for
+ * this video, so its part is left out.
+ */
+data class PresetMedia(
+    val introMs: Long? = null,
+    val frameMs: Long? = null,
+    val endingMs: Long? = null,
+)
+
+/** New projects (ARCHITECTURE section 6, "Defaults for a new project"). */
+object ProjectFactory {
+    /** "Start without a preset": the MAIN row plus an empty Text row on top. */
+    fun blank(
+        id: ProjectId,
+        ids: IdSource = RandomIds,
+    ): Project {
+        val main = Track(ids.trackId(), TrackType.MAIN)
+        val text = Track(ids.trackId(), TrackType.TEXT)
+        return Project(id = id, tracks = listOf(text, main), stacking = listOf(main.id, text.id))
+    }
+
+    /**
+     * A project from [preset]'s track template:
+     *
+     * | Screen order       | Type          | Stacking     |
+     * |--------------------|---------------|--------------|
+     * | Text 1 (empty)     | TEXT          | top          |
+     * | Frame              | OVERLAY       | over MAIN    |
+     * | Photos and videos  | MAIN          | bottom       |
+     * | Music (frame's)    | AUDIO, MUSIC  | (mixed)      |
+     * | Closing message    | AUDIO, VOICE  | (mixed)      |
+     *
+     * MAIN starts with the intro and ending. The frame and its music follow the
+     * frame span (after the intro, to the end, or to the ending when the frame
+     * does not cover it); the closing message follows a spoken ending. The
+     * preset's caption style, photo length, fit, effects and ducking are copied
+     * into the project.
+     */
+    fun fromPreset(
+        id: ProjectId,
+        preset: Preset,
+        media: PresetMedia,
+        ids: IdSource = RandomIds,
+    ): Project {
+        val mainClips = mutableListOf<MainClip>()
+        if (preset.intro != null && media.introMs != null) mainClips += IntroClip(ids.clipId(), media.introMs)
+        val ending = preset.ending?.takeIf { media.endingMs != null }
+        if (ending != null) mainClips += EndingClip(ids.clipId(), media.endingMs!!, ending.kind)
+
+        val text = Track(ids.trackId(), TrackType.TEXT)
+        val main = Track(ids.trackId(), TrackType.MAIN, clips = mainClips)
+        val screen = mutableListOf(text, main)
+        val stacking = mutableListOf(main.id)
+
+        val frame = preset.frame?.takeIf { media.frameMs != null }
+        if (frame != null) {
+            val frameMs = media.frameMs!!
+            val anchor = SpanAnchor.Frame(frame.startAfterIntro, frame.coverEnding.resolve(ending?.kind))
+            val overlay =
+                OverlayClip(
+                    id = ids.clipId(),
+                    media = MediaRef.Preset(PresetSlot.FRAME),
+                    startMs = 0,
+                    durationMs = 0,
+                    sourceDurationMs = frameMs,
+                    key = frame.key,
+                    repeat = frame.repeat,
+                    anchor = anchor,
+                )
+            val frameRow = Track(ids.trackId(), TrackType.OVERLAY, clips = listOf(overlay), presetRole = PresetRole.FRAME)
+            screen.add(1, frameRow)
+            stacking += frameRow.id
+            val music =
+                AudioClip(
+                    id = ids.clipId(),
+                    media = MediaRef.Preset(PresetSlot.FRAME),
+                    startMs = 0,
+                    durationMs = 0,
+                    sourceDurationMs = frameMs,
+                    repeat = frame.repeat,
+                    volumeDb = frame.music.gainDb,
+                    anchor = anchor,
+                )
+            screen +=
+                Track(
+                    ids.trackId(),
+                    TrackType.AUDIO,
+                    clips = listOf(music),
+                    muted = !frame.music.enabled,
+                    audioRole = AudioRole.MUSIC,
+                    presetRole = PresetRole.FRAME_MUSIC,
+                )
+        }
+        if (ending?.kind == EndingKind.AUDIO) {
+            val speech =
+                AudioClip(
+                    id = ids.clipId(),
+                    media = MediaRef.Preset(PresetSlot.ENDING),
+                    startMs = 0,
+                    durationMs = 0,
+                    sourceDurationMs = media.endingMs!!,
+                    anchor = SpanAnchor.Ending,
+                )
+            screen +=
+                Track(
+                    ids.trackId(),
+                    TrackType.AUDIO,
+                    clips = listOf(speech),
+                    audioRole = AudioRole.VOICE,
+                    presetRole = PresetRole.CLOSING_MESSAGE,
+                )
+        }
+        stacking += text.id
+
+        return Project(
+            id = id,
+            tracks = screen,
+            stacking = stacking,
+            presetId = preset.id,
+            captionDefaults = preset.caption,
+            photoDurationMs = preset.photoDurationMs,
+            defaultFit = preset.defaultFit,
+            effectDefaults = preset.effects,
+            ducking = preset.ducking,
+        ).normalized(ids)
+    }
+}
