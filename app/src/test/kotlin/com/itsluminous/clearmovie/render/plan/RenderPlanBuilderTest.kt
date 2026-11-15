@@ -29,6 +29,7 @@ import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.bringToTop
+import com.itsluminous.clearmovie.domain.model.isValid
 import com.itsluminous.clearmovie.domain.model.moveRow
 import com.itsluminous.clearmovie.domain.model.sendBackward
 import com.itsluminous.clearmovie.domain.model.setLowerWhenTalking
@@ -582,5 +583,99 @@ class RenderPlanBuilderTest {
                 .addTimedClip(TextClip(ClipId("tt"), 4000, 2500, "x"), ids = ids)
         RenderPlanBuilder(preset).build(project).assertGapFree()
         RenderPlanBuilder(preset).build(project).slice(1_234_567, 9_876_543).assertGapFree()
+    }
+
+    @Test
+    fun `an invalid project is refused`() {
+        val bad = Fixtures.blankWith(photo("a")).let { it.copy(stacking = it.stacking.drop(1)) }
+        val threw =
+            try {
+                RenderPlanBuilder().build(bad)
+                false
+            } catch (e: IllegalArgumentException) {
+                true
+            }
+        assertThat(threw).isTrue()
+    }
+
+    @Test
+    fun `a tiny repeated overlay over a long video is refused instead of making thousands of items`() {
+        val ids = SequentialIds("o")
+        val project =
+            Fixtures
+                .blankWith(video("long", 600_000), ids = ids)
+                .addTimedClip(
+                    com.itsluminous.clearmovie.domain.model.OverlayClip(
+                        ClipId("ov"),
+                        media("ov"),
+                        startMs = 0,
+                        durationMs = 600_000,
+                        sourceDurationMs = 200,
+                        repeat = true,
+                    ),
+                    ids = ids,
+                )
+        assertThat(project.isValid).isTrue()
+        val message =
+            try {
+                RenderPlanBuilder().build(project)
+                null
+            } catch (e: IllegalArgumentException) {
+                e.message
+            }
+        assertThat(message).contains("too many pieces")
+    }
+
+    @Test
+    fun `a spoken ending straight after the intro holds the intro's last frame`() {
+        val plan = RenderPlanBuilder(preset).build(presetProject())
+        val held = plan.layer(LayerRole.MAIN).segments.last() as VisualSegment.Picture
+        val src = held.source as Source.VideoFrame
+        assertThat(src.media).isEqualTo(MediaRef.Preset(PresetSlot.INTRO))
+        assertThat(src.atUs).isIn(
+            com.google.common.collect.Range
+                .closed(1_900_000L, 2_000_000L),
+        )
+        assertThat(held.placement).isEqualTo(Placement.FullFrame)
+    }
+
+    @Test
+    fun `ducking follows the lower of two crossing ramps exactly`() {
+        // A clip ends at 1 s (release to 0 over 300 ms from -12); a voice starts at
+        // 1.2 s (attack from 0 over 300 ms to -20). The ramps cross at 1.05 s, -10 dB.
+        val env =
+            RenderPlanBuilder.duckEnvelope(
+                listOf(DuckInterval(0, 1_000_000, -12.0), DuckInterval(1_200_000, 3_000_000, -20.0)),
+                300_000,
+                300_000,
+            )
+        assertThat(env.dbAt(1_050_000)).isWithin(1e-6).of(-10.0)
+        assertThat(env.dbAt(1_000_000)).isWithin(1e-6).of(-12.0)
+        assertThat(env.dbAt(1_100_000)).isWithin(1e-6).of(-13.333333)
+    }
+
+    @Test
+    fun `a crossfade keeps constant power between its breakpoints too`() {
+        val ids = SequentialIds("t")
+        val project =
+            ProjectFactory
+                .blank(ProjectId("p"), ids)
+                .addToMain(listOf(video("a"), video("b")), ids = ids)
+                .setTransition(ClipId("a"), Transition(TransitionKind.CROSSFADE, 1000))
+        val sounds =
+            RenderPlanBuilder()
+                .build(project)
+                .audio
+                .flatMap { it.segments }
+                .filterIsInstance<AudioSegment.Sound>()
+        val a = sounds.single { it.media == media("a") }
+        val b = sounds.single { it.media == media("b") }
+        // Off the 32 construction points, after the first 1/32 (where the incoming side rises from silence).
+        for (k in 2 until 64 step 3) {
+            val t = 2_000_000L + 1_000_000L * k / 64 + 7_000
+            val ga = a.gain.gainAt(t - a.startUs).toDouble()
+            val gb = b.gain.gainAt(t - b.startUs).toDouble()
+            assertThat(abs(ga * ga + gb * gb - 1.0)).isLessThan(0.05)
+        }
     }
 }

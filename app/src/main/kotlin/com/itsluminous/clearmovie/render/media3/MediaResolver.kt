@@ -69,17 +69,26 @@ class FileMediaResolver(
  * Checks every uri the factory hands to Media3: `content://` uris, or
  * `file://` uris inside the app's own files or cache folders. Anything else
  * (another app's private file, `http`, a bare path) is refused, so a bad
- * resolver can never make the renderer read outside the app.
+ * resolver can never make the renderer read outside the app. Content uris of
+ * the app's own providers are refused too: media comes from other apps
+ * (MediaStore, the photo picker, a share) or from the app's own files.
  */
 internal class UriGuard(
     context: Context,
 ) {
     private val roots = listOfNotNull(context.filesDir, context.cacheDir, context.noBackupFilesDir).map { it.canonicalFile }
+    private val ownPackage = context.packageName
 
     fun check(uri: Uri): Uri {
         when (uri.scheme) {
             "content" -> {
                 if (!MediaRef.isSafeContentUri(uri.toString())) throw MediaUnavailableException("Unsafe content uri")
+                val authority = uri.authority.orEmpty()
+                if (authority == ownPackage ||
+                    authority.startsWith("$ownPackage.")
+                ) {
+                    throw MediaUnavailableException("The app's own content")
+                }
             }
 
             "file" -> {

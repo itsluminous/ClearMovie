@@ -12,8 +12,9 @@ import com.itsluminous.clearmovie.domain.model.TrackId
 
 /**
  * Everything needed to draw and mix a project (ARCHITECTURE section 7), as
- * plain data. `CompositionFactory` turns it into one Media3 `Composition`,
- * which both the preview and the export use, so the two cannot drift apart.
+ * plain data. `CompositionFactory` turns it into one Media3 `Composition` for
+ * Transformer (the export, and short exact drafts made from a [slice]). The
+ * live editor preview draws the same plan in layers instead.
  *
  * Every time is in microseconds on the video's timeline. Every layer covers
  * exactly [0, [durationUs]): gaps are explicit transparent [VisualSegment.Fill]s
@@ -50,9 +51,17 @@ data class RenderPlan(
         )
     }
 
-    /** How many video files are decoded at [timeUs]: the decoder count risk 5 limits. */
+    /** How many video decoders are open at [timeUs]: the count risk 5 limits. */
     fun videoDecodersAt(timeUs: Long): Int =
         visual.count { layer -> layer.segmentAt(timeUs)?.let { it is VisualSegment.Picture && it.source is Source.Video } == true }
+
+    /**
+     * How many audio decoders are open at [timeUs]. A video's sound is planned
+     * as its own audio layer, so Media3 opens a separate audio decoder (and
+     * extractor) for it next to the video decoder.
+     */
+    fun audioDecodersAt(timeUs: Long): Int =
+        audio.count { layer -> layer.segments.firstOrNull { timeUs >= it.startUs && timeUs < it.endUs } is AudioSegment.Sound }
 }
 
 /** What a visual layer comes from. MAIN_B exists only when MAIN has a transition. */

@@ -9,7 +9,7 @@ import java.io.File
 /**
  * Layering inside the single `:app` module (ARCHITECTURE section 5), enforced
  * by imports:
- * - `domain` (and later `render.plan`) is pure Kotlin: no `android.*`,
+ * - `domain` and `render.plan` are pure Kotlin: no `android.*`,
  *   `androidx.*` or Media3, and nothing from the app's other layers, so it
  *   stays JVM-testable.
  * - `data` never reaches up into `ui`.

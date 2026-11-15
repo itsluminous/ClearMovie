@@ -69,5 +69,8 @@ class MediaResolverTest {
         assertThat(fails { guard.check(Uri.parse("http://example.com/a.mp4")) }).isTrue()
         assertThat(fails { guard.check(Uri.parse("/sdcard/a.mp4")) }).isTrue()
         assertThat(fails { guard.check(Uri.parse("content://")) }).isTrue()
+        // The app's own providers are not media.
+        assertThat(fails { guard.check(Uri.parse("content://${context.packageName}.androidx-startup/x")) }).isTrue()
+        assertThat(fails { guard.check(Uri.parse("content://${context.packageName}/x")) }).isTrue()
     }
 }

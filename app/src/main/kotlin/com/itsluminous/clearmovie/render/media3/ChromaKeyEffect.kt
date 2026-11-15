@@ -14,6 +14,11 @@ import com.itsluminous.clearmovie.domain.model.KeySpec
  * fully transparent within [KeySpec.tolerance] and fully opaque beyond
  * tolerance + [KeySpec.softness]. In the soft band the green spill is pulled
  * down to the larger of red and blue, so edges carry no green fringe.
+ *
+ * Only chroma is compared, not brightness: a dark green in the frame's own
+ * artwork close in hue to the key is keyed too. A preset frame is a flat key
+ * colour around artwork in other colours, which the bind-time key check
+ * (cm-storage) measures.
  */
 @UnstableApi
 class ChromaKeyEffect(
@@ -22,6 +27,10 @@ class ChromaKeyEffect(
     init {
         require(key.tolerance in 0.0..1.0 && key.softness in 0.0..1.0) { "Key tolerance and softness must be in 0..1" }
     }
+
+    override fun equals(other: Any?): Boolean = other is ChromaKeyEffect && other.key == key
+
+    override fun hashCode(): Int = key.hashCode()
 
     override fun toGlShaderProgram(
         context: Context,

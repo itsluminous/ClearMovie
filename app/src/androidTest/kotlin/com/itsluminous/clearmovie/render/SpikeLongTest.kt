@@ -107,6 +107,8 @@ class SpikeLongTest {
                 "heap limit ${am.memoryClass} MB (large ${am.largeMemoryClass} MB); java heap max ${Runtime.getRuntime().maxMemory() / 1048576} MB",
         )
         assertThat(RenderHarness.durationUs(out.file)).isAtLeast(project.totalDurationMs() * 1000 - 50_000)
+        // Peak memory well inside what a large-heap app may use on this device.
+        assertThat(peakPss.get() / 1024).isLessThan(am.largeMemoryClass * 6L / 10)
     }
 
     /**

@@ -13,16 +13,35 @@ import com.itsluminous.clearmovie.render.plan.Placement
  * and crop, fit with bars, fit over a blurred copy), picture in picture with
  * a white border, or stretched into a caption box. Every layer of the
  * composition is canvas-sized, so the compositor only has to stack them.
+ *
+ * [fromBitmap] marks pictures Media3 loads as Android bitmaps (photos,
+ * captions, cards, held frames, fills). Those reach GL with premultiplied
+ * alpha, while the compositor blends straight alpha, so the shader divides
+ * the colour by alpha again; otherwise a translucent caption box would be
+ * darkened twice. Videos are already straight (and opaque).
+ *
+ * Equal effects compare equal, so Media3 keeps its shader programs between
+ * consecutive items with the same placement instead of rebuilding them.
  */
 @UnstableApi
 class PlacementEffect(
     private val placement: Placement,
     private val canvasWidth: Int,
     private val canvasHeight: Int,
+    private val fromBitmap: Boolean = false,
 ) : GlEffect {
     init {
         require(canvasWidth > 0 && canvasHeight > 0) { "Canvas size must be positive" }
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is PlacementEffect &&
+            other.placement == placement &&
+            other.canvasWidth == canvasWidth &&
+            other.canvasHeight == canvasHeight &&
+            other.fromBitmap == fromBitmap
+
+    override fun hashCode(): Int = listOf(placement, canvasWidth, canvasHeight, fromBitmap).hashCode()
 
     override fun toGlShaderProgram(
         context: Context,
@@ -42,6 +61,7 @@ class PlacementEffect(
             program.setFloatsUniform("uBorder", floatArrayOf(g.borderX.toFloat(), g.borderY.toFloat()))
             program.setFloatUniform("uMode", g.mode.code.toFloat())
             program.setFloatUniform("uTurns", g.quarterTurns.toFloat())
+            program.setFloatUniform("uUnpremultiply", if (fromBitmap) 1f else 0f)
             val blurStep = 0.035f
             program.setFloatsUniform("uBlurStep", floatArrayOf(blurStep, blurStep * canvasWidth / canvasHeight))
             return Size(canvasWidth, canvasHeight)
@@ -66,6 +86,7 @@ uniform vec2 uBorder;
 uniform vec2 uBlurStep;
 uniform float uMode;
 uniform float uTurns;
+uniform float uUnpremultiply;
 varying vec2 vUv;
 
 bool inside(vec2 p, vec4 r) {
@@ -82,7 +103,11 @@ vec4 samplePicture(vec2 q) {
   } else if (uTurns > 2.5) {
     s = vec2(1.0 - q.y, q.x);
   }
-  return texture2D(uTexSampler, vec2(s.x, 1.0 - s.y));
+  vec4 c = texture2D(uTexSampler, vec2(s.x, 1.0 - s.y));
+  if (uUnpremultiply > 0.5 && c.a > 0.0) {
+    c.rgb = c.rgb / c.a;
+  }
+  return c;
 }
 
 vec4 blurred(vec2 q) {

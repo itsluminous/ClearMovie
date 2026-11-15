@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.render.media3
 
 import android.content.Context
 import android.os.Looper
+import android.util.Log
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
@@ -34,18 +35,27 @@ data class EncodeSpec(
 /**
  * Starts a Transformer export of a [Composition] to an MP4 file: H.264 and
  * AAC, the encoder factory falling back to a supported configuration when
- * the phone refuses the requested one. Photos are decoded no larger than
- * [maxImageDimension] on their long side, so a 48 MP photo never reaches a
- * 2 GB phone's memory at full size (review F8).
+ * the phone refuses the requested one. The encoder names are logged, so a
+ * report from a phone shows whether hardware encoding was used.
  *
- * Must be called on a thread with a [Looper]; the listener is called on it.
- * cm-export wraps this in the foreground worker.
+ * Photos are decoded no larger than [maxImageDimension] on their long side,
+ * so a 48 MP photo never reaches a 2 GB phone's memory at full size (review
+ * F8). Android decodes at a power-of-two reduction until it fits, so the
+ * limit is twice the canvas's long side (at most 4096, the usual GL texture
+ * limit): a phone photo then keeps at least canvas resolution instead of
+ * being halved below it.
+ *
+ * [start] must be called on a thread with a [Looper]; the listener is called
+ * on it. Build the composition off the main thread first. cm-export wraps
+ * this in the foreground worker.
  */
 @UnstableApi
 class RenderExporter(
     private val context: Context,
-    private val maxImageDimension: Int,
+    canvasHeight: Int,
 ) {
+    val maxImageDimension: Int = minOf(MAX_TEXTURE, 2 * maxOf(canvasHeight, (canvasHeight * 16 + 8) / 9))
+
     interface Listener {
         fun onCompleted(result: ExportResult)
 
@@ -84,7 +94,13 @@ class RenderExporter(
                         override fun onCompleted(
                             composition: Composition,
                             exportResult: ExportResult,
-                        ) = listener.onCompleted(exportResult)
+                        ) {
+                            Log.i(
+                                TAG,
+                                "Export done: video encoder ${exportResult.videoEncoderName}, audio encoder ${exportResult.audioEncoderName}",
+                            )
+                            listener.onCompleted(exportResult)
+                        }
 
                         override fun onError(
                             composition: Composition,
@@ -95,5 +111,10 @@ class RenderExporter(
                 ).build()
         transformer.start(composition, output.absolutePath)
         return transformer
+    }
+
+    private companion object {
+        const val TAG = "RenderExporter"
+        const val MAX_TEXTURE = 4096
     }
 }

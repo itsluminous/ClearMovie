@@ -29,7 +29,7 @@ androidxTestExtJunit = "1.3.0"
 turbine = "1.2.1"
 ktlintPlugin = "14.2.0"
 kover = "0.9.11"
-# Media3: Transformer for export, CompositionPlayer for preview (ARCHITECTURE section 7).
+# Media3: Transformer renders the export and exact drafts; ExoPlayer plays the layered preview (ARCHITECTURE section 7).
 media3 = "1.11.1"
 
 [libraries]

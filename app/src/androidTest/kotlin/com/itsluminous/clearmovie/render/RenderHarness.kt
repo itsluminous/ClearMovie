@@ -110,10 +110,12 @@ object RenderHarness {
         val done = AtomicReference<ExportResult>()
         val failure = AtomicReference<Throwable>()
         val started = System.currentTimeMillis()
+        // The composition is built off the main thread (it reads files and
+        // draws bitmaps), as the factory requires; Transformer runs on main.
+        val composition = CompositionFactory(context, resolver).build(plan)
         Handler(Looper.getMainLooper()).post {
             try {
-                val composition = CompositionFactory(context, resolver).build(plan)
-                RenderExporter(context, maxImageDimension = maxOf(plan.width, plan.height)).start(
+                RenderExporter(context, plan.height).start(
                     composition,
                     out,
                     EncodeSpec.forHeight(plan.height),

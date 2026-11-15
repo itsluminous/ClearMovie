@@ -25,6 +25,7 @@ import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.isValid
 import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.domain.model.totalDurationMs
 import kotlin.math.PI
@@ -54,6 +55,11 @@ fun interface LoudnessTable {
  * - sound is planned per row, with ducking computed from the timeline:
  *   music under clip sound and under voice, everything under the closing
  *   message, clip sound and voice never under music.
+ *
+ * The project is untrusted input (it comes from stored JSON): [build] refuses
+ * one that fails `validate()`, and a plan that would need more than
+ * [MAX_SEGMENTS_PER_LAYER] items in one layer (a tiny frame repeated over a
+ * long video, for example), with [IllegalArgumentException].
  */
 class RenderPlanBuilder(
     private val preset: Preset? = null,
@@ -66,6 +72,7 @@ class RenderPlanBuilder(
     ): RenderPlan {
         require(height in MIN_HEIGHT..MAX_HEIGHT) { "Unsupported output height" }
         require(fps in 1..60) { "Unsupported frame rate" }
+        require(project.isValid) { "The project is not valid" }
         val width = evenWidthFor(height)
         val totalUs = project.totalDurationMs() * US
         val ctx = Context(project, totalUs, windowRect(project), width.toDouble() / height)
@@ -82,13 +89,17 @@ class RenderPlanBuilder(
                 TrackType.AUDIO -> Unit
             }
         }
+        val audio = audioLayers(ctx)
+        require(visual.all { it.segments.size <= MAX_SEGMENTS_PER_LAYER } && audio.all { it.segments.size <= MAX_SEGMENTS_PER_LAYER }) {
+            "The video has too many pieces to render"
+        }
         return RenderPlan(
             width = width,
             height = height,
             fps = fps,
             durationUs = totalUs,
             visual = visual.filter { layer -> layer.segments.any { it !is VisualSegment.Fill } },
-            audio = audioLayers(ctx).filter { layer -> layer.segments.any { it !is AudioSegment.Silence } },
+            audio = audio.filter { layer -> layer.segments.any { it !is AudioSegment.Silence } },
         )
     }
 
@@ -209,6 +220,12 @@ class RenderPlanBuilder(
                 picture(durUs, Source.Card(prev.color, prev.text, style), Placement.Window(window, Fit.FILL_CROP))
             }
 
+            is IntroClip -> {
+                // A spoken ending straight after the intro holds the intro's last frame, full frame.
+                val lastUs = (prev.durationMs * US - FRAME_US).coerceAtLeast(0)
+                picture(durUs, Source.VideoFrame(MediaRef.Preset(PresetSlot.INTRO), lastUs), Placement.FullFrame)
+            }
+
             else -> {
                 picture(durUs, Source.Card(ArgbColor.BLACK, null, ctx.project.captionDefaults), Placement.Window(window, Fit.FILL_CROP))
             }
@@ -302,6 +319,7 @@ class RenderPlanBuilder(
         val srcUs = clip.sourceDurationMs * US
         if (durUs <= 0 || srcUs <= 0) return emptyList()
         if (!clip.repeat) return listOf(Triple(0L, minOf(durUs, srcUs), minOf(durUs, srcUs)))
+        requireFewCopies(durUs, srcUs)
         val copies = mutableListOf<Triple<Long, Long, Long>>()
         var offset = 0L
         while (offset < durUs) {
@@ -462,6 +480,7 @@ class RenderPlanBuilder(
         val durUs = clip.durationMs * US
         val rangeUs = (clip.trimEndMs - clip.trimStartMs) * US
         if (!clip.repeat || rangeUs >= durUs) return listOf(0L to minOf(durUs, rangeUs.coerceAtLeast(1)))
+        requireFewCopies(durUs, rangeUs)
         val copies = mutableListOf<Pair<Long, Long>>()
         var offset = 0L
         while (offset < durUs) {
@@ -471,6 +490,11 @@ class RenderPlanBuilder(
         }
         return copies
     }
+
+    private fun requireFewCopies(
+        totalUs: Long,
+        copyUs: Long,
+    ) = require(totalUs / copyUs < MAX_SEGMENTS_PER_LAYER) { "The video has too many pieces to render" }
 
     /** The volume of a MAIN slot's own sound, or null when it has none (photos, cards, a held frame). */
     private fun slotVolumeDb(slot: MainSlot): Double? =
@@ -548,7 +572,10 @@ class RenderPlanBuilder(
         const val MIN_NORM_DB = -24.0
         const val MAX_NORM_DB = 12.0
         const val REPEAT_FADE_US = 2_000_000L
-        private const val CURVE_STEPS = 8
+
+        /** More items than this in one layer is refused (Media3 opens each one). */
+        const val MAX_SEGMENTS_PER_LAYER = 2_000
+        private const val CURVE_STEPS = 32
 
         /** A 16:9 canvas width for [height], rounded to an even number (encoders need it). */
         fun evenWidthFor(height: Int): Int = ((height * 16 + 8) / 9 + 1) / 2 * 2
@@ -613,8 +640,20 @@ class RenderPlanBuilder(
                     .flatMap { listOf(it.startUs - attackUs, it.startUs, it.endUs, it.endUs + releaseUs) }
                     .distinct()
                     .sorted()
-            // Midpoints too: the minimum of straight ramps bends between corners.
-            val times = (corners + corners.zipWithNext { a, b -> (a + b) / 2 }).distinct().sorted()
+            // Between two corners every level is a straight line, so their minimum
+            // bends only where two of the lines cross: add those crossings.
+            val crossings = mutableListOf<Long>()
+            for ((a, b) in corners.zipWithNext()) {
+                val active = intervals.filter { it.startUs - attackUs < b && it.endUs + releaseUs > a }
+                for (i in active.indices) {
+                    for (j in i + 1 until active.size) {
+                        val da = level(active[i], a) - level(active[j], a)
+                        val db = level(active[i], b) - level(active[j], b)
+                        if (da * db < 0) crossings += a + ((b - a) * (da / (da - db))).toLong()
+                    }
+                }
+            }
+            val times = (corners + crossings).distinct().sorted()
             return GainEnvelope(times.map { t -> GainPoint(t, intervals.minOf { level(it, t) }) }).simplified()
         }
 

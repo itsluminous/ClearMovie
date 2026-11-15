@@ -100,6 +100,9 @@ class DuckingRenderTest {
         near("clip sound is not lowered by music", clip, -20.0)
         near("voice is not lowered by music", voice, -20.0)
         near("voice under the closing message", voiceUnderSpeech - voice, -20.0)
+        // The closing message itself is not lowered: its level matches the source file's.
+        val speechSource = toneDb(RenderHarness.decodeAudio(java.io.File(RenderHarness.fixtureDir, "speech.m4a")), 300.0, 1.9, 2.8)
+        near("closing message vs its file", speech - speechSource, 0.0)
         assertWithMessage(failures.joinToString("; ")).that(failures).isEmpty()
     }
 }
