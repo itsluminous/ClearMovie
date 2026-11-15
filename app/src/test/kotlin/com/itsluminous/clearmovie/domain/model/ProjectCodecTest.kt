@@ -125,6 +125,20 @@ class ProjectCodecTest {
     }
 
     @Test
+    fun `stale derived values are worked out again on load, and flagged`() {
+        // A frame whose span an older version worked out differently.
+        val rich = fixture("rich-v1.json")
+        val from = "\"startMs\": 6500,\n                    \"durationMs\": 27933"
+        val to = "\"startMs\": 0,\n                    \"durationMs\": 27933"
+        val stale = rich.replace(from, to)
+        assertThat(stale).isNotEqualTo(rich)
+        val result = ok(stale)
+        assertThat(result.repaired).isTrue()
+        assertThat(result.project).isEqualTo(Fixtures.richProject())
+        assertThat(ok(rich).repaired).isFalse()
+    }
+
+    @Test
     fun `a project from a newer app is refused`() {
         val newer = fixture("blank-v1.json").replace("\"schemaVersion\": 1", "\"schemaVersion\": 2")
         assertThat(failed(newer)).isEqualTo(ProjectDecodeResult.Reason.NEWER_VERSION)
@@ -176,17 +190,9 @@ class ProjectCodecTest {
         assertThat(
             failed(minimal.replace("\"id\": \"min\"", "\"id\": \"${"x".repeat(65)}\"")),
         ).isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
-        // A frame moved off its span, and ducking out of range: readable, but invalid.
-        assertThat(
-            failed(
-                fixture(
-                    "rich-v1.json",
-                ).replace(
-                    "\"startMs\": 6500,\n                    \"durationMs\": 27933",
-                    "\"startMs\": 0,\n                    \"durationMs\": 27933",
-                ),
-            ),
-        ).isEqualTo(ProjectDecodeResult.Reason.INVALID)
+        // An out-of-range value the model can't work out again: invalid.
+        val blank = fixture("blank-v1.json")
+        assertThat(failed(blank.replace("\"attackMs\": 300", "\"attackMs\": -5"))).isEqualTo(ProjectDecodeResult.Reason.INVALID)
         // Bad colour.
         assertThat(failed(fixture("rich-v1.json").replace("\"#202040\"", "\"blue\""))).isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
     }

@@ -21,7 +21,7 @@ internal fun Project.screenIndexForNewTrack(type: TrackType): Int {
 /**
  * The stacking position (an index into the bottom-first [Project.stacking])
  * for a new visual row of [type]: TEXT on top of everything, OVERLAY just under
- * the lowest TEXT row (but above MAIN), VISUAL just above MAIN.
+ * the lowest TEXT row above MAIN, VISUAL just above MAIN.
  */
 internal fun Project.stackIndexForNewTrack(type: TrackType): Int =
     when (type) {
@@ -30,9 +30,10 @@ internal fun Project.stackIndexForNewTrack(type: TrackType): Int =
         }
 
         TrackType.OVERLAY -> {
-            // Just under the lowest text row, but never under MAIN, where it would be hidden.
-            val lowestText = stacking.indexOfFirst { id -> track(id)?.type == TrackType.TEXT }
-            if (lowestText >= 0) maxOf(lowestText, stackIndex(main.id) + 1) else stacking.size
+            // Just under the lowest text row above MAIN; never under MAIN, where it would be hidden.
+            val mainIndex = stackIndex(main.id)
+            val lowestText = stacking.indices.firstOrNull { it > mainIndex && track(stacking[it])?.type == TrackType.TEXT }
+            lowestText ?: stacking.size
         }
 
         TrackType.VISUAL -> {
@@ -79,6 +80,22 @@ internal fun Project.candidateTracks(
     } else {
         ofType.filter { it.audioRole == role }
     }
+}
+
+/**
+ * A row a preset manages (the frame, its music, the closing message) holds
+ * only the preset's own media, so the user's items always go on rows of
+ * their own and switching the frame off never hides them.
+ */
+internal fun Track.takes(clip: Clip): Boolean {
+    if (presetRole == null) return true
+    val media =
+        when (clip) {
+            is OverlayClip -> clip.media
+            is AudioClip -> clip.media
+            else -> null
+        }
+    return media is MediaRef.Preset
 }
 
 /** The row type a timed clip belongs on. */
@@ -130,7 +147,7 @@ internal fun Project.placeTimed(
     val fits = { t: Track -> t.isFree(clip.startMs, clip.endMs, except = clip.id) }
     val target =
         when {
-            preferredTrack != null && preferredTrack.enabled && fits(preferredTrack) -> preferredTrack
+            preferredTrack != null && preferredTrack.enabled && preferredTrack.takes(clip) && fits(preferredTrack) -> preferredTrack
             allowExisting -> candidateTracks(type, role).firstOrNull { it.id != preferred && fits(it) }
             else -> null
         }

@@ -270,16 +270,14 @@ private fun Project.checkClipRanges(
         }
 
         is TextClip -> {
-            if (clip.text.length > Limits.MAX_TEXT_LENGTH || !TextRules.isAllowed(clip.text, allowNewlines = true)) {
+            if (!TextRules.isValidText(clip.text)) {
                 fail(Violation.Rule.TEXT, "$id: caption text")
             }
         }
 
         is CardClip -> {
             clip.text?.let {
-                if (it.length > Limits.MAX_TEXT_LENGTH ||
-                    !TextRules.isAllowed(it, allowNewlines = true)
-                ) {
+                if (!TextRules.isValidText(it)) {
                     fail(Violation.Rule.TEXT, "$id: card text")
                 }
             }

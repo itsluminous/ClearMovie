@@ -129,7 +129,17 @@ class EdgeCasesTest {
     @Test
     fun `hostile text is refused in names and captions, but Hindi joiners are fine`() {
         val p = Fixtures.blankWith(Fixtures.photo("a"), ids = ids)
-        for (bad in listOf("\u202Eevil", "a\u2066b", "zero\u200Bwidth", "\uFEFFbom", "\u200B", "!!!", "line\nbreak")) {
+        for (bad in listOf(
+            "\u202Eevil",
+            "a\u2066b",
+            "zero\u200Bwidth",
+            "\uFEFFbom",
+            "\u200B",
+            "   ",
+            "line\nbreak",
+            "a\u2028b",
+            "mark\u200F",
+        )) {
             assertThrows(IllegalArgumentException::class.java) { p.rename(bad) }
             assertThat(p.copy(name = bad).validate().map { it.rule }).contains(Violation.Rule.TEXT)
         }
@@ -137,7 +147,20 @@ class EdgeCasesTest {
         val hindi = "क्\u200Dष \u200Cनमस्ते"
         assertThat(p.rename(hindi).name).isEqualTo(hindi)
         assertThat(p.addText(hindi, 0, 1000, ids).validate()).isEmpty()
-        assertThat(p.addText("evil\u202E", 0, 1000, ids).validate().map { it.rule }).contains(Violation.Rule.TEXT)
+        assertThrows(IllegalArgumentException::class.java) { p.addText("evil\u202E", 0, 1000, ids) }
+        assertThrows(IllegalArgumentException::class.java) { p.addText("x".repeat(Limits.MAX_TEXT_LENGTH + 1), 0, 1000, ids) }
+        val captioned = p.addText("ok", 0, 1000, ids)
+        val caption =
+            captioned.tracks
+                .flatMap { it.clips }
+                .single { it is TextClip }
+                .id
+        assertThrows(IllegalArgumentException::class.java) { captioned.setText(caption, "tab\there") }
+        val badCard = CardClip(ClipId("card"), 3000, ArgbColor.BLACK, text = "\u202E")
+        assertThrows(IllegalArgumentException::class.java) { p.addToMain(listOf(badCard), ids = ids) }
+        // Emoji and punctuation make fine names.
+        assertThat(p.rename("\uD83C\uDF82 Party!").name).isEqualTo("\uD83C\uDF82 Party!")
+        assertThat(p.rename("!!!").name).isEqualTo("!!!")
     }
 
     @Test
@@ -152,6 +175,55 @@ class EdgeCasesTest {
     }
 
     @Test
+    fun `an ending-anchored sound on an ordinary row goes with its row when the ending is gone`() {
+        val p = Fixtures.presetProject()
+        val voice = p.byRole(PresetRole.CLOSING_MESSAGE)
+        val plain = p.copy(tracks = p.tracks.map { if (it.id == voice.id) it.copy(presetRole = null) else it })
+        val noEnding =
+            plain.copy(
+                tracks =
+                    plain.tracks.map {
+                        if (it.type ==
+                            TrackType.MAIN
+                        ) {
+                            it.copy(clips = it.clips.dropLast(1))
+                        } else {
+                            it
+                        }
+                    },
+            )
+        assertThat(noEnding.normalized().assertValid().track(voice.id)).isNull()
+    }
+
+    @Test
+    fun `without covering the ending, the frame stays until the content before it has gone`() {
+        val preset = Fixtures.preset.copy(ending = EndingSpec(EndingKind.VIDEO))
+        val p =
+            ProjectFactory
+                .fromPreset(
+                    Fixtures.PROJECT_ID,
+                    preset,
+                    Fixtures.presetMedia,
+                    ids,
+                ).addToMain(listOf(Fixtures.photo("a", 3000)), ids = ids)
+        val t = p.setTransition(ClipId("a"), crossfade).assertValid()
+        val frame = t.byRole(PresetRole.FRAME).clips.single()
+        assertThat(frame.endMs).isEqualTo(t.mainSlot(ClipId("a"))!!.endMs)
+        assertThat(frame.endMs).isEqualTo(t.endingSlot()!!.startMs + 1000)
+        assertThat(t.contentEndMs()).isEqualTo(frame.endMs)
+        assertThat(ProjectFactory.blank(Fixtures.PROJECT_ID, ids).contentEndMs()).isEqualTo(0)
+    }
+
+    @Test
+    fun `a new overlay goes under the lowest text row above MAIN`() {
+        val p = Fixtures.presetProject().addRow(TrackType.TEXT, id = TrackId("text2"))
+        val text1 = p.tracks.last { it.type == TrackType.TEXT }.id
+        val frame = p.byRole(PresetRole.FRAME).id
+        val q = p.sendToBottom(text1).addRow(TrackType.OVERLAY, id = TrackId("ov")).assertValid()
+        assertThat(q.stacking).containsExactly(text1, q.main.id, frame, TrackId("ov"), TrackId("text2")).inOrder()
+    }
+
+    @Test
     fun `a preset file with an unusable length is refused`() {
         for (media in listOf(PresetMedia(introMs = 50), PresetMedia(frameMs = 0), PresetMedia(endingMs = Limits.MAX_MEDIA_MS + 1))) {
             assertThrows(IllegalArgumentException::class.java) {
@@ -161,17 +233,25 @@ class EdgeCasesTest {
     }
 
     @Test
-    fun `insert next to the preset frame tries the frame row first`() {
+    fun `the user's items never go on the rows a preset manages`() {
         val p = Fixtures.presetProject()
         val frameRow = p.byRole(PresetRole.FRAME)
         val frame = frameRow.clips.single()
-        // Before the frame (which starts after the intro) the frame row is free.
+        // "+" next to the frame: the frame row is free before the frame starts, but the overlay goes on a row of its own.
         val before = p.insertAt(frameRow.id, frame.id, Side.BEFORE, Fixtures.overlay("ov", 0, 2000), ids).assertValid()
-        assertThat(before.trackOf(ClipId("ov"))!!.id).isEqualTo(frameRow.id)
+        val landed = before.trackOf(ClipId("ov"))!!
+        assertThat(landed.id).isNotEqualTo(frameRow.id)
+        assertThat(landed.type).isEqualTo(TrackType.OVERLAY)
         assertThat(before.requireClip(ClipId("ov")).endMs).isEqualTo(frame.startMs)
-        // After the frame there is no video left, but the clip is still placed at the boundary.
-        val after = p.insertAt(frameRow.id, frame.id, Side.AFTER, Fixtures.overlay("ov2", 0, 2000), ids).assertValid()
-        assertThat(after.requireClip(ClipId("ov2")).startMs).isEqualTo(frame.endMs)
+        // So switching the frame off never hides them.
+        val off = before.deleteClip(frame.id).assertValid()
+        assertThat(off.requireTrack(frameRow.id).enabled).isFalse()
+        assertThat(off.trackOf(ClipId("ov"))!!.enabled).isTrue()
+        // The same for sound next to the frame music.
+        val music = p.byRole(PresetRole.FRAME_MUSIC)
+        val withSound = p.addToTrack(music.id, Fixtures.audio("s", 0, 1000), 0, ids).assertValid()
+        assertThat(withSound.trackOf(ClipId("s"))!!.id).isNotEqualTo(music.id)
+        assertThat(withSound.trackOf(ClipId("s"))!!.audioRole).isEqualTo(AudioRole.MUSIC)
     }
 
     @Test
@@ -191,12 +271,13 @@ class EdgeCasesTest {
     }
 
     @Test
-    fun `a frame that does not follow MAIN is refused, not quietly moved`() {
+    fun `a frame that does not follow MAIN is not valid, and the editor won't start on it`() {
         val p = Fixtures.presetProject()
         val frame = p.byRole(PresetRole.FRAME)
         val moved = p.copy(tracks = p.tracks.map { t -> if (t.id == frame.id) t.copy(clips = t.clips.map { it.withStartMs(0) }) else t })
         assertThat(moved.validate().map { it.rule }).contains(Violation.Rule.ANCHOR)
         assertThrows(IllegalArgumentException::class.java) { ProjectEditor(moved) }
+        assertThat(moved.normalized()).isEqualTo(p)
     }
 
     @Test

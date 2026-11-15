@@ -45,6 +45,12 @@ sealed interface ProjectDecodeResult {
         val project: Project,
         /** The version the JSON was written in, before any migration. */
         val fromVersion: Int,
+        /**
+         * True when values the model derives (anchored spans, fitted
+         * transitions, animations, fades) had to be worked out again; the
+         * caller should save the project back.
+         */
+        val repaired: Boolean = false,
     ) : ProjectDecodeResult
 
     data class Failed(
@@ -76,9 +82,10 @@ sealed interface ProjectDecodeResult {
  * four-space indentation and `schemaVersion` first, so the same project
  * always gives the same bytes and golden fixtures can be compared byte for
  * byte. When reading, optional fields may be absent and take their
- * defaults, and unknown fields are ignored. A project that
- * is too large, malformed, from a newer app or invalid is refused with a
- * reason, never half-loaded.
+ * defaults, and unknown fields are ignored. Values the model derives are
+ * worked out again if they are stale (see [ProjectDecodeResult.Ok.repaired]);
+ * a project that is too large, malformed, from a newer app or otherwise
+ * invalid is refused with a reason, never half-loaded.
  */
 class ProjectCodec(
     private val migrations: ProjectMigrations = ProjectMigrations(),
@@ -121,8 +128,22 @@ class ProjectCodec(
                 return failed(ProjectDecodeResult.Reason.MALFORMED, e.message.orEmpty().take(200))
             }
         val problems = project.validate()
-        if (problems.isNotEmpty()) return failed(ProjectDecodeResult.Reason.INVALID, problems.joinToString { it.detail }.take(500))
-        return ProjectDecodeResult.Ok(project, version)
+        if (problems.isEmpty()) return ProjectDecodeResult.Ok(project, version)
+        // Values the model derives (spans that follow MAIN, fitted transitions,
+        // animations and fades) may be stale if an app update changed how they
+        // are worked out. Re-deriving them repairs that; anything else that is
+        // wrong is refused.
+        val repaired =
+            try {
+                project.normalized().takeIf { it.validate().isEmpty() }
+            } catch (e: RuntimeException) {
+                null
+            }
+        return if (repaired != null) {
+            ProjectDecodeResult.Ok(repaired, version, repaired = true)
+        } else {
+            failed(ProjectDecodeResult.Reason.INVALID, problems.joinToString { it.detail }.take(500))
+        }
     }
 
     private fun failed(

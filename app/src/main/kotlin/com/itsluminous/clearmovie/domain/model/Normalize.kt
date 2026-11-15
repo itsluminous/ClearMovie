@@ -11,8 +11,8 @@ package com.itsluminous.clearmovie.domain.model
  * - Each transition is fitted to the clips it joins (at most half the shorter
  *   one), or dropped when it no longer fits.
  * - Clips anchored to the frame span or the ending follow the MAIN row; a
- *   clip anchored to an ending that is gone is removed, with its
- *   closing-message row.
+ *   clip anchored to an ending that is gone is removed, and so is a row
+ *   that leaves empty (MAIN and the preset frame row excepted).
  * - A clip an anchored clip grew over is moved to another row, so rows
  *   never overlap.
  * - START and END animations, and a sound's fades, fit inside their clip.
@@ -75,8 +75,9 @@ private fun Project.normalizeAnchors(): Project {
             if (span == null) {
                 val rest = current.clips.filterNot { it.id == clip.id }
                 project = project.withTrackClips(track.id, rest)
-                if (rest.isEmpty() && current.presetRole == PresetRole.CLOSING_MESSAGE) {
-                    project = project.copy(tracks = project.tracks.filterNot { it.id == track.id })
+                // Like any delete, a row it leaves empty goes too.
+                if (rest.isEmpty() && current.isRemovable) {
+                    project = project.copy(tracks = project.tracks.filterNot { it.id == track.id }, stacking = project.stacking - track.id)
                 }
                 continue
             }

@@ -248,11 +248,24 @@ class TransitionsTest {
 
     @Test
     fun `a growing frame moves a clip it would cover to another row`() {
-        // A short overlay put on the frame row before the frame starts...
+        // A short overlay on the frame row before the frame starts (edits never put
+        // one there, but a stored project from another version might)...
         var p = Fixtures.presetProject()
         val frameRow = p.byRole(PresetRole.FRAME)
-        p = p.addToTrack(frameRow.id, Fixtures.overlay("early", 0, 2000), 0, ids).assertValid()
-        assertThat(p.trackOf(ClipId("early"))!!.id).isEqualTo(frameRow.id)
+        p =
+            p.copy(
+                tracks =
+                    p.tracks.map {
+                        if (it.id ==
+                            frameRow.id
+                        ) {
+                            it.copy(clips = listOf(Fixtures.overlay("early", 0, 2000)) + it.clips)
+                        } else {
+                            it
+                        }
+                    },
+            )
+        p.assertValid()
         // ...is moved off it when skipping the intro makes the frame start at 0.
         val noIntro =
             p
@@ -261,7 +274,7 @@ class TransitionsTest {
                         .first()
                         .id,
                 ).assertValid()
-        assertThat(noIntro.trackOf(ClipId("early"))!!.id).isNotEqualTo(frameRow.id)
+        assertThat(noIntro.trackOf(ClipId("early"))!!.id).isEqualTo(TrackId("row-early"))
         assertThat(noIntro.trackOf(ClipId("early"))!!.type).isEqualTo(TrackType.OVERLAY)
     }
 

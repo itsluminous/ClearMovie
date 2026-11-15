@@ -44,6 +44,7 @@ private fun requireContentClip(clip: Clip) {
         clip is PhotoClip || clip is VideoClip || clip is CardClip,
     ) { "Only photos, videos and cards go between the intro and the ending" }
     require(clip !is MediaClip || clip.pip == null) { "A MAIN item has no picture-in-picture placement" }
+    require(clip !is CardClip || clip.text == null || TextRules.isValidText(clip.text)) { "That text can't be used" }
 }
 
 /**
@@ -126,6 +127,7 @@ fun Project.addTimedClip(
     val type = clip.timedTrackType()
     require(Track(TrackId("probe"), type).accepts(clip)) { "That item does not go on that kind of row" }
     require((type == TrackType.AUDIO) == (role != null)) { "Sound needs a role, other items none" }
+    require(clip !is TextClip || TextRules.isValidText(clip.text)) { "That text can't be used" }
     return placeTimed(clip, preferred = null, role = role, ids = ids).first.normalized()
 }
 
@@ -176,7 +178,7 @@ fun Project.addToTrack(
 fun Project.deleteClip(clipId: ClipId): Project {
     val track = requireNotNull(trackOf(clipId)) { "No such clip" }
     val clip = requireClip(clipId)
-    if (track.presetRole == PresetRole.FRAME && clip is OverlayClip && clip.anchor is SpanAnchor.Frame) {
+    if (track.presetRole == PresetRole.FRAME && clip is OverlayClip && clip.media == MediaRef.Preset(PresetSlot.FRAME)) {
         return setTrackEnabled(track.id, false)
     }
     var project = withTrackClips(track.id, track.clips.filterNot { it.id == clipId }).afterRemovingFrom(track.id)
@@ -489,14 +491,16 @@ fun Project.setAudioFades(
 fun Project.setText(
     clipId: ClipId,
     text: String,
-): Project =
-    updateClip(clipId) {
+): Project {
+    require(TextRules.isValidText(text)) { "That text can't be used" }
+    return updateClip(clipId) {
         when (it) {
             is TextClip -> it.copy(text = text)
             is CardClip -> it.copy(text = text)
             else -> throw IllegalArgumentException("Only captions and cards have text")
         }
     }
+}
 
 /** "Show from/to" for a caption. */
 fun Project.setTextTiming(
