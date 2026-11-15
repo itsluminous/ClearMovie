@@ -7,11 +7,15 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.domain.model.AudioClip
+import com.itsluminous.clearmovie.domain.model.AudioRole
+import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.SequentialIds
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.render.plan.AudioSegment
 import com.itsluminous.clearmovie.render.plan.RenderPlan
@@ -36,17 +40,29 @@ class CompositionFactorySilenceTest {
     private fun build(
         silent: Set<String>,
         firstClipMs: Long = 3000,
+        voiceMs: Long? = null,
     ): Pair<RenderPlan, Composition> {
-        listOf("a.mp4", "b.mp4").forEach { File(root, it).writeBytes(byteArrayOf(0)) }
+        listOf("a.mp4", "b.mp4", "c.m4a").forEach { File(root, it).writeBytes(byteArrayOf(0)) }
         val ids = SequentialIds("t")
         val project =
-            ProjectFactory.blank(ProjectId("silence"), ids).addToMain(
-                listOf(
-                    VideoClip(ids.clipId(), MediaRef.Copied("a.mp4"), sourceDurationMs = firstClipMs),
-                    VideoClip(ids.clipId(), MediaRef.Copied("b.mp4"), sourceDurationMs = 3000),
-                ),
-                ids = ids,
-            )
+            ProjectFactory
+                .blank(ProjectId("silence"), ids)
+                .addToMain(
+                    listOf(
+                        VideoClip(ids.clipId(), MediaRef.Copied("a.mp4"), sourceDurationMs = firstClipMs),
+                        VideoClip(ids.clipId(), MediaRef.Copied("b.mp4"), sourceDurationMs = 3000),
+                    ),
+                    ids = ids,
+                ).let { p ->
+                    // A voice item exists only on a sound row, so only the sound path checks its length.
+                    voiceMs?.let {
+                        p.addTimedClip(
+                            AudioClip(ClipId("voice"), MediaRef.Copied("c.m4a"), startMs = 0, durationMs = it, sourceDurationMs = it),
+                            role = AudioRole.VOICE,
+                            ids = ids,
+                        )
+                    } ?: p
+                }
         val plan = RenderPlanBuilder().build(project)
         val probe = SourceProbe { uri: Uri -> SourceInfo(3_000_000, uri.lastPathSegment !in silent) }
         val result = AtomicReference<Any>()
@@ -113,7 +129,15 @@ class CompositionFactorySilenceTest {
     }
 
     @Test(expected = MediaUnavailableException::class)
-    fun `a silent clip longer than its file is still refused`() {
-        build(silent = setOf("a.mp4"), firstClipMs = 5000)
+    fun `a silent sound longer than its file is still refused`() {
+        build(silent = setOf("c.m4a"), voiceMs = 5000)
+    }
+
+    @Test
+    fun `a silent sound within its file's length becomes a gap`() {
+        val (plan, composition) = build(silent = setOf("c.m4a"), voiceMs = 3000)
+        assertThat(plan.audio).hasSize(2)
+        // The voice row had only the silent sound, so only MAIN's row is left.
+        assertThat(composition.audioSequences()).hasSize(1)
     }
 }

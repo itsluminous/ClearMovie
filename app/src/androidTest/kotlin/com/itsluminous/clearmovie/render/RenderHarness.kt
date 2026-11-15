@@ -243,10 +243,10 @@ object RenderHarness {
     /**
      * Pixels within Delta E 10 of either form of the preset's key colour (as
      * stored, and as a BT.601 decoder shows a BT.709 file of it), so leftover
-     * key green is counted whichever matrix decoded the export. On a BT.601
-     * decoder a pure green (0, 255, 0) picture is only Delta E 6 from the key
-     * as shown, so areas where the content itself is green go in [exclude]
-     * (normalised canvas rects: x, y, w, h).
+     * key green is counted whichever matrix decoded the export. A pure green
+     * (0, 255, 0) picture is within Delta E 6 of the BT.601 form whichever
+     * matrix decodes it, so areas where the content itself is green go in
+     * [exclude] (normalised canvas rects: x, y, w, h).
      */
     fun countNearKey(
         bitmap: Bitmap,

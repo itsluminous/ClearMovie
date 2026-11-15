@@ -24,7 +24,8 @@ import com.itsluminous.clearmovie.domain.model.KeySpec
  * apart in chroma, inside the tolerance, so the keyed area grows by about
  * 14%, and on any one device one of the two forms is spurious:
  * - On a decoder that honours BT.709, the added form costs at most 0.023
- *   alpha (#7EFF00) for colours the stored key alone leaves fully opaque;
+ *   alpha (#7EFF00, which the stored key alone leaves at 0.9995) for
+ *   colours the stored key leaves opaque;
  *   colours already in the soft band lose more (#76FF03: 0.86 to 0.75).
  * - On a decoder that uses BT.601, the stored form is the spurious one, as
  *   it was before this form was added: mid and mint greens near the soft

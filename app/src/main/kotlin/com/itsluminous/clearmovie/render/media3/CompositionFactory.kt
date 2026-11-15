@@ -138,7 +138,7 @@ class CompositionFactory(
     ) {
         private val captions = CaptionBitmapRenderer(plan.height)
         private val uris = mutableMapOf<MediaRef, Uri>()
-        private val infos = mutableMapOf<Uri, SourceInfo?>()
+        private val infos = mutableMapOf<Uri, SourceInfo>()
         val images = mutableSetOf<Uri>()
 
         private fun uri(ref: MediaRef): Uri = uris.getOrPut(ref) { guard.check(resolver.resolve(ref)) }
@@ -149,7 +149,7 @@ class CompositionFactory(
             endUs: Long,
         ): Pair<Uri, SourceInfo> {
             val u = uri(ref)
-            val info = infos.getOrPut(u) { probe.probe(u) } ?: throw MediaUnavailableException("Could not read the media's length")
+            val info = infos.getOrPut(u) { probe.probe(u) ?: throw MediaUnavailableException("Could not read the media's length") }
             if (endUs > info.durationUs + LENGTH_TOLERANCE_US) throw MediaUnavailableException("A clip is longer than its file")
             return u to info
         }
@@ -333,7 +333,8 @@ internal class RetrieverProbe(
         } catch (e: RuntimeException) {
             null
         } finally {
-            r.release()
+            // release() declares IOException on newer APIs; nothing to do about it here.
+            runCatching { r.release() }
         }
     }
 }

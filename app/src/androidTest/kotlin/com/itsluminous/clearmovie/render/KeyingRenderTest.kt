@@ -32,8 +32,12 @@ import org.junit.runner.RunWith
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class KeyingRenderTest {
-    /** The top-right quarter of the window (photo_quadrants' green), widened by 1% each side. */
-    private val greenQuadrant = doubleArrayOf(0.0094 + 0.5 * 0.9813 - 0.01, 0.0222 - 0.01, 0.5 * 0.9813 + 0.02, 0.5 * 0.7741 + 0.02)
+    /**
+     * The top-right quarter of the window (photo_quadrants' green, filled
+     * and centred), widened by 3% of the canvas each side for encoder ringing
+     * at its hard edges.
+     */
+    private val greenQuadrant = doubleArrayOf(0.0094 + 0.5 * 0.9813 - 0.03, 0.0222 - 0.03, 0.5 * 0.9813 + 0.06, 0.5 * 0.7741 + 0.06)
 
     /** A point inside the frame window, by window-relative (u, v). */
     private fun win(
@@ -127,7 +131,7 @@ class KeyingRenderTest {
             expect("t=$timeS top border", rgb(f, 0.5, 0.009), top, 14)
             expect("t=$timeS strip", rgb(f, 0.95, 0.85), strip, 14)
             expect("t=$timeS logo over the window", rgb(f, 0.1, 0.769), logo, 14)
-            // photo_quadrants' green quadrant is itself pure green, so it is not counted.
+            // photo_quadrants' green quarter is itself pure green, so it is not counted.
             val exclude = if (group.first().label == "photo-quadrants") listOf(greenQuadrant) else emptyList()
             val green = RenderHarness.countNearKey(f, exclude = exclude)
             report("keying t=$timeS pixels within dE10 of either form of #00D922: $green")

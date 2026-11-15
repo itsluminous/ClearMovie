@@ -69,6 +69,8 @@ class RealFrameKeyingTest {
         val out = RenderHarness.export(RenderPlanBuilder(RenderHarness.preset).build(project), "real-keying", resolver)
         val keyGreen = intArrayOf(0x00, 0xD9, 0x22)
         val window = RenderHarness.preset.frame!!.contentRect
+        // At 8 s the window shows photo_quadrants, whose green quarter is itself pure green (3% margin).
+        val greenQuadrant = doubleArrayOf(window.x + 0.5 * window.w - 0.03, window.y - 0.03, 0.5 * window.w + 0.06, 0.5 * window.h + 0.06)
         val failures = mutableListOf<String>()
         // Inside the window, (u, v); outside it, canvas points on the border and the strip.
         val inside = listOf(0.25 to 0.25, 0.75 to 0.25, 0.75 to 0.75, 0.5 to 0.5)
@@ -108,14 +110,6 @@ class RealFrameKeyingTest {
                 report("real t=$t $name = ${got.toList()} frame source ${want.toList()} ${if (ok) "ok" else "FAIL"}")
                 if (!ok) failures += "t=$t $name ${got.toList()} vs ${want.toList()}"
             }
-            // At 8 s the window shows photo_quadrants, whose green quarter is itself pure green.
-            val greenQuadrant =
-                doubleArrayOf(
-                    window.x + 0.5 * window.w - 0.01,
-                    window.y - 0.01,
-                    0.5 * window.w + 0.02,
-                    0.5 * window.h + 0.02,
-                )
             val near10 = RenderHarness.countNearKey(f, step = 1, exclude = if (t == 8.0) listOf(greenQuadrant) else emptyList())
             if (t == 8.0) {
                 val control = RenderHarness.countNearKey(source, step = 4)
