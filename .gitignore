@@ -1,0 +1,35 @@
+# Reference media kept locally only. Never commit.
+/old/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Gradle / Kotlin / Android build output
+build/
+.gradle/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.log
+
+# Local machine config
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Signing material (CI uses repository secrets)
+*.keystore
+*.jks
+keystore.properties
+
+# Local site previews
+/site/_local/

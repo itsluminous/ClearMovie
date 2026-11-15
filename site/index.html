@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClearMovie - simple, offline video maker for Android</title>
+<meta name="description" content="ClearMovie turns event photos and videos into a finished video with an intro, a frame overlay, captions and music. Free, open source, offline, hardware accelerated.">
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2306b6d4'/%3E%3Cpath d='M24 18v28l22-14z' fill='white'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f7f8fc;--bg2:#ffffff;--fg:#10142a;--muted:#4a5272;--line:#dde1ee;
+  --brand:#0891b2;--brand2:#7c3aed;--accent:#16a34a;--chip:#e7f6fa;
+  --shadow:0 10px 30px rgba(16,20,42,.08);
+  --radius:18px;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0b1020;--bg2:#121a33;--fg:#eef1fb;--muted:#a9b1cf;--line:#26304f;
+        --brand:#22d3ee;--brand2:#a78bfa;--accent:#4ade80;--chip:#10283a;
+        --shadow:0 10px 30px rgba(0,0,0,.35)}
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);line-height:1.6;font-size:17px}
+a{color:var(--brand)}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.skip{position:absolute;left:-999px}.skip:focus{left:12px;top:12px;background:var(--bg2);padding:8px 12px;border-radius:8px;z-index:20}
+
+/* nav */
+header.nav{position:sticky;top:0;z-index:10;backdrop-filter:saturate(1.4) blur(12px);
+  background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:20px;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:var(--fg);text-decoration:none}
+.logo svg{width:32px;height:32px}
+.nav ul{display:flex;gap:22px;list-style:none;margin:0 0 0 auto;padding:0}
+.nav ul a{color:var(--muted);text-decoration:none;font-weight:600;font-size:15px}
+.nav ul a:hover{color:var(--fg)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:999px;font-weight:700;
+  text-decoration:none;border:2px solid transparent;font-size:16px;transition:transform .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn svg{width:20px;height:20px}
+.btn.primary{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff}
+.btn.ghost{border-color:var(--line);color:var(--fg);background:var(--bg2)}
+.nav .btn{padding:8px 16px;font-size:14px}
+@media (max-width:760px){.nav ul{display:none}.nav .btn{margin-left:auto}}
+
+/* hero */
+.hero{padding:72px 0 40px;position:relative;overflow:hidden}
+.hero:before{content:"";position:absolute;inset:-30% -10% auto auto;width:640px;height:640px;border-radius:50%;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--brand) 22%,transparent),transparent);z-index:-1}
+.hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center}
+.chip{display:inline-flex;gap:8px;align-items:center;background:var(--chip);color:var(--brand);
+  font-weight:700;font-size:13px;padding:6px 12px;border-radius:999px;letter-spacing:.02em}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
+h1{font-size:clamp(34px,5vw,56px);line-height:1.08;margin:18px 0 16px;letter-spacing:-.02em}
+h1 em{font-style:normal;background:linear-gradient(135deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--muted);font-size:19px;max-width:560px}
+.ctas{display:flex;flex-wrap:wrap;gap:12px;margin:26px 0 10px}
+.also{color:var(--muted);font-size:14px}
+@media (max-width:900px){.hero .wrap{grid-template-columns:1fr}.hero{padding-top:40px}.phone{width:min(280px,76vw)}}
+
+/* phone mockup */
+.phone-col{display:flex;flex-direction:column;align-items:center;gap:10px}
+.phone{width:min(330px,82vw);aspect-ratio:9/19;border-radius:42px;background:#0a0d18;padding:12px;
+  box-shadow:var(--shadow),0 0 0 2px #2a3150 inset;position:relative}
+.screen{height:100%;border-radius:32px;background:#121729;overflow:hidden;display:flex;flex-direction:column;color:#e8ebf7;font-size:12px}
+.topbar{display:flex;align-items:center;gap:8px;padding:14px 14px 8px}
+.topbar b{flex:1;font-size:13px}
+.pill-btn{background:linear-gradient(135deg,#22d3ee,#a78bfa);color:#0b1020;font-weight:800;border-radius:999px;padding:5px 10px;font-size:11px}
+.ic{width:22px;height:22px;border-radius:7px;background:#1e2540;display:grid;place-items:center}
+.ic svg{width:14px;height:14px}
+.preview{margin:4px 10px;aspect-ratio:16/9;border-radius:10px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,#ef4444,#f97316 60%,#fb923c)}
+.preview .win{position:absolute;left:6%;top:7%;width:88%;height:86%;border-radius:10px;overflow:hidden;
+  background:linear-gradient(160deg,#7dd3fc,#38bdf8 35%,#a3e635 36%,#65a30d)}
+.preview .win:after{content:"";position:absolute;left:58%;top:18%;width:22%;aspect-ratio:1;border-radius:50%;background:#fde047;box-shadow:0 0 18px #fde047}
+.preview .cap{position:absolute;left:10%;right:10%;bottom:14%;text-align:center;font-weight:800;font-size:11px;
+  color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;z-index:2}
+.playrow{display:flex;justify-content:center;align-items:center;gap:14px;padding:8px 0;color:#a9b1cf}
+.playrow .pp{width:30px;height:30px;border-radius:50%;background:#22d3ee;display:grid;place-items:center}
+.timeline{flex:1;margin:4px 10px;border-radius:12px;background:#0e1324;padding:10px 8px;display:flex;flex-direction:column;gap:8px}
+.track{display:flex;gap:5px;overflow:hidden}
+.clip{height:44px;border-radius:7px;flex:0 0 auto;position:relative}
+.clip.sel{outline:2px solid #22d3ee;outline-offset:1px}
+.clip small{position:absolute;bottom:2px;right:4px;font-size:9px;color:#fff;text-shadow:0 1px 1px #000}
+.row{height:16px;border-radius:5px;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:700;color:#0b1020}
+.expand{align-self:center;color:#a9b1cf;font-size:10px}
+.menu{display:flex;justify-content:space-around;padding:10px 6px 16px;background:#161d36}
+.menu div{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9.5px;color:#cfd5ee}
+.menu svg{width:18px;height:18px}
+.label{font-size:13px;color:var(--muted)}
+
+/* marquee */
+.marquee{border-block:1px solid var(--line);background:var(--bg2);overflow:hidden;padding:14px 0;margin-top:28px}
+.marquee .track2{display:flex;gap:14px;width:max-content;animation:slide 32s linear infinite}
+.marquee span{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);
+  font-weight:700;font-size:14px;white-space:nowrap}
+.marquee svg{width:18px;height:18px;color:var(--brand)}
+@keyframes slide{to{transform:translateX(-50%)}}
+
+/* sections */
+section{padding:80px 0}
+h2{font-size:clamp(28px,3.4vw,40px);margin:0 0 10px;letter-spacing:-.01em;text-align:center}
+.sub{color:var(--muted);text-align:center;max-width:640px;margin:0 auto 44px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+@media (max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:600px){.grid{grid-template-columns:1fr}}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+.card .icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;margin-bottom:14px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--brand) 18%,transparent),color-mix(in srgb,var(--brand2) 18%,transparent));color:var(--brand)}
+.card .icon svg{width:26px;height:26px}
+.card h3{margin:0 0 6px;font-size:19px}
+.card p{margin:0;color:var(--muted);font-size:15.5px}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;counter-reset:s}
+@media (max-width:760px){.steps{grid-template-columns:1fr}}
+.step{position:relative;padding:28px 24px 24px;border-radius:var(--radius);background:var(--bg2);border:1px solid var(--line)}
+.step:before{counter-increment:s;content:counter(s);position:absolute;top:-18px;left:24px;width:38px;height:38px;border-radius:50%;
+  display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--brand),var(--brand2))}
+.step h3{margin:6px 0 6px}
+.step p{margin:0;color:var(--muted)}
+
+.alt{background:var(--bg2);border-block:1px solid var(--line)}
+.langs{display:flex;flex-wrap:wrap;justify-content:center;gap:14px}
+.lang{padding:14px 22px;border-radius:14px;border:1px solid var(--line);background:var(--bg);font-weight:700;font-size:18px}
+.lang small{display:block;color:var(--muted);font-weight:500;font-size:13px}
+
+.cta-box{text-align:center;border-radius:28px;padding:48px 24px;background:linear-gradient(135deg,color-mix(in srgb,var(--brand) 16%,var(--bg2)),color-mix(in srgb,var(--brand2) 16%,var(--bg2)));border:1px solid var(--line)}
+.cta-box .ctas{justify-content:center}
+
+footer{padding:36px 0;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center}
+footer nav{display:flex;gap:18px}
+footer a{color:var(--muted)}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-gh" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.6 18.3 5 18.3 5c.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z"/></symbol>
+    <symbol id="i-dl" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0-5-5m5 5 5-5M4 19h16"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></g></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></g></symbol>
+    <symbol id="i-nowm" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></g></symbol>
+    <symbol id="i-noad" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></g></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m8 6-6 6 6 6m8-12 6 6-6 6"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></g></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></g></symbol>
+    <symbol id="i-timeline" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="6" height="6" rx="1"/><rect x="11" y="5" width="10" height="6" rx="1"/><path d="M3 16h18M3 20h12"/></g></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 6V4h14v2M12 4v16M9 20h6"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></g></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 14a8 8 0 0 0 5 6M22 10a8 8 0 0 0-5-6"/></g></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3M8 21v-7h8v7"/></g></symbol>
+    <symbol id="i-scissors" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></g></symbol>
+    <symbol id="i-speed" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></g></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="ClearMovie home">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#06b6d4"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg)"/><rect x="12" y="16" width="40" height="26" rx="4" fill="none" stroke="#fff" stroke-width="4"/><path d="M28 22v14l11-7z" fill="#fff"/><rect x="12" y="46" width="40" height="4" rx="2" fill="#fff" opacity=".7"/></svg>
+      ClearMovie
+    </a>
+    <ul>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#translations">Translations</a></li>
+    </ul>
+    <a class="btn primary" href="https://github.com/itsluminous/ClearMovie/releases/latest"><svg aria-hidden="true"><use href="#i-dl"/></svg>Download</a>
+  </div>
+</header>
+
+<main id="main">
+<div id="top" class="hero">
+  <div class="wrap">
+    <div>
+      <span class="chip"><i></i>In development &middot; free &amp; open source</span>
+      <h1>Event videos, <em>made simple.</em></h1>
+      <p class="lead">ClearMovie turns the photos and videos from a family event into a finished video, with your intro, a frame overlay, background music, captions, transitions and a closing message. It is designed for people who have never used a video editor.</p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/itsluminous/ClearMovie"><svg aria-hidden="true"><use href="#i-gh"/></svg>View on GitHub</a>
+        <a class="btn ghost" href="https://github.com/itsluminous/ClearMovie/releases"><svg aria-hidden="true"><use href="#i-dl"/></svg>Releases</a>
+      </div>
+      <p class="also">Android 10 and newer &middot; APK from GitHub Releases, also via Obtainium</p>
+    </div>
+    <div class="phone-col">
+      <div class="phone" role="img" aria-label="Design preview of the ClearMovie editor: a preview with a frame overlay and caption, a timeline of photos and videos, and a bottom menu with labelled buttons">
+        <div class="screen" aria-hidden="true">
+          <div class="topbar">
+            <span class="ic"><svg><use href="#i-undo"/></svg></span>
+            <b>Wedding day</b>
+            <span class="ic"><svg><use href="#i-save"/></svg></span>
+            <span class="pill-btn">Export</span>
+          </div>
+          <div class="preview">
+            <div class="win"></div>
+            <div class="cap">Happy Anniversary!</div>
+          </div>
+          <div class="playrow"><span>0:42</span><span class="pp"><svg width="14" height="14" style="color:#0b1020"><use href="#i-play"/></svg></span><span>3:10</span></div>
+          <div class="timeline">
+            <div class="track">
+              <div class="clip" style="width:46px;background:linear-gradient(135deg,#f472b6,#fb7185)"><small>3s</small></div>
+              <div class="clip sel" style="width:70px;background:linear-gradient(135deg,#38bdf8,#818cf8)"><small>0:12</small></div>
+              <div class="clip" style="width:46px;background:linear-gradient(135deg,#facc15,#fb923c)"><small>3s</small></div>
+              <div class="clip" style="width:58px;background:linear-gradient(135deg,#34d399,#22d3ee)"><small>0:08</small></div>
+              <div class="clip" style="width:46px;background:linear-gradient(135deg,#c084fc,#f472b6)"><small>3s</small></div>
+            </div>
+            <div class="row" style="background:#22d3ee">Frame overlay &middot; music</div>
+            <div class="row" style="background:#a78bfa;width:70%">Closing message</div>
+            <div class="expand">&#9650; Hide rows</div>
+          </div>
+          <div class="menu">
+            <div><svg><use href="#i-scissors"/></svg>Trim</div>
+            <div><svg><use href="#i-text"/></svg>Caption</div>
+            <div><svg><use href="#i-speed"/></svg>Speed</div>
+            <div><svg><use href="#i-music"/></svg>Volume</div>
+            <div><svg><use href="#i-layers"/></svg>Split</div>
+          </div>
+        </div>
+      </div>
+      <span class="label">Design preview, not a screenshot</span>
+    </div>
+  </div>
+  <div class="marquee" aria-label="Highlights">
+    <div class="track2">
+      <span><svg aria-hidden="true"><use href="#i-lock"/></svg>100% offline</span>
+      <span><svg aria-hidden="true"><use href="#i-chip"/></svg>Hardware-accelerated export</span>
+      <span><svg aria-hidden="true"><use href="#i-nowm"/></svg>No watermarks</span>
+      <span><svg aria-hidden="true"><use href="#i-noad"/></svg>No ads, no tracking</span>
+      <span><svg aria-hidden="true"><use href="#i-code"/></svg>Open source (Apache-2.0)</span>
+      <span><svg aria-hidden="true"><use href="#i-rotate"/></svg>Portrait &amp; landscape</span>
+      <span aria-hidden="true"><svg><use href="#i-lock"/></svg>100% offline</span>
+      <span aria-hidden="true"><svg><use href="#i-chip"/></svg>Hardware-accelerated export</span>
+      <span aria-hidden="true"><svg><use href="#i-nowm"/></svg>No watermarks</span>
+      <span aria-hidden="true"><svg><use href="#i-noad"/></svg>No ads, no tracking</span>
+      <span aria-hidden="true"><svg><use href="#i-code"/></svg>Open source (Apache-2.0)</span>
+      <span aria-hidden="true"><svg><use href="#i-rotate"/></svg>Portrait &amp; landscape</span>
+    </div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Everything an event video needs</h2>
+    <p class="sub">The features are chosen for one job: turning the photos and videos from a day into a video you can share. Every button has a label, and nothing is hidden behind jargon.</p>
+    <div class="grid">
+      <div class="card"><div class="icon"><svg><use href="#i-layers"/></svg></div><h3>Presets</h3><p>An intro, a green-screen frame overlay that runs across the whole video, and an ending, set up once and reused with one tap. You can replace or skip any part for a single video.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-share"/></svg></div><h3>Share from your gallery</h3><p>Select photos and videos in your gallery, tap Share, then choose ClearMovie. They land on the timeline in the order they were taken.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-timeline"/></svg></div><h3>A timeline that stays simple</h3><p>Photos and videos on one row, plus as many text, music and picture-in-picture rows as you need. Pinch to zoom, tap “+” to add something exactly where you want it, and edit from a toolbar of big, labelled buttons.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-text"/></svg></div><h3>Captions in Hindi &amp; English</h3><p>Captions start in the preset's spot, font and size. Drag them, resize them, recolour them, or tap Reset. Devanagari fonts are built in.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-music"/></svg></div><h3>Music &amp; automatic ducking</h3><p>Background music plays under the whole video and is lowered automatically while people in your videos talk, and everything is lowered for the closing message.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-layers"/></svg></div><h3>Transitions &amp; animations</h3><p>Crossfades, fades, wipes, slides and zooms between items, and gentle zooms or fade-ins on single photos and captions. Each one shows a live preview before you choose it.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-rotate"/></svg></div><h3>Works in portrait and landscape</h3><p>Turn the phone sideways and the preview moves to the left with the timeline beside it. It also works on tablets, foldables and split-screen, follows your phone's light or dark mode, and uses your wallpaper colours on Android 12+.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-save"/></svg></div><h3>Autosave</h3><p>Every change is saved as you go, and your work comes back after a crash. Give a video a name to keep it in "My videos".</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-chip"/></svg></div><h3>Fast, hardware export</h3><p>Choose High (1080p), Standard (720p) or Small (480p). Export uses your phone's video hardware and keeps going if you leave the app.</p></div>
+      <div class="card"><div class="icon"><svg><use href="#i-lock"/></svg></div><h3>Private by design</h3><p>No internet permission, no accounts, no analytics. Your photos and videos never leave your phone.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="alt">
+  <div class="wrap">
+    <h2>Three steps, start to finish</h2>
+    <p class="sub">No layers, keyframes or settings screens to learn.</p>
+    <div class="steps">
+      <div class="step"><h3>Pick a preset</h3><p>Choose your preset, or start without one. Check the intro, frame and ending, then tap Next.</p></div>
+      <div class="step"><h3>Add photos &amp; videos</h3><p>Pick them in the app, or share them straight from the gallery. Drag to reorder, tap to trim or add a caption.</p></div>
+      <div class="step"><h3>Export &amp; share</h3><p>Tap Export, choose a quality, and the finished video is saved to your gallery, ready to send.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="translations">
+  <div class="wrap">
+    <h2>Speaks your language</h2>
+    <p class="sub">ClearMovie launches in three languages. Translations are plain resource files, and contributions are welcome.</p>
+    <div class="langs">
+      <div class="lang">English<small>en</small></div>
+      <div class="lang" lang="hi">हिन्दी<small>Hindi &middot; hi</small></div>
+      <div class="lang">Hinglish<small>Hindi in Latin script</small></div>
+    </div>
+    <p class="sub" style="margin-top:28px"><a href="https://github.com/itsluminous/ClearMovie/blob/main/docs/translating.md">How to translate ClearMovie</a></p>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <div class="cta-box">
+      <h2>Follow along</h2>
+      <p class="sub">ClearMovie is being built in the open. The first APK will appear on GitHub Releases. Watch the repository to be notified.</p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/itsluminous/ClearMovie/releases"><svg aria-hidden="true"><use href="#i-dl"/></svg>GitHub Releases</a>
+        <a class="btn ghost" href="https://github.com/itsluminous/ClearMovie"><svg aria-hidden="true"><use href="#i-gh"/></svg>Source code</a>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>&copy; 2026 ClearMovie &middot; Apache License 2.0</span>
+    <nav>
+      <a href="https://github.com/itsluminous/ClearMovie">GitHub</a>
+      <a href="https://github.com/itsluminous/ClearMovie/releases">Releases</a>
+      <a href="https://github.com/itsluminous/ClearMovie/issues">Issues</a>
+      <a href="https://github.com/itsluminous/ClearMovie/blob/main/docs/building.md">Build it</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
