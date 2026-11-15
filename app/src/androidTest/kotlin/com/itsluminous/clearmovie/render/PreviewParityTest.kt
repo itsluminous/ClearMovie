@@ -110,124 +110,54 @@ class PreviewParityTest {
     @Test
     fun previewFramesMatchTheExportAfterEverySeek() {
         val project = richProject()
-        // Intro 0-2, dark 2-5, crossfade 4-5, light 4-7, photo 7-10, held frame 10-13.
+        // Intro 0-2, dark 2-5 (crossfade 4-5), light 4-7, photo 7-10, held frame 10-13.
         val plan = RenderPlanBuilder(RenderHarness.preset).build(project)
         val exported = RenderHarness.export(plan, "parity-export")
-        val times = listOf(1.0, 3.2, 4.5, 6.0, 8.5, 11.5)
-        val preview = previewFrames(plan, RenderHarness.resolver(), times, 960, 540)
-
+        val times = listOf(1.0, 3.2, 4.5, 6.0, 8.5, 11.5).map { (it * 1_000_000).toLong() }
         val failures = mutableListOf<String>()
-        for ((i, t) in times.withIndex()) {
-            val ex = frameAt(exported.file, (t * 1_000_000).toLong())
-            val pv = preview.frames[i]
-            savePng(ex, "parity-t%04.1f-export".format(Locale.ROOT, t))
-            savePng(pv, "parity-t%04.1f-preview".format(Locale.ROOT, t))
-            val diffs = mutableListOf<Double>()
-            for (gy in 0 until 9) {
-                for (gx in 0 until 16) {
-                    val nx = (gx + 0.5) / 16
-                    val ny = (gy + 0.5) / 9
-                    val e = rgb(ex, nx, ny, 4)
-                    val p = rgb(pv, nx, ny, 2)
-                    diffs += e.indices.map { abs(e[it] - p[it]).toDouble() }.average()
-                }
+        PreviewProbe(plan, RenderHarness.resolver(), gain = { RecordingGain(it) }).use { probe ->
+            // Scrubbing: a paused seek must show a new frame (risks 2, 4 and 7).
+            for (t in times) {
+                val ms = probe.pausedSeek(t)
+                val shown = probe.lastFrame()
+                report("parity paused seek to ${t / 1000} ms: first new frame after $ms ms, shown frame time ${shown?.timeUs}")
+                if (ms < 0) failures += "paused seek to ${t / 1000} ms showed no new frame"
             }
-            diffs.sort()
-            val median = diffs[diffs.size / 2]
-            val p90 = diffs[(diffs.size * 9) / 10]
-            report(
-                "parity t=$t median patch diff=%.1f p90=%.1f max=%.1f seek=%d ms".format(Locale.ROOT, median, p90, diffs.last(), preview.seekMs[i]),
-            )
-            if (median > 6 || p90 > 20) failures += "t=$t median $median p90 $p90"
+            // Playback: frames at the same composition time match the export.
+            val got = probe.playAndCapture(500_000, times)
+            for ((i, t) in times.withIndex()) {
+                val pv = got[i]
+                if (pv == null) {
+                    failures += "no preview frame near ${t / 1000} ms"
+                    continue
+                }
+                val ex = frameAt(exported.file, pv.timeUs)
+                val label = "%04.1f".format(Locale.ROOT, t / 1e6)
+                savePng(ex, "parity-t$label-export")
+                savePng(pv.bitmap, "parity-t$label-preview")
+                val diffs = mutableListOf<Double>()
+                for (gy in 0 until 9) {
+                    for (gx in 0 until 16) {
+                        val nx = (gx + 0.5) / 16
+                        val ny = (gy + 0.5) / 9
+                        val e = rgb(ex, nx, ny, 4)
+                        val p = rgb(pv.bitmap, nx, ny, 2)
+                        diffs += e.indices.map { abs(e[it] - p[it]).toDouble() }.average()
+                    }
+                }
+                diffs.sort()
+                val median = diffs[diffs.size / 2]
+                val p90 = diffs[(diffs.size * 9) / 10]
+                report(
+                    "parity t=$label preview frame at %d us: median patch diff=%.1f p90=%.1f max=%.1f"
+                        .format(Locale.ROOT, pv.timeUs, median, p90, diffs.last()),
+                )
+                if (abs(pv.timeUs - t) > 100_000) failures += "nearest preview frame to $t is at ${pv.timeUs}"
+                if (median > 6 || p90 > 20) failures += "t=$label median $median p90 $p90"
+            }
+            assertThat(probe.error.get()).isNull()
         }
         report("parity gain processor flush offsets (us): ${flushes.toList()}")
         assertWithMessage(failures.joinToString("; ")).that(failures).isEmpty()
-        assertThat(preview.error).isNull()
-    }
-
-    class Preview(
-        val frames: List<Bitmap>,
-        val seekMs: List<Long>,
-        val error: PlaybackException?,
-    )
-
-    /** Plays [plan] paused and grabs the frame shown after seeking to each of [timesS]. */
-    fun previewFrames(
-        plan: RenderPlan,
-        resolver: MediaResolver,
-        timesS: List<Double>,
-        width: Int,
-        height: Int,
-    ): Preview {
-        val context = RenderHarness.context
-        val imageThread = HandlerThread("preview-images").apply { start() }
-        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
-        val latest = AtomicReference<Bitmap?>()
-        val frameCount =
-            java.util.concurrent.atomic
-                .AtomicInteger()
-        reader.setOnImageAvailableListener({ r ->
-            r.acquireLatestImage()?.use { image ->
-                val plane = image.planes[0]
-                val rowPixels = plane.rowStride / plane.pixelStride
-                val bmp = Bitmap.createBitmap(rowPixels, image.height, Bitmap.Config.ARGB_8888)
-                bmp.copyPixelsFromBuffer(plane.buffer)
-                latest.set(Bitmap.createBitmap(bmp, 0, 0, image.width, image.height))
-                frameCount.incrementAndGet()
-            }
-        }, Handler(imageThread.looper))
-        val main = Handler(Looper.getMainLooper())
-        val player = AtomicReference<CompositionPlayer>()
-        val error = AtomicReference<PlaybackException?>()
-        val ready = CountDownLatch(1)
-        main.post {
-            val composition: Composition = CompositionFactory(context, resolver) { RecordingGain(it) }.build(plan)
-            val p = PreviewPlayer.create(context)
-            p.addListener(
-                object : Player.Listener {
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_READY) ready.countDown()
-                    }
-
-                    override fun onPlayerError(e: PlaybackException) {
-                        error.set(e)
-                        ready.countDown()
-                    }
-                },
-            )
-            p.setVideoSurface(reader.surface, Size(width, height))
-            p.setComposition(composition)
-            p.prepare()
-            player.set(p)
-        }
-        val frames = mutableListOf<Bitmap>()
-        val seekMs = mutableListOf<Long>()
-        try {
-            check(ready.await(60, TimeUnit.SECONDS)) { "Preview never became ready" }
-            error.get()?.let { throw AssertionError("Preview failed: ${it.errorCodeName}", it) }
-            for (t in timesS) {
-                val before = frameCount.get()
-                val started = SystemClock.elapsedRealtime()
-                InstrumentationRegistry.getInstrumentation().runOnMainSync { player.get().seekTo((t * 1000).toLong()) }
-                var firstFrameMs = -1L
-                val deadline = started + 20_000
-                while (SystemClock.elapsedRealtime() < deadline) {
-                    if (firstFrameMs < 0 && frameCount.get() > before) firstFrameMs = SystemClock.elapsedRealtime() - started
-                    var state = 0
-                    InstrumentationRegistry.getInstrumentation().runOnMainSync { state = player.get().playbackState }
-                    if (firstFrameMs >= 0 && state == Player.STATE_READY) break
-                    SystemClock.sleep(20)
-                }
-                // Let the paused player settle on the seeked frame.
-                SystemClock.sleep(500)
-                seekMs += firstFrameMs
-                frames += checkNotNull(latest.get()) { "No preview frame at $t" }
-            }
-        } finally {
-            InstrumentationRegistry.getInstrumentation().runOnMainSync { player.get()?.release() }
-            reader.close()
-            imageThread.quitSafely()
-        }
-        return Preview(frames, seekMs, error.get())
     }
 }

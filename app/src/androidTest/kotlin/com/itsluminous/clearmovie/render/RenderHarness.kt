@@ -134,7 +134,7 @@ object RenderHarness {
         failure.get()?.let { throw AssertionError("Export of $name failed: ${(it as? ExportException)?.errorCodeName ?: it}", it) }
         val r = checkNotNull(done.get()) { "No export result" }
         val wall = System.currentTimeMillis() - started
-        report("export $name: ${wall}ms wall, ${r.durationMs}ms long, videoEncoder=${r.videoEncoderName}, audioEncoder=${r.audioEncoderName}")
+        report("export $name: ${wall}ms wall, videoEncoder=${r.videoEncoderName}, audioEncoder=${r.audioEncoderName}")
         return Exported(out, r, wall)
     }
 
