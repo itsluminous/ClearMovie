@@ -147,15 +147,24 @@ Rendering has two layers, both under `render`:
   lowered by music). `RenderPlan.slice` cuts a plan for a short exact draft.
 - **`render.media3`** maps a plan to one Media3 `Composition` for Transformer
   (`CompositionFactory`, `RenderExporter`). Media3's compositor draws the
-  first sequence on top, so layers are emitted top first. Every picture ends
-  in `PlacementEffect`, which draws it onto a transparent canvas-sized frame
-  (cover crop, fit with bars, fit over a blurred copy, picture in picture with
-  a border, or a caption box); `ChromaKeyEffect` keys the frame's green;
-  `TransitionEffect` applies the opacity ramp; `GainEnvelopeAudioProcessor`
-  applies the sound envelope. Captions and cards are drawn as bitmaps by
-  `CaptionBitmapRenderer` and cached in `cacheDir/render/` by a hash of their
-  content. `FileMediaResolver` and `UriGuard` let the renderer read only
-  `content://` media and files inside the app's own folders.
+  first sequence on top, so layers are emitted top first, under one
+  transparent full-length layer that clocks every export at the plan's frame
+  rate. Every video and sound item is checked against its file's real length
+  first, because a sequence item that comes out short moves every later item
+  in that row. Every picture ends in `PlacementEffect`, which draws it onto a
+  transparent canvas-sized frame (cover crop, fit with bars, fit over a
+  blurred copy, picture in picture with a border, or a caption box) and undoes
+  Android's premultiplied alpha for bitmaps; `ChromaKeyEffect` keys the
+  frame's green; `TransitionEffect` applies the opacity ramp;
+  `GainEnvelopeAudioProcessor` applies the sound envelope. Captions and cards
+  are drawn as bitmaps by `CaptionBitmapRenderer` and kept in
+  `noBackupFilesDir/render/` by a hash of their content, trimmed to 64 MB.
+  `FileMediaResolver` and `UriGuard` let the renderer read only other apps'
+  `content://` media and files inside the app's own folders. Building a
+  composition reads files and draws bitmaps, so it runs off the main thread.
+  A video's picture and sound are separate sequences, so each video clip opens
+  a video and an audio decoder; trimmed sound can start up to one AAC frame
+  (about 21 ms) after its picture.
 
 The live editor preview does not play this composition: Media3's multi-input
 `CompositionPlayer` (1.11.1) shows no frame after a seek and freezes when a
