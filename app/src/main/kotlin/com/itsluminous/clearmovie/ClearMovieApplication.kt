@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie
 
 import android.app.Application
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
+import com.itsluminous.clearmovie.domain.model.AppSettings
 import com.itsluminous.clearmovie.ui.theme.applyNightMode
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.flow.first
@@ -18,7 +19,9 @@ class ClearMovieApplication : Application() {
         super.onCreate()
         // The Light/Dark override must be in place before the first activity
         // inflates, or it would start in the phone's mode and recreate. The
-        // settings file is a few bytes, so this read takes milliseconds.
-        applyNightMode(runBlocking { settingsRepository.settings.first() }.themeMode)
+        // settings file is a few bytes, so this read takes milliseconds. Any
+        // failure falls back to following the phone rather than crashing start-up.
+        val settings = runCatching { runBlocking { settingsRepository.settings.first() } }.getOrDefault(AppSettings())
+        applyNightMode(settings.themeMode)
     }
 }

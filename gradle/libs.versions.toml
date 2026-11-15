@@ -1,7 +1,7 @@
 [versions]
 # Toolchain baseline taken from ClearSMS (verified there with AGP 9 + Hilt + KSP);
 # bump only when a ClearMovie requirement needs it. coreKtx and lifecycle are
-# pinned at the versions the Compose BOM already resolves them to.
+# pinned at the highest versions already on the resolved dependency graph.
 agp = "9.1.1"
 kotlin = "2.3.21"
 ksp = "2.3.7"

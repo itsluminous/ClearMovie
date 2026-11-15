@@ -15,8 +15,8 @@
     <string name="settings_title">सेटिंग्स</string>
     <string name="settings_section_theme">थीम</string>
     <string name="theme_system">फ़ोन के जैसा</string>
-    <string name="theme_light">हल्के रंग</string>
-    <string name="theme_dark">गहरे रंग</string>
+    <string name="theme_light">हल्की थीम</string>
+    <string name="theme_dark">गहरी थीम</string>
     <string name="settings_dynamic_color">वॉलपेपर के रंग</string>
     <string name="settings_dynamic_color_summary">अपने वॉलपेपर के रंग इस्तेमाल करें</string>
     <string name="settings_dynamic_color_unavailable">इसके लिए Android 12 या उससे नया चाहिए</string>

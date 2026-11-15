@@ -39,7 +39,10 @@ command -v zipinfo > /dev/null || fail "zipinfo (from unzip) is required"
 native_libs() {
   local entries
   entries="$(zipinfo -1 "$1")" || fail "zipinfo could not read $(basename "$1")"
-  printf '%s\n' "$entries" | grep '^lib/.*\.so$' || [ $? -eq 1 ]
+  printf '%s\n' "$entries" | grep '^lib/.*\.so$' || {
+    status=$?
+    [ "$status" -eq 1 ] || fail "grep failed ($status) on $(basename "$1")"
+  }
 }
 
 shopt -s nullglob
@@ -83,7 +86,7 @@ for abi in "${abis[@]}"; do
   [ -f "$dir/ClearMovie-$version-$abi.apk" ] && per_abi+=("$abi")
 done
 
-libs="$(native_libs "$universal")"
+libs="$(native_libs "$universal")" || exit 1
 echo
 echo "Native libraries in the universal APK:"
 if [ -n "$libs" ]; then echo "$libs" | sed 's/^/  /'; else echo "  (none)"; fi
@@ -100,7 +103,7 @@ fi
 # 2. Each per-ABI APK holds only its own ABI's libraries.
 for abi in ${per_abi[@]+"${per_abi[@]}"}; do
   apk="$dir/ClearMovie-$version-$abi.apk"
-  folders="$(native_libs "$apk" | cut -d/ -f2 | sort -u)"
+  folders="$(native_libs "$apk" | cut -d/ -f2 | sort -u)" || exit 1
   [ "$folders" = "$abi" ] || fail "$(basename "$apk") contains lib/ folders [$(echo "$folders" | tr '\n' ' ')], expected only $abi"
 done
 

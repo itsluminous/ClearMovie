@@ -12,7 +12,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.domain.model.ThemeMode
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,6 +29,17 @@ class MainActivityTest {
     val compose = createEmptyComposeRule()
 
     private val context: Context = ApplicationProvider.getApplicationContext()
+
+    /** Every test starts and ends following the phone, even if one fails midway. */
+    @Before
+    @After
+    fun followThePhone() {
+        val app = ApplicationProvider.getApplicationContext<ClearMovieApplication>()
+        runBlocking { app.settingsRepository.setThemeMode(ThemeMode.SYSTEM) }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        }
+    }
 
     private fun waitForText(text: String) {
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithTextExists(text) }
@@ -67,13 +83,16 @@ class MainActivityTest {
             waitForText(context.getString(R.string.settings_section_theme))
 
             compose.onNodeWithText(context.getString(R.string.theme_dark)).performScrollTo().performClick()
-            compose.waitUntil(TIMEOUT_MS) { AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES }
+            // Wait on the recreated activity's own configuration: it turns night, so
+            // the window, values-night resources and dialogs follow the override,
+            // not only Compose.
+            compose.waitUntil(TIMEOUT_MS) {
+                var night = 0
+                scenario.onActivity { night = it.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK }
+                night == Configuration.UI_MODE_NIGHT_YES
+            }
+            assertThat(AppCompatDelegate.getDefaultNightMode()).isEqualTo(AppCompatDelegate.MODE_NIGHT_YES)
             waitForText(context.getString(R.string.settings_section_theme))
-            var night = 0
-            scenario.onActivity { night = it.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK }
-            // The activity's own configuration is night, so the window, values-night
-            // resources and dialogs follow the override, not only Compose.
-            assertThat(night).isEqualTo(Configuration.UI_MODE_NIGHT_YES)
 
             compose.onNodeWithText(context.getString(R.string.theme_system)).performScrollTo().performClick()
             compose.waitUntil(TIMEOUT_MS) {

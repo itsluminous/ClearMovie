@@ -117,12 +117,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      # True only when all four signing secrets exist AND this is not a pull
-      # request: PR code never runs with the signing key. Forks and PRs build
-      # unsigned APKs instead of failing, so the native-code guard still runs.
+      # True only on a v* tag with all four signing secrets: pushes to main and
+      # pull requests build (and verify) unsigned APKs, so no signed build of an
+      # unreleased commit ever leaves CI and PR code never runs with the key.
       HAS_SIGNING_SECRETS: >-
         ${{
-          github.event_name != 'pull_request' &&
+          startsWith(github.ref, 'refs/tags/v') &&
           secrets.SIGNING_KEYSTORE_BASE64 != '' &&
           secrets.SIGNING_KEYSTORE_PASSWORD != '' &&
           secrets.SIGNING_KEY_ALIAS != '' &&
@@ -227,7 +227,6 @@ jobs:
       # A missing file cannot break the release: a short stand-in is used and
       # GitHub's generated commit list is appended either way.
       - name: Prepare release notes
-        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
           code=$(sed -nE 's/^val baseVersionCode *= *([0-9]+).*/\1/p' app/build.gradle.kts | head -n 1)
@@ -240,7 +239,6 @@ jobs:
           echo "--- release notes ---"; cat release-notes.md
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: apks/*.apk

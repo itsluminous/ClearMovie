@@ -14,8 +14,8 @@ fun ThemeMode.toAppCompatNightMode(): Int =
 /**
  * Applies the Theme override to the whole app, not only to Compose: the
  * window background, values-night resources and any framework dialog follow
- * it, and `isSystemInDarkTheme()` reports it. A no-op when nothing changes;
- * otherwise AppCompat recreates the activity (saved state survives).
+ * it, and `isSystemInDarkTheme()` reports it. A no-op when the mode is already
+ * set; otherwise AppCompat recreates any running activity (saved state survives).
  *
  * The Android 12+ system splash on a cold start is drawn before the app runs,
  * so it still follows the phone's own setting.

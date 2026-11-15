@@ -1,9 +1,9 @@
 # Release signing and APKs
 
 CI builds release APKs on every push to `main`, every `v*` tag and every pull
-request to `main`. Without the signing secrets (forks, and every pull request,
-which never gets the key) it still succeeds and produces unsigned APKs, so the
-checks below always run. A `v*` tag refuses to publish unless the APKs are
+request to `main`. Only a `v*` tag is signed: pushes to `main`, pull requests
+and forks build unsigned APKs, so the checks below always run and no signed
+build of an unreleased commit leaves CI. A `v*` tag refuses to publish unless the APKs are
 signed and the tag matches `versionName`.
 
 ## The five APKs
@@ -77,5 +77,6 @@ Locally, the same four values go in environment variables
    would need its own files.)
 3. Push a tag matching `versionName`, such as `v0.1.0`. The release job builds
    and signs the five APKs and verifies them; once the instrumented tests have
-   also passed, the publish job attaches all five to a GitHub Release whose text
-   is that changelog plus GitHub's generated commit list.
+   also passed, the publish job attaches all five to a GitHub Release. Its text
+   is that changelog (or a one-line stand-in if the file is missing) plus
+   GitHub's generated commit list.

@@ -114,7 +114,7 @@ class UserVisibleLabelConventionTest {
                     ?.drop(2)
                     ?.firstOrNull { it.isNotEmpty() }
                     .orEmpty()
-            if (branch != null && '$' !in branchText && titleCasePhrase.matches(branchText)) {
+            if (branch != null && titleCasePhrase.matches(branchText.replace(interpolation, "").trim())) {
                 found += Finding(path, reported, line)
             }
             if (underscoreToSpace.containsMatchIn(line) && caseChange.containsMatchIn(line)) {
@@ -169,9 +169,10 @@ class UserVisibleLabelConventionTest {
             AnnotatedString("Styled")
             ThemeMode.SYSTEM -> "Wallpaper Colours"
             Text(if (done) "✓" else "")
+            ThemeMode.DARK -> "Dark ${'$'}suffix"
             """.trimIndent()
         assertThat(findings("planted.kt", planted).map { it.line })
-            .containsExactly(1, 2, 3, 5, 8, 9, 11, 12, 16, 25, 26, 27, 28, 29, 30, 31)
+            .containsExactly(1, 2, 3, 5, 8, 9, 11, 12, 16, 25, 26, 27, 28, 29, 30, 31, 33)
             .inOrder()
     }
 }
