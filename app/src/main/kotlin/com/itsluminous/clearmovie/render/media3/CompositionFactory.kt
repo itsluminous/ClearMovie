@@ -31,9 +31,17 @@ import com.itsluminous.clearmovie.render.plan.Source
 import com.itsluminous.clearmovie.render.plan.VisualSegment
 import kotlin.math.roundToInt
 
-/** The real length of a media file in microseconds, or null when it can't be read. */
-fun interface MediaDurations {
+/** What the factory needs to know about a media file before it uses it. */
+fun interface MediaProbe {
+    /** The file's real length in microseconds, or null when it can't be read. */
     fun durationUs(uri: Uri): Long?
+
+    /**
+     * Whether the file has a sound track. A sound item from a file without
+     * one (a silent video, or a frame video with no music) fails the whole
+     * export in Media3, so the factory plays silence for it instead.
+     */
+    fun hasAudio(uri: Uri): Boolean = true
 }
 
 /**
@@ -54,11 +62,13 @@ fun interface MediaDurations {
  * the top sequence is the compositor's primary stream and sets the output
  * frame rate, so every export comes out at the plan's rate whatever the
  * sources are, and even a one-layer plan runs the same multi-input graph.
- * Audio-only sequences follow and are mixed.
+ * Audio-only sequences follow and are mixed. A sound from a file without a
+ * sound track becomes silence of the same length, and a sound row with no
+ * sound left is left out.
  *
  * Every layer must last exactly as long as the plan says, or the items after
  * a short one start early. So every video and sound item is checked against
- * the file's real length ([durations]), and a clip that asks for more than
+ * the file's real length ([probe]), and a clip that asks for more than
  * the file has (a file replaced or edited since it was added) fails the
  * build instead of drifting.
  *
@@ -76,7 +86,7 @@ fun interface MediaDurations {
 class CompositionFactory(
     private val context: Context,
     private val resolver: MediaResolver,
-    private val durations: MediaDurations = RetrieverDurations(context),
+    private val probe: MediaProbe = RetrieverProbe(context),
 ) {
     private val assets = RenderAssets(context)
     private val guard = UriGuard(context)
@@ -95,13 +105,16 @@ class CompositionFactory(
         }
         for (layer in plan.audio) {
             val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+            var sounds = 0
             for (segment in layer.segments) {
-                when (segment) {
-                    is AudioSegment.Silence -> builder.addGap(segment.durationUs)
-                    is AudioSegment.Sound -> builder.addItem(build.soundItem(segment))
+                if (segment is AudioSegment.Sound && build.hasAudio(segment)) {
+                    builder.addItem(build.soundItem(segment))
+                    sounds++
+                } else {
+                    builder.addGap(segment.durationUs)
                 }
             }
-            sequences += builder.build()
+            if (sounds > 0) sequences += builder.build()
         }
         assets.trim(keep = build.images)
         return Composition
@@ -122,6 +135,7 @@ class CompositionFactory(
         private val captions = CaptionBitmapRenderer(plan.height)
         private val uris = mutableMapOf<MediaRef, Uri>()
         private val lengths = mutableMapOf<Uri, Long?>()
+        private val audio = mutableMapOf<Uri, Boolean>()
         val images = mutableSetOf<Uri>()
 
         private fun uri(ref: MediaRef): Uri = uris.getOrPut(ref) { guard.check(resolver.resolve(ref)) }
@@ -133,7 +147,7 @@ class CompositionFactory(
         ): Uri {
             val u = uri(ref)
             val real =
-                lengths.getOrPut(u) { durations.durationUs(u) } ?: throw MediaUnavailableException("Could not read the media's length")
+                lengths.getOrPut(u) { probe.durationUs(u) } ?: throw MediaUnavailableException("Could not read the media's length")
             if (endUs > real + LENGTH_TOLERANCE_US) throw MediaUnavailableException("A clip is longer than its file")
             return u
         }
@@ -240,6 +254,12 @@ class CompositionFactory(
             return w to h
         }
 
+        /** Whether [segment]'s file has a sound track to play. */
+        fun hasAudio(segment: AudioSegment.Sound): Boolean {
+            val u = uri(segment.media)
+            return audio.getOrPut(u) { probe.hasAudio(u) }
+        }
+
         fun soundItem(segment: AudioSegment.Sound): EditedMediaItem {
             val item =
                 MediaItem
@@ -294,15 +314,23 @@ class CompositionFactory(
     }
 }
 
-/** Reads a file's length with [MediaMetadataRetriever]. */
-internal class RetrieverDurations(
+/** Reads a file's length and tracks with [MediaMetadataRetriever]. */
+internal class RetrieverProbe(
     private val context: Context,
-) : MediaDurations {
-    override fun durationUs(uri: Uri): Long? {
+) : MediaProbe {
+    override fun durationUs(uri: Uri): Long? = read(uri, MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.times(1000)
+
+    /** An unreadable file counts as having sound, so its real error surfaces from the export. */
+    override fun hasAudio(uri: Uri): Boolean = read(uri, MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)?.let { it == "yes" } ?: true
+
+    private fun read(
+        uri: Uri,
+        key: Int,
+    ): String? {
         val r = MediaMetadataRetriever()
         return try {
             r.setDataSource(context, uri)
-            r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.times(1000)
+            r.extractMetadata(key)
         } catch (e: RuntimeException) {
             null
         } finally {

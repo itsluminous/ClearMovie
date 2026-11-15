@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.render
 
 import androidx.media3.common.util.UnstableApi
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.common.collect.Range
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.itsluminous.clearmovie.domain.model.ArgbColor
@@ -149,5 +150,31 @@ class PlacementRenderTest {
                 true
             }
         assertThat(threw).isTrue()
+    }
+
+    /**
+     * A video without a sound track (a screen recording, a silent clip) on
+     * MAIN, between a clip with sound: the export must not fail, and must
+     * come out at the planned length with the other clip's sound.
+     */
+    @Test
+    fun silentVideoClipExports() {
+        val ids = SequentialIds("s")
+        val project =
+            ProjectFactory
+                .blank(ProjectId("silent"), ids)
+                .addToMain(
+                    listOf(
+                        VideoClip(ids.clipId(), fixture("frame_neargreen.mp4"), sourceDurationMs = 2000),
+                        VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 2000),
+                    ),
+                    ids = ids,
+                )
+        val plan = RenderPlanBuilder().build(project)
+        val out = RenderHarness.export(plan, "silent-video-clip")
+        val lengthUs = RenderHarness.durationUs(out.file)
+        report("silent-video-clip: ${lengthUs}us of ${plan.durationUs}us planned, audio encoder ${out.result.audioEncoderName}")
+        assertThat(lengthUs).isIn(Range.closed(plan.durationUs - 50_000L, plan.durationUs + 50_000L))
+        assertThat(out.result.audioEncoderName).isNotNull()
     }
 }
