@@ -23,11 +23,17 @@ their imports.
 
 `MainActivity` is the only activity (`AppCompatActivity`, `singleTop`). It
 installs the `core-splashscreen` splash (`Theme.ClearMovie.Starting`) and keeps
-it on screen until `MainViewModel` has read the settings, so a Light or Dark
-override never flashes the other theme. It then draws edge to edge, with system
+it on screen until `MainViewModel` has read the settings, so the content never
+appears in the wrong theme first. It then draws edge to edge, with system
 bar icons that follow the app's theme rather than only the phone's.
 
 ## Theme
+
+The Theme override is applied app-wide through
+`AppCompatDelegate.setDefaultNightMode` (in `ClearMovieApplication` at start
+and on every change), so the window, `values-night` resources and dialogs
+follow it too; only the Android 12+ cold-start splash, drawn before the app
+runs, follows the phone's own setting.
 
 `ClearMovieTheme(themeMode, dynamicColor)` uses Material You colours from the
 wallpaper on Android 12+ when "Colours from wallpaper" is on, and the amber
@@ -66,4 +72,4 @@ for the project database, which arrives with the storage milestone.
 See [building.md](building.md) and [release-signing.md](release-signing.md):
 per-ABI APK splits with `versionCode = base × 10 + abiCode`, and the CI
 workflow `.github/workflows/android.yml` with `check`, `instrumented`
-(API 29 and 36 emulators) and `release` jobs.
+(API 29 and 36 emulators) and `release` jobs, plus a tag-only `publish` job.

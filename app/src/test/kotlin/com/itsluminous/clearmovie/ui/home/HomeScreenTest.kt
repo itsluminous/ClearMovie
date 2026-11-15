@@ -64,6 +64,9 @@ class HomeScreenTest {
     fun `medium at font scale 2`() = showAt(ScreenSize.MEDIUM, fontScale = 2f).also { assertAllShown() }
 
     @Test
+    fun `expanded at font scale 2`() = showAt(ScreenSize.EXPANDED, fontScale = 2f).also { assertAllShown() }
+
+    @Test
     fun `the settings button opens settings`() {
         var opened = 0
         showAt(ScreenSize.COMPACT, onOpenSettings = { opened++ })

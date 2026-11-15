@@ -15,7 +15,9 @@
   The format and plural checks catch a translation that would crash or show
   the wrong form at runtime.
 
-  There is no lint baseline: every finding is fixed, not recorded.
+  There is no lint baseline: errors are fixed, never recorded. Warnings that
+  remain are dependency-age notices and OldTargetApi (targetSdk 36 is the
+  milestone's requirement).
 -->
 <lint>
     <issue id="HardcodedText" severity="error" />
@@ -25,4 +27,7 @@
     <issue id="StringFormatMatches" severity="error" />
     <issue id="StringFormatCount" severity="error" />
     <issue id="MissingQuantity" severity="error" />
+    <!-- Lint cannot read the ABI list from splitAbis in app/build.gradle.kts,
+         which does include x86_64; verify-release-apks.sh checks the real APKs. -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
 </lint>

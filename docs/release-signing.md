@@ -1,9 +1,10 @@
 # Release signing and APKs
 
-CI builds release APKs on every push and pull request. Without the signing
-secrets (forks, and every pull request, which never gets the key) it still
-succeeds and produces unsigned APKs, so the checks below always run. A `v*` tag
-refuses to publish unless the APKs are signed.
+CI builds release APKs on every push to `main`, every `v*` tag and every pull
+request to `main`. Without the signing secrets (forks, and every pull request,
+which never gets the key) it still succeeds and produces unsigned APKs, so the
+checks below always run. A `v*` tag refuses to publish unless the APKs are
+signed and the tag matches `versionName`.
 
 ## The five APKs
 
@@ -48,12 +49,12 @@ Then add four repository secrets under
 
 | Secret | Value |
 | --- | --- |
-| `SIGNING_KEYSTORE_BASE64` | `base64 -i clearmovie-release.jks` output |
+| `SIGNING_KEYSTORE_BASE64` | `base64 -i clearmovie-release.jks` on macOS, `base64 -w0 clearmovie-release.jks` on Linux |
 | `SIGNING_KEYSTORE_PASSWORD` | the keystore password |
 | `SIGNING_KEY_ALIAS` | the key alias (e.g. `clearmovie`) |
 | `SIGNING_KEY_PASSWORD` | the key password |
 
-Or with the GitHub CLI:
+Or with the GitHub CLI (macOS `base64` shown; use `base64 -w0` on Linux):
 
 ```bash
 gh secret set SIGNING_KEYSTORE_BASE64 --body "$(base64 -i clearmovie-release.jks)"
@@ -70,7 +71,11 @@ Locally, the same four values go in environment variables
 
 1. Raise `baseVersionCode` and `versionName` in `app/build.gradle.kts`.
 2. Add the user-facing notes at
-   `fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt`.
-3. Push a tag such as `v0.1.0`. The release job builds and signs the five APKs,
-   verifies them, and attaches all of them to a GitHub Release whose text is that
-   changelog plus GitHub's generated commit list.
+   `fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt`. This file
+   is read only by CI for the GitHub Release text. (F-Droid looks changelogs up
+   by an APK's own versionCode, `base × 10 + abiCode`, so an F-Droid listing
+   would need its own files.)
+3. Push a tag matching `versionName`, such as `v0.1.0`. The release job builds
+   and signs the five APKs and verifies them; once the instrumented tests have
+   also passed, the publish job attaches all five to a GitHub Release whose text
+   is that changelog plus GitHub's generated commit list.

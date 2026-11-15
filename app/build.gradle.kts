@@ -123,6 +123,10 @@ android {
     }
 
     androidResources {
+        // Ship only the shipped languages' resources: AndroidX and Material carry
+        // ~85 locales, whose framework strings ("Navigate up") would otherwise
+        // show in the phone's language while the app's own text is English.
+        localeFilters += listOf("en", "hi", "b+hi+Latn")
         // AGP generates the locale config from the values-<locale>/ folders plus
         // the default locale named in res/resources.properties, and wires
         // android:localeConfig into the merged manifest. A new translation
@@ -176,9 +180,12 @@ androidComponents {
             output.versionCode.set(baseVersionCode * 10 + (abi?.let { abiVersionCodes.getValue(it) } ?: 0))
             if (variant.buildType == "release") {
                 // ClearMovie-<versionName>-<abi>.apk, and -universal for the fat APK.
-                (output as? com.android.build.api.variant.impl.VariantOutputImpl)
-                    ?.outputFileName
-                    ?.set(output.versionName.map { "ClearMovie-$it-${abi ?: "universal"}.apk" })
+                // VariantOutputImpl is AGP-internal (ClearSMS uses it too); fail at
+                // configuration time, not with oddly named APKs, if an AGP bump removes it.
+                val impl =
+                    output as? com.android.build.api.variant.impl.VariantOutputImpl
+                        ?: throw GradleException("AGP no longer exposes VariantOutputImpl; update the APK naming in app/build.gradle.kts")
+                impl.outputFileName.set(output.versionName.map { "ClearMovie-$it-${abi ?: "universal"}.apk" })
             }
         }
     }

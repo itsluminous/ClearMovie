@@ -1,10 +1,13 @@
 package com.itsluminous.clearmovie
 
 import android.content.Context
+import android.content.res.Configuration
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -53,6 +56,29 @@ class MainActivityTest {
 
             waitForText(context.getString(R.string.settings_section_theme))
             compose.onNodeWithText(context.getString(R.string.settings_section_language)).assertExists()
+        }
+    }
+
+    @Test
+    fun darkOverrideReachesTheWholeActivityAndSameAsPhoneRestoresIt() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitForText(context.getString(R.string.home_empty_title))
+            compose.onNodeWithContentDescription(context.getString(R.string.action_settings)).performClick()
+            waitForText(context.getString(R.string.settings_section_theme))
+
+            compose.onNodeWithText(context.getString(R.string.theme_dark)).performScrollTo().performClick()
+            compose.waitUntil(TIMEOUT_MS) { AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES }
+            waitForText(context.getString(R.string.settings_section_theme))
+            var night = 0
+            scenario.onActivity { night = it.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK }
+            // The activity's own configuration is night, so the window, values-night
+            // resources and dialogs follow the override, not only Compose.
+            assertThat(night).isEqualTo(Configuration.UI_MODE_NIGHT_YES)
+
+            compose.onNodeWithText(context.getString(R.string.theme_system)).performScrollTo().performClick()
+            compose.waitUntil(TIMEOUT_MS) {
+                AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
         }
     }
 

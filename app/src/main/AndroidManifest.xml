@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- No permissions. ClearMovie is offline by design: there is no
          INTERNET permission, and gallery access arrives with cm-storage. -->
 
     <!-- allowBackup is false: projects (from cm-storage on) hold links to this
          phone's gallery, which mean nothing on another phone, and settings are
-         three switches. Nothing is worth an automatic cloud copy. -->
+         three switches. Nothing is worth an automatic cloud copy.
+         dataExtractionRules repeats that for Android 12+ device transfer.
+         DataExtractionRules lint asks for fullBackupContent too; with backup
+         off on every version there is nothing for it to configure. -->
     <application
         android:name=".ClearMovieApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:ignore="DataExtractionRules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"

@@ -5,10 +5,11 @@
     <style name="Theme.ClearMovie" parent="Theme.Material3.DayNight.NoActionBar" />
 
     <!-- Launch theme for androidx.core:core-splashscreen. Colours come from
-         values/colors.xml and values-night/colors.xml, so the splash follows
-         the phone's light or dark mode. MainActivity keeps it on screen until
-         the saved theme choice has loaded, so the app never flashes the wrong
-         theme. -->
+         values/colors.xml and values-night/colors.xml. On a cold start on
+         Android 12+ the system draws it before the app runs, so it follows the
+         phone's light or dark mode. MainActivity keeps it on screen until the
+         saved settings have loaded, so the content never appears in the wrong
+         theme first. -->
     <style name="Theme.ClearMovie.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>

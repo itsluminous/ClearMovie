@@ -5,7 +5,7 @@
   (video, settings, theme, update, version); use Hindi for grammar and
   connective words. Polite aap-register throughout ("use karein", never
   "use kar"). Fixed spellings: hai, nahi, kiya, gaya, karein, ke liye, abhi,
-  jaldi, aap, apne, yahan, dikhenge, chahiye. No Devanagari characters
+  jaldi, aap, apne, yahan, dikhenge, chahiye, me (not "mein"). No Devanagari characters
   anywhere in this directory (StringKeyParityTest checks).
 -->
 <resources>

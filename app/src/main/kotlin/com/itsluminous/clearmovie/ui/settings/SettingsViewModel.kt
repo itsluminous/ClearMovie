@@ -18,8 +18,9 @@ class SettingsViewModel
     constructor(
         private val settingsRepository: SettingsRepository,
     ) : ViewModel() {
-        val settings: StateFlow<AppSettings> =
-            settingsRepository.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
+        /** Null until the stored settings are read, so the screen never shows defaults first. */
+        val settings: StateFlow<AppSettings?> =
+            settingsRepository.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
         fun setThemeMode(mode: ThemeMode) {
             viewModelScope.launch { settingsRepository.setThemeMode(mode) }

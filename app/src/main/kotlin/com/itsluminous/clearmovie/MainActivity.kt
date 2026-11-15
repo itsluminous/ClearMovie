@@ -9,11 +9,13 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.ui.navigation.ClearMovieApp
 import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
+import com.itsluminous.clearmovie.ui.theme.applyNightMode
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -31,14 +33,17 @@ class MainActivity : AppCompatActivity() {
         // Before super.onCreate: swaps Theme.ClearMovie.Starting for the app theme.
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        // Hold the splash until the saved theme is known, so a Light or Dark
-        // override never flashes the other theme first.
+        // Hold the splash until the saved settings are known, so the content
+        // never appears in the wrong theme or colours first.
         splashScreen.setKeepOnScreenCondition { viewModel.settings.value == null }
         enableEdgeToEdge()
 
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val loaded = settings ?: return@setContent
+            // A Theme change in Settings reaches the whole app (window, dialogs),
+            // not only Compose; ClearMovieApplication applied the saved one at start.
+            LaunchedEffect(loaded.themeMode) { applyNightMode(loaded.themeMode) }
             val darkTheme = loaded.themeMode.isDark(isSystemInDarkTheme())
 
             // System bar icons follow the app's theme, including the in-app

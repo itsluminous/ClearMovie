@@ -32,6 +32,15 @@ build_tools="$(find "$sdk/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V
 aapt2="$build_tools/aapt2"
 apksigner="$build_tools/apksigner"
 [ -x "$aapt2" ] || fail "aapt2 not found in $build_tools"
+command -v zipinfo > /dev/null || fail "zipinfo (from unzip) is required"
+
+# The .so entries of an APK. zipinfo failing must fail the check, not read as
+# "no native code"; only grep's "nothing matched" is tolerated.
+native_libs() {
+  local entries
+  entries="$(zipinfo -1 "$1")" || fail "zipinfo could not read $(basename "$1")"
+  printf '%s\n' "$entries" | grep '^lib/.*\.so$' || [ $? -eq 1 ]
+}
 
 shopt -s nullglob
 universal=("$dir"/ClearMovie-*-universal.apk)
@@ -39,7 +48,7 @@ all=("$dir"/*.apk)
 shopt -u nullglob
 
 echo "APKs in $dir:"
-for apk in "${all[@]}"; do
+for apk in ${all[@]+"${all[@]}"}; do
   printf '  %-45s %10s bytes\n' "$(basename "$apk")" "$(wc -c < "$apk" | tr -d ' ')"
 done
 
@@ -53,13 +62,13 @@ version="$(basename "$universal" | sed -E 's/^ClearMovie-(.+)-universal\.apk$/\1
 metadata="$dir/output-metadata.json"
 if [ -f "$metadata" ]; then
   built="$(sed -nE 's/.*"outputFile": *"([^"]+)".*/\1/p' "$metadata" | sort)"
-  present="$(for apk in "${all[@]}"; do basename "$apk"; done | sort)"
+  present="$(for apk in ${all[@]+"${all[@]}"}; do basename "$apk"; done | sort)"
   [ "$built" = "$present" ] || fail "APKs in $dir do not match output-metadata.json (stale files from an earlier build?). Built: [$(echo $built)] present: [$(echo $present)]"
 fi
 
 # Every APK must be one of the five expected names; anything else means the
 # naming in app/build.gradle.kts changed.
-for apk in "${all[@]}"; do
+for apk in ${all[@]+"${all[@]}"}; do
   name="$(basename "$apk")"
   case "$name" in
     "ClearMovie-$version-universal.apk") ;;
@@ -74,11 +83,11 @@ for abi in "${abis[@]}"; do
   [ -f "$dir/ClearMovie-$version-$abi.apk" ] && per_abi+=("$abi")
 done
 
-libs="$(zipinfo -1 "$universal" 'lib/*' 2> /dev/null | grep '\.so$' || true)"
+libs="$(native_libs "$universal")"
 echo
 echo "Native libraries in the universal APK:"
 if [ -n "$libs" ]; then echo "$libs" | sed 's/^/  /'; else echo "  (none)"; fi
-echo "Per-ABI APKs: ${#per_abi[@]} (${per_abi[*]:-none})"
+echo "Per-ABI APKs: ${#per_abi[@]} (${per_abi[*]+${per_abi[*]}})"
 
 # 1. Native-code guard.
 if [ -n "$libs" ] && [ "${#per_abi[@]}" -lt "${#abis[@]}" ]; then
@@ -89,9 +98,9 @@ if [ -z "$libs" ] && [ "${#per_abi[@]}" -gt 0 ]; then
 fi
 
 # 2. Each per-ABI APK holds only its own ABI's libraries.
-for abi in "${per_abi[@]}"; do
+for abi in ${per_abi[@]+"${per_abi[@]}"}; do
   apk="$dir/ClearMovie-$version-$abi.apk"
-  folders="$(zipinfo -1 "$apk" 'lib/*' 2> /dev/null | grep '\.so$' | cut -d/ -f2 | sort -u || true)"
+  folders="$(native_libs "$apk" | cut -d/ -f2 | sort -u)"
   [ "$folders" = "$abi" ] || fail "$(basename "$apk") contains lib/ folders [$(echo "$folders" | tr '\n' ' ')], expected only $abi"
 done
 
@@ -118,7 +127,7 @@ done
 # 4. Signatures (CI sets VERIFY_SIGNATURES=true when the signing secrets exist).
 if [ "${VERIFY_SIGNATURES:-false}" = "true" ]; then
   [ -x "$apksigner" ] || fail "apksigner not found in $build_tools"
-  for apk in "${all[@]}"; do
+  for apk in ${all[@]+"${all[@]}"}; do
     echo
     echo "==> apksigner verify $(basename "$apk")"
     # --min-sdk-version 24: for minSdk 29 apksigner checks only the v3 block;

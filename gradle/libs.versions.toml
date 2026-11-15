@@ -1,15 +1,16 @@
 [versions]
 # Toolchain baseline taken from ClearSMS (verified there with AGP 9 + Hilt + KSP);
-# bump only when a ClearMovie requirement needs it.
+# bump only when a ClearMovie requirement needs it. coreKtx and lifecycle are
+# pinned at the versions the Compose BOM already resolves them to.
 agp = "9.1.1"
 kotlin = "2.3.21"
 ksp = "2.3.7"
 composeBom = "2026.03.01"
 activityCompose = "1.9.3"
 appcompat = "1.7.1"
-coreKtx = "1.15.0"
+coreKtx = "1.16.0"
 coreSplashscreen = "1.2.0"
-lifecycle = "2.8.7"
+lifecycle = "2.9.4"
 navigationCompose = "2.8.5"
 hilt = "2.60.1"
 androidxHilt = "1.3.0"

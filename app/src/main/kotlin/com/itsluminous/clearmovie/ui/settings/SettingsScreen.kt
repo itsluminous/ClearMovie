@@ -30,7 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -53,11 +55,14 @@ fun SettingsRoute(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val loaded by viewModel.settings.collectAsStateWithLifecycle()
+    val settings = loaded ?: return
     val context = LocalContext.current
-    // A language change recreates the activity, so these are read once per composition.
     val languages = remember(context) { AppLanguage.options(context) }
-    val selectedLanguage = remember(languages) { AppLanguage.selectedTag(languages.map { it.tag }) }
+    // Held as state, not only re-read on recreation: choosing "Phone language"
+    // while the phone already speaks the chosen language changes nothing on
+    // screen, so the activity is not recreated and the radio must move itself.
+    var selectedLanguage by remember(languages) { mutableStateOf(AppLanguage.selectedTag(languages.map { it.tag })) }
     SettingsScreen(
         settings = settings,
         dynamicColorSupported = isDynamicColorSupported,
@@ -67,7 +72,10 @@ fun SettingsRoute(
         onBack = onBack,
         onThemeModeSelected = viewModel::setThemeMode,
         onDynamicColorChanged = viewModel::setDynamicColor,
-        onLanguageSelected = AppLanguage::select,
+        onLanguageSelected = { tag ->
+            selectedLanguage = tag
+            AppLanguage.select(tag)
+        },
     )
 }
 
