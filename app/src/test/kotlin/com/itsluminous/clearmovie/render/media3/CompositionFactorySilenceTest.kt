@@ -69,7 +69,9 @@ class CompositionFactorySilenceTest {
         // build() refuses the main thread, which is the test thread here.
         Thread {
             result.set(
-                runCatching { CompositionFactory(context, FileMediaResolver(emptyMap(), root), probe).build(plan) }.fold({ it }, { it }),
+                runCatching {
+                    CompositionFactory(context, FileMediaResolver(emptyMap(), root), probe) { DeviceColour.TRUSTED }.build(plan)
+                }.fold({ it }, { it }),
             )
         }.apply {
             start()

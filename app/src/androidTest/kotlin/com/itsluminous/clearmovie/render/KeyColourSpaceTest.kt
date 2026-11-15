@@ -29,6 +29,7 @@ import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.KeySpec
 import com.itsluminous.clearmovie.render.RenderHarness.report
 import com.itsluminous.clearmovie.render.media3.ChromaKeyEffect
+import com.itsluminous.clearmovie.render.media3.DeviceColour
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
 import com.itsluminous.clearmovie.render.media3.RenderExporter
 import org.junit.Test
@@ -128,7 +129,7 @@ class KeyColourSpaceTest {
         val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build()).build()
         Handler(Looper.getMainLooper()).post {
             try {
-                RenderExporter(RenderHarness.context, 1080).start(
+                RenderExporter(RenderHarness.context, 1080, DeviceColour.TRUSTED).start(
                     composition,
                     out,
                     EncodeSpec.forHeight(1080),

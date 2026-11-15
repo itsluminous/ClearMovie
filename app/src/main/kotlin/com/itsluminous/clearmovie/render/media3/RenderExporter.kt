@@ -1,12 +1,17 @@
 package com.itsluminous.clearmovie.render.media3
 
 import android.content.Context
+import android.media.metrics.LogSessionId
 import android.os.Looper
 import android.util.Log
+import androidx.media3.common.C
+import androidx.media3.common.ColorInfo
+import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.transformer.AudioEncoderSettings
+import androidx.media3.transformer.Codec
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultAssetLoaderFactory
 import androidx.media3.transformer.DefaultEncoderFactory
@@ -45,6 +50,11 @@ data class EncodeSpec(
  * limit): a phone photo then keeps at least canvas resolution instead of
  * being halved below it.
  *
+ * [deviceColour] is the device's measured colour handling
+ * ([ColourCalibration]): when its encoder writes BT.601 YUV under a BT.709
+ * tag (the Android 10 emulator's `OMX.google.h264.encoder` does), the export
+ * asks for BT.601, so the file's tag matches what the encoder wrote.
+ *
  * [start] must be called on a thread with a [Looper]; the listener is called
  * on it. Build the composition off the main thread first. cm-export wraps
  * this in the foreground worker.
@@ -53,6 +63,7 @@ data class EncodeSpec(
 class RenderExporter(
     private val context: Context,
     canvasHeight: Int,
+    private val deviceColour: DeviceColour,
 ) {
     val maxImageDimension: Int = minOf(MAX_TEXTURE, 2 * maxOf(canvasHeight, (canvasHeight * 16 + 8) / 9))
 
@@ -69,13 +80,7 @@ class RenderExporter(
         listener: Listener,
     ): Transformer {
         val looper = checkNotNull(Looper.myLooper()) { "Export needs a Looper thread" }
-        val encoders =
-            DefaultEncoderFactory
-                .Builder(context)
-                .setEnableFallback(true)
-                .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(spec.videoBitrate).build())
-                .setRequestedAudioEncoderSettings(AudioEncoderSettings.Builder().setBitrate(spec.audioBitrate).build())
-                .build()
+        val encoders = encoderFactory(context, spec, deviceColour)
         val bitmapLoader =
             DataSourceBitmapLoader
                 .Builder(context)
@@ -113,8 +118,47 @@ class RenderExporter(
         return transformer
     }
 
-    private companion object {
-        const val TAG = "RenderExporter"
-        const val MAX_TEXTURE = 4096
+    companion object {
+        private const val TAG = "RenderExporter"
+        private const val MAX_TEXTURE = 4096
+
+        /** BT.601 SDR, limited range: the tag for an encoder that writes BT.601 YUV. */
+        val SDR_BT601_LIMITED: ColorInfo =
+            ColorInfo
+                .Builder()
+                .setColorSpace(C.COLOR_SPACE_BT601)
+                .setColorRange(C.COLOR_RANGE_LIMITED)
+                .setColorTransfer(C.COLOR_TRANSFER_SDR)
+                .build()
+
+        /** The export's encoders; the calibration uses the same ones. */
+        fun encoderFactory(
+            context: Context,
+            spec: EncodeSpec,
+            deviceColour: DeviceColour,
+        ): Codec.EncoderFactory {
+            val encoders =
+                DefaultEncoderFactory
+                    .Builder(context)
+                    .setEnableFallback(true)
+                    .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(spec.videoBitrate).build())
+                    .setRequestedAudioEncoderSettings(AudioEncoderSettings.Builder().setBitrate(spec.audioBitrate).build())
+                    .build()
+            return if (deviceColour.encoderWritesBt601) Bt601TaggedEncoders(encoders) else encoders
+        }
+    }
+
+    /** Asks [delegate] for BT.601 SDR video instead of BT.709; HDR and audio are passed through unchanged. */
+    private class Bt601TaggedEncoders(
+        private val delegate: Codec.EncoderFactory,
+    ) : Codec.EncoderFactory by delegate {
+        override fun createForVideoEncoding(
+            format: Format,
+            logSessionId: LogSessionId?,
+        ): Codec {
+            val sdr = format.colorInfo == null || !ColorInfo.isTransferHdr(format.colorInfo)
+            val requested = if (sdr) format.buildUpon().setColorInfo(SDR_BT601_LIMITED).build() else format
+            return delegate.createForVideoEncoding(requested, logSessionId)
+        }
     }
 }

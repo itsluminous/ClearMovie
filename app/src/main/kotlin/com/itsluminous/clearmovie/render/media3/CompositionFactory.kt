@@ -1,6 +1,8 @@
 package com.itsluminous.clearmovie.render.media3
 
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Looper
@@ -40,6 +42,8 @@ import kotlin.math.roundToInt
 data class SourceInfo(
     val durationUs: Long,
     val hasAudio: Boolean,
+    /** The picture is BT.709 (tagged so, or HD and untagged, as Android assumes); false for BT.601 and other SD video. */
+    val bt709: Boolean = true,
 )
 
 /** Reads a [SourceInfo], or null when the file can't be read. */
@@ -78,6 +82,11 @@ fun interface SourceProbe {
  * Every visual item ends in a [PlacementEffect], so every layer is a
  * canvas-sized frame that is transparent where it draws nothing.
  *
+ * On a GPU that decodes BT.709 video with the BT.601 matrix
+ * ([DeviceColour.gpuDecodesBt709AsBt601], measured by [ColourCalibration]),
+ * every BT.709 video item starts with [Bt709Correction], so keying and
+ * everything after it sees the colours the file holds.
+ *
  * [build] reads files and draws bitmaps, so it must not run on the main
  * thread. It throws [MediaUnavailableException] when media is missing,
  * unreadable or shorter than planned, [IllegalArgumentException] for a plan
@@ -90,6 +99,7 @@ class CompositionFactory(
     private val context: Context,
     private val resolver: MediaResolver,
     private val probe: SourceProbe = RetrieverProbe(context),
+    private val deviceColour: () -> DeviceColour = { ColourCalibration.of(context) },
 ) {
     private val assets = RenderAssets(context)
     private val guard = UriGuard(context)
@@ -98,7 +108,7 @@ class CompositionFactory(
         check(!Looper.getMainLooper().isCurrentThread) { "Build the composition off the main thread" }
         require(plan.durationUs > 0) { "Nothing to render" }
         require(plan.visual.isNotEmpty()) { "Nothing to draw" }
-        val build = Build(plan)
+        val build = Build(plan, deviceColour())
         val sequences = mutableListOf<EditedMediaItemSequence>()
         val top = build.visualItem(VisualSegment.Fill(0, plan.durationUs))
         sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItem(top).build()
@@ -135,6 +145,7 @@ class CompositionFactory(
     /** State for one [build]: resolved uris, probed files, and the images used. */
     private inner class Build(
         private val plan: RenderPlan,
+        private val colour: DeviceColour,
     ) {
         private val captions = CaptionBitmapRenderer(plan.height)
         private val uris = mutableMapOf<MediaRef, Uri>()
@@ -153,12 +164,6 @@ class CompositionFactory(
             if (endUs > info.durationUs + LENGTH_TOLERANCE_US) throw MediaUnavailableException("A clip is longer than its file")
             return u to info
         }
-
-        /** [ref]'s uri, after checking the file holds [endUs] of media. */
-        private fun timedUri(
-            ref: MediaRef,
-            endUs: Long,
-        ): Uri = timedSource(ref, endUs).first
 
         private fun image(
             png: Uri,
@@ -198,6 +203,9 @@ class CompositionFactory(
         private fun picture(segment: VisualSegment.Picture): EditedMediaItem {
             val source = segment.source
             val effects = mutableListOf<Effect>()
+            val video = (source as? Source.Video)?.let { timedSource(it.media, it.clipEndUs) }
+            // First, so every later effect sees the file's colours.
+            if (video != null && video.second.bt709 && colour.gpuDecodesBt709AsBt601) effects += Bt709Correction
             segment.key?.let { effects += ChromaKeyEffect(it) }
             effects += PlacementEffect(segment.placement, plan.width, plan.height, fromBitmap = source !is Source.Video)
             if (segment.alpha.isNotEmpty()) effects += TransitionEffect(segment.alpha, segment.startUs, segment.clipOffsetUs)
@@ -206,7 +214,7 @@ class CompositionFactory(
                     val item =
                         MediaItem
                             .Builder()
-                            .setUri(timedUri(source.media, source.clipEndUs))
+                            .setUri(checkNotNull(video).first)
                             .setClippingConfiguration(clipping(source.clipStartUs, source.clipEndUs, source.speed, segment.durationUs))
                             .build()
                     EditedMediaItem
@@ -319,23 +327,63 @@ class CompositionFactory(
     }
 }
 
-/** Reads a file's length and tracks with one [MediaMetadataRetriever] pass. */
+/** Reads a file's length and tracks with [MediaMetadataRetriever], and a video's colour standard with [MediaExtractor]. */
 internal class RetrieverProbe(
     private val context: Context,
 ) : SourceProbe {
     override fun probe(uri: Uri): SourceInfo? {
         val r = MediaMetadataRetriever()
+        val info =
+            try {
+                r.setDataSource(context, uri)
+                val durationUs = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.times(1000) ?: return null
+                // The keys are present ("yes") only when the file has that track.
+                val hasVideo = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
+                SourceInfo(durationUs, r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes") to hasVideo
+            } catch (e: RuntimeException) {
+                return null
+            } finally {
+                // release() declares IOException on newer APIs; nothing to do about it here.
+                runCatching { r.release() }
+            }
+        return if (info.second) info.first.copy(bt709 = isBt709(uri)) else info.first
+    }
+
+    /** From the video track's colour standard, else by size (HD is BT.709), as Android decides for untagged video. */
+    private fun isBt709(uri: Uri): Boolean {
+        val e = MediaExtractor()
         return try {
-            r.setDataSource(context, uri)
-            val durationUs = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.times(1000) ?: return null
-            // The key is present ("yes") only when the file has a sound track.
-            SourceInfo(durationUs, r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes")
-        } catch (e: RuntimeException) {
-            null
+            e.setDataSource(context, uri, null)
+            val format =
+                (0 until e.trackCount).map { e.getTrackFormat(it) }.firstOrNull {
+                    it.getString(MediaFormat.KEY_MIME)?.startsWith("video/") ==
+                        true
+                }
+                    ?: return true
+            videoIsBt709(
+                if (format.containsKey(MediaFormat.KEY_COLOR_STANDARD)) format.getInteger(MediaFormat.KEY_COLOR_STANDARD) else null,
+                if (format.containsKey(MediaFormat.KEY_HEIGHT)) format.getInteger(MediaFormat.KEY_HEIGHT) else 0,
+            )
+        } catch (ex: RuntimeException) {
+            true
+        } catch (ex: java.io.IOException) {
+            true
         } finally {
-            // release() declares IOException on newer APIs; nothing to do about it here.
-            runCatching { r.release() }
+            runCatching { e.release() }
         }
+    }
+
+    companion object {
+        /** BT.709 when tagged so; BT.601 when tagged so; otherwise by height, 720 and up meaning BT.709. */
+        fun videoIsBt709(
+            standard: Int?,
+            height: Int,
+        ): Boolean =
+            when (standard) {
+                MediaFormat.COLOR_STANDARD_BT709 -> true
+                MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC, MediaFormat.COLOR_STANDARD_BT2020 -> false
+                else -> height >= 720
+            }
     }
 }
 

@@ -20,6 +20,7 @@ import com.itsluminous.clearmovie.domain.model.PresetParseResult
 import com.itsluminous.clearmovie.domain.model.PresetParser
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.render.media3.ChromaKeyEffect
+import com.itsluminous.clearmovie.render.media3.ColourCalibration
 import com.itsluminous.clearmovie.render.media3.CompositionFactory
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
 import com.itsluminous.clearmovie.render.media3.FileMediaResolver
@@ -113,10 +114,12 @@ object RenderHarness {
         val started = System.currentTimeMillis()
         // The composition is built off the main thread (it reads files and
         // draws bitmaps), as the factory requires; Transformer runs on main.
-        val composition = CompositionFactory(context, resolver).build(plan)
+        // The device's colour handling, measured once (and cached) off the main thread.
+        val colour = ColourCalibration.of(context)
+        val composition = CompositionFactory(context, resolver, deviceColour = { colour }).build(plan)
         Handler(Looper.getMainLooper()).post {
             try {
-                RenderExporter(context, plan.height).start(
+                RenderExporter(context, plan.height, colour).start(
                     composition,
                     out,
                     EncodeSpec.forHeight(plan.height),
