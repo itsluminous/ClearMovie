@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hindi (Devanagari). Same names and placeholders as values/strings.xml. -->
+<resources>
+    <string name="action_settings">सेटिंग्स</string>
+    <string name="action_back">वापस</string>
+
+    <string name="home_empty_title">आपके वीडियो यहाँ दिखेंगे</string>
+    <string name="home_empty_body">वीडियो बनाने की सुविधा जल्द ही एक अपडेट में आएगी। थीम और भाषा आप अभी सेटिंग्स में चुन सकते हैं।</string>
+    <!-- Hindi plural rules use "one" for 0 and 1, so "one" must read well for 0. -->
+    <plurals name="home_saved_videos">
+        <item quantity="one">%1$d वीडियो सेव है</item>
+        <item quantity="other">%1$d वीडियो सेव हैं</item>
+    </plurals>
+
+    <string name="settings_title">सेटिंग्स</string>
+    <string name="settings_section_theme">थीम</string>
+    <string name="theme_system">फ़ोन के जैसा</string>
+    <string name="theme_light">हल्का</string>
+    <string name="theme_dark">गहरा</string>
+    <string name="settings_dynamic_color">वॉलपेपर के रंग</string>
+    <string name="settings_dynamic_color_summary">अपने वॉलपेपर के रंग इस्तेमाल करें</string>
+    <string name="settings_dynamic_color_unavailable">इसके लिए Android 12 या नया चाहिए</string>
+
+    <string name="settings_section_language">भाषा</string>
+    <string name="language_system">फ़ोन की भाषा</string>
+    <string name="language_name_native">हिन्दी</string>
+
+    <string name="settings_section_about">जानकारी</string>
+    <string name="settings_version">वर्शन %1$s</string>
+</resources>

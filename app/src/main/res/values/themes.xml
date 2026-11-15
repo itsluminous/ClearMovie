@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- XML theme from Material Components; the real theming (dynamic colour or
+         the branded fallback, light or dark) happens in Compose (ui/theme). -->
+    <style name="Theme.ClearMovie" parent="Theme.Material3.DayNight.NoActionBar" />
+
+    <!-- Launch theme for androidx.core:core-splashscreen. Colours come from
+         values/colors.xml and values-night/colors.xml, so the splash follows
+         the phone's light or dark mode. MainActivity keeps it on screen until
+         the saved theme choice has loaded, so the app never flashes the wrong
+         theme. -->
+    <style name="Theme.ClearMovie.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
+        <item name="postSplashScreenTheme">@style/Theme.ClearMovie</item>
+    </style>
+</resources>

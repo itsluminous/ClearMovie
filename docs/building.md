@@ -1,8 +1,5 @@
 # Building ClearMovie
 
-> The Gradle project arrives with the first code milestone. The commands below are the
-> ones the project will support. Until then, this repository holds only docs and the website.
-
 Requirements: JDK 17+ and the Android SDK (compileSdk 36). The Android Gradle
 plugin installs any missing SDK build-tools on first build if the SDK manager's
 licences are accepted. No system Gradle is needed: use the wrapper (`./gradlew`),
@@ -29,9 +26,12 @@ Run checks the same way CI does:
   (`MissingTranslation`) and strings that exist only in a translation (`ExtraTranslation`)
   as errors. See [translating.md](translating.md).
 - **Unit tests** include convention tests that scan the sources: every user-visible
-  label must come from a string resource, the English, Hindi and Hinglish files must
-  have the same keys and placeholders, and the colours used for the timeline and
-  preview must keep enough contrast in light and dark themes.
+  label must come from a string resource (Lint cannot see literals in Compose code, so
+  `UserVisibleLabelConventionTest` does), the English, Hindi and Hinglish files must
+  have the same keys and placeholders (`StringKeyParityTest`), and the colours used for
+  the timeline and preview must keep enough contrast in light and dark themes. The
+  Robolectric tests emulate Android 14 (SDK 34), because newer SDKs need Java 21 and the
+  build uses JDK 17; real Android 10 and 16 are covered by the instrumented tests.
 
 `./gradlew assembleRelease` produces release APKs under
 `app/build/outputs/apk/release/`: one per processor type (`arm64-v8a`,
@@ -42,11 +42,21 @@ AndroidX libraries ship small native (`.so`) files. Each APK has its own
 environment variables (`SIGNING_KEYSTORE_FILE`, `SIGNING_KEYSTORE_PASSWORD`,
 `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`) the APKs are unsigned.
 
+The release APKs are named `ClearMovie-<version>-<abi>.apk` and
+`ClearMovie-<version>-universal.apk`. Debug builds are split the same way
+(`app-<abi>-debug.apk`); `installDebug` picks the one that matches the device.
+Check a release build the way CI does:
+
+```bash
+./gradlew assembleRelease
+scripts/verify-release-apks.sh     # names, ABI-split guard, versionCodes
+```
+
 GitHub Actions builds signed APKs on `v*` tags, using a key held in repository
-secrets. It renames them to `ClearMovie-<version>-<abi>.apk` and attaches all of
-them to the GitHub Release. CI fails if the universal APK contains native
-libraries but the per-ABI APKs are missing. Keystores are never committed (`*.jks`
-and `*.keystore` are gitignored).
+secrets, and attaches all five to the GitHub Release (see
+[release-signing.md](release-signing.md)). CI fails if the universal APK contains
+native libraries but the per-ABI APKs are missing. Keystores are never committed
+(`*.jks` and `*.keystore` are gitignored).
 
 ## Instrumented tests
 
@@ -83,8 +93,9 @@ adb -s emulator-5584 shell cmd uimode night yes   # dark; "no" for light
 
 ## Test media
 
-Tests use small synthetic clips generated with `ffmpeg` and committed under
-`app/src/test*/resources/fixtures`. Personal media is never committed.
+Tests that need media use small synthetic clips generated with `ffmpeg` and committed
+under `app/src/test*/resources/fixtures` (the first arrive with the render milestone).
+Personal media is never committed.
 
 ## Adding a language
 

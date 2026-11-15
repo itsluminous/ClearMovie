@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings that must NOT be translated: the product name, URLs and language
+     tags. Every entry carries translatable="false", which keeps it out of
+     Lint's MissingTranslation check and tells translators to leave it alone.
+     NoTranslateStringsConventionTest fails the build if an entry here lacks
+     the flag, or if a URL lands in any other file. -->
+<resources>
+    <!-- The product name is the same in every language. -->
+    <string name="app_name" translatable="false">ClearMovie</string>
+
+    <!-- Languages offered in Settings -> Language, as BCP 47 tags, in display
+         order. Each one is shown in its own script through that locale's
+         language_name_native string, so adding a language is resource-only:
+         a values-<code>/ folder plus its tag here. -->
+    <string-array name="supported_language_tags" translatable="false">
+        <item>en</item>
+        <item>hi</item>
+        <item>hi-Latn</item>
+    </string-array>
+</resources>

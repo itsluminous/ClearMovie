@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- No permissions. ClearMovie is offline by design: there is no
+         INTERNET permission, and gallery access arrives with cm-storage. -->
+
+    <!-- allowBackup is false: projects (from cm-storage on) hold links to this
+         phone's gallery, which mean nothing on another phone, and settings are
+         three switches. Nothing is worth an automatic cloud copy. -->
+    <application
+        android:name=".ClearMovieApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ClearMovie">
+
+        <!-- The only activity. Exported because it is the launcher entry.
+             singleTop so a later share (cm-share) reaches onNewIntent instead
+             of stacking a second editor. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ClearMovie.Starting">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Per-app language on Android 10-12: AppCompat stores the in-app
+             choice itself (autoStoreLocales) and applies it on every start.
+             On Android 13+ the system's LocaleManager stores it instead. -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
+    </application>
+</manifest>

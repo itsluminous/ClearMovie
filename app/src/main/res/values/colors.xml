@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand seed (amber). The Compose fallback schemes in ui/theme/Theme.kt
+         are built around it and used when Material You dynamic colour is off
+         or unavailable (Android 10 and 11). -->
+    <color name="ic_launcher_background">#FFB35400</color>
+
+    <!-- Splash screen (light). Dark variants in values-night/colors.xml. -->
+    <color name="splash_background">#FFFFF8F5</color>
+    <color name="splash_icon">#FF8B5000</color>
+</resources>

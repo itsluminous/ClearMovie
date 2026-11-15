@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Text that Android itself shows outside the app's own screens: notification
+     channels, the "Share to" label, the export notification. The first entries
+     arrive with cm-share and cm-export. Translated like strings.xml. -->
+<resources>
+</resources>

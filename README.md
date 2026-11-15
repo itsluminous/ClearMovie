@@ -119,8 +119,8 @@ What's planned, and what has shipped:
 
 **Everywhere**
 - [ ] Portrait and landscape on every screen; tablets and foldables
-- [ ] Light and dark themes, wallpaper colours (Android 12+), themed icon
-- [ ] English, Hindi and Hinglish
+- [x] Light and dark themes, wallpaper colours (Android 12+), themed icon
+- [x] English, Hindi and Hinglish, with an in-app language picker
 
 ## Privacy Principles
 
@@ -135,7 +135,9 @@ What's planned, and what has shipped:
 ## Building
 
 Requirements, build and test commands, and how to run tests on an emulator are in
-[docs/building.md](docs/building.md).
+[docs/building.md](docs/building.md). How the code is laid out is in
+[docs/architecture.md](docs/architecture.md), and release signing in
+[docs/release-signing.md](docs/release-signing.md).
 
 ## Translations
 
@@ -143,9 +145,9 @@ ClearMovie launches in three languages. Untranslated strings fall back to Englis
 
 | Language | Code | Status |
 | --- | --- | --- |
-| English | `values` (default) | planned for the first release |
-| Hindi (हिन्दी) | `hi` | planned for the first release |
-| Hinglish | `b+hi+Latn` | planned for the first release |
+| English | `values` (default) | complete |
+| Hindi (हिन्दी) | `hi` | complete |
+| Hinglish | `b+hi+Latn` | complete |
 
 How to add or improve a translation is in [docs/translating.md](docs/translating.md).
 

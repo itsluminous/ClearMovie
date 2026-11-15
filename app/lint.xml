@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Translation and text policy (see docs/translating.md).
+
+  ClearMovie ships English, Hindi and Hinglish, and all three must stay
+  complete, so MissingTranslation is an ERROR here. (ClearSMS keeps it a
+  warning to accept partial community translations; ClearMovie accepts a new
+  language only once it is complete.)
+
+  ExtraTranslation: a name in a translation that is absent from values/ is a
+  typo or a leftover, so it fails the build.
+  HardcodedText: no literal text in XML layouts or manifest labels. Literal
+  text in Compose code is caught by UserVisibleLabelConventionTest instead,
+  because Lint cannot see it.
+  The format and plural checks catch a translation that would crash or show
+  the wrong form at runtime.
+
+  There is no lint baseline: every finding is fixed, not recorded.
+-->
+<lint>
+    <issue id="HardcodedText" severity="error" />
+    <issue id="MissingTranslation" severity="error" />
+    <issue id="ExtraTranslation" severity="error" />
+    <issue id="StringFormatInvalid" severity="error" />
+    <issue id="StringFormatMatches" severity="error" />
+    <issue id="StringFormatCount" severity="error" />
+    <issue id="MissingQuantity" severity="error" />
+</lint>
