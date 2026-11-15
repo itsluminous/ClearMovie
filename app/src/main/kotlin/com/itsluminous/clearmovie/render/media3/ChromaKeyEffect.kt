@@ -15,6 +15,14 @@ import com.itsluminous.clearmovie.domain.model.KeySpec
  * tolerance + [KeySpec.softness]. In the soft band the green spill is pulled
  * down to the larger of red and blue, so edges carry no green fringe.
  *
+ * The key colour is stored as true BT.709 RGB (cm-storage measures it with
+ * the stream's own matrix), but the GPU's video sampler does not always
+ * honour the BT.709 tag: the emulator's decodes it as BT.601, which moves
+ * the window green by Delta E 16 (KeyColourSpaceTest). So each pixel is
+ * compared with both forms of the key, as decoded by either matrix
+ * ([misdecodedAsBt601]), and the nearer one counts. The two forms are 0.055
+ * apart in chroma, well inside the tolerance, so this only removes a bias.
+ *
  * Only chroma is compared, not brightness: a dark green in the frame's own
  * artwork close in hue to the key is keyed too. A preset frame is a flat key
  * colour around artwork in other colours, which the bind-time key check
@@ -40,7 +48,9 @@ class ChromaKeyEffect(
     private inner class Program : SinglePassShaderProgram(FRAGMENT) {
         init {
             val (cb, cr) = chroma(key.color)
+            val (cb2, cr2) = chroma(misdecodedAsBt601(key.color))
             program.setFloatsUniform("uKey", floatArrayOf(cb, cr))
+            program.setFloatsUniform("uKey601", floatArrayOf(cb2, cr2))
             program.setFloatUniform("uTolerance", key.tolerance.toFloat())
             program.setFloatUniform("uSoftness", key.softness.toFloat().coerceAtLeast(1e-4f))
         }
@@ -63,10 +73,30 @@ class ChromaKeyEffect(
             return (b - y) / 1.8556f to (r - y) / 1.5748f
         }
 
+        /**
+         * [color] as a decoder shows it when it encodes with BT.709 (the file's
+         * matrix) and decodes with BT.601 (what a sampler ignoring the tag uses).
+         */
+        fun misdecodedAsBt601(color: ArgbColor): ArgbColor {
+            val r = ((color.argb shr 16) and 0xFF) / 255.0
+            val g = ((color.argb shr 8) and 0xFF) / 255.0
+            val b = (color.argb and 0xFF) / 255.0
+            val y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            val cb = (b - y) / 1.8556
+            val cr = (r - y) / 1.5748
+
+            fun byte(v: Double) = (v.coerceIn(0.0, 1.0) * 255 + 0.5).toLong()
+            val r2 = byte(y + 1.402 * cr)
+            val g2 = byte(y - 0.344136 * cb - 0.714136 * cr)
+            val b2 = byte(y + 1.772 * cb)
+            return ArgbColor(0xFF000000L or (r2 shl 16) or (g2 shl 8) or b2)
+        }
+
         private const val FRAGMENT = """
 precision highp float;
 uniform sampler2D uTexSampler;
 uniform vec2 uKey;
+uniform vec2 uKey601;
 uniform float uTolerance;
 uniform float uSoftness;
 varying vec2 vUv;
@@ -75,7 +105,7 @@ void main() {
   vec4 c = texture2D(uTexSampler, vUv);
   float y = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   vec2 cc = vec2((c.b - y) / 1.8556, (c.r - y) / 1.5748);
-  float d = distance(cc, uKey);
+  float d = min(distance(cc, uKey), distance(cc, uKey601));
   float keep = smoothstep(uTolerance, uTolerance + uSoftness, d);
   vec3 rgb = c.rgb;
   float limit = max(rgb.r, rgb.b);

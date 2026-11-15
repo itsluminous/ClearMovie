@@ -38,4 +38,22 @@ class ChromaKeyEffectTest {
     fun `out-of-range settings are refused`() {
         ChromaKeyEffect(KeySpec(key, 1.5, 0.1))
     }
+
+    @Test
+    fun `the key as a BT601 sampler shows it matches ffmpeg's decode of the reference frame`() {
+        // ffmpeg -ss 1 -i Frame-White.mp4 -vf scale=in_color_matrix=bt601:in_range=tv:out_range=pc gives (16, 253, 41).
+        val shown = ChromaKeyEffect.misdecodedAsBt601(key)
+        val r = ((shown.argb shr 16) and 0xFF).toInt()
+        val g = ((shown.argb shr 8) and 0xFF).toInt()
+        val b = (shown.argb and 0xFF).toInt()
+        assertThat(kotlin.math.abs(r - 16)).isAtMost(4)
+        assertThat(kotlin.math.abs(g - 253)).isAtMost(4)
+        assertThat(kotlin.math.abs(b - 41)).isAtMost(4)
+        // Both forms are close enough that keying either is a small widening of the key.
+        assertThat(distance(key, shown)).isLessThan(0.08)
+        // Frame colours stay opaque against the second form too.
+        for (c in listOf("#C81414", "#1440B4", "#FFFFFF", "#E0AC69", "#000000", "#2E7D32")) {
+            assertThat(distance(shown, ArgbColor.parse(c)!!)).isGreaterThan(0.18 + 0.08)
+        }
+    }
 }
