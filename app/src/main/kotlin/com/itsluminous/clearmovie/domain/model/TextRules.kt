@@ -38,7 +38,8 @@ object TextRules {
     private fun isVisible(codePoint: Int): Boolean =
         when (Character.getType(codePoint).toByte()) {
             Character.CONTROL, Character.FORMAT, Character.SPACE_SEPARATOR, Character.LINE_SEPARATOR,
-            Character.PARAGRAPH_SEPARATOR, Character.UNASSIGNED, Character.NON_SPACING_MARK,
+            Character.PARAGRAPH_SEPARATOR, Character.UNASSIGNED, Character.NON_SPACING_MARK, Character.PRIVATE_USE,
+            Character.SURROGATE,
             -> false
 
             else -> true

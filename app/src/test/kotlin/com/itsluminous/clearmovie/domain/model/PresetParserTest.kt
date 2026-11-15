@@ -252,6 +252,10 @@ class PresetParserTest {
             .contains("displayName.en: is longer than 60 characters")
         assertThat(errors(bundledWithTop(bundledWith("displayNameRes", null), "displayName", "{ \"en\": \"bell\\u0007\" }")))
             .contains("displayName.en: contains control or invisible characters")
+        assertThat(errors(bundledWithTop(bundledWith("displayNameRes", null), "displayName", "{ \"en\": \"\u200d\" }")))
+            .contains("displayName.en: shows no characters")
+        assertThat(errors(bundledWithTop(bundledWith("displayNameRes", null), "displayName", "{ \"en\": \"two\\nlines\" }")))
+            .contains("displayName.en: contains control or invisible characters")
         assertThat(errors(bundledWithTop(bundledWith("displayNameRes", null), "displayName", "{ \"en\": \"\u202Eevil\" }")))
             .contains("displayName.en: contains control or invisible characters")
     }

@@ -146,6 +146,9 @@ class EdgeCasesTest {
         // Devanagari with a zero-width joiner and non-joiner.
         val hindi = "क्\u200Dष \u200Cनमस्ते"
         assertThat(p.rename(hindi).name).isEqualTo(hindi)
+        // A consonant with a virama and a joiner, and a vowel sign, are names too.
+        assertThat(p.rename("क्\u200D").name).isEqualTo("क्\u200D")
+        assertThat(p.rename("की").name).isEqualTo("की")
         assertThat(p.addText(hindi, 0, 1000, ids).validate()).isEmpty()
         assertThrows(IllegalArgumentException::class.java) { p.addText("evil\u202E", 0, 1000, ids) }
         assertThrows(IllegalArgumentException::class.java) { p.addText("x".repeat(Limits.MAX_TEXT_LENGTH + 1), 0, 1000, ids) }
@@ -165,7 +168,7 @@ class EdgeCasesTest {
         }
         assertThrows(IllegalArgumentException::class.java) { captioned.addToTrack(row, TextClip(ClipId("b2"), 0, 1000, "x\t"), 5000, ids) }
         // Names that show nothing are refused: only joiners, combining marks or tag characters.
-        for (blank in listOf("\u200D", "\u0301\u0301", "\uDB40\uDC41", " \u200C ")) {
+        for (blank in listOf("\u200D", "\u0301\u0301", "\uDB40\uDC41", " \u200C ", "\uE000", "\uDC00")) {
             assertThrows(IllegalArgumentException::class.java) { p.rename(blank) }
         }
         // Emoji and punctuation make fine names.
@@ -244,6 +247,21 @@ class EdgeCasesTest {
         assertThat(off.requireTrack(row.id).clips).containsExactly(replaced)
         assertThat(off.requireTrack(row.id).enabled).isFalse()
         assertThat(q.requireTrack(row.id).takes(Fixtures.overlay("user", 0))).isFalse()
+        // A stored project with a user's overlay on the frame row is not valid.
+        val crafted =
+            p.copy(
+                tracks =
+                    p.tracks.map {
+                        if (it.id ==
+                            row.id
+                        ) {
+                            it.copy(clips = it.clips + Fixtures.overlay("user", 20_000, 1000))
+                        } else {
+                            it
+                        }
+                    },
+            )
+        assertThat(crafted.validate().map { it.rule }).contains(Violation.Rule.CLIP_KIND)
     }
 
     @Test

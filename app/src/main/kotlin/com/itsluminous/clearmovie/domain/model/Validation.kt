@@ -155,6 +155,8 @@ private fun Project.checkTrack(
     }
 
     track.clips.filterNot { track.accepts(it) }.forEach { fail(Violation.Rule.CLIP_KIND, "$where: ${it.id.value} does not belong here") }
+    // A row the preset manages holds only the preset's clip (see Track.takes).
+    track.clips.filterNot { track.takes(it) }.forEach { fail(Violation.Rule.CLIP_KIND, "$where: ${it.id.value} is not the preset's") }
 
     if (track.type == TrackType.MAIN) {
         checkMain(track, fail)

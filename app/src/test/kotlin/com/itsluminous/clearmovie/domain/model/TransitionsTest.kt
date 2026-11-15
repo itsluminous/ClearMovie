@@ -247,33 +247,34 @@ class TransitionsTest {
     }
 
     @Test
-    fun `a growing frame moves a clip it would cover to another row`() {
-        // A short overlay on the frame row before the frame starts (edits never put
-        // one there, but a stored project from another version might)...
-        var p = Fixtures.presetProject()
-        val frameRow = p.byRole(PresetRole.FRAME)
+    fun `a growing anchored clip moves a clip it would cover to another row`() {
+        // An ordinary overlay row holding a clip that follows the frame span, and a
+        // short overlay before that span starts...
+        val base = Fixtures.presetProject()
+        val follower = (base.byRole(PresetRole.FRAME).clips.single() as OverlayClip).copy(id = ClipId("follower"))
+        val row = TrackId("ov")
+        var p = base.addRow(TrackType.OVERLAY, id = row)
         p =
             p.copy(
                 tracks =
                     p.tracks.map {
                         if (it.id ==
-                            frameRow.id
+                            row
                         ) {
-                            it.copy(clips = listOf(Fixtures.overlay("early", 0, 2000)) + it.clips)
+                            it.copy(clips = listOf(Fixtures.overlay("early", 0, 2000), follower))
                         } else {
                             it
                         }
                     },
             )
         p.assertValid()
-        // ...is moved off it when skipping the intro makes the frame start at 0.
-        val noIntro =
-            p
-                .deleteClip(
-                    p.main.clips
-                        .first()
-                        .id,
-                ).assertValid()
+        // ...moves the short one to a new row when skipping the intro makes the span start at 0.
+        val intro =
+            p.main.clips
+                .first()
+                .id
+        val noIntro = p.deleteClip(intro).assertValid()
+        assertThat(noIntro.requireClip(ClipId("follower")).startMs).isEqualTo(0)
         assertThat(noIntro.trackOf(ClipId("early"))!!.id).isEqualTo(TrackId("row-early"))
         assertThat(noIntro.trackOf(ClipId("early"))!!.type).isEqualTo(TrackType.OVERLAY)
     }

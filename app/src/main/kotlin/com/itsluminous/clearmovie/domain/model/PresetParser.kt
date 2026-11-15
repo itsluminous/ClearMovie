@@ -69,7 +69,7 @@ object PresetParser {
         if (version != null && version < Preset.SCHEMA_VERSION) error("schemaVersion", "unknown preset version")
         val id = string("id", required = true, pattern = PresetId.PATTERN, maxLength = 64)
         val nameRes = string("displayNameRes", pattern = RESOURCE_NAME, maxLength = 64)
-        val name = localized("displayName", MAX_DISPLAY_NAME)
+        val name = localized("displayName", MAX_DISPLAY_NAME, oneLine = true)
         if (nameRes == null && name == null && !hasError("displayNameRes") && !hasError("displayName")) {
             error("displayName", "a preset needs displayNameRes or displayName")
         }
@@ -265,18 +265,20 @@ object PresetParser {
         return ExportSpec(height ?: d.height, fps ?: d.fps, rate ?: d.audioSampleRate, bitrate ?: d.audioBitrate)
     }
 
+    /** Text in the three languages; [oneLine] for a name (one visible line), otherwise caption text. */
     private fun Fields.localized(
         key: String,
         maxLength: Int,
+        oneLine: Boolean = false,
     ): LocalizedText? {
         if (isNull(key)) {
             take(key)
             return null
         }
         val f = obj(key) ?: return null
-        val en = f.string("en", maxLength = maxLength, text = true)
-        val hi = f.string("hi", maxLength = maxLength, text = true)
-        val hiLatn = f.string("hi-Latn", maxLength = maxLength, text = true)
+        val en = f.string("en", maxLength = maxLength, text = true, oneLine = oneLine)
+        val hi = f.string("hi", maxLength = maxLength, text = true, oneLine = oneLine)
+        val hiLatn = f.string("hi-Latn", maxLength = maxLength, text = true, oneLine = oneLine)
         f.finish()
         if (en == null && hi == null && hiLatn == null) {
             if (!f.hasAnyError()) error(key, "needs at least one of en, hi or hi-Latn")
@@ -355,6 +357,7 @@ object PresetParser {
             pattern: Regex? = null,
             maxLength: Int = 64,
             text: Boolean = false,
+            oneLine: Boolean = false,
         ): String? {
             val v = value(key, required) ?: return null
             if (v !is JsonPrimitive || !v.isString) {
@@ -365,7 +368,8 @@ object PresetParser {
             when {
                 s.length > maxLength -> error(key, "is longer than $maxLength characters")
                 text && s.isBlank() -> error(key, "is empty")
-                text && !TextRules.isAllowed(s, allowNewlines = true) -> error(key, "contains control or invisible characters")
+                text && !TextRules.isAllowed(s, allowNewlines = !oneLine) -> error(key, "contains control or invisible characters")
+                text && oneLine && !TextRules.isValidName(s) -> error(key, "shows no characters")
                 !text && pattern != null && !pattern.matches(s) -> error(key, "has characters that aren't allowed")
                 else -> return s
             }
