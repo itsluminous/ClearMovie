@@ -32,6 +32,9 @@ import org.junit.runner.RunWith
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class KeyingRenderTest {
+    /** The top-right quarter of the window (photo_quadrants' green), widened by 1% each side. */
+    private val greenQuadrant = doubleArrayOf(0.0094 + 0.5 * 0.9813 - 0.01, 0.0222 - 0.01, 0.5 * 0.9813 + 0.02, 0.5 * 0.7741 + 0.02)
+
     /** A point inside the frame window, by window-relative (u, v). */
     private fun win(
         u: Double,
@@ -78,6 +81,10 @@ class KeyingRenderTest {
         val top = rgb(frameSrc, 0.5, 0.009)
         val strip = rgb(frameSrc, 0.95, 0.85)
         val logo = rgb(frameSrc, 0.1, 0.769)
+        // The key-green counter must see the un-keyed window, or "no key green left" proves nothing.
+        val control = RenderHarness.countNearKey(frameSrc)
+        report("keying control: $control key-green pixels in the frame source")
+        if (control == 0) failures += "the key-green counter sees no key green in the un-keyed frame"
 
         // t = 1 s: the intro, full frame, while the frame row is still a transparent fill.
         frameAt(out.file, 1_000_000).let { f ->
@@ -120,7 +127,9 @@ class KeyingRenderTest {
             expect("t=$timeS top border", rgb(f, 0.5, 0.009), top, 14)
             expect("t=$timeS strip", rgb(f, 0.95, 0.85), strip, 14)
             expect("t=$timeS logo over the window", rgb(f, 0.1, 0.769), logo, 14)
-            val green = RenderHarness.countNearKey(f)
+            // photo_quadrants' green quadrant is itself pure green, so it is not counted.
+            val exclude = if (group.first().label == "photo-quadrants") listOf(greenQuadrant) else emptyList()
+            val green = RenderHarness.countNearKey(f, exclude = exclude)
             report("keying t=$timeS pixels within dE10 of either form of #00D922: $green")
             if (green != 0) failures += "t=$timeS has $green key-green pixels"
         }
@@ -133,9 +142,10 @@ class KeyingRenderTest {
 
     /**
      * The two-form keyer (stored key and its BT.601-decoded form) must not
-     * widen the key into near-green frame artwork: five swatches 0.30-0.31
-     * in Cb/Cr from the nearer form whichever matrix decodes them (0.04
-     * outside tolerance + softness) stay exactly as the frame shows them,
+     * widen the key into near-green frame artwork: five swatches 0.29-0.32
+     * in Cb/Cr from the nearer form as encoded, whichever matrix decodes
+     * them (at least 0.03 outside tolerance + softness), stay exactly as the
+     * frame shows them,
      * while the window beside them is keyed to the photo under it. The frame
      * file has no sound track, so this also exports a silent frame video.
      */

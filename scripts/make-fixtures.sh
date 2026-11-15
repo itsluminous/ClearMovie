@@ -42,10 +42,10 @@ drawbox=x=72:y=842:w=160:h=120:color=0x1440B4:t=fill[bg];\
 
 # frame_neargreen.mp4: 4 s, the same window geometry as frame.mp4, with a
 # strip of five near-green swatches below the window, none of which may be
-# keyed. Each is 0.30-0.31 from the nearer form of the key in BT.709 Cb/Cr
-# (the stored key and its BT.601-decoded form) whichever matrix decodes
-# it, so 0.04 outside tolerance + softness (0.26). Encoded near-lossless
-# (crf 12) so the swatches keep those colours.
+# keyed. As encoded, each is 0.29-0.32 from the nearer form of the key in
+# BT.709 Cb/Cr (the stored key and its BT.601-decoded form) whichever
+# matrix decodes it, so at least 0.03 outside tolerance + softness (0.26).
+# Encoded near-lossless (crf 12) so the swatches keep those colours.
 "${ff[@]}" \
   -f lavfi -i "color=c=0xC81414:s=1920x1080:r=30:d=4" \
   -filter_complex "[0:v]drawbox=x=18:y=24:w=1884:h=836:color=0x00D922:t=fill,\

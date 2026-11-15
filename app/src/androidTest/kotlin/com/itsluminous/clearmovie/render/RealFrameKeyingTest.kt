@@ -108,7 +108,20 @@ class RealFrameKeyingTest {
                 report("real t=$t $name = ${got.toList()} frame source ${want.toList()} ${if (ok) "ok" else "FAIL"}")
                 if (!ok) failures += "t=$t $name ${got.toList()} vs ${want.toList()}"
             }
-            val near10 = RenderHarness.countNearKey(f, step = 1)
+            // At 8 s the window shows photo_quadrants, whose green quarter is itself pure green.
+            val greenQuadrant =
+                doubleArrayOf(
+                    window.x + 0.5 * window.w - 0.01,
+                    window.y - 0.01,
+                    0.5 * window.w + 0.02,
+                    0.5 * window.h + 0.02,
+                )
+            val near10 = RenderHarness.countNearKey(f, step = 1, exclude = if (t == 8.0) listOf(greenQuadrant) else emptyList())
+            if (t == 8.0) {
+                val control = RenderHarness.countNearKey(source, step = 4)
+                report("real control: $control key-green pixels in the frame source")
+                if (control == 0) failures += "the key-green counter sees no key green in the un-keyed frame"
+            }
             val near20 = countNear(f, keyGreen, 20.0, step = 1)
             report(
                 "real t=$t pixels within dE10 of either form of #00D922: $near10 (within dE20 of #00D922: $near20) of ${f.width * f.height}",
