@@ -98,6 +98,9 @@ class ProjectCodecTest {
         assertThat(migrating.encode(result.project)).contains("\"schemaVersion\": 1")
         // Without the step, the old file is refused rather than misread.
         assertThat(failed(fixture("old-v0.json"))).isEqualTo(ProjectDecodeResult.Reason.UNSUPPORTED_VERSION)
+        // A damaged old file makes the step throw: that is a refusal, not a crash.
+        assertThat(failed("{\"schemaVersion\": 0, \"id\": \"x\", \"stacking\": []}", migrating))
+            .isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
     }
 
     @Test
@@ -173,6 +176,17 @@ class ProjectCodecTest {
         assertThat(
             failed(minimal.replace("\"id\": \"min\"", "\"id\": \"${"x".repeat(65)}\"")),
         ).isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
+        // A frame moved off its span, and ducking out of range: readable, but invalid.
+        assertThat(
+            failed(
+                fixture(
+                    "rich-v1.json",
+                ).replace(
+                    "\"startMs\": 6500,\n                    \"durationMs\": 27933",
+                    "\"startMs\": 0,\n                    \"durationMs\": 27933",
+                ),
+            ),
+        ).isEqualTo(ProjectDecodeResult.Reason.INVALID)
         // Bad colour.
         assertThat(failed(fixture("rich-v1.json").replace("\"#202040\"", "\"blue\""))).isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
     }

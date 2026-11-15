@@ -38,7 +38,9 @@ object ProjectFactory {
      * frame span (after the intro, to the end, or to the ending when the frame
      * does not cover it); the closing message follows a spoken ending. The
      * preset's caption style, photo length, fit, effects and ducking are copied
-     * into the project.
+     * into the project. A bound file whose length is under
+     * [Limits.MIN_CLIP_MS] or over [Limits.MAX_MEDIA_MS] is refused with
+     * [IllegalArgumentException].
      */
     fun fromPreset(
         id: ProjectId,
@@ -46,6 +48,9 @@ object ProjectFactory {
         media: PresetMedia,
         ids: IdSource = RandomIds,
     ): Project {
+        for (ms in listOfNotNull(media.introMs, media.frameMs, media.endingMs)) {
+            require(ms in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) { "A preset file has an unusable length" }
+        }
         val mainClips = mutableListOf<MainClip>()
         if (preset.intro != null && media.introMs != null) mainClips += IntroClip(ids.clipId(), media.introMs)
         val ending = preset.ending?.takeIf { media.endingMs != null }
@@ -126,6 +131,6 @@ object ProjectFactory {
             defaultFit = preset.defaultFit,
             effectDefaults = preset.effects,
             ducking = preset.ducking,
-        ).normalized(ids)
+        ).normalized()
     }
 }

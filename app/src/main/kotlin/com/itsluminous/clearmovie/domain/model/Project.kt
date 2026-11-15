@@ -34,6 +34,10 @@ data class EffectDefaults(
  * ducking are copied in when the project is created, so a project renders
  * the same even if its preset changes later.
  *
+ * [name] is null for an unnamed draft. It is for display only
+ * (`TextRules.isValidName`); code that makes a file name from it must make it
+ * safe itself.
+ *
  * [transitionForAll] is set by **Apply to all**: while it is set, every MAIN
  * junction, including new ones, gets that transition.
  *

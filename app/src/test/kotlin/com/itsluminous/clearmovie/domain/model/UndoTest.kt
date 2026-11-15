@@ -17,6 +17,7 @@ class UndoTest {
             .presetProject(ids)
             .addToMain(listOf(Fixtures.photo("a", 3000), Fixtures.video("v", 10_000), Fixtures.photo("b", 3000)), ids = ids)
             .addText("hello", 7000, 2000, ids)
+            .let { it.setCaptionStyle(it.textId(), CaptionStyleOverride(sizePx = 80)) }
             .addRow(TrackType.VISUAL, id = pipRow)
             .addToTrack(pipRow, Fixtures.photo("pp", 2000, PipPlacement.DEFAULT), 7000, ids)
 
@@ -61,7 +62,8 @@ class UndoTest {
             "setAudioFades" to { setAudioFades(music().clips.single().id, 1000, 1000) },
             "setText" to { setText(textId(), "changed") },
             "setTextTiming" to { setTextTiming(textId(), 7000, 1500) },
-            "setCaptionStyle" to { setCaptionStyle(textId(), CaptionStyleOverride(sizePx = 80)) },
+            "setCaptionStyle" to { setCaptionStyle(textId(), CaptionStyleOverride(sizePx = 90)) },
+            "resetCaptionStyle" to { resetCaptionStyle(textId()) },
             "splitClip" to { splitClip(v, 4000, it.clipId()) },
             "joinClips" to { splitClip(v, 4000, ClipId("v2")).joinClips(v, ClipId("v2")) },
             "setTransition" to { setTransition(a, Transition(TransitionKind.CROSSFADE, 800)) },
@@ -75,7 +77,7 @@ class UndoTest {
         for ((name, op) in operations) {
             val editor = ProjectEditor(start(), ids)
             val before = editor.project
-            assertWithMessage(name).that(editor.edit(op)).isTrue()
+            assertWithMessage(name).that(editor.edit(op)).isEqualTo(EditResult.Applied)
             val after = editor.project
             assertWithMessage(name).that(after).isNotEqualTo(before)
             assertWithMessage(name).that(editor.undoDepth).isEqualTo(1)
@@ -90,7 +92,7 @@ class UndoTest {
     fun `the 51st edit drops the oldest`() {
         val editor = ProjectEditor(start(), ids)
         val first = editor.project
-        repeat(51) { i -> assertThat(editor.edit { rename("Name $i") }).isTrue() }
+        repeat(51) { i -> assertThat(editor.edit { rename("Name $i") }).isEqualTo(EditResult.Applied) }
         assertThat(editor.undoDepth).isEqualTo(50)
         repeat(50) { assertThat(editor.undo()).isTrue() }
         assertThat(editor.undo()).isFalse()
@@ -117,10 +119,12 @@ class UndoTest {
     fun `a refused or empty edit adds no step and changes nothing`() {
         val editor = ProjectEditor(start(), ids)
         val before = editor.project
-        assertThat(editor.edit { removeRow(main.id) }).isFalse()
-        assertThat(editor.edit { this }).isFalse()
+        assertThat(editor.edit { removeRow(main.id) }).isEqualTo(EditResult.Refused("This row can't be removed"))
+        assertThat(editor.edit { this }).isEqualTo(EditResult.Unchanged)
         // A result that breaks an invariant is refused too.
-        assertThat(editor.edit { copy(stacking = emptyList()) }).isFalse()
+        val broken = editor.edit { copy(stacking = emptyList()) }
+        assertThat(broken).isInstanceOf(EditResult.Refused::class.java)
+        assertThat((broken as EditResult.Refused).violations.map { it.rule }).contains(Violation.Rule.STACKING)
         assertThat(editor.project).isEqualTo(before)
         assertThat(editor.canUndo).isFalse()
     }

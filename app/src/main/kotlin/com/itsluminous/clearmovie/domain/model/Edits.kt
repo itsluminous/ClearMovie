@@ -36,7 +36,7 @@ fun Project.addToMain(
             (firstContent + index).also { require(it in firstContent..lastContent) { "No such place" } }
         }
     val placed = current.toMutableList().apply { addAll(at, clips.map { it.withStartMs(0) }) }
-    return withTrackClips(main.id, placed).normalized(ids)
+    return withTrackClips(main.id, placed).normalized()
 }
 
 private fun requireContentClip(clip: Clip) {
@@ -100,7 +100,7 @@ fun Project.insertAt(
         require(!(anchor is EndingClip && side == Side.AFTER)) { "Nothing goes after the ending" }
         val at = track.clips.indexOf(anchor) + if (side == Side.AFTER) 1 else 0
         val placed = track.clips.toMutableList().apply { add(at, clip.withStartMs(0)) }
-        return withTrackClips(trackId, placed).normalized(ids)
+        return withTrackClips(trackId, placed).normalized()
     }
     require(track.accepts(clip)) { "That item does not go on this row" }
     val start =
@@ -108,7 +108,7 @@ fun Project.insertAt(
             Side.BEFORE -> (anchor.startMs - clip.durationMs).coerceAtLeast(0)
             Side.AFTER -> anchor.endMs
         }
-    return placeTimed(clip.withStartMs(start), preferred = trackId, role = track.audioRole, ids = ids).first.normalized(ids)
+    return placeTimed(clip.withStartMs(start), preferred = trackId, role = track.audioRole, ids = ids).first.normalized()
 }
 
 /**
@@ -126,7 +126,7 @@ fun Project.addTimedClip(
     val type = clip.timedTrackType()
     require(Track(TrackId("probe"), type).accepts(clip)) { "That item does not go on that kind of row" }
     require((type == TrackType.AUDIO) == (role != null)) { "Sound needs a role, other items none" }
-    return placeTimed(clip, preferred = null, role = role, ids = ids).first.normalized(ids)
+    return placeTimed(clip, preferred = null, role = role, ids = ids).first.normalized()
 }
 
 /** "Add text": a caption from [startMs] lasting [durationMs], on the highest free text row (section 6.1). */
@@ -161,23 +161,24 @@ fun Project.addToTrack(
     require(track.type.isTimed) { "Use addToMain for the MAIN row" }
     require(track.accepts(clip)) { "That item does not go on this row" }
     require(clip(clip.id) == null) { "Clip id already used" }
-    return placeTimed(clip.withStartMs(startMs), preferred = trackId, role = track.audioRole, ids = ids).first.normalized(ids)
+    return placeTimed(clip.withStartMs(startMs), preferred = trackId, role = track.audioRole, ids = ids).first.normalized()
 }
 
 // ---------------------------------------------------------------- delete and move
 
 /**
  * Deletes a clip. A row left empty is removed in the same step, except MAIN
- * and the preset frame row, which is switched off instead (section 6.1).
- * Deleting the intro or ending skips it for this video; skipping a spoken
- * ending also removes its closing message.
+ * and the preset frame row (section 6.1). Deleting the preset frame itself
+ * switches its row off and keeps the frame, so switching it on again brings
+ * it back. Deleting the intro or ending skips it for this video; skipping a
+ * spoken ending also removes its closing message.
  */
-fun Project.deleteClip(
-    clipId: ClipId,
-    ids: IdSource = RandomIds,
-): Project {
+fun Project.deleteClip(clipId: ClipId): Project {
     val track = requireNotNull(trackOf(clipId)) { "No such clip" }
     val clip = requireClip(clipId)
+    if (track.presetRole == PresetRole.FRAME && clip is OverlayClip && clip.anchor is SpanAnchor.Frame) {
+        return setTrackEnabled(track.id, false)
+    }
     var project = withTrackClips(track.id, track.clips.filterNot { it.id == clipId }).afterRemovingFrom(track.id)
     if (clip is EndingClip) {
         for (t in project.tracks) {
@@ -187,7 +188,7 @@ fun Project.deleteClip(
             }
         }
     }
-    return project.normalized(ids)
+    return project.normalized()
 }
 
 /** Removes row [trackId] if an edit just emptied it (or switches the preset frame off). */
@@ -240,7 +241,7 @@ fun Project.moveClip(
     val without = withTrackClips(source.id, source.clips.filterNot { it.id == clipId })
     val (placed, landed) = without.placeTimed(clip, preferred = target.id, role = source.audioRole, ids = ids, allowExisting = false)
     val cleaned = if (landed == source.id) placed else placed.afterRemovingFrom(source.id)
-    return cleaned.normalized(ids)
+    return cleaned.normalized()
 }
 
 /** The clip with its span anchor removed: the user has taken control of its timing. */
@@ -378,7 +379,7 @@ fun Project.trimVideo(
 ): Project =
     updateTyped<VideoClip>(clipId, "videos") {
         requireTrim(startMs, endMs, it.sourceDurationMs)
-        it.copy(trimStartMs = startMs, trimEndMs = endMs).also { c -> require(c.durationMs >= Limits.MIN_CLIP_MS) { "Too short" } }
+        it.copy(trimStartMs = startMs, trimEndMs = endMs).requireSensibleLength()
     }
 
 /** Trims a sound to [startMs]..[endMs] of its source; its length follows unless it repeats. */
@@ -406,7 +407,7 @@ private fun requireTrim(
 fun Project.setSpeed(
     clipId: ClipId,
     speed: Speed,
-): Project = updateTyped<VideoClip>(clipId, "videos") { it.copy(speed = speed) }
+): Project = updateTyped<VideoClip>(clipId, "videos") { it.copy(speed = speed).requireSensibleLength() }
 
 /** Loop: play the trimmed range [loops] times. */
 fun Project.setLoops(
@@ -414,7 +415,12 @@ fun Project.setLoops(
     loops: Int,
 ): Project {
     require(loops in 1..Limits.MAX_LOOPS) { "Loops out of range" }
-    return updateTyped<VideoClip>(clipId, "videos") { it.copy(loops = loops) }
+    return updateTyped<VideoClip>(clipId, "videos") { it.copy(loops = loops).requireSensibleLength() }
+}
+
+private fun VideoClip.requireSensibleLength(): VideoClip {
+    require(durationMs in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) { "Length out of range" }
+    return this
 }
 
 /** How long a photo, or a text or colour card, is shown. */
@@ -520,8 +526,9 @@ fun Project.resetCaptionStyle(clipId: ClipId): Project = setCaptionStyle(clipId,
 
 /** Names the project; null makes it a draft again. */
 fun Project.rename(name: String?): Project {
-    require(name == null || name.isNotBlank()) { "A name can't be blank" }
-    return copy(name = name?.trim())
+    val trimmed = name?.trim()
+    require(trimmed == null || TextRules.isValidName(trimmed)) { "That name can't be used" }
+    return copy(name = trimmed)
 }
 
 // ---------------------------------------------------------------- split and join (section 6.3)
@@ -542,8 +549,14 @@ fun Project.splitClip(
     require(clip is VideoClip) { "Only videos can be split" }
     require(clip.loops == 1) { "Turn loop off before splitting" }
     require(clip(newId) == null) { "Clip id already used" }
-    require(atMs >= Limits.MIN_CLIP_MS && clip.durationMs - atMs >= Limits.MIN_CLIP_MS) { "Too close to the edge" }
-    val cut = clip.trimStartMs + clip.speed.sourceMs(atMs)
+    // The cut, in media time, rounded down to a whole step of the speed
+    // fraction, so the two halves add up to exactly the original length.
+    val sourceIn = clip.speed.sourceMs(atMs).let { it - it % clip.speed.numerator }
+    val cut = clip.trimStartMs + sourceIn
+    val firstMs = clip.speed.timelineMs(sourceIn)
+    val secondMs = clip.durationMs - firstMs
+    require(firstMs >= Limits.MIN_CLIP_MS && secondMs >= Limits.MIN_CLIP_MS) { "Too close to the edge" }
+    require(sourceIn >= Limits.MIN_CLIP_MS && clip.trimEndMs - cut >= Limits.MIN_CLIP_MS) { "Too close to the edge" }
     val group = clip.splitGroup ?: clip.id.value
     val a = clip.animations
     val first =
@@ -606,10 +619,7 @@ fun Project.canJoin(
     val i = track.clips.indexOf(first)
     val neighbours = track.clips.getOrNull(i + 1) == second && (!track.type.isTimed || second.startMs == first.endMs)
     return neighbours &&
-        first.splitGroup != null &&
-        first.splitGroup == second.splitGroup &&
-        first.media == second.media &&
-        first.trimEndMs == second.trimStartMs &&
+        isContinuousSplit(first, second) &&
         first.speed == second.speed &&
         first.loops == 1 &&
         second.loops == 1

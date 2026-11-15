@@ -146,7 +146,8 @@ object PresetParser {
     }
 
     private fun Fields.readCoverEnding(): CoverEnding {
-        val value = take("coverEnding") ?: return CoverEnding.AUTO
+        val value = take("coverEnding")
+        if (value == null || value is JsonNull) return CoverEnding.AUTO
         if (value is JsonPrimitive) {
             if (value.isString && value.content == "auto") return CoverEnding.AUTO
             if (!value.isString) value.booleanOrNull?.let { return if (it) CoverEnding.YES else CoverEnding.NO }
@@ -364,7 +365,7 @@ object PresetParser {
             when {
                 s.length > maxLength -> error(key, "is longer than $maxLength characters")
                 text && s.isBlank() -> error(key, "is empty")
-                text && s.any { it.isISOControl() && it != '\n' } -> error(key, "contains control characters")
+                text && !TextRules.isAllowed(s, allowNewlines = true) -> error(key, "contains control or invisible characters")
                 !text && pattern != null && !pattern.matches(s) -> error(key, "has characters that aren't allowed")
                 else -> return s
             }

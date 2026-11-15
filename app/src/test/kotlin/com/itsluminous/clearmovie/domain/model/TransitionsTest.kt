@@ -131,7 +131,7 @@ class TransitionsTest {
     @Test
     fun `Apply to all sets every junction in one undo step`() {
         val editor = ProjectEditor(Fixtures.presetProject().addToMain(listOf(Fixtures.photo("a"), Fixtures.photo("b")), ids = ids), ids)
-        assertThat(editor.edit { applyTransitionToAll(Transition(TransitionKind.FADE_BLACK, 800)) }).isTrue()
+        assertThat(editor.edit { applyTransitionToAll(Transition(TransitionKind.FADE_BLACK, 800)) }).isEqualTo(EditResult.Applied)
         assertThat(editor.undoDepth).isEqualTo(1)
         val clips = editor.project.mainClips
         // Intro to first, between the items, and last to ending.
@@ -273,7 +273,7 @@ class TransitionsTest {
                 .addToMain(listOf(Fixtures.photo("a"), Fixtures.video("b")), ids = ids)
                 .applyTransitionToAll(crossfade)
                 .setAnimation(ClipId("a"), AnimSlot.START, Anim(AnimKind.FADE_IN))
-        assertThat(p.normalized(ids)).isEqualTo(p)
-        assertThat(p.normalized(ids).normalized(ids)).isEqualTo(p)
+        assertThat(p.normalized()).isEqualTo(p)
+        assertThat(p.normalized().normalized()).isEqualTo(p)
     }
 }

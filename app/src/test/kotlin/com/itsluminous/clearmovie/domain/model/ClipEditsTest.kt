@@ -308,7 +308,14 @@ class ClipEditsTest {
                 .animations.start!!
                 .kind,
         ).isEqualTo(AnimKind.POP)
-        assertThat(p.setAnimation(text, AnimSlot.DURING, Anim(AnimKind.PULSE)).assertValid()).isNotNull()
+        assertThat(
+            p
+                .setAnimation(text, AnimSlot.DURING, Anim(AnimKind.PULSE))
+                .assertValid()
+                .requireClip(text)
+                .animations.during!!
+                .kind,
+        ).isEqualTo(AnimKind.PULSE)
         // Wrong slot, wrong clip kind, wrong length.
         assertThrows(IllegalArgumentException::class.java) { p.setAnimation(a, AnimSlot.START, Anim(AnimKind.FADE_OUT)) }
         assertThrows(IllegalArgumentException::class.java) { p.setAnimation(a, AnimSlot.START, Anim(AnimKind.POP)) }
@@ -350,15 +357,23 @@ class ClipEditsTest {
                 .animations
         assertThat(short.start!!.durationMs).isEqualTo(500)
         assertThat(short.end!!.durationMs).isEqualTo(500)
-        // Too short for the minimum on both: they go.
+        // Too short for both at the minimum: the start animation stays, the end one goes.
         val tiny =
             p
                 .setPhotoDuration(a, 300)
                 .assertValid()
                 .requireClip(a)
                 .animations
-        assertThat(tiny.start).isNull()
+        assertThat(tiny.start!!.durationMs).isEqualTo(300)
         assertThat(tiny.end).isNull()
+        // Shorter than the minimum: neither fits.
+        val none =
+            p
+                .setPhotoDuration(a, 150)
+                .assertValid()
+                .requireClip(a)
+                .animations
+        assertThat(none.isEmpty).isTrue()
     }
 
     @Test

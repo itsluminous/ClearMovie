@@ -72,10 +72,11 @@ sealed interface ProjectDecodeResult {
 
 /**
  * Project JSON (stored by cm-storage in Room). The form is canonical: keys in
- * declaration order, default values left out, four-space indentation and
- * `schemaVersion` first, so the same project always gives the same bytes and
- * golden fixtures can be compared byte for byte. Optional fields may be
- * absent and take their defaults; unknown fields are ignored. A project that
+ * declaration order, every value written (only nulls are left out),
+ * four-space indentation and `schemaVersion` first, so the same project
+ * always gives the same bytes and golden fixtures can be compared byte for
+ * byte. When reading, optional fields may be absent and take their
+ * defaults, and unknown fields are ignored. A project that
  * is too large, malformed, from a newer app or invalid is refused with a
  * reason, never half-loaded.
  */
@@ -103,9 +104,16 @@ class ProjectCodec(
                 ?: return failed(ProjectDecodeResult.Reason.MALFORMED, "no schemaVersion")
         if (version > migrations.currentVersion) return failed(ProjectDecodeResult.Reason.NEWER_VERSION, "version $version")
         if (version < migrations.oldestVersion) return failed(ProjectDecodeResult.Reason.UNSUPPORTED_VERSION, "version $version")
+        val upgraded =
+            try {
+                migrations.upgrade(JsonObject(root - VERSION_KEY), version)
+            } catch (e: RuntimeException) {
+                // A migration step reads old JSON that may be damaged; whatever it
+                // throws is a refusal, never a crash.
+                return failed(ProjectDecodeResult.Reason.MALFORMED, "could not upgrade from version $version")
+            }
         val project =
             try {
-                val upgraded = migrations.upgrade(JsonObject(root - VERSION_KEY), version)
                 json.decodeFromJsonElement(Project.serializer(), upgraded)
             } catch (e: IllegalArgumentException) {
                 // SerializationException is an IllegalArgumentException, and so are
@@ -130,7 +138,9 @@ class ProjectCodec(
         internal val json =
             Json {
                 prettyPrint = true
-                encodeDefaults = false
+                // Every value is written, defaults included, so a stored project
+                // never changes meaning when a default in the code changes later.
+                encodeDefaults = true
                 explicitNulls = false
                 ignoreUnknownKeys = true
                 classDiscriminator = "type"

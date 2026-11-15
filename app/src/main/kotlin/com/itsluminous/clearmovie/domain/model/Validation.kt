@@ -35,6 +35,12 @@ data class Violation(
 
         /** Names, captions and styles are within limits. */
         TEXT,
+
+        /** Clips anchored to the frame or the ending have exactly the span they follow. */
+        ANCHOR,
+
+        /** The project's frozen preset settings (ducking, effect defaults) are in range. */
+        SETTINGS,
     }
 }
 
@@ -71,9 +77,7 @@ fun Project.validate(): List<Violation> =
         }
         for (track in tracks) checkTrack(track, ::fail)
 
-        name?.let {
-            if (it.isBlank() || it.length > Limits.MAX_NAME_LENGTH || it.any(Char::isISOControl)) fail(Violation.Rule.TEXT, "project name")
-        }
+        name?.let { if (!TextRules.isValidName(it)) fail(Violation.Rule.TEXT, "project name") }
         captionDefaults.problems().forEach { fail(Violation.Rule.TEXT, it) }
         if (photoDurationMs !in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) fail(Violation.Rule.RANGE, "photo duration")
         transitionForAll?.let {
@@ -81,7 +85,47 @@ fun Project.validate(): List<Violation> =
                 fail(Violation.Rule.TRANSITION, "Apply to all transition")
             }
         }
+        checkSettings(::fail)
+        if (mains == 1) checkAnchors(::fail)
     }
+
+private fun Project.checkSettings(fail: (Violation.Rule, String) -> Unit) {
+    val levels = Limits.MIN_VOLUME_DB..0.0
+    val d = ducking
+    if (listOf(d.musicUnderClipDb, d.musicUnderVoiceDb, d.speechDuckDb).any { !it.isFinite() || it !in levels }) {
+        fail(Violation.Rule.SETTINGS, "ducking level")
+    }
+    if (d.attackMs !in 0..MAX_RAMP_MS || d.releaseMs !in 0..MAX_RAMP_MS) fail(Violation.Rule.SETTINGS, "ducking ramp")
+    val e = effectDefaults
+    e.mainTransition?.let {
+        if (it.kind == TransitionKind.NONE || it.durationMs !in Transition.MIN_MS..Transition.MAX_MS) {
+            fail(Violation.Rule.SETTINGS, "default transition")
+        }
+    }
+    e.photoDuring?.let { if (AnimSlot.DURING !in it.slots || it.textOnly) fail(Violation.Rule.SETTINGS, "default photo animation") }
+    e.textStart?.let { if (AnimSlot.START !in it.slots || it.photoOnly) fail(Violation.Rule.SETTINGS, "default caption animation") }
+}
+
+private const val MAX_RAMP_MS = 5000L
+
+/** Anchored clips must already have the span they follow, so loading a file never moves them behind the user's back. */
+private fun Project.checkAnchors(fail: (Violation.Rule, String) -> Unit) {
+    for (track in tracks) {
+        for (clip in track.clips) {
+            val anchor =
+                when (clip) {
+                    is OverlayClip -> clip.anchor
+                    is AudioClip -> clip.anchor
+                    else -> null
+                } ?: continue
+            val span = anchorSpan(anchor)
+            when {
+                span == null -> fail(Violation.Rule.ANCHOR, "${clip.id.value} follows an ending that is not there")
+                clip.respanned(span.first, span.second) != clip -> fail(Violation.Rule.ANCHOR, "${clip.id.value} does not follow its span")
+            }
+        }
+    }
+}
 
 private fun Project.checkTrack(
     track: Track,
@@ -172,7 +216,7 @@ private fun Project.checkMain(
     }
     transitionForAll?.let { all ->
         main.zipWithNext().forEach { (a, b) ->
-            if (a.transitionToNext != Timeline.fit(all, a.durationMs, b.durationMs)) {
+            if (!isContinuousSplit(a, b) && a.transitionToNext != Timeline.fit(all, a.durationMs, b.durationMs)) {
                 fail(Violation.Rule.TRANSITION, "${a.id.value}: Apply to all is set but this junction differs")
             }
         }
@@ -226,7 +270,7 @@ private fun Project.checkClipRanges(
         }
 
         is TextClip -> {
-            if (clip.text.length > Limits.MAX_TEXT_LENGTH || clip.text.any { it.isISOControl() && it != '\n' }) {
+            if (clip.text.length > Limits.MAX_TEXT_LENGTH || !TextRules.isAllowed(clip.text, allowNewlines = true)) {
                 fail(Violation.Rule.TEXT, "$id: caption text")
             }
         }
@@ -234,7 +278,7 @@ private fun Project.checkClipRanges(
         is CardClip -> {
             clip.text?.let {
                 if (it.length > Limits.MAX_TEXT_LENGTH ||
-                    it.any { c -> c.isISOControl() && c != '\n' }
+                    !TextRules.isAllowed(it, allowNewlines = true)
                 ) {
                     fail(Violation.Rule.TEXT, "$id: card text")
                 }

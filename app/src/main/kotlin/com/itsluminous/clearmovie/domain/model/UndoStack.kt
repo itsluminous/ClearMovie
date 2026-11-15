@@ -52,6 +52,24 @@ class UndoStack<T>(
     }
 }
 
+/** What [ProjectEditor.edit] did. */
+sealed interface EditResult {
+    /** The edit was applied and is one undo step. */
+    data object Applied : EditResult
+
+    /** The edit changed nothing, so no step was added. */
+    data object Unchanged : EditResult
+
+    /**
+     * The edit was refused and the project is as it was. [reason] is for logs
+     * and tests, not for the user (the UI only offers edits that apply).
+     */
+    data class Refused(
+        val reason: String,
+        val violations: List<Violation> = emptyList(),
+    ) : EditResult
+}
+
 /**
  * The editing session over one project: each [edit] is one undo step, and
  * only a valid result is accepted. An edit that throws, or whose result
@@ -77,23 +95,20 @@ class ProjectEditor(
         require(problems.isEmpty()) { "The project is not valid: $problems" }
     }
 
-    /**
-     * Applies [change] (an operation from `Edits`, given this editor's
-     * [IdSource]). Returns false, and changes nothing, when the operation
-     * refuses or the result is invalid.
-     */
-    fun edit(change: Project.(IdSource) -> Project): Boolean {
+    /** Applies [change] (an operation from `Edits`, given this editor's [IdSource]). */
+    fun edit(change: Project.(IdSource) -> Project): EditResult {
         val next =
             try {
-                project.change(ids).normalized(ids)
+                project.change(ids).normalized()
             } catch (e: IllegalArgumentException) {
-                return false
+                return EditResult.Refused(e.message.orEmpty())
             }
-        if (next == project) return false
-        if (next.validate().isNotEmpty()) return false
+        if (next == project) return EditResult.Unchanged
+        val problems = next.validate()
+        if (problems.isNotEmpty()) return EditResult.Refused("the result breaks an invariant", problems)
         history.push(project)
         project = next
-        return true
+        return EditResult.Applied
     }
 
     fun undo(): Boolean {

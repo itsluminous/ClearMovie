@@ -21,7 +21,7 @@ internal fun Project.screenIndexForNewTrack(type: TrackType): Int {
 /**
  * The stacking position (an index into the bottom-first [Project.stacking])
  * for a new visual row of [type]: TEXT on top of everything, OVERLAY just under
- * the lowest TEXT row, VISUAL just above MAIN.
+ * the lowest TEXT row (but above MAIN), VISUAL just above MAIN.
  */
 internal fun Project.stackIndexForNewTrack(type: TrackType): Int =
     when (type) {
@@ -30,8 +30,9 @@ internal fun Project.stackIndexForNewTrack(type: TrackType): Int =
         }
 
         TrackType.OVERLAY -> {
+            // Just under the lowest text row, but never under MAIN, where it would be hidden.
             val lowestText = stacking.indexOfFirst { id -> track(id)?.type == TrackType.TEXT }
-            if (lowestText >= 0) lowestText else stacking.size
+            if (lowestText >= 0) maxOf(lowestText, stackIndex(main.id) + 1) else stacking.size
         }
 
         TrackType.VISUAL -> {

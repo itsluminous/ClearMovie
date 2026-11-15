@@ -104,7 +104,7 @@ class TracksTest {
         val clipId = row.clips.single().id
         val rowCount = editor.project.tracks.size
 
-        assertThat(editor.edit { deleteClip(clipId) }).isTrue()
+        assertThat(editor.edit { deleteClip(clipId) }).isEqualTo(EditResult.Applied)
         assertThat(editor.project.track(row.id)).isNull()
         assertThat(editor.project.stacking).doesNotContain(row.id)
         assertThat(editor.project.tracks).hasSize(rowCount - 1)
@@ -131,12 +131,18 @@ class TracksTest {
         assertThrows(IllegalArgumentException::class.java) { p.removeRow(p.main.id) }
         assertThrows(IllegalArgumentException::class.java) { p.removeRow(frame.id) }
 
-        // Deleting the frame switches the row off instead of removing it.
+        // Deleting the frame switches the row off and keeps the frame, so On brings it back.
         val noFrame = p.deleteClip(frame.clips.single().id).assertValid()
         val kept = noFrame.requireTrack(frame.id)
-        assertThat(kept.clips).isEmpty()
+        assertThat(kept.clips).isEqualTo(frame.clips)
         assertThat(kept.enabled).isFalse()
         assertThat(noFrame.stacking).contains(frame.id)
+        assertThat(noFrame.setTrackEnabled(frame.id, true)).isEqualTo(p)
+        // If the user moved the frame off its row, the emptied row is switched off, not removed.
+        val other = TrackId("other")
+        val moved = p.addRow(TrackType.OVERLAY, id = other).moveClip(frame.clips.single().id, 0, other, ids).assertValid()
+        assertThat(moved.requireTrack(frame.id).clips).isEmpty()
+        assertThat(moved.requireTrack(frame.id).enabled).isFalse()
 
         // Deleting every MAIN item keeps MAIN.
         val emptyMain =

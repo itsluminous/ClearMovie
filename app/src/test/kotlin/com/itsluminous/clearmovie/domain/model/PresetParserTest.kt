@@ -216,6 +216,7 @@ class PresetParserTest {
         assertThat(ok(bundledWith("frame.coverEnding", "true")).preset.frame!!.coverEnding).isEqualTo(CoverEnding.YES)
         assertThat(ok(bundledWith("frame.coverEnding", "false")).preset.frame!!.coverEnding).isEqualTo(CoverEnding.NO)
         assertThat(ok(bundledWith("frame.coverEnding", null)).preset.frame!!.coverEnding).isEqualTo(CoverEnding.AUTO)
+        assertThat(ok(bundledWith("frame.coverEnding", "null")).preset.frame!!.coverEnding).isEqualTo(CoverEnding.AUTO)
         assertThat(
             ok(bundledWith("frame.music.enabled", "false"))
                 .preset.frame!!
@@ -250,7 +251,9 @@ class PresetParserTest {
         assertThat(errors(bundledWithTop(bundledWith("displayNameRes", null), "displayName", "{ \"en\": \"$longName\" }")))
             .contains("displayName.en: is longer than 60 characters")
         assertThat(errors(bundledWithTop(bundledWith("displayNameRes", null), "displayName", "{ \"en\": \"bell\\u0007\" }")))
-            .contains("displayName.en: contains control characters")
+            .contains("displayName.en: contains control or invisible characters")
+        assertThat(errors(bundledWithTop(bundledWith("displayNameRes", null), "displayName", "{ \"en\": \"\u202Eevil\" }")))
+            .contains("displayName.en: contains control or invisible characters")
     }
 
     @Test

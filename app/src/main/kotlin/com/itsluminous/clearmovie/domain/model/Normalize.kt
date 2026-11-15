@@ -5,96 +5,93 @@ package com.itsluminous.clearmovie.domain.model
  * ends here, so the rules below hold after any change:
  * - MAIN clips have `startMs = 0`; a NONE transition is stored as null; the
  *   last MAIN clip owns no transition.
- * - With **Apply to all** set, every MAIN junction has that transition.
+ * - With **Apply to all** set, every MAIN junction has that transition,
+ *   except the cut between two continuous halves of a split, which never
+ *   gets one (section 6.4).
  * - Each transition is fitted to the clips it joins (at most half the shorter
- *   one, section 6.4), or dropped when it no longer fits.
- * - START and END animations fit inside their clip.
+ *   one), or dropped when it no longer fits.
  * - Clips anchored to the frame span or the ending follow the MAIN row; a
- *   clip anchored to an ending that is gone is removed.
+ *   clip anchored to an ending that is gone is removed, with its
+ *   closing-message row.
  * - A clip an anchored clip grew over is moved to another row, so rows
  *   never overlap.
+ * - START and END animations, and a sound's fades, fit inside their clip.
  *
- * It is idempotent: normalising a normalised project changes nothing.
+ * It is a pure function of the project (a row it has to create gets an id
+ * derived from the clip it holds), and idempotent: normalising a normalised
+ * project changes nothing.
  */
-fun Project.normalized(ids: IdSource = RandomIds): Project =
+fun Project.normalized(): Project =
     normalizeMain()
-        .normalizeAnimations()
-        .normalizeAnchors(ids)
+        .normalizeAnchors()
+        .normalizeFits()
+
+/** Two neighbouring halves of one split, still continuous: the cut between them takes no transition. */
+internal fun isContinuousSplit(
+    a: Clip,
+    b: Clip,
+): Boolean =
+    a is VideoClip &&
+        b is VideoClip &&
+        a.splitGroup != null &&
+        a.splitGroup == b.splitGroup &&
+        a.media == b.media &&
+        a.trimEndMs == b.trimStartMs
 
 private fun Project.normalizeMain(): Project {
     val clips = main.clips.filterIsInstance<MainClip>()
+    val forAll = transitionForAll?.takeUnless { it.kind == TransitionKind.NONE }
     val fixed =
         clips.mapIndexed { i, clip ->
+            val next = clips.getOrNull(i + 1)
             val wanted =
                 when {
-                    i == clips.lastIndex -> null
-                    transitionForAll != null -> transitionForAll
+                    next == null -> null
+                    forAll != null && !isContinuousSplit(clip, next) -> forAll
                     else -> clip.transitionToNext
                 }
-            val fitted = if (i < clips.lastIndex) Timeline.fit(wanted, clip.durationMs, clips[i + 1].durationMs) else null
+            val fitted = if (next != null) Timeline.fit(wanted, clip.durationMs, next.durationMs) else null
             val placed = if (clip.startMs != 0L) clip.withStartMs(0) as MainClip else clip
             if (placed.transitionToNext == fitted) placed else placed.withTransition(fitted)
         }
-    val forAll = transitionForAll?.takeUnless { it.kind == TransitionKind.NONE }
     return withTrackClips(main.id, fixed).copy(transitionForAll = forAll)
 }
 
-private fun Project.normalizeAnimations(): Project =
-    copy(
-        tracks =
-            tracks.map { track ->
-                track.copy(clips = track.clips.map { it.withFittedAnimations() })
-            },
-    )
-
-/** START and END animations shortened to fit the clip together, or dropped when they can't. */
-internal fun Clip.withFittedAnimations(): Clip {
-    if (this is AudioClip || animations.isEmpty) return this
-    val a = animations
-    val both = a.start != null && a.end != null
-    val cap = if (both) durationMs / 2 else durationMs
-
-    fun fit(anim: Anim?): Anim? {
-        if (anim == null) return null
-        val length = minOf(anim.durationMs.coerceIn(Anim.MIN_MS, Anim.MAX_MS), cap)
-        return when {
-            length < Anim.MIN_MS -> null
-            length == anim.durationMs -> anim
-            else -> anim.copy(durationMs = length)
+private val Clip.anchor: SpanAnchor?
+    get() =
+        when (this) {
+            is OverlayClip -> anchor
+            is AudioClip -> anchor
+            else -> null
         }
-    }
-    val fitted = a.copy(start = fit(a.start), end = fit(a.end))
-    return if (fitted == a) this else withAnimations(fitted)
-}
 
-private fun Project.normalizeAnchors(ids: IdSource): Project {
+private fun Project.normalizeAnchors(): Project {
     var project = this
     for (track in tracks) {
         for (clip in track.clips) {
-            val anchor =
-                when (clip) {
-                    is OverlayClip -> clip.anchor
-                    is AudioClip -> clip.anchor
-                    else -> null
-                } ?: continue
+            val anchor = clip.anchor ?: continue
+            val current = project.track(track.id) ?: continue
             val span = project.anchorSpan(anchor)
-            val current = project.track(track.id)!!
             if (span == null) {
-                project = project.withTrackClips(track.id, current.clips.filterNot { it.id == clip.id })
+                val rest = current.clips.filterNot { it.id == clip.id }
+                project = project.withTrackClips(track.id, rest)
+                if (rest.isEmpty() && current.presetRole == PresetRole.CLOSING_MESSAGE) {
+                    project = project.copy(tracks = project.tracks.filterNot { it.id == track.id })
+                }
                 continue
             }
             val respanned = clip.respanned(span.first, span.second)
             if (respanned != clip) {
                 project = project.withTrackClips(track.id, current.clips.map { if (it.id == clip.id) respanned else it })
             }
-            project = project.moveAsideFrom(track.id, respanned, ids)
+            project = project.moveAsideFrom(track.id, respanned)
         }
     }
     return project
 }
 
 /** The clip moved to [start] and stretched to [end] (capped at its media when it does not repeat). */
-private fun Clip.respanned(
+internal fun Clip.respanned(
     start: Long,
     end: Long,
 ): Clip {
@@ -110,14 +107,92 @@ private fun Clip.respanned(
 private fun Project.moveAsideFrom(
     trackId: TrackId,
     keep: Clip,
-    ids: IdSource,
 ): Project {
     val track = track(trackId)!!
-    val inTheWay = track.clips.filter { it.id != keep.id && !track.copy(clips = listOf(keep)).isFree(it.startMs, it.endMs) }
+    val keepOnly = track.copy(clips = listOf(keep))
+    val inTheWay = track.clips.filter { it.id != keep.id && !keepOnly.isFree(it.startMs, it.endMs) }
     if (inTheWay.isEmpty()) return this
     var project = withTrackClips(trackId, track.clips - inTheWay.toSet())
     for (clip in inTheWay) {
-        project = project.placeTimed(clip, preferred = null, role = track.audioRole, ids = ids).first
+        val p = project
+        project = p.placeTimed(clip, preferred = null, role = track.audioRole, ids = { p.freshTrackId(clip.id).value }).first
     }
     return project
+}
+
+/** `row-<clip id>`, with `-2`, `-3`... when taken: a stable id for a row normalisation has to create. */
+private fun Project.freshTrackId(forClip: ClipId): TrackId {
+    val base = "row-" + forClip.value.take(MAX_BASE)
+    var candidate = base
+    var n = 1
+    while (tracks.any { it.id.value == candidate }) candidate = "$base-${++n}"
+    return TrackId(candidate)
+}
+
+private const val MAX_BASE = 54
+
+private fun Project.normalizeFits(): Project =
+    copy(tracks = tracks.map { track -> track.copy(clips = track.clips.map { it.withFittedAnimations().withFittedFades() }) })
+
+/**
+ * START and END animations shortened to fit the clip together. Each is first
+ * capped at the clip; if together they are still too long, the longer one
+ * gives way to the shorter, then both share the clip equally, and if even
+ * that is under the minimum only the START animation is kept. The result
+ * depends only on the clip, never on the order the animations were set.
+ */
+internal fun Clip.withFittedAnimations(): Clip {
+    if (this is AudioClip || animations.isEmpty) return this
+    val a = animations
+    val d = durationMs
+    var s =
+        a.start
+            ?.durationMs
+            ?.coerceIn(Anim.MIN_MS, Anim.MAX_MS)
+            ?.coerceAtMost(d)
+    var e =
+        a.end
+            ?.durationMs
+            ?.coerceIn(Anim.MIN_MS, Anim.MAX_MS)
+            ?.coerceAtMost(d)
+    if (s != null && e != null && s + e > d) {
+        when {
+            s <= e && d - s >= Anim.MIN_MS -> {
+                e = d - s
+            }
+
+            e < s && d - e >= Anim.MIN_MS -> {
+                s = d - e
+            }
+
+            d / 2 >= Anim.MIN_MS -> {
+                s = d / 2
+                e = d / 2
+            }
+
+            else -> {
+                e = null
+            }
+        }
+    }
+
+    fun fit(
+        anim: Anim?,
+        length: Long?,
+    ): Anim? =
+        when {
+            anim == null || length == null || length < Anim.MIN_MS -> null
+            length == anim.durationMs -> anim
+            else -> anim.copy(durationMs = length)
+        }
+    val fitted = a.copy(start = fit(a.start, s), end = fit(a.end, e))
+    return if (fitted == a) this else withAnimations(fitted)
+}
+
+/** A sound's fades shortened, in proportion, to fit inside it together. */
+internal fun Clip.withFittedFades(): Clip {
+    if (this !is AudioClip || durationMs <= 0 || fadeInMs + fadeOutMs <= durationMs) return this
+    val total = fadeInMs + fadeOutMs
+    val fadeIn = fadeInMs * durationMs / total
+    return copy(fadeInMs = fadeIn, fadeOutMs = minOf(fadeOutMs, durationMs - fadeIn))
 }

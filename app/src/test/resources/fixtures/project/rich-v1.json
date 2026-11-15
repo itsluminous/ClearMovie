@@ -16,11 +16,18 @@
                     "startMs": 9000,
                     "durationMs": 2000,
                     "sourceDurationMs": 2500,
+                    "trimStartMs": 0,
+                    "trimEndMs": 2500,
+                    "repeat": false,
+                    "volumeDb": 0.0,
                     "fadeInMs": 200,
                     "fadeOutMs": 300
                 }
             ],
-            "audioRole": "voice"
+            "muted": false,
+            "enabled": true,
+            "audioRole": "voice",
+            "lowerWhenTalking": true
         },
         {
             "id": "g3",
@@ -35,12 +42,14 @@
                     "style": {
                         "align": "start",
                         "sizePx": 72,
+                        "clearOutline": false,
                         "clearBackground": true
                     },
                     "animations": {
                         "start": {
                             "kind": "pop",
-                            "durationMs": 400
+                            "durationMs": 400,
+                            "seed": 0
                         }
                     }
                 },
@@ -49,9 +58,17 @@
                     "id": "g12",
                     "startMs": 12000,
                     "durationMs": 2500,
-                    "text": "Line one\nLine two"
+                    "text": "Line one\nLine two",
+                    "style": {
+                        "clearOutline": false,
+                        "clearBackground": false
+                    },
+                    "animations": {}
                 }
-            ]
+            ],
+            "muted": false,
+            "enabled": true,
+            "lowerWhenTalking": true
         },
         {
             "id": "overlay",
@@ -71,9 +88,14 @@
                         "color": "#00FF00",
                         "tolerance": 0.2,
                         "softness": 0.1
-                    }
+                    },
+                    "repeat": true,
+                    "animations": {}
                 }
-            ]
+            ],
+            "muted": false,
+            "enabled": true,
+            "lowerWhenTalking": true
         },
         {
             "id": "g6",
@@ -94,14 +116,19 @@
                         "tolerance": 0.18,
                         "softness": 0.08
                     },
+                    "repeat": true,
                     "anchor": {
                         "type": "frame",
                         "startAfterIntro": true,
                         "coverEnding": true
-                    }
+                    },
+                    "animations": {}
                 }
             ],
-            "presetRole": "frame"
+            "muted": false,
+            "enabled": true,
+            "presetRole": "frame",
+            "lowerWhenTalking": true
         },
         {
             "id": "pip",
@@ -116,12 +143,18 @@
                     },
                     "durationMs": 2500,
                     "startMs": 8000,
+                    "rotation": "0",
+                    "fit": "fillCrop",
                     "pip": {
                         "corner": "bottomLeft",
                         "scale": 0.3
-                    }
+                    },
+                    "animations": {}
                 }
-            ]
+            ],
+            "muted": false,
+            "enabled": true,
+            "lowerWhenTalking": true
         },
         {
             "id": "g4",
@@ -130,7 +163,9 @@
                 {
                     "type": "intro",
                     "id": "g1",
-                    "durationMs": 6500
+                    "durationMs": 6500,
+                    "startMs": 0,
+                    "animations": {}
                 },
                 {
                     "type": "photo",
@@ -140,6 +175,7 @@
                         "uri": "content://media/external/images/media/photo1"
                     },
                     "durationMs": 4000,
+                    "startMs": 0,
                     "rotation": "90",
                     "fit": "fitBlur",
                     "transitionToNext": {
@@ -149,6 +185,7 @@
                     "animations": {
                         "during": {
                             "kind": "gentleZoomIn",
+                            "durationMs": 500,
                             "seed": 7
                         }
                     }
@@ -164,7 +201,12 @@
                     "trimStartMs": 1000,
                     "trimEndMs": 9000,
                     "speed": "1.5",
-                    "volumeDb": -3.5
+                    "loops": 1,
+                    "volumeDb": -3.5,
+                    "startMs": 0,
+                    "rotation": "0",
+                    "fit": "fillCrop",
+                    "animations": {}
                 },
                 {
                     "type": "card",
@@ -172,10 +214,16 @@
                     "durationMs": 3000,
                     "color": "#202040",
                     "text": "Thank you",
+                    "style": {
+                        "clearOutline": false,
+                        "clearBackground": false
+                    },
+                    "startMs": 0,
                     "transitionToNext": {
                         "kind": "slideLeft",
                         "durationMs": 600
-                    }
+                    },
+                    "animations": {}
                 },
                 {
                     "type": "video",
@@ -185,9 +233,16 @@
                         "uri": "content://media/external/images/media/video2"
                     },
                     "sourceDurationMs": 5000,
+                    "trimStartMs": 0,
                     "trimEndMs": 4000,
+                    "speed": "1",
+                    "loops": 1,
                     "splitGroup": "video2",
-                    "fit": "fitBars"
+                    "volumeDb": 0.0,
+                    "startMs": 0,
+                    "rotation": "0",
+                    "fit": "fitBars",
+                    "animations": {}
                 },
                 {
                     "type": "video",
@@ -198,12 +253,19 @@
                     },
                     "sourceDurationMs": 5000,
                     "trimStartMs": 4000,
+                    "trimEndMs": 5000,
+                    "speed": "1",
+                    "loops": 1,
                     "splitGroup": "video2",
+                    "volumeDb": 0.0,
+                    "startMs": 0,
+                    "rotation": "0",
                     "fit": "fitBars",
                     "animations": {
                         "end": {
                             "kind": "fadeOut",
-                            "durationMs": 700
+                            "durationMs": 700,
+                            "seed": 0
                         }
                     }
                 },
@@ -215,15 +277,28 @@
                         "uri": "content://media/external/images/media/video3"
                     },
                     "sourceDurationMs": 2000,
-                    "loops": 3
+                    "trimStartMs": 0,
+                    "trimEndMs": 2000,
+                    "speed": "1",
+                    "loops": 3,
+                    "volumeDb": 0.0,
+                    "startMs": 0,
+                    "rotation": "0",
+                    "fit": "fillCrop",
+                    "animations": {}
                 },
                 {
                     "type": "ending",
                     "id": "g2",
                     "durationMs": 6000,
-                    "kind": "audio"
+                    "kind": "audio",
+                    "startMs": 0,
+                    "animations": {}
                 }
-            ]
+            ],
+            "muted": false,
+            "enabled": true,
+            "lowerWhenTalking": true
         },
         {
             "id": "g8",
@@ -239,8 +314,12 @@
                     "startMs": 6500,
                     "durationMs": 27933,
                     "sourceDurationMs": 304000,
+                    "trimStartMs": 0,
+                    "trimEndMs": 304000,
                     "repeat": true,
                     "volumeDb": -8.0,
+                    "fadeInMs": 0,
+                    "fadeOutMs": 0,
                     "anchor": {
                         "type": "frame",
                         "startAfterIntro": true,
@@ -248,8 +327,11 @@
                     }
                 }
             ],
+            "muted": false,
+            "enabled": true,
             "audioRole": "music",
-            "presetRole": "frameMusic"
+            "presetRole": "frameMusic",
+            "lowerWhenTalking": true
         },
         {
             "id": "g10",
@@ -265,13 +347,22 @@
                     "startMs": 28433,
                     "durationMs": 6000,
                     "sourceDurationMs": 6000,
+                    "trimStartMs": 0,
+                    "trimEndMs": 6000,
+                    "repeat": false,
+                    "volumeDb": 0.0,
+                    "fadeInMs": 0,
+                    "fadeOutMs": 0,
                     "anchor": {
                         "type": "ending"
                     }
                 }
             ],
+            "muted": false,
+            "enabled": true,
             "audioRole": "voice",
-            "presetRole": "closingMessage"
+            "presetRole": "closingMessage",
+            "lowerWhenTalking": true
         }
     ],
     "stacking": [
@@ -283,6 +374,28 @@
     ],
     "name": "Family day",
     "presetId": "event-frame",
+    "captionDefaults": {
+        "box": {
+            "x": 0.16,
+            "y": 0.62,
+            "w": 0.81,
+            "h": 0.14
+        },
+        "align": "center",
+        "font": "noto_sans_devanagari_bold",
+        "sizePx": 64,
+        "color": "#FFFFFF",
+        "outline": {
+            "color": "#000000",
+            "widthPx": 4
+        },
+        "background": {
+            "color": "#99000000",
+            "cornerPx": 12
+        }
+    },
+    "photoDurationMs": 3000,
+    "defaultFit": "fillCrop",
     "effectDefaults": {
         "photoDuring": "gentleZoomIn",
         "mainTransition": {
@@ -290,5 +403,12 @@
             "durationMs": 600
         },
         "textStart": "fadeIn"
+    },
+    "ducking": {
+        "musicUnderClipDb": -12.0,
+        "musicUnderVoiceDb": -20.0,
+        "speechDuckDb": -20.0,
+        "attackMs": 300,
+        "releaseMs": 300
     }
 }

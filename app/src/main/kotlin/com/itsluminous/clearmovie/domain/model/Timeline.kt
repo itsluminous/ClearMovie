@@ -68,19 +68,27 @@ fun Project.mainSlot(clipId: ClipId): MainSlot? = mainLayout().firstOrNull { it.
 /** The end of the intro, or 0 without one. */
 fun Project.introEndMs(): Long = mainLayout().firstOrNull()?.takeIf { it.clip is IntroClip }?.endMs ?: 0L
 
+/**
+ * Where the first item after the intro starts: the intro's end, less the
+ * transition into that item when there is one. 0 without an intro.
+ */
+fun Project.contentStartMs(): Long =
+    mainLayout().firstOrNull()?.takeIf { it.clip is IntroClip }?.let { it.endMs - it.overlapToNextMs } ?: 0L
+
 /** The ending's slot, if the video has one. */
 fun Project.endingSlot(): MainSlot? = mainLayout().lastOrNull()?.takeIf { it.clip is EndingClip }
 
 /**
  * The span a time-anchored clip follows, as (start, end). For the frame this
- * is from the intro's end (or 0) to the end of the video, or to the start of
- * the ending when the frame does not cover it. Null for an [SpanAnchor.Ending]
- * when there is no ending.
+ * is from where the content after the intro starts (or 0) to the end of the
+ * video, or to the start of the ending when the frame does not cover it, so
+ * the frame arrives and leaves with the content, transitions included. Null
+ * for an [SpanAnchor.Ending] when there is no ending.
  */
 fun Project.anchorSpan(anchor: SpanAnchor): Pair<Long, Long>? =
     when (anchor) {
         is SpanAnchor.Frame -> {
-            val start = if (anchor.startAfterIntro) introEndMs() else 0L
+            val start = if (anchor.startAfterIntro) contentStartMs() else 0L
             val ending = endingSlot()
             val end = if (!anchor.coverEnding && ending != null) ending.startMs else totalDurationMs()
             start to maxOf(start, end)
