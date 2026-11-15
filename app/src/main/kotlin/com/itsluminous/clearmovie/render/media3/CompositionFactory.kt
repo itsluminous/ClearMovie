@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.SpeedParameters
 import androidx.media3.common.VideoCompositorSettings
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.ExperimentalApi
@@ -20,6 +21,7 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.render.plan.AudioSegment
+import com.itsluminous.clearmovie.render.plan.GainEnvelope
 import com.itsluminous.clearmovie.render.plan.Placement
 import com.itsluminous.clearmovie.render.plan.RenderPlan
 import com.itsluminous.clearmovie.render.plan.Source
@@ -42,6 +44,9 @@ import kotlin.math.roundToInt
  * Every visual item ends in a [PlacementEffect], so every layer is a
  * canvas-sized frame that is transparent where it draws nothing.
  *
+ * [gainProcessor] makes each item's gain processor; tests pass one that
+ * records what Media3 tells it.
+ *
  * @throws MediaUnavailableException from [build] when a clip's media is gone.
  */
 @OptIn(ExperimentalApi::class)
@@ -49,6 +54,7 @@ import kotlin.math.roundToInt
 class CompositionFactory(
     private val context: Context,
     private val resolver: MediaResolver,
+    private val gainProcessor: (GainEnvelope) -> AudioProcessor = ::GainEnvelopeAudioProcessor,
 ) {
     private val assets = RenderAssets(context)
     private val guard = UriGuard(context)
@@ -61,6 +67,13 @@ class CompositionFactory(
         for (layer in plan.visual.asReversed()) {
             val items = layer.segments.map { visualItem(plan, it, captions) }
             sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItems(items).build()
+        }
+        // Always at least two visual sequences, so preview and export both run
+        // the multi-input graph and compositor (a single layer gets a
+        // transparent one under it): the same code path for every project.
+        if (plan.visual.size == 1) {
+            val fill = visualItem(plan, VisualSegment.Fill(0, plan.durationUs), captions)
+            sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItem(fill).build()
         }
         for (layer in plan.audio) {
             val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
@@ -207,7 +220,7 @@ class CompositionFactory(
         return EditedMediaItem
             .Builder(item)
             .setDurationUs(segment.sourceDurationUs)
-            .setEffects(Effects(listOf(GainEnvelopeAudioProcessor(segment.gain)), listOf()))
+            .setEffects(Effects(listOf(gainProcessor(segment.gain)), listOf()))
             .apply { speedParameters(segment.speed)?.let { setSpeed(it) } }
             .build()
     }

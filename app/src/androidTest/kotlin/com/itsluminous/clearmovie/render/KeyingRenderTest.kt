@@ -25,8 +25,8 @@ import org.junit.runner.RunWith
 /**
  * Risk 1 and the keying acceptance (ROADMAP cm-render): the preset frame is
  * keyed in a multi-sequence composition whose frame row starts with a
- * transparent fill (it begins after the intro) and repeats a 4 s frame
- * video over 13 s. Window pixels show the clip, border pixels stay the frame,
+ * transparent fill (it begins after the intro) and repeats a 12 s frame
+ * video over 13 s (the second copy, cut to 1 s, plays from 14 s). Window pixels show the clip, border pixels stay the frame,
  * the logo that overlaps the window stays, no key green is left, and the
  * intro is not hidden at t = 1 s.
  */
@@ -46,7 +46,7 @@ class KeyingRenderTest {
         val ids = SequentialIds("k")
         val project =
             ProjectFactory
-                .fromPreset(ProjectId("keying"), RenderHarness.preset, PresetMedia(introMs = 2000, frameMs = 4000, endingMs = 3000), ids)
+                .fromPreset(ProjectId("keying"), RenderHarness.preset, PresetMedia(introMs = 2000, frameMs = 12000, endingMs = 3000), ids)
                 .addToMain(
                     listOf(
                         PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 3000),
@@ -110,6 +110,7 @@ class KeyingRenderTest {
                 Check(6.5, "video-dark", 0.5, 0.5, darkCentre),
                 Check(10.0, "photo-blue", 0.5, 0.5, intArrayOf(32, 64, 224)),
                 Check(13.5, "held-last-under-closing", 0.5, 0.5, intArrayOf(32, 64, 224)),
+                Check(14.5, "second-frame-copy", 0.5, 0.5, intArrayOf(32, 64, 224)),
             )
         for ((timeS, group) in checks.groupBy { it.timeS }) {
             val f = frameAt(out.file, (timeS * 1_000_000).toLong())

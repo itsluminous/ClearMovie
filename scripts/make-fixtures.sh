@@ -15,33 +15,38 @@ x264=(-c:v libx264 -preset veryslow -crf 30 -pix_fmt yuv420p -profile:v main
   -color_primaries bt709 -color_trc bt709 -colorspace bt709 -g 25 -bf 0)
 aac=(-c:a aac -b:a 48k -ar 44100)
 
-# frame.mp4: a 4 s 1920x1080 green-screen frame with the reference geometry
+# Tones are drawn with aevalsrc at an exact amplitude of 0.1 (-20 dBFS) on
+# both channels, so the ducking test can check absolute levels.
+tone() { echo "aevalsrc=0.1*sin(2*PI*$1*t)|0.1*sin(2*PI*$1*t):s=44100:d=$2"; }
+
+# frame.mp4: a 12 s 1920x1080 green-screen frame with the reference geometry
 # (ARCHITECTURE section 3): a red border, a #00D922 window at x 18-1901,
 # y 24-859, a blue strip below with a white band, and a white "logo" box
 # that overlaps the window's bottom-left corner (x 32-271, y 802-1059). A
 # white block moves along the strip so the frame is a real moving video
 # (overlay, because drawbox's "t" is its thickness, not the time).
-# Its soundtrack (the background music) is a 1 kHz tone at -20 dBFS.
+# Its soundtrack (the background music) is a 1 kHz tone at -20 dBFS. It is
+# long enough that the ducking test never meets a repeat join.
 "${ff[@]}" \
-  -f lavfi -i "color=c=0xC81414:s=1920x1080:r=30:d=4" \
-  -f lavfi -i "sine=frequency=1000:sample_rate=44100:duration=4" \
-  -f lavfi -i "color=c=0xFFFFFF:s=120x100:r=30:d=4" \
+  -f lavfi -i "color=c=0xC81414:s=1920x1080:r=30:d=12" \
+  -f lavfi -i "$(tone 1000 12)" \
+  -f lavfi -i "color=c=0xFFFFFF:s=120x100:r=30:d=12" \
   -filter_complex "[0:v]drawbox=x=18:y=24:w=1884:h=836:color=0x00D922:t=fill,\
 drawbox=x=0:y=860:w=1920:h=180:color=0x1440B4:t=fill,\
 drawbox=x=0:y=1040:w=1920:h=40:color=0xF0F0F0:t=fill,\
 drawbox=x=32:y=802:w=240:h=258:color=0xFFFFFF:t=fill,\
 drawbox=x=72:y=842:w=160:h=120:color=0x1440B4:t=fill[bg];\
 [bg][2:v]overlay=x='400+mod(t*300\,1200)':y=900[v];\
-[1:a]volume=0.1,aformat=channel_layouts=stereo[a]" \
-  -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 4 "$out/frame.mp4"
+[1:a]anull[a]" \
+  -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 12 "$out/frame.mp4"
 
 # intro.mp4: 2 s of solid orange with a moving dark block, and a 660 Hz tone.
 "${ff[@]}" \
   -f lavfi -i "color=c=0xFF8000:s=1920x1080:r=30:d=2" \
-  -f lavfi -i "sine=frequency=660:sample_rate=44100:duration=2" \
+  -f lavfi -i "$(tone 660 2)" \
   -f lavfi -i "color=c=0x402000:s=200x200:r=30:d=2" \
   -filter_complex "[0:v][2:v]overlay=x='100+t*600':y=100[v];\
-[1:a]volume=0.1,aformat=channel_layouts=stereo[a]" \
+[1:a]anull[a]" \
   -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 2 "$out/intro.mp4"
 
 # clip_dark.mp4 / clip_light.mp4: 3 s, 1280x720 (not the canvas size, so
@@ -51,18 +56,18 @@ for spec in "dark 0x3C3C3C 440" "light 0xC8C8C8 550"; do
   set -- $spec
   "${ff[@]}" \
     -f lavfi -i "color=c=$2:s=1280x720:r=30:d=3" \
-    -f lavfi -i "sine=frequency=$3:sample_rate=44100:duration=3" \
+    -f lavfi -i "$(tone "$3" 3)" \
     -f lavfi -i "color=c=0x808080:s=60x40:r=30:d=3" \
     -filter_complex "[0:v][2:v]overlay=x='mod(t*200\,1100)':y=20[v];\
-[1:a]volume=0.1,aformat=channel_layouts=stereo[a]" \
+[1:a]anull[a]" \
     -map "[v]" -map "[a]" "${x264[@]}" "${aac[@]}" -t 3 "$out/clip_$1.mp4"
 done
 
 # speech.m4a: 3 s mono "speech-like" sound, a 300 Hz tone with a 4 Hz
-# syllable-rate tremolo, peaking near -14 dBFS.
+# syllable-rate tremolo, peaking at -14 dBFS.
 "${ff[@]}" \
-  -f lavfi -i "sine=frequency=300:sample_rate=44100:duration=3" \
-  -af "volume=0.2,tremolo=f=4:d=0.6" -c:a aac -b:a 48k -ac 1 "$out/speech.m4a"
+  -f lavfi -i "aevalsrc=0.2*sin(2*PI*300*t):s=44100:d=3" \
+  -af "tremolo=f=4:d=0.6" -c:a aac -b:a 48k -ac 1 "$out/speech.m4a"
 
 # photo_blue.png: a flat blue 800x450 picture (the picture-in-picture item).
 "${ff[@]}" -f lavfi -i "color=c=0x2040E0:s=800x450:d=1" -frames:v 1 "$out/photo_blue.png"
