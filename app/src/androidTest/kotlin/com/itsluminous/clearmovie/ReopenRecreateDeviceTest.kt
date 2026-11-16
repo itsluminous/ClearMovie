@@ -26,6 +26,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.itsluminous.clearmovie.data.media.ShareHandoff
 import com.itsluminous.clearmovie.data.media.ShareLinks
 import com.itsluminous.clearmovie.data.media.SharedLinks
@@ -250,34 +251,46 @@ class ReopenRecreateDeviceTest {
     fun aReopenedEditorShowsTheSamePreviewFrameAfterRecreate() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             editorShown()
-            // A known time inside the first video on MAIN (0:04 to 0:07), away from its
-            // crossfades, so the paused picture is one frame of one clip and not a mix.
-            val fraction = KNOWN_TIME_US.toFloat() / h.plannedUs(project)
-            compose
-                .onNodeWithContentDescription(
-                    s(R.string.editor_seek),
-                ).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
-            compose.waitUntil(TIMEOUT_MS) { abs(progress() - fraction) < 0.01f }
-            val at = timeLabel()
-            val before = settledFrame()
-
-            scenario.recreate()
-            editorShown()
-            // The restored playhead, and then its picture, which the players land after it.
-            compose.waitUntil(TIMEOUT_MS) { timeLabel() == at }
-            val after = settledFrame(like = before)
-
-            save(before, "reopen-preview-before-recreate.png")
-            save(after, "reopen-preview-after-recreate.png")
-            val diff = meanAbsDiff(before, after)
-            Log.i(ExportHarness.TAG, "Preview at $at: before spread ${spread(before)}, after spread ${spread(after)}, mean abs diff $diff")
-            // A coarse picture of each capture in the log, for a run whose PNGs stay on its device (CI).
-            Log.i(ExportHarness.TAG, "Preview before (3x3 mean RGB): ${grid(before)}")
-            Log.i(ExportHarness.TAG, "Preview after (3x3 mean RGB): ${grid(after)}")
-            // A picture, not a blank surface, and the same one after the recreate.
-            assertThat(spread(before)).isGreaterThan(MIN_SPREAD)
-            assertThat(diff).isLessThan(MAX_DIFF)
+            // Each probe: seek paused, capture, recreate, capture again. All are
+            // measured and logged before any is asserted, so a failing run says
+            // which picture changed and how.
+            val results = KNOWN_TIMES_US.map { probe(scenario, it) }
+            results.forEach { (at, before, diff) ->
+                // A picture, not a blank surface, and the same one after the recreate.
+                assertWithMessage("picture at $at").that(spread(before)).isGreaterThan(MIN_SPREAD)
+                assertWithMessage("change at $at after recreate").that(diff).isLessThan(MAX_DIFF)
+            }
         }
+    }
+
+    /** Seeks to [us] paused, then compares the preview before and after a recreate. */
+    private fun probe(
+        scenario: ActivityScenario<MainActivity>,
+        us: Long,
+    ): Triple<String, Bitmap, Double> {
+        val fraction = us.toFloat() / h.plannedUs(project)
+        compose.onNodeWithContentDescription(s(R.string.editor_seek)).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
+        compose.waitUntil(TIMEOUT_MS) { abs(progress() - fraction) < 0.01f }
+        val at = timeLabel()
+        val before = settledFrame()
+
+        scenario.recreate()
+        editorShown()
+        // The restored playhead, and then its picture, which the players land after it.
+        compose.waitUntil(TIMEOUT_MS) { timeLabel() == at }
+        val after = settledFrame(like = before)
+
+        save(before, "reopen-preview-$us-before-recreate.png")
+        save(after, "reopen-preview-$us-after-recreate.png")
+        val diff = meanAbsDiff(before, after)
+        Log.i(
+            ExportHarness.TAG,
+            "Preview at $us us ($at): before spread ${spread(before)}, after spread ${spread(after)}, mean abs diff $diff",
+        )
+        // A coarse picture of each capture in the log, for a run whose PNGs stay on its device (CI).
+        Log.i(ExportHarness.TAG, "Preview at $us us before (3x3 mean RGB): ${grid(before)}")
+        Log.i(ExportHarness.TAG, "Preview at $us us after (3x3 mean RGB): ${grid(after)}")
+        return Triple(at, before, diff)
     }
 
     /**
@@ -322,11 +335,13 @@ class ReopenRecreateDeviceTest {
         const val TIMEOUT_MS = 20_000L
 
         /**
-         * Inside the first video on MAIN (0:04 to 0:07, crossfades at both ends),
-         * and away from the frame fixture's 4 s loop point (near 5.4 s here), where
-         * one frame of difference moves its white square across the window.
+         * The first video on MAIN plays from about 0:04 to 0:07. 4.2 s is just
+         * after its cut-in from the photo (where the old CI failure was seen, the
+         * spot a tap on its tile lands near); 6.0 s is inside it, away from the
+         * crossfades and from the frame fixture's 4 s loop point (near 5.4 s
+         * here), where one frame of difference moves its white square across.
          */
-        const val KNOWN_TIME_US = 6_000_000L
+        val KNOWN_TIMES_US = listOf(4_200_000L, 6_000_000L)
 
         /** Brightest minus darkest luma: a blank or single-colour surface is near 0. */
         const val MIN_SPREAD = 40
