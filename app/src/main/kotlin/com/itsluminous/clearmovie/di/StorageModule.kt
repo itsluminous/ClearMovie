@@ -14,7 +14,9 @@ import com.itsluminous.clearmovie.data.media.MediaFactsProbe
 import com.itsluminous.clearmovie.data.media.MediaResolver
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.data.media.UriGrants
+import com.itsluminous.clearmovie.data.preset.AndroidFrameKeyCheck
 import com.itsluminous.clearmovie.data.preset.AndroidMediaProbe
+import com.itsluminous.clearmovie.data.preset.FrameKeyCheck
 import com.itsluminous.clearmovie.data.preset.MediaProbe
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.project.ProjectRepository
@@ -136,6 +138,12 @@ object StorageModule {
         @ApplicationContext context: Context,
         files: AppFiles,
     ): MediaFactsProbe = AndroidMediaFactsProbe(context, files)
+
+    @Provides
+    fun provideFrameKeyCheck(
+        @ApplicationContext context: Context,
+        files: AppFiles,
+    ): FrameKeyCheck = AndroidFrameKeyCheck(context, files)
 
     @Provides
     fun provideStorageUsage(

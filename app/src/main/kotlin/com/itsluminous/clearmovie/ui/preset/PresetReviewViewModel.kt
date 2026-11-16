@@ -10,6 +10,7 @@ import com.itsluminous.clearmovie.data.media.IntakeItem
 import com.itsluminous.clearmovie.data.media.MediaAccess
 import com.itsluminous.clearmovie.data.media.MediaAccessState
 import com.itsluminous.clearmovie.data.media.MediaFactsProbe
+import com.itsluminous.clearmovie.data.preset.FrameKeyCheck
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SlotStatus
 import com.itsluminous.clearmovie.data.project.OpenResult
@@ -70,6 +71,9 @@ sealed interface ReviewMessage {
 
     /** It could not be opened or kept. */
     data object Unreadable : ReviewMessage
+
+    /** A frame of the user's own with no flat green where the preset's window is. */
+    data object NoGreenWindow : ReviewMessage
 }
 
 sealed interface ReviewEvent {
@@ -99,6 +103,7 @@ class PresetReviewViewModel
         private val mediaAccess: MediaAccess,
         private val probe: MediaFactsProbe,
         private val files: AppFiles,
+        private val frameKey: FrameKeyCheck,
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -113,7 +118,7 @@ class PresetReviewViewModel
 
         init {
             viewModelScope.launch {
-                val opened = repository.open(projectId) as? OpenResult.Opened
+                val opened = repository.open(projectId, inEditor = false) as? OpenResult.Opened
                 val presetId = opened?.project?.presetId
                 val preset = presetId?.let { presetStore.effectivePreset(it) }
                 if (preset == null) {
@@ -237,8 +242,15 @@ class PresetReviewViewModel
                                     allowNewlines = false,
                                 )
                             }?.take(PartChoice.Replace.MAX_FILE_NAME)
-                    uiState.update { it.copy(replacing = null) }
-                    choose(slot, PartChoice.Replace(ref, ms, name))
+                    // A frame of the user's own needs a flat green where the preset's window is.
+                    val frame = uiState.value.preset?.frame
+                    val green = if (slot == PresetSlot.FRAME && frame != null) frameKey.green(projectId, ref, ms, frame) else null
+                    if (slot == PresetSlot.FRAME && frame != null && green == null) {
+                        uiState.update { it.copy(replacing = null, message = ReviewMessage.NoGreenWindow) }
+                    } else {
+                        uiState.update { it.copy(replacing = null) }
+                        choose(slot, PartChoice.Replace(ref, ms, name, keyColor = green))
+                    }
                 }
             }
         }

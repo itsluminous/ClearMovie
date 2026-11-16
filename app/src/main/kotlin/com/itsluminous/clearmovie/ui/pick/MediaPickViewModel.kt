@@ -49,6 +49,9 @@ sealed interface PickEvent {
 
     /** The phone filled up during the copy; nothing was added. */
     data object OutOfSpace : PickEvent
+
+    /** The items were taken in, but the video could not be written (the phone is full). */
+    data object NotSaved : PickEvent
 }
 
 /**
@@ -159,7 +162,7 @@ class MediaPickViewModel
             addingState.value = true
             viewModelScope.launch {
                 // After a process death nothing is open yet; the intake needs the project's row.
-                if (repository.open.value?.id != projectId && repository.open(projectId) !is OpenResult.Opened) {
+                if (repository.open.value?.id != projectId && repository.open(projectId, inEditor = false) !is OpenResult.Opened) {
                     addingState.value = false
                     eventChannel.send(PickEvent.Back)
                     return@launch
@@ -168,8 +171,13 @@ class MediaPickViewModel
             }
         }
 
-        /** Back from this step. A new blank video with nothing in it is not kept. */
+        /**
+         * Back from this step. A new blank video with nothing in it is not kept.
+         * While the items are being put on MAIN (after the copies are done) Back
+         * waits: leaving then would let them land in a video the user just left.
+         */
         fun leave() {
+            if (finishing) return
             intake.cancel()
             viewModelScope.launch {
                 val project = repository.open.value?.takeIf { it.id == projectId }
@@ -178,7 +186,18 @@ class MediaPickViewModel
             }
         }
 
+        private var finishing = false
+
         private suspend fun add(done: IntakeState.Done) {
+            finishing = true
+            try {
+                addItems(done)
+            } finally {
+                finishing = false
+            }
+        }
+
+        private suspend fun addItems(done: IntakeState.Done) {
             val project = repository.open.value?.takeIf { it.id == projectId }
             if (project == null) {
                 addingState.value = false
@@ -187,10 +206,10 @@ class MediaPickViewModel
             }
             val items = newMainItems(projectId, done.items, project.photoDurationMs, project.defaultFit, probe)
             val added = items.clips.isEmpty() || repository.update { it.addToMain(items.clips) }
-            repository.flush()
+            val written = repository.flush()
             savedState.remove<ArrayList<String>>(KEY_PENDING)
             addingState.value = false
-            eventChannel.send(PickEvent.Added(projectId, if (added) items.skipped else done.items.size))
+            eventChannel.send(if (added && written) PickEvent.Added(projectId, items.skipped) else PickEvent.NotSaved)
         }
 
         private fun Project.isEmpty() = mainClips.isEmpty()

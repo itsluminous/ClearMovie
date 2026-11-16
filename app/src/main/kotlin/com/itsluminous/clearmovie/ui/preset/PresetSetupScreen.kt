@@ -296,6 +296,10 @@ private fun MessageCard(
                 stringResource(R.string.preset_definition_added)
             }
 
+            SetupMessage.DefinitionOtherPreset -> {
+                stringResource(R.string.preset_definition_other)
+            }
+
             SetupMessage.NotSaved -> {
                 stringResource(R.string.new_video_not_saved)
             }

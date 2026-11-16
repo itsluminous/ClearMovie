@@ -24,9 +24,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +43,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
+import kotlinx.coroutines.delay
 
 /**
  * Plays one file in a dialog: a preset part on the review screen, or the
@@ -55,8 +59,24 @@ fun PlayFileDialog(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
-    val player = remember(uri) { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(uri)) } }
-    var playing by remember(player) { mutableStateOf(true) }
+    // Where it was, so a rotation goes on from there instead of starting again.
+    var savedMs by rememberSaveable(uri) { mutableLongStateOf(0L) }
+    var savedPlaying by rememberSaveable(uri) { mutableStateOf(true) }
+    val player =
+        remember(uri) {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(MediaItem.fromUri(uri), savedMs)
+            }
+        }
+    var playing by remember(player) { mutableStateOf(savedPlaying) }
+    // Kept up to date while it plays: the saved state is written before the dialog goes away.
+    LaunchedEffect(player) {
+        while (true) {
+            savedMs = player.currentPosition
+            savedPlaying = player.playWhenReady
+            delay(SAVE_MS)
+        }
+    }
     DisposableEffect(player) {
         val listener =
             object : Player.Listener {
@@ -66,7 +86,7 @@ fun PlayFileDialog(
             }
         player.addListener(listener)
         player.prepare()
-        player.playWhenReady = true
+        player.playWhenReady = savedPlaying
         onDispose {
             player.removeListener(listener)
             player.release()
@@ -115,3 +135,5 @@ fun PlayFileDialog(
         }
     }
 }
+
+private const val SAVE_MS = 300L

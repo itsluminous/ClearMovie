@@ -19,13 +19,18 @@ sealed interface PartChoice {
     @SerialName("skip")
     data object Skip : PartChoice
 
-    /** The user's own file instead: [media] is [durationMs] long; [name] is the file's name, for display. */
+    /**
+     * The user's own file instead: [media] is [durationMs] long; [name] is the
+     * file's name, for display. For a frame, [keyColor] is the green measured
+     * in its window, which the video keys out instead of the preset's.
+     */
     @Serializable
     @SerialName("replace")
     data class Replace(
         val media: MediaRef,
         val durationMs: Long,
         val name: String? = null,
+        val keyColor: ArgbColor? = null,
     ) : PartChoice {
         companion object {
             const val MAX_FILE_NAME = 255
@@ -96,8 +101,9 @@ data class PresetChoices(
 
 /**
  * Rebuilds a project that has just been made from [preset] with new review
- * [choices], keeping its id and every photo, video and card already on MAIN
- * (the review screen runs before anything else is edited).
+ * [choices], keeping its id, its name and every photo, video and card already
+ * on MAIN (the review screen runs before anything else is edited). A
+ * replaced frame with a measured [PartChoice.Replace.keyColor] keys that green.
  */
 fun Project.withPresetChoices(
     preset: Preset,
@@ -106,6 +112,10 @@ fun Project.withPresetChoices(
     ids: IdSource = RandomIds,
 ): Project {
     val content = mainClips.filter { it is PhotoClip || it is VideoClip || it is CardClip }
-    val fresh = ProjectFactory.fromPreset(id, preset, choices.applyTo(bound), ids).copy(name = name)
+    // A frame of the user's own keys out its own green.
+    val green = (choices.frame as? PartChoice.Replace)?.keyColor
+    val frame = preset.frame
+    val keyed = if (green != null && frame != null) preset.copy(frame = frame.copy(key = frame.key.copy(color = green))) else preset
+    val fresh = ProjectFactory.fromPreset(id, keyed, choices.applyTo(bound), ids).copy(name = name)
     return if (content.isEmpty()) fresh else fresh.addToMain(content, ids = ids)
 }

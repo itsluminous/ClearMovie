@@ -28,22 +28,29 @@ internal object YuvFrameDecoder {
         file: File,
         timesUs: List<Long>,
         maxWidth: Int,
+    ): List<FrameSample> = frames({ it.setDataSource(file.path) }, timesUs, maxWidth)
+
+    /** As above, from any source [open] sets on the extractor (a `content://` link, say). */
+    suspend fun frames(
+        open: (MediaExtractor) -> Unit,
+        timesUs: List<Long>,
+        maxWidth: Int,
     ): List<FrameSample> {
         if (timesUs.isEmpty()) return emptyList()
         // A fresh decoder per frame: flushing and seeking one decoder is not
         // reliable on every device, and three short decodes from a key frame are cheap.
-        return timesUs.sorted().mapNotNull { frameAt(file, it, maxWidth) }
+        return timesUs.sorted().mapNotNull { frameAt(open, it, maxWidth) }
     }
 
     private suspend fun frameAt(
-        file: File,
+        open: (MediaExtractor) -> Unit,
         timeUs: Long,
         maxWidth: Int,
     ): FrameSample? {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            extractor.setDataSource(file.path)
+            open(extractor)
             val track =
                 (0 until extractor.trackCount).firstOrNull {
                     extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true

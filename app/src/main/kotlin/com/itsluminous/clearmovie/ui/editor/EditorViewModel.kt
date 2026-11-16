@@ -129,7 +129,7 @@ class EditorViewModel
         val events: Flow<EditorEvent> = eventChannel.receiveAsFlow()
 
         /** The notes the editor shows once on arrival: items that could not be added, "We brought back your last video". */
-        val arrivalNotes: ArrivalNotes? =
+        var arrivalNotes: ArrivalNotes? =
             if (savedState.get<Boolean>(KEY_NOTES_SHOWN) == true) {
                 null
             } else {
@@ -138,8 +138,11 @@ class EditorViewModel
                     broughtBack = savedState.get<Boolean>(Routes.ARG_BROUGHT_BACK) ?: false,
                 )
             }
+            private set
 
+        /** The notes are shown once: not again after a rotation (this view model lives on) or a process death. */
         fun notesShown() {
+            arrivalNotes = null
             savedState[KEY_NOTES_SHOWN] = true
         }
 

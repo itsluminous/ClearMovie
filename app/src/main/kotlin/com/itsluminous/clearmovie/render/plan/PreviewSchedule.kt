@@ -242,7 +242,11 @@ data class PreviewSchedule(
                 val nextStart = pictures.getOrNull(i + 1)?.startUs ?: total
                 val start = maxOf(p.startUs, at)
                 val end = minOf(p.endUs, nextStart, total)
-                if (start > at) out += blank(at, start - at)
+                if (start > at) {
+                    out += blank(at, start - at)
+                    at = start
+                }
+                // A sliver is left for the next entry's blank (or the end's) to cover.
                 if (end - start < MIN_ENTRY_US) continue
                 // A picture that starts late into its own segment (cut by the one before) starts later in its file.
                 val trimmed = p.trimmedFront(start - p.startUs)
@@ -322,7 +326,10 @@ data class PreviewSchedule(
             val out = mutableListOf<LaneEntry>()
             var at = 0L
             for (e in entries.sortedBy { it.startUs }) {
-                if (e.startUs > at) out += LaneEntry.Gap(at, e.startUs - at)
+                if (e.startUs > at) {
+                    out += LaneEntry.Gap(at, e.startUs - at)
+                    at = e.startUs
+                }
                 val start = maxOf(e.startUs, at)
                 val end = minOf(e.endUs, total)
                 if (end - start < MIN_ENTRY_US) continue

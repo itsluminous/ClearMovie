@@ -38,11 +38,11 @@ class NewVideos
                     // A bound file with an unusable length: choosing it again repairs it.
                     return NewVideoResult.NeedsSetup
                 }
-            return if (projects.createDraft(project)) NewVideoResult.Created(project.id) else NewVideoResult.NotSaved
+            return if (projects.createDraft(project, inEditor = false)) NewVideoResult.Created(project.id) else NewVideoResult.NotSaved
         }
 
         suspend fun blank(): NewVideoResult {
             val project = ProjectFactory.blank(ProjectId(RandomIds.next()))
-            return if (projects.createDraft(project)) NewVideoResult.Created(project.id) else NewVideoResult.NotSaved
+            return if (projects.createDraft(project, inEditor = false)) NewVideoResult.Created(project.id) else NewVideoResult.NotSaved
         }
     }

@@ -179,8 +179,14 @@ class ProjectRepository(
      * editor. Whatever was open before is written first; if that fails (the
      * phone is full) nothing changes and this returns false. Its media folder
      * may be filled after this: copies go into a project that already has a row.
+     *
+     * [inEditor] false (a new video still on its review or photo screen) leaves
+     * it out of the session, so a restart opens Home rather than an empty editor.
      */
-    suspend fun createDraft(project: Project): Boolean {
+    suspend fun createDraft(
+        project: Project,
+        inEditor: Boolean = true,
+    ): Boolean {
         require(project.validate().isEmpty()) { "the project is not valid" }
         val json = encode(project)
         writeMutex.withLock {
@@ -202,7 +208,7 @@ class ProjectRepository(
                 runCatching { db.projects().delete(project.id.value) }
                 return false
             }
-            setSession(project.id, now)
+            if (inEditor) setSession(project.id, now) else clearSession()
             return true
         }
     }
@@ -212,10 +218,18 @@ class ProjectRepository(
      * ([OpenResult.NotSaved] when it cannot be). A project from an older app
      * version, or one whose derived values were stale, is saved back in the
      * current form; one that cannot be read is left untouched and reported.
-     * Opening the project that is already open keeps it as it is.
+     * Opening the project that is already open keeps it as it is. [inEditor]
+     * false (the review or photo screen of a new video) leaves it out of the
+     * session, as in [createDraft]; the editor opens it with true.
      */
-    suspend fun open(id: ProjectId): OpenResult {
-        openState.value?.takeIf { it.id == id }?.let { return OpenResult.Opened(it, repaired = false, migratedFrom = null) }
+    suspend fun open(
+        id: ProjectId,
+        inEditor: Boolean = true,
+    ): OpenResult {
+        openState.value?.takeIf { it.id == id }?.let {
+            writeMutex.withLock { if (inEditor) setSession(id, wallClock()) else clearSession() }
+            return OpenResult.Opened(it, repaired = false, migratedFrom = null)
+        }
         val row = db.projects().get(id.value) ?: return OpenResult.NotFound
         val decoded = withContext(codecDispatcher) { codec.decode(row.modelJson) }
         if (decoded !is ProjectDecodeResult.Ok) return OpenResult.Unreadable((decoded as ProjectDecodeResult.Failed).reason)
@@ -237,7 +251,7 @@ class ProjectRepository(
             }
             if (!settleAndSwitchLocked(project)) return OpenResult.NotSaved
             // The session names a project only once the editor really shows it.
-            setSession(id, now)
+            if (inEditor) setSession(id, now) else clearSession()
         }
         return OpenResult.Opened(project, decoded.repaired, decoded.fromVersion.takeIf { it < migrations.currentVersion })
     }
@@ -365,6 +379,11 @@ class ProjectRepository(
         files.projectDir(id).deleteRecursively()
         files.thumbFile(id).delete()
         return true
+    }
+
+    /** No project is in the editor. A failure only means a restart may reopen the editor. */
+    private suspend fun clearSession() {
+        runCatching { db.session().clear() }
     }
 
     /** Names [id] as open in the editor, seen at [now]. A failure only loses the reopen-after-a-crash hint. */

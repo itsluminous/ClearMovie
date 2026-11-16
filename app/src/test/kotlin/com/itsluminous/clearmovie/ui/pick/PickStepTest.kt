@@ -69,7 +69,10 @@ class PickStepTest {
         setContent {
             AtSize(size, 2f) {
                 ClearMovieTheme(dynamicColor = false) {
-                    PickStep(rememberPickStepState(), access, adding) { launches++ }
+                    PickStep(rememberPickStepState(), access, adding, onLaunchPicker = {
+                        launches++
+                        true
+                    })
                 }
             }
         }
@@ -114,7 +117,12 @@ class PickStepTest {
         val tester = StateRestorationTester(compose)
         val access = controller(MediaAccessState.Partial)
         tester.setContent {
-            ClearMovieTheme(dynamicColor = false) { PickStep(rememberPickStepState(), access, adding = true) { launches++ } }
+            ClearMovieTheme(dynamicColor = false) {
+                PickStep(rememberPickStepState(), access, adding = true, onLaunchPicker = {
+                    launches++
+                    true
+                })
+            }
         }
         compose.waitForIdle()
         assertThat(launches).isEqualTo(1)
@@ -130,7 +138,12 @@ class PickStepTest {
         val tester = StateRestorationTester(compose)
         val access = controller(MediaAccessState.Denied)
         tester.setContent {
-            ClearMovieTheme(dynamicColor = false) { PickStep(rememberPickStepState(), access, adding = false) { launches++ } }
+            ClearMovieTheme(dynamicColor = false) {
+                PickStep(rememberPickStepState(), access, adding = false, onLaunchPicker = {
+                    launches++
+                    true
+                })
+            }
         }
         compose.onNodeWithText(s(R.string.media_access_not_now)).performScrollTo().performClick()
         compose.waitForIdle()

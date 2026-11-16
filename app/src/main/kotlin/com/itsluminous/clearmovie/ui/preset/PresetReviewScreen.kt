@@ -127,7 +127,11 @@ fun PresetReviewRoute(
         state = intake,
         onCopyAnyway = viewModel.intake::copyAnyway,
         onChooseFewer = viewModel.intake::chooseFewer,
-        onAllowAll = viewModel.intake::chooseFewer,
+        // Allow all photos: Android's own question; the file is then chosen again with full access.
+        onAllowAll = {
+            viewModel.intake.chooseFewer()
+            access.request()
+        },
         onCancel = viewModel.intake::cancel,
     )
     val slot = playing?.let { n -> PresetSlot.entries.firstOrNull { it.name == n } }
@@ -327,19 +331,34 @@ private fun PartCard(
                         Text(stringResource(R.string.action_play))
                     }
                 }
-                OutlinedButton(onClick = { onReplace(slot) }, enabled = enabled, modifier = Modifier.heightIn(min = 56.dp)) {
+                val replaceDescription = stringResource(R.string.review_replace_part, label)
+                OutlinedButton(
+                    onClick = { onReplace(slot) },
+                    enabled = enabled,
+                    modifier = Modifier.heightIn(min = 56.dp).semantics { contentDescription = replaceDescription },
+                ) {
                     Icon(painterResource(R.drawable.ic_folder_open), contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.action_replace))
                 }
                 if (choice == PartChoice.UsePreset) {
-                    TextButton(onClick = { onSkip(slot) }, enabled = enabled, modifier = Modifier.heightIn(min = 56.dp)) {
+                    val skipDescription = stringResource(R.string.review_skip_part, label)
+                    TextButton(
+                        onClick = { onSkip(slot) },
+                        enabled = enabled,
+                        modifier = Modifier.heightIn(min = 56.dp).semantics { contentDescription = skipDescription },
+                    ) {
                         Icon(painterResource(R.drawable.ic_block), contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.review_skip))
                     }
                 } else {
-                    TextButton(onClick = { onUsePreset(slot) }, enabled = enabled, modifier = Modifier.heightIn(min = 56.dp)) {
+                    val useDescription = stringResource(R.string.review_use_preset_part, label)
+                    TextButton(
+                        onClick = { onUsePreset(slot) },
+                        enabled = enabled,
+                        modifier = Modifier.heightIn(min = 56.dp).semantics { contentDescription = useDescription },
+                    ) {
                         Icon(painterResource(R.drawable.ic_restore), contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.review_use_preset))
@@ -372,6 +391,10 @@ private fun ReviewMessageCard(
 
             ReviewMessage.Unreadable -> {
                 stringResource(R.string.preset_bind_unreadable)
+            }
+
+            ReviewMessage.NoGreenWindow -> {
+                stringResource(R.string.review_frame_no_green)
             }
         }
     Card(

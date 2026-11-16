@@ -141,7 +141,7 @@
     <string name="review_spoken_hint">A spoken message that plays over your last photo or video.</string>
     <string name="review_video_ending_hint">Plays last, over the whole screen.</string>
     <string name="review_skip">Skip for this video</string>
-    <string name="review_use_preset">Use the preset\'s</string>
+    <string name="review_use_preset">Use the preset\'s own</string>
     <!-- For screen readers. %1$s is a part of the preset, such as Intro. -->
     <string name="review_play_part">Play the %1$s</string>
     <string name="pick_adding">Adding your photos and videos</string>
@@ -190,4 +190,18 @@
         <item quantity="one">%1$d item could not be added</item>
         <item quantity="other">%1$d items could not be added</item>
     </plurals>
+    <string name="editor_part_unavailable">A photo, video or preset file couldn\'t be played, so the preview skips it.</string>
+    <string name="editor_cannot_open_title">This video can\'t be opened</string>
+    <string name="editor_cannot_open_body">It may have been deleted, or the phone is full. Go back and try again.</string>
+    <string name="review_frame_no_green">This video has no green window where the preset\'s frame has one, so your photos would not show through it. Choose a frame video with the green window in the same place.</string>
+    <!-- For screen readers. %1$s is a part of the preset, such as Intro. -->
+    <string name="review_replace_part">Replace the %1$s</string>
+    <!-- For screen readers. %1$s is a part of the preset, such as Intro. -->
+    <string name="review_skip_part">Skip the %1$s for this video</string>
+    <!-- For screen readers. %1$s is a part of the preset, such as Intro. -->
+    <string name="review_use_preset_part">Use the preset\'s own %1$s</string>
+    <!-- For screen readers: the item the preview is on. -->
+    <string name="editor_item_current">Playing now</string>
+    <string name="pick_no_picker">This phone has no app to choose photos and videos from.</string>
+    <string name="preset_definition_other">This preset file is for another preset, so it was added to that one, not this one.</string>
 </resources>

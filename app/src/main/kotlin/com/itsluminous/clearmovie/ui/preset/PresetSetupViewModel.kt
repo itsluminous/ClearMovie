@@ -61,6 +61,9 @@ sealed interface SetupMessage {
 
     data object DefinitionAdded : SetupMessage
 
+    /** The preset file was for another preset (it was added there). */
+    data object DefinitionOtherPreset : SetupMessage
+
     /** The new video could not be started (the phone is full). */
     data object NotSaved : SetupMessage
 }
@@ -163,10 +166,25 @@ class PresetSetupViewModel
         fun chooseDefinition(uri: Uri) =
             run {
                 uiState.update { it.copy(work = SetupWork.Checking, message = null) }
-                when (presetStore.bindDefinition(uri)) {
-                    is DefinitionBindResult.Bound -> SetupMessage.DefinitionAdded
-                    is DefinitionBindResult.Invalid -> SetupMessage.DefinitionInvalid
-                    DefinitionBindResult.Unreadable -> SetupMessage.Unreadable
+                when (val r = presetStore.bindDefinition(uri)) {
+                    // A file for another preset is added to that one; say it is not this preset's.
+                    is DefinitionBindResult.Bound -> {
+                        if (r.preset.id ==
+                            presetId
+                        ) {
+                            SetupMessage.DefinitionAdded
+                        } else {
+                            SetupMessage.DefinitionOtherPreset
+                        }
+                    }
+
+                    is DefinitionBindResult.Invalid -> {
+                        SetupMessage.DefinitionInvalid
+                    }
+
+                    DefinitionBindResult.Unreadable -> {
+                        SetupMessage.Unreadable
+                    }
                 }
             }
 

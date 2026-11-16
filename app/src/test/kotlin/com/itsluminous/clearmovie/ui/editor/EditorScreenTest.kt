@@ -174,7 +174,7 @@ class EditorScreenTest {
     }
 
     @Test
-    fun `the editor's own saved state survives a restore`() {
+    fun `the editor shell comes back whole after a restore`() {
         val tester = StateRestorationTester(compose)
         tester.setContent {
             AtSize(

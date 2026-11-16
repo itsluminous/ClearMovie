@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -64,6 +66,7 @@ fun MediaPickRoute(
     val step = rememberPickStepState()
     var retryAfterAccess by rememberSaveable { mutableStateOf(false) }
     var outOfSpace by rememberSaveable { mutableStateOf(false) }
+    var notSaved by rememberSaveable { mutableStateOf(false) }
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
             viewModel.picked(uris, access.state)
@@ -91,6 +94,10 @@ fun MediaPickRoute(
                 PickEvent.OutOfSpace -> {
                     outOfSpace = true
                 }
+
+                PickEvent.NotSaved -> {
+                    notSaved = true
+                }
             }
         }
     }
@@ -109,7 +116,14 @@ fun MediaPickRoute(
         state = step,
         access = access,
         adding = adding,
-        onLaunchPicker = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+        onLaunchPicker = {
+            runCatching {
+                picker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
+                )
+            }.isSuccess
+        },
+        onBack = viewModel::leave,
     )
     MediaIntakeDialogs(
         state = intake,
@@ -118,6 +132,19 @@ fun MediaPickRoute(
         onAllowAll = viewModel.intake::allowAll,
         onCancel = viewModel.intake::cancel,
     )
+    if (notSaved) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.copy_no_space_title)) },
+            text = { Text(stringResource(R.string.editor_not_saved)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    notSaved = false
+                    viewModel.leave()
+                }) { Text(stringResource(R.string.action_ok)) }
+            },
+        )
+    }
     if (outOfSpace) {
         AlertDialog(
             onDismissRequest = {},
@@ -138,13 +165,17 @@ fun MediaPickRoute(
 class PickStepState(
     launched: Boolean,
     notNow: Boolean,
+    noPicker: Boolean = false,
 ) {
     var launched by mutableStateOf(launched)
     var notNow by mutableStateOf(notNow)
 
+    /** The phone has no photo picker to open (a phone without the usual apps). */
+    var noPicker by mutableStateOf(noPicker)
+
     companion object {
         val Saver: Saver<PickStepState, List<Boolean>> =
-            Saver(save = { listOf(it.launched, it.notNow) }, restore = { PickStepState(it[0], it[1]) })
+            Saver(save = { listOf(it.launched, it.notNow, it.noPicker) }, restore = { PickStepState(it[0], it[1], it[2]) })
     }
 }
 
@@ -166,14 +197,29 @@ fun PickStep(
     state: PickStepState,
     access: MediaAccessController,
     adding: Boolean,
-    onLaunchPicker: () -> Unit,
+    onLaunchPicker: () -> Boolean,
+    onBack: () -> Unit = {},
 ) {
     val ready = access.state == MediaAccessState.Full || access.state == MediaAccessState.Partial || state.notNow
     LaunchedEffect(ready, state.launched) {
         if (ready && !state.launched) {
             state.launched = true
-            onLaunchPicker()
+            if (!onLaunchPicker()) state.noPicker = true
         }
+    }
+    if (state.noPicker) {
+        Surface(Modifier.fillMaxSize()) {
+            Column(
+                Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(stringResource(R.string.pick_no_picker), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(24.dp))
+                Button(onClick = onBack, modifier = Modifier.heightIn(min = 56.dp)) { Text(stringResource(R.string.action_back)) }
+            }
+        }
+        return
     }
     if (!state.launched && !ready) {
         MediaAccessExplainer(

@@ -50,8 +50,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -213,13 +215,21 @@ private fun Controls(
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
         val duration = playhead.durationUs.coerceAtLeast(1)
-        val position = durationText(playhead.positionUs)
+        // While the thumb is dragged it follows the finger, and the preview moves only on release:
+        // seeking every player on every frame of a drag makes the thumb jump back under a slow hand.
+        var dragging by remember { mutableStateOf<Float?>(null) }
+        val shownUs = dragging?.let { (it * duration).toLong() } ?: playhead.positionUs
+        val position = durationText(shownUs)
         val total = durationText(playhead.durationUs)
         val seekLabel = stringResource(R.string.editor_seek)
         val timeLabel = stringResource(R.string.editor_time, position, total)
         Slider(
-            value = (playhead.positionUs.toFloat() / duration).coerceIn(0f, 1f),
-            onValueChange = { onSeek((it * duration).toLong()) },
+            value = dragging ?: (playhead.positionUs.toFloat() / duration).coerceIn(0f, 1f),
+            onValueChange = { dragging = it },
+            onValueChangeFinished = {
+                dragging?.let { onSeek((it * duration).toLong()) }
+                dragging = null
+            },
             enabled = enabled,
             modifier =
                 Modifier.fillMaxWidth().semantics {
@@ -371,14 +381,17 @@ private fun Tile(
     val missing = status != null && status != MediaStatus.AVAILABLE
     val description =
         stringResource(if (missing) R.string.editor_item_missing_description else R.string.editor_item_description, label, length)
-    val picture by produceState<Bitmap?>(null, clip) { value = if (missing) null else thumbnail(slot) }
+    val picture by produceState<Bitmap?>(null, clip, missing) { value = if (missing) null else thumbnail(slot) }
+    val nowPlaying = stringResource(R.string.editor_item_current)
     Column(
         Modifier
             .width(TILE_WIDTH)
             .clip(RoundedCornerShape(8.dp))
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) { contentDescription = description }
-            .padding(4.dp),
+            .semantics(mergeDescendants = true) {
+                contentDescription = description
+                if (current) stateDescription = nowPlaying
+            }.padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(

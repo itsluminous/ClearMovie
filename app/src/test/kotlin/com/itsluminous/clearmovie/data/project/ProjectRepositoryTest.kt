@@ -633,4 +633,17 @@ class ProjectRepositoryTest {
             delay(20)
         }
     }
+
+    @Test
+    fun `a new video still on its review or photo screen is not reopened in the editor after a restart`() =
+        runBlocking<Unit> {
+            val db = db()
+            val repo = repository(db)
+            assertThat(repo.createDraft(draft(), inEditor = false)).isTrue()
+            assertThat(repo.open(ProjectId("p1"), inEditor = false)).isInstanceOf(OpenResult.Opened::class.java)
+            assertThat(repository(db).launchDecision()).isEqualTo(LaunchDecision.Home)
+            // The editor shows it (already open, as after the photo step): now a restart brings it back.
+            repo.open(ProjectId("p1"))
+            assertThat(repository(db).launchDecision()).isInstanceOf(LaunchDecision.ReopenEditor::class.java)
+        }
 }

@@ -116,7 +116,7 @@
     <string name="review_spoken_hint">एक बोला हुआ संदेश, जो आपकी आखिरी फ़ोटो या वीडियो पर चलता है।</string>
     <string name="review_video_ending_hint">सबसे आखिर में, पूरी स्क्रीन पर चलता है।</string>
     <string name="review_skip">इस वीडियो में छोड़ें</string>
-    <string name="review_use_preset">प्रीसेट वाला लें</string>
+    <string name="review_use_preset">प्रीसेट वाला ही लें</string>
     <string name="review_play_part">%1$s चलाएँ</string>
     <string name="pick_adding">आपकी फ़ोटो और वीडियो जोड़ी जा रही हैं</string>
     <string name="pick_out_of_space">कॉपी करते समय फ़ोन की जगह खत्म हो गई, इसलिए कुछ नहीं जोड़ा गया। थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
@@ -155,4 +155,14 @@
         <item quantity="one">%1$d चीज़ नहीं जोड़ी जा सकी</item>
         <item quantity="other">%1$d चीज़ें नहीं जोड़ी जा सकीं</item>
     </plurals>
+    <string name="editor_part_unavailable">एक फ़ोटो, वीडियो या प्रीसेट फ़ाइल नहीं चल सकी, इसलिए प्रीव्यू उसे छोड़ देता है।</string>
+    <string name="editor_cannot_open_title">यह वीडियो नहीं खुल सकता</string>
+    <string name="editor_cannot_open_body">हो सकता है यह हटा दिया गया हो, या फ़ोन भर गया हो। वापस जाएँ और फिर से कोशिश करें।</string>
+    <string name="review_frame_no_green">इस वीडियो में वहाँ हरा हिस्सा नहीं है जहाँ प्रीसेट के फ़्रेम में है, इसलिए आपकी फ़ोटो उसमें से नहीं दिखेंगी। ऐसा फ़्रेम वीडियो चुनें जिसमें हरा हिस्सा उसी जगह हो।</string>
+    <string name="review_replace_part">%1$s बदलें</string>
+    <string name="review_skip_part">इस वीडियो में %1$s छोड़ें</string>
+    <string name="review_use_preset_part">प्रीसेट वाला %1$s ही लें</string>
+    <string name="editor_item_current">अभी चल रहा है</string>
+    <string name="pick_no_picker">इस फ़ोन में फ़ोटो और वीडियो चुनने वाला कोई ऐप नहीं है।</string>
+    <string name="preset_definition_other">यह प्रीसेट फ़ाइल किसी दूसरे प्रीसेट की है, इसलिए उसे उसी में जोड़ा गया, इसमें नहीं।</string>
 </resources>

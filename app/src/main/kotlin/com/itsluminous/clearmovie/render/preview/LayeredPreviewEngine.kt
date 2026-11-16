@@ -200,7 +200,7 @@ class LayeredPreviewEngine(
         publish()
     }
 
-    fun togglePlay() = if (main?.playWhenReady == true) pause() else play()
+    fun togglePlay() = if (isPlaying) pause() else play()
 
     /** Moves every player to [us] of the video's time. */
     fun seekTo(us: Long) {
@@ -218,7 +218,8 @@ class LayeredPreviewEngine(
 
     val positionUs: Long get() = mainTimeUs()
 
-    val isPlaying: Boolean get() = main?.playWhenReady == true
+    /** Playing, and not stopped at the end (ExoPlayer keeps playWhenReady set there). */
+    val isPlaying: Boolean get() = main?.let { it.playWhenReady && it.playbackState != Player.STATE_ENDED } == true
 
     /** Shows MAIN on [view]. Calling it again with the same view does nothing, so the UI may call it on every update. */
     fun setMainSurface(view: TextureView?) {
@@ -296,7 +297,7 @@ class LayeredPreviewEngine(
                 while (isActive) {
                     sync(force = false)
                     publish()
-                    if (main?.playWhenReady != true) break
+                    if (!isPlaying) break
                     delay(TICK_MS)
                 }
             }
@@ -355,7 +356,7 @@ class LayeredPreviewEngine(
 
     private fun keepInStep(t: Long) {
         val s = schedule ?: return
-        val playing = main?.playWhenReady == true
+        val playing = isPlaying
 
         fun check(
             player: ExoPlayer,
@@ -439,10 +440,15 @@ class LayeredPreviewEngine(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // A file that fails mid-play stops the preview, never the app; Play starts again.
+            // A file that fails mid-play never stops the app: the preview pauses and moves on to
+            // the next item, so Play does not hit the same file again (the UI says a part is missing).
+            val p = main ?: return
+            val s = schedule ?: return
             allPlayers().forEach { it.playWhenReady = false }
             stateFlow.value = stateFlow.value.copy(unavailable = stateFlow.value.unavailable + 1)
-            main?.prepare()
+            val next = (p.currentMediaItemIndex + 1).coerceAtMost(s.main.lastIndex)
+            p.prepare()
+            seekTo(s.main[next].startUs)
             publish()
         }
     }

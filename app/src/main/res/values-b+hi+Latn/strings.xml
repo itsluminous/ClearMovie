@@ -124,7 +124,7 @@
     <string name="review_spoken_hint">Ek bola hua message, jo aapki aakhri photo ya video par chalta hai.</string>
     <string name="review_video_ending_hint">Sabse aakhir me, poori screen par chalta hai.</string>
     <string name="review_skip">Is video me chhodein</string>
-    <string name="review_use_preset">Preset wala lein</string>
+    <string name="review_use_preset">Preset wala hi lein</string>
     <string name="review_play_part">%1$s play karein</string>
     <string name="pick_adding">Aapki photos aur videos add ho rahi hain</string>
     <string name="pick_out_of_space">Copy karte waqt phone ki jagah khatam ho gayi, isliye kuch add nahi hua. Thodi jagah khaali karein aur phir se koshish karein.</string>
@@ -156,11 +156,21 @@
     <string name="settings_storage_copied">Copy ki gayi photos aur videos: %1$s</string>
     <string name="settings_storage_cache">Chhoti tasveerein, zaroorat par phir ban jaati hain: %1$s</string>
     <plurals name="home_preset_missing">
-        <item quantity="one">%1$d file nahi mili, theek karne ke liye tap karein</item>
-        <item quantity="other">%1$d files nahi mili, theek karne ke liye tap karein</item>
+        <item quantity="one">%1$d file nahi mil rahi, theek karne ke liye tap karein</item>
+        <item quantity="other">%1$d files nahi mil rahi hain, theek karne ke liye tap karein</item>
     </plurals>
     <plurals name="pick_skipped">
         <item quantity="one">%1$d item add nahi ho saka</item>
         <item quantity="other">%1$d items add nahi ho sake</item>
     </plurals>
+    <string name="editor_part_unavailable">Ek photo, video ya preset file nahi chal saki, isliye preview use chhod deta hai.</string>
+    <string name="editor_cannot_open_title">Yeh video nahi khul sakta</string>
+    <string name="editor_cannot_open_body">Ho sakta hai yeh delete ho gaya ho, ya phone bhar gaya ho. Wapas jaayein aur phir se koshish karein.</string>
+    <string name="review_frame_no_green">Is video me wahan hara hissa nahi hai jahan preset ke frame me hai, isliye aapki photos usme se nahi dikhengi. Aisa frame video chunein jisme hara hissa usi jagah ho.</string>
+    <string name="review_replace_part">%1$s replace karein</string>
+    <string name="review_skip_part">Is video me %1$s chhodein</string>
+    <string name="review_use_preset_part">Preset wala %1$s hi lein</string>
+    <string name="editor_item_current">Abhi chal raha hai</string>
+    <string name="pick_no_picker">Is phone me photos aur videos chunne wala koi app nahi hai.</string>
+    <string name="preset_definition_other">Yeh preset file kisi doosre preset ki hai, isliye use usi me add kiya gaya, isme nahi.</string>
 </resources>

@@ -179,4 +179,31 @@ class PreviewScheduleTest {
             (s.main[1].content as MainContent.Video).media,
         ).isEqualTo((presetProject(Fixtures.video("v")).mainClips[1] as VideoClip).media)
     }
+
+    @Test
+    fun `a sliver after a gap leaves no overlap and no extra time`() {
+        val m = Fixtures.media("a")
+        val sliver = VisualSegment.Picture(1_000, 400, Source.Photo(m), Placement.FullFrame)
+        val next = VisualSegment.Picture(1_400, 2_000_000, Source.Photo(Fixtures.media("b")), Placement.FullFrame)
+        val plan =
+            RenderPlan(
+                width = 1280,
+                height = 720,
+                fps = 30,
+                durationUs = 2_001_400,
+                visual =
+                    listOf(
+                        VisualLayer(
+                            com.itsluminous.clearmovie.domain.model
+                                .TrackId("m"),
+                            LayerRole.MAIN,
+                            listOf(VisualSegment.Fill(0, 1_000), sliver, next),
+                        ),
+                    ),
+                audio = emptyList(),
+            )
+        val s = PreviewSchedule.of(plan)
+        assertCovers(s.main.map { it.startUs to it.durationUs }, s.durationUs)
+        assertThat(s.main.last().content).isEqualTo(MainContent.Still(Source.Photo(Fixtures.media("b"))))
+    }
 }

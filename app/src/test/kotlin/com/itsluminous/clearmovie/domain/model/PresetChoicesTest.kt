@@ -141,4 +141,33 @@ class PresetChoicesTest {
         assertThat((decoded.mainClips.first() as IntroClip).media).isEqualTo(MediaRef.Preset(PresetSlot.INTRO))
         assertThat((decoded.mainClips.last() as EndingClip).media).isEqualTo(MediaRef.Preset(PresetSlot.ENDING))
     }
+
+    @Test
+    fun `a replaced frame keys out its own measured green`() {
+        val green = ArgbColor(0xFF10C030)
+        val start = build(PresetChoices())
+        val p =
+            start
+                .withPresetChoices(
+                    preset,
+                    bound,
+                    PresetChoices(frame = PartChoice.Replace(mine, 60_000, keyColor = green)),
+                    SequentialIds("k"),
+                ).assertValid()
+        val overlay = p.byRole(PresetRole.FRAME).clips.single() as OverlayClip
+        assertThat(overlay.key!!.color).isEqualTo(green)
+        assertThat(overlay.key!!.tolerance).isEqualTo(preset.frame!!.key.tolerance)
+        // Back to the preset's frame: its own key again.
+        val back = p.withPresetChoices(preset, bound, PresetChoices(), SequentialIds("j"))
+        assertThat((back.byRole(PresetRole.FRAME).clips.single() as OverlayClip).key).isEqualTo(preset.frame!!.key)
+    }
+
+    @Test
+    fun `a project saved before this change still reads, with the preset's own intro and ending`() {
+        val text = requireNotNull(javaClass.getResource("/fixtures/project/rich-v1-before-flow.json")).readText()
+        val decoded = ProjectCodec().decode(text) as ProjectDecodeResult.Ok
+        assertThat((decoded.project.mainClips.first() as IntroClip).media).isEqualTo(MediaRef.Preset(PresetSlot.INTRO))
+        assertThat((decoded.project.mainClips.last() as EndingClip).media).isEqualTo(MediaRef.Preset(PresetSlot.ENDING))
+        assertThat(decoded.project).isEqualTo(Fixtures.richProject())
+    }
 }
