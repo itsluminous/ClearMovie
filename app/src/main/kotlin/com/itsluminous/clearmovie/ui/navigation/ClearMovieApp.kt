@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalResources
@@ -30,6 +31,8 @@ import com.itsluminous.clearmovie.ui.pick.MediaPickRoute
 import com.itsluminous.clearmovie.ui.preset.PresetReviewRoute
 import com.itsluminous.clearmovie.ui.preset.PresetSetupRoute
 import com.itsluminous.clearmovie.ui.settings.SettingsRoute
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The app's navigation graph (requirement 1-4): Home and preset pick, then
@@ -38,22 +41,15 @@ import com.itsluminous.clearmovie.ui.settings.SettingsRoute
  *
  * [launchDecision] runs once for a fresh start (never after a rotation or a
  * restored process, whose screens come back on their own): when the app
- * stopped with a video open in the editor, the editor opens again at once.
+ * stopped with a video open in the editor, the editor opens again at once
+ * ([ReopenAtLaunch]).
  */
 @Composable
 fun ClearMovieApp(
     launchDecision: (suspend () -> LaunchDecision)? = null,
     navController: NavHostController = rememberNavController(),
 ) {
-    var decided by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (decided) return@LaunchedEffect
-        decided = true
-        val decision = launchDecision?.invoke()
-        if (decision is LaunchDecision.ReopenEditor) {
-            navController.navigate(Routes.editor(decision.id, broughtBack = decision.broughtBack))
-        }
-    }
+    ReopenAtLaunch(launchDecision) { navController.navigate(Routes.editor(it.id, broughtBack = it.broughtBack)) }
 
     fun go(step: FlowStep) {
         navController.navigate(Routes.of(step))
@@ -157,6 +153,39 @@ fun ClearMovieApp(
                 onAddMedia = { navController.navigate(Routes.pick(it)) },
                 onFixPreset = { navController.navigate(Routes.setup(it, newVideo = false)) },
             )
+        }
+    }
+}
+
+/**
+ * Runs [launchDecision] once for a fresh start and hands a reopen to
+ * [reopen] (storage D2: the app stopped with a video open in the editor).
+ *
+ * [reopen] navigates, and a NavController may only be used on the main
+ * thread. The decision reads the database, and a suspend call can return on
+ * the thread that finished it (the Compose test harness resumes there), so
+ * the decision is acted on with an explicit switch to the main thread; a
+ * navigate on another thread throws half way, leaving the editor's back
+ * stack entry INITIALIZED, and destroying the activity then crashes.
+ *
+ * It counts as decided only once acted on, in the same main-thread step, so
+ * an activity destroyed while the decision is still being read (a rotation
+ * at launch) decides again, and one restored after acting (a rotation, or a
+ * process death, whose back stack comes back on its own) never reopens twice.
+ */
+@Composable
+internal fun ReopenAtLaunch(
+    launchDecision: (suspend () -> LaunchDecision)?,
+    reopen: (LaunchDecision.ReopenEditor) -> Unit,
+) {
+    var decided by rememberSaveable { mutableStateOf(false) }
+    val currentReopen by rememberUpdatedState(reopen)
+    LaunchedEffect(Unit) {
+        if (decided) return@LaunchedEffect
+        val decision = launchDecision?.invoke()
+        withContext(Dispatchers.Main.immediate) {
+            if (decision is LaunchDecision.ReopenEditor) currentReopen(decision)
+            decided = true
         }
     }
 }
