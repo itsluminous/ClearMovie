@@ -33,7 +33,15 @@ import com.itsluminous.clearmovie.data.preset.SlotBindResult
 import com.itsluminous.clearmovie.data.preset.SlotStatus
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
+import com.itsluminous.clearmovie.domain.model.Speed
+import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.ui.editor.EDITOR_TIMELINE_TAG
+import com.itsluminous.clearmovie.ui.editor.PANEL_DONE_TAG
+import com.itsluminous.clearmovie.ui.editor.PANEL_TAG
+import com.itsluminous.clearmovie.ui.editor.ZOOM_IN_TAG
+import com.itsluminous.clearmovie.ui.editor.barActionTag
+import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_RULER_TAG
 import com.itsluminous.clearmovie.ui.home.HOME_LIST_TAG
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matchers.not
@@ -181,6 +189,60 @@ class FlowDeviceTest {
             compose.onNodeWithText(s(R.string.action_pause)).performClick()
         }
     }
+
+    /**
+     * cm-timeline: a recreation in the middle of an edit keeps the selected
+     * item, the open panel, the zoom and the edit itself (ARCHITECTURE
+     * section 11.11), and the picker is not opened again.
+     */
+    @Test
+    fun aRecreationMidEditKeepsTheSelectionTheOpenPanelAndTheZoom() {
+        pickerAnswers(
+            listOf(
+                insert("fixtures/photo_blue.png", "image/png"),
+                insert("fixtures/clip_light.mp4", "video/mp4"),
+                insert("fixtures/photo_quadrants.png", "image/png"),
+            ),
+        )
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitFor(hasTestTag(HOME_LIST_TAG))
+            compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(s(R.string.home_start_blank)))
+            compose.onNodeWithText(s(R.string.home_start_blank)).performClick()
+            itemsShown(photos = 2, videos = 1)
+
+            compose.onNode(hasContentDescription(s(R.string.editor_item_video) + ",", substring = true)).performClick()
+            repeat(2) { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() }
+            compose.onNodeWithTag(barActionTag(EditAction.SPEED)).performClick()
+            compose.onNodeWithText(context.getString(R.string.speed_value, "2")).performClick()
+            compose.waitForIdle()
+            val ruler = tick()
+            val edited = runBlocking { app.projectRepository.open.value!! }
+            assertThat(
+                edited.mainClips
+                    .filterIsInstance<VideoClip>()
+                    .single()
+                    .speed,
+            ).isEqualTo(Speed.X2)
+
+            scenario.recreate()
+            waitFor(hasTestTag(PANEL_TAG))
+            assertThat(tick()).isEqualTo(ruler)
+            val after = runBlocking { app.projectRepository.open.value!! }
+            assertThat(after).isEqualTo(edited)
+            // Done closes the panel; the bar is the selected video's.
+            compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
+            waitFor(hasTestTag(barActionTag(EditAction.TRIM)))
+            intended(not(isInternal()), Intents.times(1))
+        }
+    }
+
+    /** The ruler's label spacing: it changes with the zoom. */
+    private fun tick(): String =
+        compose
+            .onNodeWithTag(TIMELINE_RULER_TAG)
+            .fetchSemanticsNode()
+            .config
+            .getOrElse(SemanticsProperties.StateDescription) { "" }
 
     @Test
     fun aPresetFileThatWentMissingOpensTheRepairScreen() {

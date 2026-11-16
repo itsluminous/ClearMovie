@@ -118,6 +118,20 @@ tagged() {
 tagged 640x480 1 tag_sd709.mp4
 tagged 1280x720 6 tag_hd601.mp4
 
+# seconds.mp4: 10 s, 640x360, one flat colour per second of the file
+# (SECOND_COLOURS in PreviewTimingDeviceTest), so a preview frame tells
+# which second of the file it shows: trim, split, speed and loop are checked
+# against the model by colour. A 440 Hz tone keeps it a normal clip with sound.
+cols=(0xE53935 0xFB8C00 0xFDD835 0x43A047 0x00ACC1 0x1E88E5 0x3949AB 0x8E24AA 0xD81B60 0x6D4C41)
+inputs=(); chain=""
+for i in "${!cols[@]}"; do
+  inputs+=(-f lavfi -i "color=c=${cols[$i]}:s=640x360:r=30:d=1")
+  chain="$chain[$i:v]"
+done
+"${ff[@]}" "${inputs[@]}" -f lavfi -i "$(tone 440 10)" \
+  -filter_complex "${chain}concat=n=10:v=1:a=0[v]" \
+  -map "[v]" -map 10:a "${x264[@]}" "${aac[@]}" -t 10 "$out/seconds.mp4"
+
 for f in "$out"/*; do
   size=$(wc -c < "$f")
   if [ "$size" -ge 307200 ]; then

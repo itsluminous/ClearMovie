@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -15,10 +16,12 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onChildAt
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -38,6 +41,7 @@ import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addRow
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.mainSlot
+import com.itsluminous.clearmovie.domain.model.totalDurationMs
 import com.itsluminous.clearmovie.testing.AtSize
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
@@ -564,6 +568,27 @@ class EditorScreenTest {
         assertThat(halves).hasSize(2)
         assertThat(halves.sumOf { it.durationMs }).isEqualTo(4000)
     }
+
+    @Test
+    fun `the Trim panel trims without the handles, and the time can be set without dragging`() {
+        val h = show(ScreenSize.COMPACT)
+        selectItem(h, "v4")
+        compose.onNodeWithTag(barActionTag(EditAction.TRIM)).performClick()
+        // The range's two thumbs, start then end, each set as TalkBack sets them.
+        val range = compose.onNodeWithContentDescription(s(R.string.trim_title))
+        range.onChildAt(0).performSemanticsAction(SemanticsActions.SetProgress) { it(1500f) }
+        range.onChildAt(1).performSemanticsAction(SemanticsActions.SetProgress) { it(4500f) }
+        compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
+        val v4 = h.project.clip(ClipId("v4")) as VideoClip
+        assertThat(v4.trimStartMs.toDouble()).isWithin(100.0).of(1500.0)
+        assertThat(v4.trimEndMs.toDouble()).isWithin(100.0).of(4500.0)
+        // The playback time is a TalkBack-adjustable control: no ruler drag needed.
+        compose.onNodeWithContentDescription(s(R.string.editor_seek)).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        assertThat(h.calls.last()).startsWith("seek:")
+        assertThat(h.playheadUs).isWithin(300_000).of(h.project.mainLayoutTotalUs() / 2)
+    }
+
+    private fun com.itsluminous.clearmovie.domain.model.Project.mainLayoutTotalUs() = totalDurationMs() * 1000
 
     @Test
     fun `Delete removes the item and the snackbar's Undo brings it back`() {
