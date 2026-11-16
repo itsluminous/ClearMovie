@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Hindi. Same names as values/strings_platform.xml. -->
 <resources>
+    <string name="notification_channel_export">वीडियो सेव करना</string>
+    <string name="notification_channel_export_description">वीडियो सेव होते समय दिखाता है कि वह कहाँ तक पहुँचा, और कब तैयार हुआ।</string>
+    <string name="notification_export_title">आपका वीडियो सेव हो रहा है</string>
+    <string name="notification_export_progress">%1$d%% पूरा</string>
+    <string name="notification_export_restarted">फिर से शुरू हुआ, %1$d%% पूरा</string>
+    <string name="notification_export_done_title">आपका वीडियो तैयार है</string>
+    <string name="notification_export_done_text">%1$s आपकी गैलरी में है। चलाने के लिए टैप करें।</string>
+    <string name="notification_export_failed_title">आपका वीडियो सेव नहीं हुआ</string>
 </resources>

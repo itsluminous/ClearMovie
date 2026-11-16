@@ -1,7 +1,9 @@
 package com.itsluminous.clearmovie
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.work.Configuration
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.media.MediaAccess
 import com.itsluminous.clearmovie.data.preset.PresetStore
@@ -18,9 +20,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
-/** Application entry point; the Hilt component lives here. */
+/**
+ * Application entry point; the Hilt component lives here. It also gives
+ * WorkManager Hilt's worker factory, so the export worker gets its
+ * dependencies (WorkManager's own start-up initializer is removed in the
+ * manifest for this).
+ */
 @HiltAndroidApp
-class ClearMovieApplication : Application() {
+class ClearMovieApplication :
+    Application(),
+    Configuration.Provider {
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+
     @Inject
     lateinit var settingsRepository: SettingsRepository
 

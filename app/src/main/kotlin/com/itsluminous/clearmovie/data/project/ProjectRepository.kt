@@ -257,6 +257,20 @@ class ProjectRepository(
     }
 
     /**
+     * Project [id] as it is now, without opening it: the open project's
+     * latest edits when it is the one open, else the stored row. Nothing is
+     * written, migrated or switched (the export reads its project this way,
+     * while the editor may still be open on it). Null when it is gone or
+     * cannot be read.
+     */
+    suspend fun read(id: ProjectId): Project? {
+        openState.value?.takeIf { it.id == id }?.let { return it }
+        val row = db.projects().get(id.value) ?: return null
+        val decoded = withContext(codecDispatcher) { codec.decode(row.modelJson) } as? ProjectDecodeResult.Ok ?: return null
+        return decoded.project.takeIf { it.id == id }
+    }
+
+    /**
      * Applies [transform] to the open project and schedules the write. Returns
      * false, changing nothing, when no project is open or the result is not a
      * valid project of the same id (a project that could not be read back must

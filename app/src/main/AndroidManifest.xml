@@ -14,6 +14,18 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
 
+    <!-- Export (ARCHITECTURE section 12): a foreground worker keeps saving the
+         video while the screen turns or the app is in the background, with a
+         progress notification and Stop. mediaProcessing is the type on
+         Android 15+; dataSync before it. POST_NOTIFICATIONS (Android 13+) is
+         asked for once, when the first export starts; saving works without it.
+         Writing to Movies/ClearMovie needs no storage permission: the app only
+         adds and removes its own entries. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- allowBackup is false: projects (from cm-storage on) hold links to this
          phone's gallery, which mean nothing on another phone, and settings are
          three switches. Nothing is worth an automatic cloud copy.
@@ -44,6 +56,33 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- WorkManager's foreground service, given the export's types. Not
+             exported (WorkManager's own declaration), so no other app can start it. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaProcessing"
+            tools:node="merge" />
+
+        <!-- The export notification's Stop button. Not exported: only the app's
+             own immutable PendingIntent reaches it. -->
+        <receiver
+            android:name=".work.ExportStopReceiver"
+            android:exported="false" />
+
+        <!-- WorkManager starts from ClearMovieApplication (Configuration.Provider)
+             with Hilt's worker factory, not from its start-up initializer. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
         <!-- Per-app language on Android 10-12: AppCompat stores the in-app
              choice itself (autoStoreLocales) and applies it on every start.

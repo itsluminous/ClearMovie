@@ -74,10 +74,24 @@ object ColourCalibration {
     @Volatile private var cached: DeviceColour? = null
     private val lock = Any()
 
-    fun of(context: Context): DeviceColour {
-        cached?.let { return it }
+    /**
+     * [retryUnclear] (an export, which runs for minutes) measures again when
+     * this process only has an unclear or failed result, such as after a
+     * codec error while the preview held the decoders; at most
+     * [MAX_EXPORT_RETRIES] times per process, so a phone whose calibration
+     * always stalls does not lose [TIMEOUT_S] on every export.
+     */
+    fun of(
+        context: Context,
+        retryUnclear: Boolean = false,
+    ): DeviceColour {
+        cached?.let { if (!shouldRetry(it, retryUnclear)) return it }
         synchronized(lock) {
-            cached?.let { return it }
+            cached?.let { current ->
+                if (!shouldRetry(current, retryUnclear)) return current
+                exportRetries++
+                Log.i(TAG, "Measuring colour again for the export (try $exportRetries of $MAX_EXPORT_RETRIES)")
+            }
             check(!Looper.getMainLooper().isCurrentThread) { "Calibrate colour off the main thread" }
             val app = context.applicationContext
             val file = File(File(app.noBackupFilesDir, "render"), "colour-calibration.txt")
@@ -86,6 +100,17 @@ object ColourCalibration {
             return result
         }
     }
+
+    // Guarded by [lock].
+    private var exportRetries = 0
+
+    private fun shouldRetry(
+        current: DeviceColour,
+        retryUnclear: Boolean,
+    ): Boolean = retryUnclear && !current.measured && exportRetries < MAX_EXPORT_RETRIES
+
+    /** Exports per process that may measure again after an unclear result. */
+    const val MAX_EXPORT_RETRIES = 3
 
     /** The cache key: the measurement's version and the system build. */
     internal fun key(): String = "v$VERSION|${Build.FINGERPRINT}"

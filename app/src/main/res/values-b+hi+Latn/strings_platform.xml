@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Hinglish. Same names as values/strings_platform.xml. No Devanagari. -->
 <resources>
+    <string name="notification_channel_export">Videos save karna</string>
+    <string name="notification_channel_export_description">Video save hote waqt dikhata hai ki woh kahan tak pahuncha, aur kab taiyaar hua.</string>
+    <string name="notification_export_title">Aapka video save ho raha hai</string>
+    <string name="notification_export_progress">%1$d%% poora</string>
+    <string name="notification_export_restarted">Phir se shuru hua, %1$d%% poora</string>
+    <string name="notification_export_done_title">Aapka video taiyaar hai</string>
+    <string name="notification_export_done_text">%1$s aapki gallery me hai. Play karne ke liye tap karein.</string>
+    <string name="notification_export_failed_title">Aapka video save nahi hua</string>
 </resources>

@@ -248,6 +248,10 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
+    // Export runs in a Hilt-injected foreground worker (ARCHITECTURE section 12).
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Room (projects, preset bindings, session) and DataStore (settings)
     implementation(libs.room.runtime)
@@ -279,6 +283,7 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.androidx.work.testing)
 
     // Instrumented tests
     androidTestImplementation(libs.androidx.test.runner)
@@ -290,4 +295,5 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.espresso.intents)
+    androidTestImplementation(libs.androidx.work.testing)
 }

@@ -1,10 +1,12 @@
 package com.itsluminous.clearmovie.data.preset
 
+import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
+import android.net.Uri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -58,11 +60,26 @@ class AndroidMediaProbe(
             }
         }
 
-    private suspend fun loudness(file: File): Double? {
+    /**
+     * Integrated loudness of [uri]'s first audio track (a replaced ending, or
+     * a sound the user added, measured when the video is exported), or null
+     * without audio or when it cannot be read.
+     */
+    suspend fun loudnessOf(
+        context: Context,
+        uri: Uri,
+    ): Double? =
+        withContext(dispatcher) {
+            orNullUnlessCancelled { loudness { it.setDataSource(context, uri, null) } }
+        }
+
+    private suspend fun loudness(file: File): Double? = loudness { it.setDataSource(file.path) }
+
+    private suspend fun loudness(open: (MediaExtractor) -> Unit): Double? {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            extractor.setDataSource(file.path)
+            open(extractor)
             val track =
                 (0 until extractor.trackCount).firstOrNull {
                     extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") ==

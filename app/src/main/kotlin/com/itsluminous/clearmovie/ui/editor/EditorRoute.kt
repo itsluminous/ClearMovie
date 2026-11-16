@@ -48,6 +48,8 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.ui.components.PlayFileDialog
 import com.itsluminous.clearmovie.ui.components.WorkDialog
+import com.itsluminous.clearmovie.ui.export.ExportBlock
+import com.itsluminous.clearmovie.ui.export.ExportFlow
 import com.itsluminous.clearmovie.ui.media.rememberMediaAccessController
 import com.itsluminous.clearmovie.ui.preset.presetName
 
@@ -128,12 +130,7 @@ fun EditorRoute(
         snackbar = snackbar,
     )
     if (exportInfo) {
-        AlertDialog(
-            onDismissRequest = { exportInfo = false },
-            title = { Text(stringResource(R.string.editor_export_soon_title)) },
-            text = { Text(stringResource(R.string.editor_export_soon_body)) },
-            confirmButton = { TextButton(onClick = { exportInfo = false }) { Text(stringResource(R.string.action_ok)) } },
-        )
+        ExportFlow(title = title, blocked = exportBlock(ui), onDismiss = { exportInfo = false })
     }
     if (notSaved) {
         AlertDialog(
@@ -165,6 +162,15 @@ fun EditorRoute(
         }
     }
 }
+
+/** What the editor already knows stops an export: nothing to save, a missing preset file, a missing photo or video. */
+internal fun exportBlock(ui: EditorUi): ExportBlock? =
+    when {
+        !ui.hasContent -> ExportBlock.NOTHING
+        ui.presetNeedsRepair -> ExportBlock.PRESET_BROKEN
+        ui.missing.isNotEmpty() -> ExportBlock.MISSING_MEDIA
+        else -> null
+    }
 
 private tailrec fun Context.findActivity(): Activity? =
     when (this) {

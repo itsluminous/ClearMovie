@@ -82,8 +82,10 @@ adb -s emulator-5584 emu kill
 ```
 
 Emulators encode video in software, so export tests prove correctness, not speed.
-Hardware encoding is checked on a real phone, where a dedicated test runs and the
-emulator skips it.
+Hardware encoding is checked on a real phone, where a dedicated test
+(`ExportDeviceTest.hardwareEncoderIsUsedOnAPhone`) runs and the emulator skips
+it with the reason. Every export logs its encoders and the decoders it keeps
+open at once (`adb logcat -s ExportPipeline RenderExporter VideoExport`).
 
 The render tests (`app/src/androidTest/.../render/`) export small projects through
 the real Transformer and check pixels and sound levels in the output: keying, layer
@@ -94,6 +96,13 @@ before the test run uninstalls the app. Two kinds of render test only run by han
 
 - `SpikeLongTest` (a 2-minute export watching memory, and frame-video seek times)
   takes several minutes: add `-Pandroid.testInstrumentationRunnerArguments.cm.long=true`.
+- `RealMediaExportTest` exports a whole project made from real preset files
+  at every size through the real export, for a by-eye check. Put
+  `Intro.mp4`, `Frame-White.mp4`, `speech_last.mp3` and some `photo*.jpg` and
+  `video*.mp4` files in the app's external files folder under `realmedia/`,
+  then add `-Pandroid.testInstrumentationRunnerArguments.cm.realmedia=true`.
+  The outputs and `realmedia-timeline.txt` (when each part starts) land in
+  `render-tests/`.
 - `RealFrameKeyingTest` checks keying against a real preset frame. Put `Intro.mp4`,
   `Frame-White-20s.mp4` (16 s or more) and `speech_last.mp3` in the app's
   external files folder under `realmedia/` first; without them it is skipped.

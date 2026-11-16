@@ -12,7 +12,8 @@ their imports.
 | --- | --- | --- |
 | `domain.model` | The project and preset model (below), `ThemeMode`, `AppSettings`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `render.plan` | `RenderPlanBuilder` and the `RenderPlan` it makes, and the preview's `PreviewSchedule`: pure Kotlin | `android.*`, `androidx.*`, Media3, or any other app layer but `domain` |
-| `render.media3` | The Media3 mapping: `CompositionFactory`, the GL effects, the gain processor, `RenderExporter` | |
+| `domain.export` | The export's rules: the three sizes (`ExportQuality`), the free-space rule, the gallery file name, the time left: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
+| `render.media3` | The Media3 mapping: `CompositionFactory`, the GL effects, the gain processor, `RenderExporter`, `VideoExport` (hardware first, then software) | |
 | `render.preview` | The layered editor preview (`LayeredPreviewEngine`, `StillLoader`) and the exact draft (`ExactDraft`) | |
 | `data.settings` | `SettingsRepository` and its DataStore implementation | `ui` |
 | `data.db` | The Room database `ClearMovieDatabase` (projects, session, preset bindings and definitions, persisted link grants) | `ui` |
@@ -20,11 +21,13 @@ their imports.
 | `data.preset` | `PresetStore`, the key-colour check, `LoudnessMeter`, `MediaProbe` | `ui` |
 | `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants, `newMainItems` (picked items to clips) | `ui` |
 | `data.files` | `AppFiles` (where files live), `SafeFileName`, `StorageUsage` | `ui` |
+| `data.export` | `ExportStore`: the export's hidden-then-shown entry in `Movies/ClearMovie` | `ui` |
+| `work` | `ExportWorker` (the foreground worker), `ExportPipeline` (what one export does), its notifications and Stop receiver | |
 | `di` | Hilt modules (the settings DataStore, the database, the storage classes, the app scope) | |
 | `ui.theme` | `ClearMovieTheme`, the branded fallback colour schemes, `MediaColors` | |
 | `ui.navigation` | `ClearMovieApp` (the navigation graph), `NewVideoFlow` (which screen follows which), `Routes` | |
 | `ui.layout` | `WindowClass`: Material window size classes from the space the screen has | |
-| `ui.home`, `ui.preset`, `ui.pick`, `ui.editor`, `ui.settings` | The screens and their view models; `AppLanguage` (the in-app language picker) | |
+| `ui.home`, `ui.preset`, `ui.pick`, `ui.editor`, `ui.export`, `ui.settings` | The screens and their view models; `AppLanguage` (the in-app language picker) | |
 | `ui.media`, `ui.components` | The photo-access explainer, the copy dialogs and `MediaIntake`, the missing-clip tile; progress and play-a-file dialogs | |
 
 `ClearMovieApplication` (`@HiltAndroidApp`) and `MainActivity` sit at the root.
@@ -230,6 +233,55 @@ until its first frame lands; and a TextureView that is never drawn stops taking
 pictures and stalls its player, so a hidden layer is drawn almost transparent
 rather than not at all.
 
+## Export
+
+The editor's Export button opens the export sheet (`ui.export`): three sizes,
+**Best** (1080p30, about 12 Mb/s), **Good** (720p30, about 6 Mb/s, suggested)
+and **Small** (480p30, about 2.5 Mb/s), each with its estimated size and, when
+the phone is too full for it, how much to free. Save starts `ExportWorker`
+through WorkManager as unique work named `export`, so one export runs at a
+time on the phone (a second video asks before replacing it). The sheet only
+watches that work; hiding it, rotating, leaving the app or closing the editor
+never stops the export.
+
+`ExportWorker` is a Hilt `CoroutineWorker` promoted to a foreground service
+(type `mediaProcessing` on Android 15+, `dataSync` before) with a quiet
+progress notification whose Stop button reaches the app's own unexported
+`ExportStopReceiver` through an immutable PendingIntent. If the process is
+killed, WorkManager runs it again from the start and the sheet says so.
+`ExportPipeline` does the work:
+
+1. removes what a killed export left (this app's hidden gallery entries in
+   `Movies/ClearMovie`, its temporary files);
+2. reads the project as it is (`ProjectRepository.read`, without opening it),
+   and refuses with a plain reason when a preset file it plays changed or a
+   photo or video is missing;
+3. measures the loudness of any sound that was not measured when it was bound
+   (a replaced spoken ending), so it is evened out like the preset's own;
+4. builds the plan and composition at the chosen height, with the colour
+   calibration measured again when this process only had an unclear answer
+   (at most three times per process);
+5. applies the free-space rule: 2.2 times the estimate plus 200 MB for a
+   temporary file that is then copied into the gallery, else 1.2 times for
+   writing straight into the hidden gallery entry (Media3's MP4 muxer on its
+   file descriptor), else it says how much to free;
+6. encodes with `VideoExport`: hardware encoders first; when an encoder fails,
+   the output is emptied and the export runs once more with software encoders
+   only. Decoders fall back to the next one when the first will not start
+   (an Android 10 phone out of hardware decoder instances). The log names the
+   encoders and the most decoders the plan keeps open at once next to the
+   phone's H.264 instance limits;
+7. shows the entry in the gallery only when it is complete. A Stop or a
+   failure removes the entry and the temporary file.
+
+The gallery name comes from the project's name (`ExportFileName`): path and
+reserved characters become spaces, invisible and direction-changing
+characters are dropped, a leading dot cannot hide it, letters of every script
+stay, and the extension is always `.mp4`. An unnamed draft uses the editor's
+title. The result offers Play (the app's own player) and Share (the phone's
+share sheet, with read access to that one video), and the notification does
+the same.
+
 ## Screens and navigation
 
 Home (preset pick, Start without a preset, My videos) leads to preset setup or
@@ -238,7 +290,8 @@ repair heading), then preset review (Play, Replace or Skip for this video for
 the intro, frame and ending; the choices rebuild the new draft from the
 track template), then the photo step (the one-time access explainer, Try
 again after a refusal, the system Photo Picker, the intake), then the editor
-shell (Export at the top right, the layered preview, the read-only MAIN row).
+shell (Export at the top right, which opens the export sheet; the layered
+preview; the read-only MAIN row).
 `NewVideoFlow` decides the order: with `EntryMode.MEDIA_CHOSEN` (shares, from
 cm-share) the preset pick goes straight to the editor.
 

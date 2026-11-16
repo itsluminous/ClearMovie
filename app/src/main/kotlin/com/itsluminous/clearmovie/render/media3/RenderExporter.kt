@@ -9,18 +9,24 @@ import androidx.media3.common.C
 import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.Clock
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
+import androidx.media3.muxer.Muxer
 import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Codec
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultAssetLoaderFactory
+import androidx.media3.transformer.DefaultDecoderFactory
 import androidx.media3.transformer.DefaultEncoderFactory
+import androidx.media3.transformer.EncoderSelector
+import androidx.media3.transformer.EncoderUtil
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
+import com.google.common.collect.ImmutableList
 import java.io.File
 
 /** Output settings per quality (ARCHITECTURE section 7, Export). */
@@ -40,10 +46,24 @@ data class EncodeSpec(
 }
 
 /**
+ * Which encoders an export may use. [HARDWARE_FIRST] tries the phone's
+ * hardware encoders before its software ones (the normal export);
+ * [SOFTWARE_ONLY] is the retry after a hardware encoder failed mid-export.
+ */
+enum class EncoderPreference { HARDWARE_FIRST, SOFTWARE_ONLY }
+
+/**
  * Starts a Transformer export of a [Composition] to an MP4 file: H.264 and
  * AAC, the encoder factory falling back to a supported configuration when
  * the phone refuses the requested one. The encoder names are logged, so a
  * report from a phone shows whether hardware encoding was used.
+ *
+ * [preference] picks hardware or software encoders. [baseEncoders] replaces
+ * the default encoder factory (a test injects a failing one there).
+ * [muxerFactory] replaces the default MP4 muxer (the export's direct path
+ * writes into a gallery entry's file descriptor). Decoders fall back to the
+ * next one the phone has when the first refuses to start, which covers a
+ * phone out of hardware decoder instances (risk 5).
  *
  * Photos are decoded no larger than [maxImageDimension] on their long side,
  * so a 48 MP photo never reaches a 2 GB phone's memory at full size (review
@@ -66,6 +86,9 @@ class RenderExporter(
     private val context: Context,
     canvasHeight: Int,
     private val deviceColour: DeviceColour,
+    private val preference: EncoderPreference = EncoderPreference.HARDWARE_FIRST,
+    private val baseEncoders: ((EncodeSpec, EncoderPreference) -> Codec.EncoderFactory)? = null,
+    private val muxerFactory: Muxer.Factory? = null,
 ) {
     val maxImageDimension: Int = minOf(MAX_TEXTURE, 2 * maxOf(canvasHeight, (canvasHeight * 16 + 8) / 9))
 
@@ -82,12 +105,19 @@ class RenderExporter(
         listener: Listener,
     ): Transformer {
         val looper = checkNotNull(Looper.myLooper()) { "Export needs a Looper thread" }
-        val encoders = encoderFactory(context, spec, deviceColour)
+        val base = baseEncoders
+        val encoders =
+            if (base != null) {
+                encoderFactory(context, spec, deviceColour) { base(spec, preference) }
+            } else {
+                encoderFactory(context, spec, deviceColour, preference)
+            }
         val bitmapLoader =
             DataSourceBitmapLoader
                 .Builder(context)
                 .setMaximumOutputDimension(maxImageDimension)
                 .build()
+        val decoders = DefaultDecoderFactory.Builder(context).setEnableDecoderFallback(true).build()
         val transformer =
             Transformer
                 .Builder(context)
@@ -95,7 +125,8 @@ class RenderExporter(
                 .setVideoMimeType(MimeTypes.VIDEO_H264)
                 .setAudioMimeType(MimeTypes.AUDIO_AAC)
                 .setEncoderFactory(encoders)
-                .setAssetLoaderFactory(DefaultAssetLoaderFactory(context, bitmapLoader))
+                .setAssetLoaderFactory(DefaultAssetLoaderFactory(context, decoders, Clock.DEFAULT, null, bitmapLoader))
+                .apply { muxerFactory?.let(::setMuxerFactory) }
                 .addListener(
                     object : Transformer.Listener {
                         override fun onCompleted(
@@ -104,7 +135,8 @@ class RenderExporter(
                         ) {
                             Log.i(
                                 TAG,
-                                "Export done: video encoder ${exportResult.videoEncoderName}, audio encoder ${exportResult.audioEncoderName}",
+                                "Export done: video encoder ${exportResult.videoEncoderName}, " +
+                                    "audio encoder ${exportResult.audioEncoderName} ($preference)",
                             )
                             listener.onCompleted(exportResult)
                         }
@@ -138,19 +170,38 @@ class RenderExporter(
             context: Context,
             spec: EncodeSpec,
             deviceColour: DeviceColour,
-            base: () -> Codec.EncoderFactory = {
-                DefaultEncoderFactory
-                    .Builder(context)
-                    .setEnableFallback(true)
-                    .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(spec.videoBitrate).build())
-                    .setRequestedAudioEncoderSettings(AudioEncoderSettings.Builder().setBitrate(spec.audioBitrate).build())
-                    .build()
-            },
+            preference: EncoderPreference = EncoderPreference.HARDWARE_FIRST,
+            base: () -> Codec.EncoderFactory = { defaultEncoders(context, spec, preference) },
         ): Codec.EncoderFactory {
             val encoders = base()
             val measured = deviceColour.encoderName
             return if (deviceColour.encoderWritesBt601 && measured != null) Bt601TaggedEncoders(encoders, measured) else encoders
         }
+
+        /** Media3's encoder factory, with fallback to a supported size and rate, choosing encoders by [preference]. */
+        fun defaultEncoders(
+            context: Context,
+            spec: EncodeSpec,
+            preference: EncoderPreference,
+        ): Codec.EncoderFactory =
+            DefaultEncoderFactory
+                .Builder(context)
+                .setEnableFallback(true)
+                .setVideoEncoderSelector(selector(preference))
+                .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(spec.videoBitrate).build())
+                .setRequestedAudioEncoderSettings(AudioEncoderSettings.Builder().setBitrate(spec.audioBitrate).build())
+                .build()
+
+        /** Hardware encoders before software ones (in the phone's own order otherwise), or software only. */
+        fun selector(preference: EncoderPreference): EncoderSelector =
+            EncoderSelector { mime ->
+                val all = EncoderUtil.getSupportedEncoders(mime)
+                val (hardware, software) = all.partition { EncoderUtil.isHardwareAccelerated(it, mime) }
+                when (preference) {
+                    EncoderPreference.HARDWARE_FIRST -> ImmutableList.copyOf(hardware + software)
+                    EncoderPreference.SOFTWARE_ONLY -> ImmutableList.copyOf(software)
+                }
+            }
     }
 
     /**

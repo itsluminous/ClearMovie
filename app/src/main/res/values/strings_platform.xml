@@ -3,4 +3,12 @@
      channels, the "Share to" label, the export notification. The first entries
      arrive with cm-share and cm-export. Translated like strings.xml. -->
 <resources>
+    <string name="notification_channel_export">Saving videos</string>
+    <string name="notification_channel_export_description">Shows how far a video has got while it is being saved, and when it is ready.</string>
+    <string name="notification_export_title">Saving your video</string>
+    <string name="notification_export_progress">%1$d%% done</string>
+    <string name="notification_export_restarted">Started again, %1$d%% done</string>
+    <string name="notification_export_done_title">Your video is ready</string>
+    <string name="notification_export_done_text">%1$s is in your gallery. Tap to play it.</string>
+    <string name="notification_export_failed_title">Your video wasn\'t saved</string>
 </resources>

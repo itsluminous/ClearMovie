@@ -83,8 +83,8 @@ Planned for the first release:
 - **Portrait and landscape** - in landscape, the preview sits on the left and the timeline on the right.
   This also works on tablets, foldables and split-screen.
 - **Autosave** - work is saved as you go and recovered after a crash. Name a video to keep it.
-- **Hardware-accelerated export** - High (1080p), Standard (720p) or Small (480p), saved
-  to your gallery and ready to share.
+- **Hardware-accelerated export** - Best (1080p), Good (720p) or Small (480p), saved
+  to your gallery and ready to play or share.
 
 ## Feature checklist
 
@@ -114,8 +114,8 @@ What's planned, and what has shipped:
 **Saving and export**
 - [ ] Autosave and crash recovery
 - [ ] Named projects in "My videos"
-- [ ] Export in High, Standard or Small quality with hardware encoding; keeps running if you rotate or leave the app
-- [ ] Saved to Movies/ClearMovie, then a Share button
+- [x] Export in Best, Good or Small quality with hardware encoding; keeps running if you rotate or leave the app
+- [x] Saved to Movies/ClearMovie, then Play and Share buttons
 
 **Everywhere**
 - [ ] Portrait and landscape on every screen; tablets and foldables
