@@ -80,19 +80,25 @@ object ColourCalibration {
             val file = File(File(app.noBackupFilesDir, "render"), "colour-calibration.txt")
             val key = "v$VERSION|${Build.FINGERPRINT}"
             val stored = runCatching { DeviceColour.parse(file.readText(), key) }.getOrNull()
-            val result =
-                stored
-                    ?: runCatching { measure(app) }.onFailure { Log.w(TAG, "Colour calibration failed", it) }.getOrNull()?.also { measured ->
-                        if (measured.measured) {
-                            runCatching {
-                                file.parentFile?.mkdirs()
-                                file.writeText(measured.serialize(key))
-                            }
-                        }
-                    } ?: DeviceColour.TRUSTED
+            val result = stored ?: measureAndStore(app, file, key) ?: DeviceColour.TRUSTED
             cached = result
             return result
         }
+    }
+
+    private fun measureAndStore(
+        context: Context,
+        file: File,
+        key: String,
+    ): DeviceColour? {
+        val measured = runCatching { measure(context) }.onFailure { Log.w(TAG, "Colour calibration failed", it) }.getOrNull()
+        if (measured?.measured == true) {
+            runCatching {
+                file.parentFile?.mkdirs()
+                file.writeText(measured.serialize(key))
+            }
+        }
+        return measured
     }
 
     /** Runs the calibration export; null when it failed. */
