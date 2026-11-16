@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.SystemBarStyle
@@ -14,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.ui.navigation.ClearMovieApp
+import com.itsluminous.clearmovie.ui.share.ShareViewModel
 import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
 import com.itsluminous.clearmovie.ui.theme.applyNightMode
 import dagger.hilt.android.AndroidEntryPoint
@@ -29,6 +31,9 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    /** The share flow; the same instance the app's screens use (activity scope, default key). */
+    private val share: ShareViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super.onCreate: swaps Theme.ClearMovie.Starting for the app theme.
         val splashScreen = installSplashScreen()
@@ -37,6 +42,9 @@ class MainActivity : AppCompatActivity() {
         // never appears in the wrong theme or colours first.
         splashScreen.setKeepOnScreenCondition { viewModel.settings.value == null }
         enableEdgeToEdge()
+        // A share that started the app. After a rotation or a process death the
+        // share's own saved state carries on instead, so it is never taken twice.
+        if (savedInstanceState == null) share.receive(intent)
 
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -57,9 +65,16 @@ class MainActivity : AppCompatActivity() {
             }
 
             ClearMovieTheme(themeMode = loaded.themeMode, dynamicColor = loaded.dynamicColor) {
-                ClearMovieApp(launchDecision = viewModel::launchDecision)
+                ClearMovieApp(launchDecision = viewModel::launchDecision, share = share)
             }
         }
+    }
+
+    /** A share while ClearMovie is open, handed on by [ShareActivity]. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        share.receive(intent)
     }
 
     private companion object {

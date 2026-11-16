@@ -31,6 +31,10 @@ import com.itsluminous.clearmovie.ui.pick.MediaPickRoute
 import com.itsluminous.clearmovie.ui.preset.PresetReviewRoute
 import com.itsluminous.clearmovie.ui.preset.PresetSetupRoute
 import com.itsluminous.clearmovie.ui.settings.SettingsRoute
+import com.itsluminous.clearmovie.ui.share.ShareDialogs
+import com.itsluminous.clearmovie.ui.share.ShareNav
+import com.itsluminous.clearmovie.ui.share.ShareRoute
+import com.itsluminous.clearmovie.ui.share.ShareViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,11 +47,16 @@ import kotlinx.coroutines.withContext
  * restored process, whose screens come back on their own): when the app
  * stopped with a video open in the editor, the editor opens again at once
  * ([ReopenAtLaunch]).
+ *
+ * [share] is the activity's share flow (cm-share): a share goes to its own
+ * preset pick and then straight to the editor, skipping the review and the
+ * picker; its questions and messages show over whatever screen is open.
  */
 @Composable
 fun ClearMovieApp(
     launchDecision: (suspend () -> LaunchDecision)? = null,
     navController: NavHostController = rememberNavController(),
+    share: ShareViewModel? = null,
 ) {
     ReopenAtLaunch(launchDecision) {
         navController.navigate(Routes.editor(it.id, broughtBack = it.broughtBack)) {
@@ -70,6 +79,55 @@ fun ClearMovieApp(
             // The new-video screens are done with; Back from the editor goes Home.
             popUpTo(Routes.HOME)
             launchSingleTop = true
+        }
+    }
+
+    fun goHome() {
+        if (!navController.popBackStack(Routes.HOME, inclusive = false)) navController.navigate(Routes.HOME)
+    }
+
+    fun onShare(nav: ShareNav) {
+        when (nav) {
+            ShareNav.ToPick -> {
+                navController.navigate(Routes.SHARE) {
+                    popUpTo(Routes.HOME)
+                    launchSingleTop = true
+                }
+            }
+
+            is ShareNav.ToEditor -> {
+                val top = navController.currentBackStackEntry
+                val showing =
+                    top?.destination?.route == Routes.EDITOR && top.arguments?.getString(Routes.ARG_PROJECT) == nav.projectId.value
+                if (!showing) openEditor(nav.projectId)
+            }
+
+            is ShareNav.ToSetup -> {
+                navController.navigate(Routes.setup(nav.presetId, newVideo = true, shareDraft = nav.draft))
+            }
+
+            ShareNav.Home -> {
+                goHome()
+            }
+
+            ShareNav.AskForAccess -> {
+                Unit
+            }
+        }
+    }
+
+    if (share != null) {
+        // A share whose video the editor now shows is done.
+        LaunchedEffect(navController, share) {
+            navController.currentBackStackEntryFlow.collect { entry ->
+                if (entry.destination.route == Routes.EDITOR) {
+                    entry.arguments
+                        ?.getString(Routes.ARG_PROJECT)
+                        ?.let { id ->
+                            runCatching { ProjectId(id) }.getOrNull()
+                        }?.let(share::editorShown)
+                }
+            }
         }
     }
 
@@ -119,6 +177,11 @@ fun ClearMovieApp(
                         type = NavType.BoolType
                         defaultValue = false
                     },
+                    navArgument(Routes.ARG_SHARE_DRAFT) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
                 ),
         ) {
             PresetSetupRoute(
@@ -130,6 +193,9 @@ fun ClearMovieApp(
                 },
                 onBack = { navController.popBackStack() },
             )
+        }
+        composable(Routes.SHARE) {
+            if (share != null) ShareRoute(share, onIdle = ::goHome) else LaunchedEffect(Unit) { goHome() }
         }
         composable(Routes.REVIEW, arguments = listOf(navArgument(Routes.ARG_PROJECT) { type = NavType.StringType })) {
             PresetReviewRoute(onGo = ::go, onBack = { navController.popBackStack() })
@@ -162,6 +228,7 @@ fun ClearMovieApp(
             )
         }
     }
+    if (share != null) ShareDialogs(share, onNav = ::onShare)
 }
 
 /**

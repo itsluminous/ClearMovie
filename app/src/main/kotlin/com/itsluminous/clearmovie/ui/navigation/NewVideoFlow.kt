@@ -86,16 +86,22 @@ object Routes {
     const val ARG_NEW_VIDEO = "newVideo"
     const val ARG_SKIPPED = "skipped"
     const val ARG_BROUGHT_BACK = "broughtBack"
+    const val ARG_SHARE_DRAFT = "shareDraft"
 
-    const val SETUP = "setup/{$ARG_PRESET}?$ARG_NEW_VIDEO={$ARG_NEW_VIDEO}"
+    /** The share's preset pick (cm-share); the share itself lives in the activity's `ShareViewModel`. */
+    const val SHARE = "share"
+
+    const val SETUP = "setup/{$ARG_PRESET}?$ARG_NEW_VIDEO={$ARG_NEW_VIDEO}&$ARG_SHARE_DRAFT={$ARG_SHARE_DRAFT}"
     const val REVIEW = "review/{$ARG_PROJECT}"
     const val PICK = "pick/{$ARG_PROJECT}"
     const val EDITOR = "editor/{$ARG_PROJECT}?$ARG_SKIPPED={$ARG_SKIPPED}&$ARG_BROUGHT_BACK={$ARG_BROUGHT_BACK}"
 
+    /** [shareDraft]: the draft holding a share's items, which Done gives this preset (then the editor). */
     fun setup(
         presetId: PresetId,
         newVideo: Boolean,
-    ) = "setup/${presetId.value}?$ARG_NEW_VIDEO=$newVideo"
+        shareDraft: ProjectId? = null,
+    ) = "setup/${presetId.value}?$ARG_NEW_VIDEO=$newVideo" + (shareDraft?.let { "&$ARG_SHARE_DRAFT=${it.value}" } ?: "")
 
     fun review(projectId: ProjectId) = "review/${projectId.value}"
 

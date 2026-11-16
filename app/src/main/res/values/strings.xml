@@ -247,4 +247,51 @@
     <string name="editor_item_current">Playing now</string>
     <string name="pick_no_picker">This phone has no app to choose photos and videos from.</string>
     <string name="preset_definition_other">This preset file is for another preset, so it was added to that one, not this one.</string>
+    <!-- Share from the gallery (cm-share). -->
+    <string name="share_getting_ready">Getting your photos and videos ready</string>
+    <!-- %1$d is how many shared photos and videos are ready. -->
+    <plurals name="share_ready">
+        <item quantity="one">%1$d photo or video is ready</item>
+        <item quantity="other">%1$d photos and videos are ready</item>
+    </plurals>
+    <string name="share_choose_preset">Choose a preset for your video</string>
+    <!-- %1$d is a number of shared items. -->
+    <plurals name="share_skipped_not_media">
+        <item quantity="one">%1$d item was skipped because it isn\'t a photo or video</item>
+        <item quantity="other">%1$d items were skipped because they aren\'t photos or videos</item>
+    </plurals>
+    <!-- %1$d is a number of shared items. -->
+    <plurals name="share_skipped_unreadable">
+        <item quantity="one">%1$d item couldn\'t be opened. Share it again from your gallery.</item>
+        <item quantity="other">%1$d items couldn\'t be opened. Share them again from your gallery.</item>
+    </plurals>
+    <!-- %1$d is a number of shared items left out, %2$d the most one share can add (500). -->
+    <plurals name="share_skipped_over_limit">
+        <item quantity="one">%1$d item was left out: ClearMovie takes up to %2$d at a time.</item>
+        <item quantity="other">%1$d items were left out: ClearMovie takes up to %2$d at a time.</item>
+    </plurals>
+    <string name="share_add_title">Add to the open video?</string>
+    <!-- %1$d is how many photos and videos were shared. -->
+    <plurals name="share_add_body">
+        <item quantity="one">Add this photo or video to the video you have open, or start a new video with it?</item>
+        <item quantity="other">Add these %1$d photos and videos to the video you have open, or start a new video with them?</item>
+    </plurals>
+    <string name="share_add_here">Add to this video</string>
+    <string name="share_start_new">Start a new video</string>
+    <string name="share_many_title">That\'s a lot of items</string>
+    <!-- %1$d is the video's length in minutes. -->
+    <plurals name="share_many_body">
+        <item quantity="one">Your video will be about %1$d minute long. You can take items out later.</item>
+        <item quantity="other">Your video will be about %1$d minutes long. You can take items out later.</item>
+    </plurals>
+    <string name="share_continue">Continue</string>
+    <string name="share_nothing_title">Nothing could be added</string>
+    <string name="share_nothing_body">Only photos and videos can be added to a video.</string>
+    <string name="share_added_title">Added to your video</string>
+    <!-- %1$d is how many photos and videos went onto the video. -->
+    <plurals name="share_added_body">
+        <item quantity="one">%1$d photo or video was added.</item>
+        <item quantity="other">%1$d photos and videos were added.</item>
+    </plurals>
+    <string name="share_not_saved">Your phone is full, so the shared photos and videos could not be added. Free up some space and share them again.</string>
 </resources>

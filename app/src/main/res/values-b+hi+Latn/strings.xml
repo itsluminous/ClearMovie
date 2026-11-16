@@ -216,4 +216,43 @@
     <string name="editor_item_current">Abhi chal raha hai</string>
     <string name="pick_no_picker">Is phone me photos aur videos chunne wala koi app nahi hai.</string>
     <string name="preset_definition_other">Yeh preset file kisi doosre preset ki hai, isliye use usi me add kiya gaya, isme nahi.</string>
+    <string name="share_getting_ready">Aapki photos aur videos ready ho rahe hain</string>
+    <plurals name="share_ready">
+        <item quantity="one">%1$d photo ya video ready hai</item>
+        <item quantity="other">%1$d photos aur videos ready hain</item>
+    </plurals>
+    <string name="share_choose_preset">Apne video ke liye preset chunein</string>
+    <plurals name="share_skipped_not_media">
+        <item quantity="one">%1$d item chhod diya gaya, kyunki woh photo ya video nahi hai</item>
+        <item quantity="other">%1$d items chhod diye gaye, kyunki woh photos ya videos nahi hain</item>
+    </plurals>
+    <plurals name="share_skipped_unreadable">
+        <item quantity="one">%1$d item khul nahi saka. Use apni gallery se phir se share karein.</item>
+        <item quantity="other">%1$d items khul nahi sake. Unhe apni gallery se phir se share karein.</item>
+    </plurals>
+    <plurals name="share_skipped_over_limit">
+        <item quantity="one">%1$d item chhoot gaya: ClearMovie ek baar me %2$d tak hi leta hai.</item>
+        <item quantity="other">%1$d items chhoot gaye: ClearMovie ek baar me %2$d tak hi leta hai.</item>
+    </plurals>
+    <string name="share_add_title">Khule hue video me add karein?</string>
+    <plurals name="share_add_body">
+        <item quantity="one">Yeh photo ya video abhi khule video me add karein, ya isse naya video shuru karein?</item>
+        <item quantity="other">Yeh %1$d photos aur videos abhi khule video me add karein, ya inse naya video shuru karein?</item>
+    </plurals>
+    <string name="share_add_here">Isi video me add karein</string>
+    <string name="share_start_new">Naya video shuru karein</string>
+    <string name="share_many_title">Yeh bahut saare items hain</string>
+    <plurals name="share_many_body">
+        <item quantity="one">Aapka video lagbhag %1$d minute ka hoga. Aap baad me items hata sakte hain.</item>
+        <item quantity="other">Aapka video lagbhag %1$d minute ka hoga. Aap baad me items hata sakte hain.</item>
+    </plurals>
+    <string name="share_continue">Aage badhein</string>
+    <string name="share_nothing_title">Kuch bhi add nahi ho saka</string>
+    <string name="share_nothing_body">Video me sirf photos aur videos hi add ho sakte hain.</string>
+    <string name="share_added_title">Aapke video me add ho gaya</string>
+    <plurals name="share_added_body">
+        <item quantity="one">%1$d photo ya video add hua.</item>
+        <item quantity="other">%1$d photos aur videos add hue.</item>
+    </plurals>
+    <string name="share_not_saved">Aapka phone bhar gaya hai, isliye share ki gayi photos aur videos add nahi ho sake. Thodi jagah khaali karein aur unhe phir se share karein.</string>
 </resources>

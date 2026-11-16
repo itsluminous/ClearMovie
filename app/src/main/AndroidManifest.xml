@@ -43,9 +43,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ClearMovie">
 
-        <!-- The only activity. Exported because it is the launcher entry.
-             singleTop so a later share (cm-share) reaches onNewIntent instead
-             of stacking a second editor. -->
+        <!-- The app's one screen-holding activity. Exported because it is the
+             launcher entry. singleTop: ShareActivity hands a share to it with
+             CLEAR_TOP | SINGLE_TOP in its own task, so a share while ClearMovie
+             is open reaches onNewIntent instead of stacking a second editor. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -83,6 +84,33 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!-- Share from the gallery (cm-share): photos and videos only, so
+             ClearMovie is not offered for PDFs or text (review F12). A mixed
+             share sent as */* still matches. Android starts a share target in
+             the sharing app's task, so this activity shows nothing: it hands
+             the links (and only the links, with a read grant) to MainActivity
+             in ClearMovie's own task and finishes. -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
 
         <!-- Per-app language on Android 10-12: AppCompat stores the in-app
              choice itself (autoStoreLocales) and applies it on every start.

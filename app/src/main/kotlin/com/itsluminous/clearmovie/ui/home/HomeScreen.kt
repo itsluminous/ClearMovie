@@ -66,10 +66,31 @@ const val HOME_LIST_TAG = "home_list"
 private val MIN_CARD_WIDTH = 340.dp
 
 /**
+ * What the share variant of the preset pick says at the top (cm-share):
+ * "Getting your photos and videos ready" until [ready], then "N photos and
+ * videos are ready", and a line for each kind of item that was left out.
+ */
+data class ShareHeader(
+    val ready: Boolean,
+    val items: Int,
+    val notMedia: Int = 0,
+    val unreadable: Int = 0,
+    val overLimit: Int = 0,
+    val limit: Int = 0,
+)
+
+/** Test tag of the share header. */
+const val SHARE_HEADER_TAG = "share_header"
+
+/**
  * Home and preset pick (ARCHITECTURE section 11.1): "Make a new video", a
  * large card per preset (with "N files missing, tap to fix" when a file is
  * gone), the Start without a preset card, then "My videos". One column on a
  * phone held upright, two or three on wider windows. Stateless.
+ *
+ * With [share] it is the share variant (section 11.12): the shared items'
+ * header above the presets, a Cancel button instead of Settings, and no
+ * "My videos"; the cards wait until the items are ready.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,17 +103,28 @@ fun HomeScreen(
     onVideo: (ProjectId) -> Unit,
     onOpenSettings: () -> Unit,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    share: ShareHeader? = null,
+    onCancelShare: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
+                navigationIcon = {
+                    if (share != null) {
+                        IconButton(onClick = onCancelShare) {
+                            Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
+                        }
+                    }
+                },
                 actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_settings),
-                            contentDescription = stringResource(R.string.action_settings),
-                        )
+                    if (share == null) {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_settings),
+                                contentDescription = stringResource(R.string.action_settings),
+                            )
+                        }
                     }
                 },
             )
@@ -103,8 +135,9 @@ fun HomeScreen(
         AdaptiveScreen(Modifier.fillMaxSize().padding(padding)) { window ->
             // Wide windows get more columns, but never so narrow that a preset's name breaks.
             val columns = (maxWidth / MIN_CARD_WIDTH).toInt().coerceIn(1, window.columns)
+            val enabled = !busy && share?.ready != false
             Column(Modifier.fillMaxSize()) {
-                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (busy || share?.ready == false) LinearProgressIndicator(Modifier.fillMaxWidth())
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
                     state = rememberLazyGridState(),
@@ -113,11 +146,17 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize().testTag(HOME_LIST_TAG),
                 ) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { Heading(stringResource(R.string.home_new_video)) }
-                    items(presets.orEmpty(), key = { "preset-" + it.preset.id.value }) { card ->
-                        PresetCardView(card, enabled = !busy, onClick = { onPreset(card.preset.id) })
+                    if (share != null) {
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "share") { ShareHeaderView(share) }
                     }
-                    item(key = "blank") { BlankCard(enabled = !busy, onClick = onStartBlank) }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Heading(stringResource(if (share != null) R.string.share_choose_preset else R.string.home_new_video))
+                    }
+                    items(presets.orEmpty(), key = { "preset-" + it.preset.id.value }) { card ->
+                        PresetCardView(card, enabled = enabled, onClick = { onPreset(card.preset.id) })
+                    }
+                    item(key = "blank") { BlankCard(enabled = enabled, onClick = onStartBlank) }
+                    if (share != null) return@LazyVerticalGrid
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Heading(stringResource(R.string.home_my_videos), Modifier.padding(top = 8.dp))
                     }
@@ -134,6 +173,55 @@ fun HomeScreen(
                         VideoCard(video, enabled = !busy, onClick = { onVideo(video.id) })
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareHeaderView(header: ShareHeader) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag(SHARE_HEADER_TAG),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painterResource(R.drawable.ic_photo_library),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(32.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    if (header.ready) {
+                        pluralStringResource(R.plurals.share_ready, header.items, header.items)
+                    } else {
+                        stringResource(R.string.share_getting_ready)
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.semantics { heading() },
+                )
+            }
+            val note = MaterialTheme.typography.bodyLarge
+            val color = MaterialTheme.colorScheme.onPrimaryContainer
+            if (header.notMedia > 0) {
+                Text(pluralStringResource(R.plurals.share_skipped_not_media, header.notMedia, header.notMedia), style = note, color = color)
+            }
+            if (header.unreadable > 0) {
+                Text(
+                    pluralStringResource(R.plurals.share_skipped_unreadable, header.unreadable, header.unreadable),
+                    style = note,
+                    color = color,
+                )
+            }
+            if (header.overLimit > 0) {
+                Text(
+                    pluralStringResource(R.plurals.share_skipped_over_limit, header.overLimit, header.overLimit, header.limit),
+                    style = note,
+                    color = color,
+                )
             }
         }
     }

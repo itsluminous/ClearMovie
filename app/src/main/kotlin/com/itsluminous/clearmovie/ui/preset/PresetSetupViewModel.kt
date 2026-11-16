@@ -10,10 +10,13 @@ import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SlotBindResult
 import com.itsluminous.clearmovie.data.project.NewVideoResult
 import com.itsluminous.clearmovie.data.project.NewVideos
+import com.itsluminous.clearmovie.data.project.ShareChoice
+import com.itsluminous.clearmovie.data.project.ShareDrafts
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
+import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.ui.navigation.EntryMode
 import com.itsluminous.clearmovie.ui.navigation.FlowStep
 import com.itsluminous.clearmovie.ui.navigation.NewVideoFlow
@@ -99,9 +102,17 @@ class PresetSetupViewModel
         savedState: SavedStateHandle,
         private val presetStore: PresetStore,
         private val newVideos: NewVideos,
+        private val shareDrafts: ShareDrafts,
     ) : ViewModel() {
         val presetId: PresetId = PresetId(requireNotNull(savedState.get<String>(Routes.ARG_PRESET)))
         val forNewVideo: Boolean = savedState.get<Boolean>(Routes.ARG_NEW_VIDEO) ?: false
+
+        /** Set up from a share's preset pick: Done gives the share's draft this preset, then the editor (cm-share). */
+        private val shareDraft: ProjectId? =
+            savedState
+                .get<String>(
+                    Routes.ARG_SHARE_DRAFT,
+                )?.let { runCatching { ProjectId(it) }.getOrNull() }
 
         private val uiState = MutableStateFlow(SetupUi())
         val ui: StateFlow<SetupUi> = uiState.asStateFlow()
@@ -201,6 +212,11 @@ class PresetSetupViewModel
                 eventChannel.trySend(SetupEvent.Back)
                 return
             }
+            val share = shareDraft
+            if (share != null) {
+                job = viewModelScope.launch { doneForShare(share) }
+                return
+            }
             job =
                 viewModelScope.launch {
                     when (val r = newVideos.fromPreset(presetId)) {
@@ -219,6 +235,19 @@ class PresetSetupViewModel
                         }
                     }
                 }
+        }
+
+        private suspend fun doneForShare(draft: ProjectId) {
+            when (val r = shareDrafts.choose(draft, presetId)) {
+                is ShareChoice.Ready -> eventChannel.send(SetupEvent.Go(NewVideoFlow.afterSetup(EntryMode.MEDIA_CHOSEN, r.projectId)))
+
+                ShareChoice.NeedsSetup -> refresh()
+
+                ShareChoice.NotSaved -> uiState.update { it.copy(message = SetupMessage.NotSaved) }
+
+                // The shared items' video was deleted elsewhere: nothing to finish.
+                ShareChoice.Gone -> eventChannel.send(SetupEvent.Back)
+            }
         }
 
         private fun run(block: suspend () -> SetupMessage?) {

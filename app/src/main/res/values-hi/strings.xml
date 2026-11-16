@@ -208,4 +208,43 @@
     <string name="editor_item_current">अभी चल रहा है</string>
     <string name="pick_no_picker">इस फ़ोन में फ़ोटो और वीडियो चुनने वाला कोई ऐप नहीं है।</string>
     <string name="preset_definition_other">यह प्रीसेट फ़ाइल किसी दूसरे प्रीसेट की है, इसलिए उसे उसी में जोड़ा गया, इसमें नहीं।</string>
+    <string name="share_getting_ready">आपकी फ़ोटो और वीडियो तैयार हो रहे हैं</string>
+    <plurals name="share_ready">
+        <item quantity="one">%1$d फ़ोटो या वीडियो तैयार है</item>
+        <item quantity="other">%1$d फ़ोटो और वीडियो तैयार हैं</item>
+    </plurals>
+    <string name="share_choose_preset">अपने वीडियो के लिए प्रीसेट चुनें</string>
+    <plurals name="share_skipped_not_media">
+        <item quantity="one">%1$d चीज़ छोड़ दी गई, क्योंकि वह फ़ोटो या वीडियो नहीं है</item>
+        <item quantity="other">%1$d चीज़ें छोड़ दी गईं, क्योंकि वे फ़ोटो या वीडियो नहीं हैं</item>
+    </plurals>
+    <plurals name="share_skipped_unreadable">
+        <item quantity="one">%1$d चीज़ खुल नहीं सकी। उसे अपनी गैलरी से फिर से शेयर करें।</item>
+        <item quantity="other">%1$d चीज़ें खुल नहीं सकीं। उन्हें अपनी गैलरी से फिर से शेयर करें।</item>
+    </plurals>
+    <plurals name="share_skipped_over_limit">
+        <item quantity="one">%1$d चीज़ छूट गई: ClearMovie एक बार में %2$d तक ही लेता है।</item>
+        <item quantity="other">%1$d चीज़ें छूट गईं: ClearMovie एक बार में %2$d तक ही लेता है।</item>
+    </plurals>
+    <string name="share_add_title">खुले हुए वीडियो में जोड़ें?</string>
+    <plurals name="share_add_body">
+        <item quantity="one">यह फ़ोटो या वीडियो अभी खुले वीडियो में जोड़ें, या इससे नया वीडियो शुरू करें?</item>
+        <item quantity="other">ये %1$d फ़ोटो और वीडियो अभी खुले वीडियो में जोड़ें, या इनसे नया वीडियो शुरू करें?</item>
+    </plurals>
+    <string name="share_add_here">इसी वीडियो में जोड़ें</string>
+    <string name="share_start_new">नया वीडियो शुरू करें</string>
+    <string name="share_many_title">ये बहुत सारी चीज़ें हैं</string>
+    <plurals name="share_many_body">
+        <item quantity="one">आपका वीडियो लगभग %1$d मिनट का होगा। आप बाद में चीज़ें हटा सकते हैं।</item>
+        <item quantity="other">आपका वीडियो लगभग %1$d मिनट का होगा। आप बाद में चीज़ें हटा सकते हैं।</item>
+    </plurals>
+    <string name="share_continue">आगे बढ़ें</string>
+    <string name="share_nothing_title">कुछ भी नहीं जोड़ा जा सका</string>
+    <string name="share_nothing_body">वीडियो में सिर्फ़ फ़ोटो और वीडियो ही जोड़े जा सकते हैं।</string>
+    <string name="share_added_title">आपके वीडियो में जोड़ दिया गया</string>
+    <plurals name="share_added_body">
+        <item quantity="one">%1$d फ़ोटो या वीडियो जोड़ा गया।</item>
+        <item quantity="other">%1$d फ़ोटो और वीडियो जोड़े गए।</item>
+    </plurals>
+    <string name="share_not_saved">आपका फ़ोन भर गया है, इसलिए शेयर की गई फ़ोटो और वीडियो नहीं जोड़े जा सके। थोड़ी जगह खाली करें और उन्हें फिर से शेयर करें।</string>
 </resources>
