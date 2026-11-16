@@ -163,6 +163,7 @@
     <string name="export_stopped">Saving was stopped. Nothing was saved.</string>
     <string name="export_saving_title">Saving your video</string>
     <string name="export_percent">%1$d%% done</string>
+    <string name="export_getting_ready">Getting ready…</string>
     <string name="export_restarted">The phone paused saving, so it started again from the beginning.</string>
     <string name="export_leave_ok">You can turn the phone or leave the app. Saving carries on.</string>
     <string name="export_hide">Hide</string>

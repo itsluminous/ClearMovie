@@ -44,7 +44,8 @@ interface ExportOutput {
  * Hardware first, then software: when the first attempt fails in the video
  * or audio encoder (a hardware encoder that will not start, or stops
  * mid-way), the output is emptied and the export runs again once with
- * software encoders only. Any other failure is reported as it is.
+ * software encoders only ([onRestart] is told, so the screen can say it
+ * started again). Any other failure is reported as it is.
  *
  * Cancelling the coroutine cancels Transformer and waits up to
  * [CANCEL_WAIT_MS] for it to release its codecs before returning.
@@ -73,13 +74,14 @@ class VideoExport(
         height: Int,
         spec: EncodeSpec,
         output: ExportOutput,
+        onRestart: suspend () -> Unit = {},
         onProgress: suspend (Int) -> Unit,
     ): Outcome {
         val first = attempt(composition, height, spec, output, EncoderPreference.HARDWARE_FIRST, onProgress)
         if (first !is Outcome.Failed || !isEncoderError(first.error)) return first
         Log.w(TAG, "The first encoder failed (${first.error.errorCodeName}); exporting again with software encoders", first.error)
         output.reset()
-        onProgress(0)
+        onRestart()
         return when (val second = attempt(composition, height, spec, output, EncoderPreference.SOFTWARE_ONLY, onProgress)) {
             is Outcome.Done -> second.copy(hardwareFailure = first.error)
             is Outcome.Failed -> second

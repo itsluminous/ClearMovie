@@ -31,11 +31,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import javax.inject.Inject
 
@@ -60,6 +62,9 @@ class ExportViewModel
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
         private val watched = MutableStateFlow(savedState.get<String>(KEY_WATCHED)?.let { runCatching { UUID.fromString(it) }.getOrNull() })
+
+        /** When [watched] was set: an export asked for and never seen counts as running only for a while (review F7). */
+        private var watchedAt = System.currentTimeMillis()
         private val choose = MutableStateFlow(ExportStep.Choose())
 
         /** Set when the user agreed to stop another video's export; the next start replaces it. */
@@ -73,7 +78,8 @@ class ExportViewModel
                 }
             }
 
-        val step: StateFlow<ExportStep> =
+        /** Null until WorkManager has answered, so an export in progress never flashes the sizes first (review F12). */
+        val step: StateFlow<ExportStep?> =
             combine(
                 workManager.getWorkInfosForUniqueWorkFlow(ExportWorker.UNIQUE_NAME).map { list -> list.map(::toExportWork) },
                 watched,
@@ -83,9 +89,10 @@ class ExportViewModel
             ) { works, watchedId, sizes, replace, now ->
                 // A running export of this video is the one to report on, even one started before a restart.
                 works.firstOrNull { !it.finished && it.projectId == projectId.value }?.let { if (it.id != watchedId) watch(it.id) }
-                ExportSteps.step(works, watchedId, projectId, sizes, now, replaceAgreed = replace)
+                val lost = watchedId != null && works.none { it.id == watchedId } && now - watchedAt > LOST_AFTER_MS
+                ExportSteps.step(works, watchedId.takeUnless { lost }, projectId, sizes, now, replaceAgreed = replace)
             }.distinctUntilChanged()
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), ExportStep.Choose())
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 
         init {
             viewModelScope.launch {
@@ -93,21 +100,26 @@ class ExportViewModel
                     .filterNotNull()
                     .filter { it.id == projectId }
                     .distinctUntilChanged()
-                    .collect { project ->
-                        val durationUs =
-                            withContext(Dispatchers.Default) {
-                                runCatching {
-                                    val set = projectMedia.forProject(project)
-                                    RenderPlanBuilder(
-                                        set.preset,
-                                        set.loudness,
-                                    ).build(project, height = ExportQuality.SMALL.height).durationUs
-                                }.getOrNull()
-                            }
-                        val free = withContext(Dispatchers.IO) { ExportModule.exportFreeBytes(context) }
-                        choose.value = ExportSteps.choose(durationUs, free)
-                    }
+                    .collect { measure(it) }
             }
+        }
+
+        /** Works out the sizes, and how much room is free, again: after the user freed space, for example (review F3). */
+        fun refresh() {
+            val project = repository.open.value?.takeIf { it.id == projectId } ?: return
+            viewModelScope.launch { measure(project) }
+        }
+
+        private suspend fun measure(project: com.itsluminous.clearmovie.domain.model.Project) {
+            val durationUs =
+                withContext(Dispatchers.Default) {
+                    runCatching {
+                        val set = projectMedia.forProject(project)
+                        RenderPlanBuilder(set.preset, set.loudness).build(project, height = ExportQuality.SMALL.height).durationUs
+                    }.getOrNull()
+                }
+            val free = withContext(Dispatchers.IO) { ExportModule.exportFreeBytes(context) }
+            choose.value = ExportSteps.choose(durationUs, free)
         }
 
         /** Starts exporting at [quality]; [title] names the file of a video that has no name yet. */
@@ -115,9 +127,20 @@ class ExportViewModel
             quality: ExportQuality,
             title: String,
         ) {
-            val id = ExportWorker.enqueue(workManager, projectId, quality, title, replace = replaceAgreed.value)
+            if (!replaceAgreed.value) {
+                watch(ExportWorker.enqueue(workManager, projectId, quality, title, replace = false))
+                return
+            }
+            // Another video's export is stopped first, and this one starts only once it has
+            // ended, so two exports never hold the encoders together (review F9).
             setReplace(false)
-            watch(id)
+            viewModelScope.launch {
+                workManager.cancelUniqueWork(ExportWorker.UNIQUE_NAME)
+                withTimeoutOrNull(REPLACE_WAIT_MS) {
+                    workManager.getWorkInfosForUniqueWorkFlow(ExportWorker.UNIQUE_NAME).first { list -> list.all { it.state.isFinished } }
+                }
+                watch(ExportWorker.enqueue(workManager, projectId, quality, title, replace = false))
+            }
         }
 
         /** Stops the export of this video; its unfinished file is removed. */
@@ -143,6 +166,7 @@ class ExportViewModel
         fun forget() {
             watched.value = null
             savedState.remove<String>(KEY_WATCHED)
+            refresh()
         }
 
         /** Whether to ask for the notification permission before the first export (Android 13+, asked once). */
@@ -156,6 +180,7 @@ class ExportViewModel
         private fun prefs() = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
         private fun watch(id: UUID) {
+            if (watched.value != id) watchedAt = System.currentTimeMillis()
             watched.value = id
             savedState[KEY_WATCHED] = id.toString()
         }
@@ -167,6 +192,8 @@ class ExportViewModel
             private const val PREF_ASKED_NOTIFICATIONS = "asked_notifications"
             private const val TICK_MS = 1_000L
             private const val STOP_TIMEOUT_MS = 5_000L
+            private const val LOST_AFTER_MS = 10_000L
+            private const val REPLACE_WAIT_MS = 15_000L
 
             fun toExportWork(info: WorkInfo): ExportWork {
                 val data = if (info.state.isFinished) info.outputData else info.progress

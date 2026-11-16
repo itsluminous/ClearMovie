@@ -111,7 +111,8 @@ fun ExportSheet(
 ) {
     var confirmStop by rememberSaveable { mutableStateOf(false) }
     Dialog(
-        onDismissRequest = if (step is ExportStep.Running) actions::hide else actions::close,
+        // Back or a tap outside never throws away a running export or its result (review F11).
+        onDismissRequest = if (step is ExportStep.Choose || step == ExportStep.OtherRunning) actions::close else actions::hide,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         ExportSheetContent(step, blocked, actions, onStop = { confirmStop = true })
@@ -320,12 +321,19 @@ private fun ColumnScope.Running(
     onStop: () -> Unit,
 ) {
     Title(stringResource(R.string.export_saving_title))
-    LinearProgressIndicator(
-        progress = { step.percent / 100f },
-        modifier = Modifier.fillMaxWidth().height(8.dp).testTag(EXPORT_PROGRESS_TAG),
-    )
-    Spacer(Modifier.height(12.dp))
-    Text(stringResource(R.string.export_percent, step.percent), style = MaterialTheme.typography.titleMedium)
+    if (step.percent <= 0) {
+        // Before the first frame (measuring the sound, checking the colours): moving, so it never looks stuck (review F8).
+        LinearProgressIndicator(Modifier.fillMaxWidth().height(8.dp).testTag(EXPORT_PROGRESS_TAG))
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.export_getting_ready), style = MaterialTheme.typography.titleMedium)
+    } else {
+        LinearProgressIndicator(
+            progress = { step.percent / 100f },
+            modifier = Modifier.fillMaxWidth().height(8.dp).testTag(EXPORT_PROGRESS_TAG),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.export_percent, step.percent), style = MaterialTheme.typography.titleMedium)
+    }
     step.minutesLeft?.let {
         Text(pluralStringResource(R.plurals.export_minutes_left, it, it), style = MaterialTheme.typography.bodyLarge)
     }

@@ -137,6 +137,7 @@
     <string name="export_stopped">सेव करना रोक दिया गया। कुछ भी सेव नहीं हुआ।</string>
     <string name="export_saving_title">आपका वीडियो सेव हो रहा है</string>
     <string name="export_percent">%1$d%% पूरा</string>
+    <string name="export_getting_ready">तैयारी हो रही है…</string>
     <string name="export_restarted">फ़ोन ने सेव करना रोक दिया था, इसलिए यह शुरू से फिर चालू हुआ।</string>
     <string name="export_leave_ok">आप फ़ोन घुमा सकते हैं या ऐप से बाहर जा सकते हैं। सेव होता रहेगा।</string>
     <string name="export_hide">छिपाएँ</string>

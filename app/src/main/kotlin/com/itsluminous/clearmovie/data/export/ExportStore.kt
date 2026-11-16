@@ -37,12 +37,7 @@ data class GalleryVideo(
 class ExportStore(
     private val resolver: ContentResolver,
 ) {
-    private val collection: Uri =
-        if (Build.VERSION.SDK_INT >= 29) {
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        } else {
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        }
+    private val collection: Uri = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 
     /** A new hidden entry named [displayName]; MediaStore adds " (1)" when the name is taken. */
     fun createPending(displayName: String): Uri {
@@ -76,9 +71,16 @@ class ExportStore(
         if (resolver.update(requireOurs(uri), values, null, null) != 1) throw IOException("The new video could not be shown in the gallery")
     }
 
-    /** Removes [uri]; quietly does nothing when it is already gone. */
+    /** Removes [uri] when it is one of ours in [RELATIVE_PATH]; quietly does nothing when it is already gone. */
     fun delete(uri: Uri) {
-        runCatching { resolver.delete(requireOurs(uri), null, null) }.onFailure { Log.w(TAG, "Could not remove an unfinished video", it) }
+        runCatching {
+            val entry = describe(uri) ?: return
+            if (entry.relativePath != RELATIVE_PATH) {
+                Log.w(TAG, "Not removing a video outside $RELATIVE_PATH")
+                return
+            }
+            resolver.delete(requireOurs(uri), null, null)
+        }.onFailure { Log.w(TAG, "Could not remove an unfinished video", it) }
     }
 
     /** What MediaStore says about [uri], pending or not; null when it is gone. */
@@ -161,9 +163,15 @@ class ExportStore(
         }
     }
 
-    /** Only entries of the video collection this store writes to, never another app's file or provider. */
+    /**
+     * Only single entries of the video collection this store writes to (`.../external_primary/video/media/<id>`),
+     * never another provider, collection or a whole collection. Which app owns an entry
+     * MediaStore enforces itself: this app may only change its own.
+     */
     private fun requireOurs(uri: Uri): Uri {
-        require(uri.authority == MediaStore.AUTHORITY && uri.pathSegments.contains("video")) { "not a gallery video" }
+        val base = collection.toString().trimEnd('/') + "/"
+        val id = uri.lastPathSegment?.toLongOrNull()
+        require(uri.toString().startsWith(base) && id != null && uri.toString() == base + id) { "not one of this app's gallery videos" }
         return uri
     }
 

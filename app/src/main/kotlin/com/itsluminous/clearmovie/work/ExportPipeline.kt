@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.work
 
+import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaCodecList
@@ -51,6 +52,8 @@ import com.itsluminous.clearmovie.render.plan.decoderPeak
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -142,6 +145,7 @@ class ExportPipeline(
         projectId: ProjectId,
         quality: ExportQuality,
         fallbackName: String,
+        onRestart: suspend () -> Unit = {},
         onProgress: suspend (Int) -> Unit,
     ): ExportOutcome {
         withContext(Dispatchers.IO) { sweep() }
@@ -181,11 +185,12 @@ class ExportPipeline(
             }
 
         val name = ExportFileName.displayName(project.name, fallbackName)
+        // Created, opened, copied and shown without a cancellation check in between, so a Stop
+        // can never lose track of an entry it must remove, or report "nothing saved" for one
+        // that was just shown (review F5, F6). The finally below removes an unshown entry.
         val entry =
             try {
-                withContext(Dispatchers.IO) { store.createPending(name) }
-            } catch (e: CancellationException) {
-                throw e
+                withContext(NonCancellable + Dispatchers.IO) { store.createPending(name) }
             } catch (e: Exception) {
                 Log.w(TAG, "The gallery refused a new video", e)
                 return ExportOutcome.Failed(ExportFailure.FAILED)
@@ -194,10 +199,12 @@ class ExportPipeline(
         var fd: ParcelFileDescriptor? = null
         var published = false
         try {
+            currentCoroutineContext().ensureActive()
             val output: ExportOutput =
                 if (direct) {
-                    val opened = withContext(Dispatchers.IO) { store.openForWrite(entry) }
+                    val opened = withContext(NonCancellable + Dispatchers.IO) { store.openForWrite(entry) }
                     fd = opened
+                    currentCoroutineContext().ensureActive()
                     DirectOutput(opened, File(tempDir.apply { mkdirs() }, "direct.unused"))
                 } else {
                     val file = File(tempDir.apply { mkdirs() }, "export-${System.nanoTime()}.mp4")
@@ -225,13 +232,14 @@ class ExportPipeline(
                     }
                 }
             val info =
-                withContext(Dispatchers.IO) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    val written = fd?.let { runCatching { Os.fstat(it.fileDescriptor).st_size }.getOrNull() }
                     fd?.close()
                     fd = null
                     temp?.let { store.copyInto(entry, it) }
                     store.publish(entry)
                     published = true
-                    store.describe(entry)
+                    store.describe(entry)?.let { if (it.sizeBytes == null || it.sizeBytes == 0L) it.copy(sizeBytes = written) else it }
                 }
             val r = done.result
             val saved =
@@ -248,7 +256,13 @@ class ExportPipeline(
                     softwareFallback = done.hardwareFailure != null,
                     direct = direct,
                 )
-            Log.i(TAG, "Saved $saved")
+            // The name is the user's own text: the log gets the gallery id and the facts only (review F10).
+            Log.i(
+                TAG,
+                "Saved gallery video ${ContentUris.parseId(entry)}: ${saved.width}x${saved.height}, ${saved.sizeBytes} bytes, " +
+                    "video encoder ${saved.videoEncoder}, audio encoder ${saved.audioEncoder}, " +
+                    "average video ${saved.averageVideoBitrate} b/s, software fallback ${saved.softwareFallback}, direct ${saved.direct}",
+            )
             return ExportOutcome.Done(saved)
         } catch (e: CancellationException) {
             throw e
@@ -322,7 +336,7 @@ class ExportPipeline(
                     val uri = runCatching { resolver.resolve(ref) }.getOrNull() ?: return@mapNotNull null
                     probe.loudnessOf(context, uri)?.takeIf { it.isFinite() }?.let { ref to it }
                 }.toMap()
-        Log.i(TAG, "Measured the loudness of ${measured.size} of ${unknown.size} sounds: ${measured.values}")
+        Log.i(TAG, "Measured the loudness of ${measured.size} of ${unknown.size} sounds")
         return LoudnessTable { ref -> known.lufs(ref) ?: measured[ref] }
     }
 

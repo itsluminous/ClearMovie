@@ -119,12 +119,15 @@ class ExportNotifications(
                     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
             )
 
-    private fun base(): NotificationCompat.Builder =
-        NotificationCompat
+    private fun base(): NotificationCompat.Builder {
+        // Creating a channel that exists is a no-op; a foreground notification on a missing one crashes the app.
+        ensureChannel()
+        return NotificationCompat
             .Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_export)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setSilent(true)
+    }
 
     private fun openApp(): PendingIntent =
         activity(REQUEST_OPEN, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP))

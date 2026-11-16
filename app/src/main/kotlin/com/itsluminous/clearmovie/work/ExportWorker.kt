@@ -5,6 +5,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.text.format.Formatter
 import android.util.Log
+import androidx.core.content.edit
 import androidx.hilt.work.HiltWorker
 import androidx.media3.common.util.UnstableApi
 import androidx.work.CoroutineWorker
@@ -48,16 +49,25 @@ class ExportWorker
         private val pipeline: ExportPipeline,
     ) : CoroutineWorker(context, params) {
         private val notifications = ExportNotifications(applicationContext)
+        private val attempts = ExportAttempts(applicationContext)
 
-        override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(0, runAttemptCount > 0)
+        // On Android 10 and 11 WorkManager runs expedited work as a foreground service before
+        // doWork, with this notification, so the channel must exist here already (review F1).
+        override suspend fun getForegroundInfo(): ForegroundInfo {
+            notifications.ensureChannel()
+            return foregroundInfo(0, attempts.wasStarted(id))
+        }
 
         override suspend fun doWork(): Result {
             val projectId = inputData.getString(KEY_PROJECT)?.let { runCatching { ProjectId(it) }.getOrNull() }
             val quality = ExportQuality.parse(inputData.getString(KEY_QUALITY))
             if (projectId == null || quality == null) return failure(ExportFailure.FAILED, 0)
             val title = inputData.getString(KEY_TITLE).orEmpty()
-            val restarted = runAttemptCount > 0
-            val startedAt = System.currentTimeMillis()
+            // WorkManager does not count a run the system killed, so the worker keeps its own
+            // note that this export already started once (review F2).
+            var restarted = attempts.wasStarted(id) || runAttemptCount > 0
+            attempts.markStarted(id)
+            var startedAt = System.currentTimeMillis()
             notifications.ensureChannel()
             notifications.cancelResult()
             try {
@@ -78,10 +88,22 @@ class ExportWorker
             val outcome =
                 try {
                     report(0)
-                    pipeline.run(projectId, quality, title) { report(it) }
+                    pipeline.run(
+                        projectId,
+                        quality,
+                        title,
+                        onRestart = {
+                            // The hardware encoder failed; the software attempt starts from 0 (review F4).
+                            restarted = true
+                            startedAt = System.currentTimeMillis()
+                            shown = -1
+                            report(0)
+                        },
+                    ) { report(it) }
                 } finally {
                     // Normally WorkManager removes it with the foreground service; not when that was refused.
                     notifications.cancelProgress()
+                    attempts.clear(id)
                 }
             return when (outcome) {
                 is ExportOutcome.Done -> {
@@ -131,6 +153,19 @@ class ExportWorker
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 }
             return ForegroundInfo(ExportNotifications.PROGRESS_ID, notification, type)
+        }
+
+        /** Which exports have started a run, so a run after a kill knows it started again. */
+        class ExportAttempts(
+            context: Context,
+        ) {
+            private val prefs = context.getSharedPreferences("export_attempts", Context.MODE_PRIVATE)
+
+            fun wasStarted(id: UUID): Boolean = prefs.getBoolean(id.toString(), false)
+
+            fun markStarted(id: UUID) = prefs.edit(commit = true) { putBoolean(id.toString(), true) }
+
+            fun clear(id: UUID) = prefs.edit { remove(id.toString()) }
         }
 
         companion object {

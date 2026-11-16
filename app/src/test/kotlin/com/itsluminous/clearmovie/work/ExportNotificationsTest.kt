@@ -56,7 +56,7 @@ class ExportNotificationsTest {
         assertThat(n.actions.map { it.title.toString() }).containsExactly(context.getString(R.string.export_stop))
         // Stop is an immutable broadcast to the app's own unexported receiver, naming this export.
         val stop = shadowOf(n.actions[0].actionIntent)
-        assertThat(stop.isBroadcastIntent).isTrue()
+        assertThat(stop.isBroadcast).isTrue()
         assertThat(stop.isImmutable).isTrue()
         assertThat(stop.savedIntent.component?.className).isEqualTo(ExportStopReceiver::class.java.name)
         assertThat(stop.savedIntent.getStringExtra(ExportStopReceiver.EXTRA_WORK_ID)).isEqualTo(work.toString())
@@ -87,6 +87,27 @@ class ExportNotificationsTest {
             state = workManager.getWorkInfoById(request.id).get()!!.state
         }
         assertThat(state).isEqualTo(androidx.work.WorkInfo.State.CANCELLED)
+    }
+
+    @Test
+    fun `a run after a kill knows the export started before`() {
+        val attempts = ExportWorker.ExportAttempts(context)
+        val id = UUID.randomUUID()
+        assertThat(attempts.wasStarted(id)).isFalse()
+        attempts.markStarted(id)
+        // A new process (a new instance) still sees it.
+        assertThat(ExportWorker.ExportAttempts(context).wasStarted(id)).isTrue()
+        assertThat(attempts.wasStarted(UUID.randomUUID())).isFalse()
+        attempts.clear(id)
+        assertThat(attempts.wasStarted(id)).isFalse()
+    }
+
+    @Test
+    fun `every notification creates its channel first`() {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.deleteNotificationChannel(ExportNotifications.CHANNEL_ID)
+        ExportNotifications(context).progress(UUID.randomUUID(), 0, restarted = false)
+        assertThat(manager.getNotificationChannel(ExportNotifications.CHANNEL_ID)).isNotNull()
     }
 
     @Test

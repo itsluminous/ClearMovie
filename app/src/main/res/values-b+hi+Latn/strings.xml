@@ -145,6 +145,7 @@
     <string name="export_stopped">Save karna rok diya gaya. Kuch bhi save nahi hua.</string>
     <string name="export_saving_title">Aapka video save ho raha hai</string>
     <string name="export_percent">%1$d%% poora</string>
+    <string name="export_getting_ready">Taiyaari ho rahi hai…</string>
     <string name="export_restarted">Phone ne save karna rok diya tha, isliye yeh shuru se phir chalu hua.</string>
     <string name="export_leave_ok">Aap phone ghuma sakte hain ya app se bahar ja sakte hain. Save hota rahega.</string>
     <string name="export_hide">Chhupaayein</string>

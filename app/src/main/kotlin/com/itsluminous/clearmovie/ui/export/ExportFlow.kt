@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,8 +26,9 @@ import com.itsluminous.clearmovie.work.ExportNotifications
  * The export sheet wired to [ExportViewModel] (shown by the editor's Export
  * button). [title] is what the editor calls the video, and names the file
  * of a video that has no name yet. [blocked] is a reason the editor already
- * knows the export cannot start. Hiding the sheet leaves the export running;
- * opening it again shows where it is.
+ * knows the export cannot start. Hiding the sheet (Hide, Back, a tap
+ * outside) leaves the export and its result where they are; opening it
+ * again shows them. Only Close and Cancel put it back on the sizes.
  *
  * Before the first export on Android 13+, the notification permission is
  * asked for once, so progress and the result can show outside the app;
@@ -40,7 +42,9 @@ fun ExportFlow(
     onDismiss: () -> Unit,
     viewModel: ExportViewModel = hiltViewModel(),
 ) {
-    val step by viewModel.step.collectAsStateWithLifecycle()
+    val current by viewModel.step.collectAsStateWithLifecycle()
+    // The free space and the sizes are looked at again each time the sheet opens.
+    LaunchedEffect(viewModel) { viewModel.refresh() }
     val context = LocalContext.current
     var playing by rememberSaveable { mutableStateOf<String?>(null) }
     var waiting by rememberSaveable { mutableStateOf<String?>(null) }
@@ -52,6 +56,8 @@ fun ExportFlow(
             if (quality != null) viewModel.start(quality, title)
         }
     val noApp = stringResource(R.string.export_share_none)
+    // Null until WorkManager has answered: nothing is shown for that blink.
+    val step = current ?: return
     val actions =
         remember(viewModel, step, title) {
             object : ExportSheetActions {

@@ -214,6 +214,14 @@ class ExportSheetTest {
     }
 
     @Test
+    fun `before the first percent the bar moves and says it is getting ready`() {
+        show(ExportStep.Running(0, null, restarted = false))
+        compose.onNodeWithText(s(R.string.export_getting_ready)).assertExists()
+        compose.onNodeWithText(context.getString(R.string.export_percent, 0)).assertDoesNotExist()
+        compose.onNodeWithTag(EXPORT_STOP_TAG).assertExists()
+    }
+
+    @Test
     fun `Stop asks first, and only Stop stops`() {
         compose.setContent { ClearMovieTheme(dynamicColor = false) { ExportSheet(ExportStep.Running(10, null, false), null, actions) } }
         compose.onNodeWithTag(EXPORT_STOP_TAG).performScrollTo().performClick()
