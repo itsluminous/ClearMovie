@@ -168,6 +168,21 @@ Rendering has two layers, both under `render`:
   a video and an audio decoder; trimmed sound can start up to one AAC frame
   (about 21 ms) after its picture.
 
+Export colour does not trust the device. Media3 turns SDR video into RGB
+with the GPU's `samplerExternalOES`, so the YUV-to-RGB matrix is the
+driver's, and the encoder chooses its own RGB-to-YUV matrix. Both Android
+emulators decode BT.709 video with the BT.601 matrix, and the Android 10
+emulator's encoder writes BT.601 YUV under a BT.709 tag. `ColourCalibration`
+therefore exports a 1 s, 320x192 flat BT.709 clip once per build fingerprint
+(cached in `noBackupFilesDir/render`): a GL readback gives the decode matrix
+and the output's raw YUV gives the encoder's. On a GPU that misdecodes, every
+BT.709 video item starts with `Bt709Correction`; on an encoder that writes
+BT.601, the export asks for BT.601 so the file's tag matches its YUV. A
+calibration that fails or cannot tell changes nothing. Colours whose BT.601
+decode falls outside 0..255 (the most saturated ones) are clipped by the GPU
+before any effect runs, so on a misdecoding GPU they stay off after the
+correction.
+
 The live editor preview does not play this composition: Media3's multi-input
 `CompositionPlayer` (1.11.1) shows no frame after a seek and freezes when a
 lower layer goes from a video to a photo. The editor therefore previews MAIN

@@ -18,9 +18,11 @@ import com.itsluminous.clearmovie.domain.model.KeySpec
  * The key colour is stored as true BT.709 RGB (cm-storage measures it with
  * the stream's own matrix), but the GPU's video sampler does not always
  * honour the BT.709 tag: the emulator's decodes it as BT.601, which moves
- * the window green by Delta E 16 (KeyColourSpaceTest). So each pixel is
- * compared with both forms of the key, as decoded by either matrix
- * ([misdecodedAsBt601]), and the nearer one counts. The two forms are 0.057
+ * the window green by Delta E 16 (KeyColourSpaceTest). A calibrated export
+ * corrects that before keying ([Bt709Correction]); for a device the
+ * calibration could not read, each pixel is still compared with both forms
+ * of the key, as decoded by either matrix ([misdecodedAsBt601]), and the
+ * nearer one counts. The two forms are 0.057
  * apart in chroma, inside the tolerance, so the keyed area grows by about
  * 14%, and on any one device one of the two forms is spurious:
  * - On a decoder that honours BT.709, the added form costs at most 0.023
