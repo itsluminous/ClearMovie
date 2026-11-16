@@ -70,7 +70,8 @@ class TimelinePiecesTest {
         assertThat(abs(visible - visible.toInt() - 0.5f)).isLessThan(0.001f)
         assertThat(w).isAtLeast(72.dp)
         // When they all fit, they share the width.
-        assertThat(barItemWidth(400.dp, 72.dp, 3)).isEqualTo(400.dp / 3)
+        assertThat(barItemWidth(400.dp, 72.dp, 3) * 3).isLessThan(400.dp)
+        assertThat(barItemWidth(400.dp, 72.dp, 3).value).isWithin(0.5f).of(400f / 3)
         // A wide label (large font) keeps the button at least that wide, still cut in half.
         val big = barItemWidth(400.dp, 150.dp, 8)
         assertThat(big).isAtLeast(150.dp)

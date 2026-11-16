@@ -330,22 +330,30 @@ class EditorViewModel
         /** Applies [change] to the project as one undo step. False when it was refused (nothing changes). */
         fun edit(change: Project.() -> Project): Boolean {
             val applied = session.edit(change) == EditResult.Applied
-            if (applied) {
-                val next = session.current
-                if (next != null) repository.update { next }
-            }
+            if (applied) session.current?.let(::write)
             publishHistory()
             return applied
         }
 
         fun undo() {
-            session.undo()?.let { p -> repository.update { p } }
+            session.undo()?.let(::write)
             publishHistory()
         }
 
         fun redo() {
-            session.redo()?.let { p -> repository.update { p } }
+            session.redo()?.let(::write)
             publishHistory()
+        }
+
+        /**
+         * Writes [next] and shows it at once: the timeline must not wait for the
+         * autosave round trip (an item just put in is selected straight away,
+         * and a selection is dropped only when its item is really gone). The
+         * preview's schedule follows when the repository hands the project back.
+         */
+        private fun write(next: Project) {
+            uiState.update { it.copy(project = next) }
+            repository.update { next }
         }
 
         private fun publishHistory() = uiState.update { it.copy(canUndo = session.canUndo, canRedo = session.canRedo) }

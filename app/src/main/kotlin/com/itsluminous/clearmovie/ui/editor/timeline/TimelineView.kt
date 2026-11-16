@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -103,6 +104,8 @@ fun thumbTag(id: ClipId) = "timeline_thumbs_${id.value}"
 
 fun rowTag(key: String) = "timeline_row_$key"
 
+fun headerTag(type: RowType) = "timeline_header_${type.name}"
+
 const val TRIM_START_TAG = "timeline_trim_start"
 const val TRIM_END_TAG = "timeline_trim_end"
 
@@ -158,11 +161,16 @@ data class RowMetrics(
     val rulerDp: Double get() = 28.0 * grow
     val mainDp: Double get() = 72.0 + 24.0 * (grow - 1)
     val rowDp: Double get() = 48.0 * grow
-    val headerDp: Double get() = 64.0
+
+    /** The row headers are an icon each (the owner's call: no label, so the rows keep the width); 48 dp to touch. */
+    val headerDp: Double get() = HEADER_DP
     val toggleDp: Double get() = 48.0 * grow
 
     fun heightOf(type: RowType): Double = if (type == RowType.MAIN) mainDp else rowDp
 }
+
+/** The width of a row's icon header: a 24 dp icon in a 48 dp touch target. */
+private const val HEADER_DP = 48.0
 
 /** Padding at each end of the time span, so the first and last "+" can be reached. */
 private const val PAD_DP = 28.0
@@ -746,27 +754,18 @@ private fun RowHeader(
 ) {
     val (icon, name) = rowLook(type)
     val label = stringResource(name)
-    Column(
+    // The icon alone; its row's name is what TalkBack reads. A long-press here is kept for
+    // the row menu (cm-tracks), so there is no tooltip.
+    Box(
         Modifier
             .width(metrics.headerDp.dp)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .then(if (type == RowType.MAIN) Modifier.testTag(TIMELINE_MAIN_HEADER_TAG) else Modifier)
-            .semantics(mergeDescendants = true) { contentDescription = label },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .testTag(if (type == RowType.MAIN) TIMELINE_MAIN_HEADER_TAG else headerTag(type))
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-        if (type == RowType.MAIN || metrics.rowDp >= 48) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center,
-                maxLines = if (type == RowType.MAIN) 3 else 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 2.dp),
-            )
-        }
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -802,6 +801,8 @@ private fun OtherRowContent(
             Box(
                 Modifier
                     .offset(x = x.dp)
+                    // An item can be far wider than the screen when zoomed in: never squeezed to the row's width.
+                    .wrapContentWidth(Alignment.Start, unbounded = true)
                     .width(w.dp)
                     .fillMaxHeight()
                     .padding(vertical = 6.dp)
@@ -859,7 +860,7 @@ private fun MainRowContent(
             val dragged = drag?.index == i
             if (i !in visible && !dragged) continue
             val start = if (drag != null) reflowStart.getValue(i) else slot.startMs.toDouble()
-            val x = PAD_DP + zoom.xOf(start) + if (dragged) drag!!.dxDp else 0.0
+            val x = PAD_DP + zoom.xOf(start) + if (dragged) drag.dxDp else 0.0
             val w = slot.durationMs / zoom.msPerDp
             val contentIndex = slots.take(i).count { it.clip.isContent() }
             ClipTile(
@@ -918,6 +919,8 @@ private fun ClipTile(
     Box(
         Modifier
             .offset { IntOffset((xDp * density).roundToInt(), 0) }
+            // Zoomed in, an item is often wider than the screen: never squeezed to the row's width.
+            .wrapContentWidth(Alignment.Start, unbounded = true)
             .width(widthDp.coerceAtLeast(2.0).dp)
             .fillMaxHeight()
             // The tag and semantics cover the item's whole time span; the padding below is the visible gap.

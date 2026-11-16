@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -105,6 +106,7 @@ import com.itsluminous.clearmovie.ui.editor.timeline.LayoutEvent
 import com.itsluminous.clearmovie.ui.editor.timeline.LayoutInput
 import com.itsluminous.clearmovie.ui.editor.timeline.PopupCorner
 import com.itsluminous.clearmovie.ui.editor.timeline.PreviewLayout
+import com.itsluminous.clearmovie.ui.editor.timeline.PreviewLayoutReducer
 import com.itsluminous.clearmovie.ui.editor.timeline.RowMetrics
 import com.itsluminous.clearmovie.ui.editor.timeline.RowSpec
 import com.itsluminous.clearmovie.ui.editor.timeline.RowType
@@ -198,7 +200,14 @@ fun EditorScreen(
                 } else {
                     resources.getString(R.string.editor_deleted)
                 }
-            val result = snackbar.showSnackbar(message, actionLabel = resources.getString(R.string.action_undo), withDismissAction = true)
+            // Long, not the indefinite default for a snackbar with an action: it must not sit over the bar.
+            val result =
+                snackbar.showSnackbar(
+                    message,
+                    actionLabel = resources.getString(R.string.action_undo),
+                    withDismissAction = true,
+                    duration = SnackbarDuration.Long,
+                )
             if (result == SnackbarResult.ActionPerformed) actions.undo()
         }
     }
@@ -323,7 +332,9 @@ fun EditorScreen(
                             ?.takeIf { selectedSlot != null },
                 )
             LaunchedEffect(input) { state.layoutEvent(LayoutEvent.Measured(input)) }
-            val layout = state.layout.layout
+            // Worked out now from this frame's measurements (the reducer is pure), so a frame never shows the
+            // layout of the rows as they were before (the effect above only stores it for the next event).
+            val layout = PreviewLayoutReducer.reduce(state.layout, LayoutEvent.Measured(input)).layout
             val visible = layout?.visibleRows ?: rows.map { it.key }
             val hidden = rows.filter { it.key in layout?.hiddenRows.orEmpty() }
 
@@ -439,7 +450,8 @@ fun EditorScreen(
                     if (layout is PreviewLayout.Floating) {
                         FloatingPreview(
                             corner = layout.corner,
-                            topDp = topDp,
+                            // Below the top bar and the playback controls, which stay usable.
+                            topDp = topDp + controlsDp,
                             bottomDp = bottomDp,
                             preview = preview,
                             onMoved = { state.layoutEvent(LayoutEvent.PopupMoved(it)) },

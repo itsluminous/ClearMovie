@@ -15,7 +15,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onChildAt
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -184,6 +186,32 @@ class EditorScreenTest {
 
     @Test
     fun `expanded at font scale 2`() = assertLayout(ScreenSize.EXPANDED, 2f)
+
+    @Test
+    fun `row headers are icons only, named for TalkBack, at least 48 dp to touch`() {
+        forEachSize(fontScales = listOf(1f, 2f)) { _, _ ->
+            val names =
+                listOf(
+                    R.string.timeline_row_text,
+                    R.string.timeline_row_frame,
+                    R.string.editor_row_main,
+                    R.string.timeline_row_music,
+                    R.string.timeline_row_voice,
+                ).map(::s)
+            // Every row shown (MAIN always; the others as the layout fits them) has its icon header.
+            val shown = names.filter { compose.onAllNodesWithContentDescription(it).fetchSemanticsNodes().isNotEmpty() }
+            assertThat(shown).contains(s(R.string.editor_row_main))
+            for (name in names) {
+                // No visible label: the name is never drawn as text.
+                assertThat(compose.onAllNodesWithText(name).fetchSemanticsNodes()).isEmpty()
+            }
+            for (name in shown) {
+                val header = compose.onNodeWithContentDescription(name).bounds()
+                assertThat((header.right - header.left).v()).isAtLeast(48f)
+                assertThat((header.bottom - header.top).v()).isAtLeast(48f)
+            }
+        }
+    }
 
     // ---------------------------------------------------------------- selection and the bar
 

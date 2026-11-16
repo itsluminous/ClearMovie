@@ -70,7 +70,8 @@ fun barItemWidth(
     count: Int,
 ): Dp {
     if (count <= 0) return natural
-    if (natural * count <= barWidth) return barWidth / count
+    // When they all fit they share the width, a little under it, so rounding to pixels never makes the bar scrollable.
+    if (natural * count <= barWidth) return (barWidth - 1.dp) / count
     val whole = floor(barWidth / natural - 0.5f).toInt().coerceAtLeast(1)
     return maxOf(natural, barWidth / (whole + 0.5f))
 }
