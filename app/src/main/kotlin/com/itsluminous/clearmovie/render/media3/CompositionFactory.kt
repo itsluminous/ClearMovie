@@ -349,7 +349,7 @@ internal class RetrieverProbe(
         return if (info.second) info.first.copy(bt709 = isBt709(uri)) else info.first
     }
 
-    /** From the video track's colour standard, else by size (HD is BT.709), as Android decides for untagged video. */
+    /** From the video track's colour standard, else by size, as Android decides for untagged video. */
     private fun isBt709(uri: Uri): Boolean {
         val e = MediaExtractor()
         return try {
@@ -362,7 +362,12 @@ internal class RetrieverProbe(
                     ?: return true
 
             fun int(key: String) = if (format.containsKey(key)) runCatching { format.getInteger(key) }.getOrNull() else null
-            videoIsBt709(int(MediaFormat.KEY_COLOR_STANDARD), int(MediaFormat.KEY_HEIGHT) ?: 0, int(MediaFormat.KEY_COLOR_TRANSFER))
+            videoIsBt709(
+                int(MediaFormat.KEY_COLOR_STANDARD),
+                int(MediaFormat.KEY_WIDTH) ?: 0,
+                int(MediaFormat.KEY_HEIGHT) ?: 0,
+                int(MediaFormat.KEY_COLOR_TRANSFER),
+            )
         } catch (ex: RuntimeException) {
             true
         } catch (ex: java.io.IOException) {
@@ -374,12 +379,15 @@ internal class RetrieverProbe(
 
     companion object {
         /**
-         * BT.709 when tagged so; BT.601 when tagged so; otherwise by height,
-         * 720 and up meaning BT.709. HDR (PQ or HLG) never is: Media3 converts
-         * HDR video itself.
+         * BT.709 when tagged so; BT.601 or BT.2020 when tagged so; otherwise by
+         * size, as Android's codecs default untagged video
+         * (`ColorUtils::setDefaultCodecColorAspectsIfNeeded`): BT.2020 from 4K,
+         * BT.601 up to PAL or NTSC size, BT.709 between. HDR (PQ or HLG) never
+         * is: Media3 converts HDR video itself.
          */
         fun videoIsBt709(
             standard: Int?,
+            width: Int,
             height: Int,
             transfer: Int? = null,
         ): Boolean =
@@ -389,8 +397,19 @@ internal class RetrieverProbe(
                 when (standard) {
                     MediaFormat.COLOR_STANDARD_BT709 -> true
                     MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC, MediaFormat.COLOR_STANDARD_BT2020 -> false
-                    else -> height >= 720
+                    else -> sizeDefaultIsBt709(width, height)
                 }
+            }
+
+        private fun sizeDefaultIsBt709(
+            w: Int,
+            h: Int,
+        ): Boolean =
+            when {
+                w >= 3840 || h >= 3840 || w.toLong() * h >= 3840L * 1634 -> false
+                (w <= 720 && h in 481..576) || (h <= 720 && w in 481..576) -> false
+                (w <= 720 && h <= 480) || (h <= 720 && w <= 480) -> false
+                else -> true
             }
     }
 }

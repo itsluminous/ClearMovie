@@ -109,22 +109,33 @@ class DeviceColourTest {
     }
 
     @Test
-    fun `untagged video is BT709 from 720 lines up, as Android assumes`() {
-        assertThat(RetrieverProbe.videoIsBt709(null, 1080)).isTrue()
-        assertThat(RetrieverProbe.videoIsBt709(null, 480)).isFalse()
-        assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT709, 480)).isTrue()
-        assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, 1080)).isFalse()
+    fun `untagged video is BT709 by size as Android assumes`() {
+        assertThat(RetrieverProbe.videoIsBt709(null, 1920, 1080)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 1080, 1920)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 1280, 720)).isTrue()
+        // A Small export's size is HD to Android, unlike 640x480 or PAL.
+        assertThat(RetrieverProbe.videoIsBt709(null, 854, 480)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 640, 480)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 720, 576)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 480, 854)).isTrue()
+        // 4K and up defaults to BT.2020.
+        assertThat(RetrieverProbe.videoIsBt709(null, 3840, 2160)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 2160, 3840)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 0, 0)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT709, 640, 480)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, 1920, 1080)).isFalse()
         // Values outside the public constants (the emulator reports 71) fall back to size.
-        assertThat(RetrieverProbe.videoIsBt709(71, 1080)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(71, 1920, 1080)).isTrue()
         // HDR is converted by Media3 itself, never corrected.
-        assertThat(RetrieverProbe.videoIsBt709(null, 2160, android.media.MediaFormat.COLOR_TRANSFER_HLG)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 1920, 1080, android.media.MediaFormat.COLOR_TRANSFER_HLG)).isFalse()
         assertThat(
             RetrieverProbe.videoIsBt709(
                 android.media.MediaFormat.COLOR_STANDARD_BT709,
+                1920,
                 1080,
                 android.media.MediaFormat.COLOR_TRANSFER_ST2084,
             ),
         ).isFalse()
-        assertThat(RetrieverProbe.videoIsBt709(null, 1080, android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 1920, 1080, android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO)).isTrue()
     }
 }

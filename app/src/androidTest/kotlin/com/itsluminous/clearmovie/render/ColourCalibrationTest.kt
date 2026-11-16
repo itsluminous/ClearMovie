@@ -43,6 +43,16 @@ class ColourCalibrationTest {
     }
 
     @Test
+    fun anInterruptedCalibrationAnswersNothingAndKeepsTheInterrupt() {
+        Thread.currentThread().interrupt()
+        val result = ColourCalibration.measure(RenderHarness.context)
+        // Clears the flag, so later tests on this thread are not interrupted.
+        val stillInterrupted = Thread.interrupted()
+        assertThat(result).isNull()
+        assertWithMessage("the caller's interrupt was lost").that(stillInterrupted).isTrue()
+    }
+
+    @Test
     fun calibrationClipIsWhatTheMeasurementAssumes() {
         val clip = File(RenderHarness.context.cacheDir, "calibration-clip.mp4")
         RenderHarness.context.assets

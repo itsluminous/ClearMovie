@@ -55,7 +55,7 @@ import java.util.concurrent.atomic.AtomicReference
  * next process; one that was interrupted is tried again on the next call.
  * [of] blocks for the calibration (about a second; a stalled
  * one is cancelled after [TIMEOUT_S], Media3's cancel is waited for at most
- * [CANCEL_WAIT_S], and reading the output back at most [RawYuv]'s deadline)
+ * [CANCEL_WAIT_S], and the output's decode loop at most 5 s)
  * and must not run on the main thread. Nothing it throws
  * reaches the export.
  */
@@ -201,7 +201,8 @@ object ColourCalibration {
                 Log.w(TAG, "Colour calibration: the output could not be read")
                 return null
             }
-            val result = classify(gl, yuv).copy(encoderName = encoder.get())
+            val classified = classify(gl, yuv)
+            val result = if (classified.measured) classified.copy(encoderName = encoder.get()) else classified
             logResult(gl, yuv, result)
             return result
         } catch (e: InterruptedException) {
@@ -352,7 +353,11 @@ internal class GlColourProbe(
         }
 }
 
-/** Raw YUV of a video frame, decoded by `MediaCodec` to buffers (no colour conversion), within a 5 s deadline. */
+/**
+ * Raw YUV of a video frame, decoded by `MediaCodec` to buffers (no colour
+ * conversion). The decode loop gives up after 5 s; opening and releasing the
+ * decoder are not bounded by it.
+ */
 internal object RawYuv {
     /** Mean Y, Cb, Cr of an 8x8 patch at (x, y) of the first frame at or after [timeUs]; null when it can't be read. */
     fun meanAt(
@@ -442,6 +447,6 @@ internal object RawYuv {
 
     private const val MAX_POLLS = 2000
 
-    /** At most this long, whatever the decoder does: the export waits for it. */
+    /** How long the decode loop may run: the export waits for it. */
     private const val DEADLINE_NS = 5_000_000_000L
 }

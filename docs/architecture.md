@@ -180,7 +180,10 @@ the encoder's. The BT.601 tag is asked for only when an export opens the
 encoder that was measured. High and Small exports reuse the 720p answer:
 Android's size defaults for untagged video put 854x480, 1280x720 and
 1920x1080 in the same BT.709 class, so an encoder or decoder that falls back
-to them answers alike at all three sizes. On a GPU that misdecodes, every
+to them answers alike at all three sizes. Low drafts (below 854x480) and SD
+BT.709-tagged sources on a decoder that ignores the tag are outside that
+argument; they reuse the answer unmeasured. Untagged sources are classed by the
+same size rule (`RetrieverProbe.videoIsBt709`). On a GPU that misdecodes, every
 BT.709 video item starts with `Bt709Correction`; on an encoder that writes
 BT.601, the export asks for BT.601 so the file's tag matches its YUV. A
 calibration that fails or cannot tell changes nothing. Colours whose BT.601
