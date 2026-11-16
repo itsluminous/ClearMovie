@@ -91,17 +91,31 @@ class ShareIntakeRulesTest {
     }
 
     @Test
-    fun `counts handed on by ShareActivity are added, within bounds`() {
-        val forwarded =
-            multiple(listOf(media(1)))
-                .setAction(ShareLinks.ACTION_SHARED)
-                .putExtra(ShareLinks.EXTRA_REFUSED, 2)
-                .putExtra(ShareLinks.EXTRA_OVER_LIMIT, Int.MAX_VALUE)
-        val shared = ShareLinks.read(forwarded)!!
-        assertThat(shared.refused).isEqualTo(2)
-        assertThat(shared.overLimit).isEqualTo(10_000)
-        // Only the forwarded action carries counts.
-        assertThat(ShareLinks.read(multiple(listOf(media(1))).putExtra(ShareLinks.EXTRA_REFUSED, 9))!!.refused).isEqualTo(0)
+    fun `a hand-off token works once, and a made-up one gives nothing`() {
+        val links = SharedLinks(listOf(media(1)), refused = 2, overLimit = 3)
+        val token = ShareHandoff.put(links)
+        assertThat(ShareHandoff.take("made-up")).isNull()
+        assertThat(ShareHandoff.take(null)).isNull()
+        assertThat(ShareHandoff.take(token)).isEqualTo(links)
+        assertThat(ShareHandoff.take(token)).isNull()
+        // The internal action is not a share to read: its links come only through the token.
+        assertThat(ShareLinks.read(Intent(ShareLinks.ACTION_SHARED).putExtra(Intent.EXTRA_STREAM, media(1)))).isNull()
+    }
+
+    @Test
+    fun `links with a user part in the authority are refused`() {
+        val shared = ShareLinks.read(multiple(listOf("content://0@com.itsluminous.ClearMovie.androidx-startup/x".toUri(), media(2))))!!
+        assertThat(shared.uris).containsExactly(media(2))
+        assertThat(shared.refused).isEqualTo(1)
+    }
+
+    @Test
+    fun `a provider date in seconds is read as seconds, and 0 is no date`() {
+        assertThat(CaptureDates.provider(1_794_627_000_000L)).isEqualTo(1_794_627_000_000L)
+        assertThat(CaptureDates.provider(1_794_627_000L)).isEqualTo(1_794_627_000_000L)
+        assertThat(CaptureDates.provider(0)).isNull()
+        assertThat(CaptureDates.provider(null)).isNull()
+        assertThat(CaptureDates.provider(5_000L)).isNull()
     }
 
     @Test

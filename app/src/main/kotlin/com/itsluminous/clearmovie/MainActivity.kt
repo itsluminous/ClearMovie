@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.itsluminous.clearmovie.data.media.ShareHandoff
 import com.itsluminous.clearmovie.data.media.ShareLinks
 import com.itsluminous.clearmovie.ui.navigation.ClearMovieApp
 import com.itsluminous.clearmovie.ui.share.ShareViewModel
@@ -78,9 +79,16 @@ class MainActivity : AppCompatActivity() {
         receiveShare(intent)
     }
 
-    /** Only shares handed on by [ShareActivity]; a SEND sent here directly (it is exported as the launcher) is ignored. */
+    /**
+     * Only shares handed on by [ShareActivity], by a one-time token from this
+     * process: a SEND, or a made-up hand-off, sent here directly (this
+     * activity is exported as the launcher) is ignored, and so is one Android
+     * replays from Recents (its token was used).
+     */
     private fun receiveShare(intent: Intent?) {
-        if (intent?.action == ShareLinks.ACTION_SHARED) share.receive(intent)
+        if (intent?.action != ShareLinks.ACTION_SHARED) return
+        val token = runCatching { intent.getStringExtra(ShareHandoff.EXTRA_TOKEN) }.getOrNull()
+        ShareHandoff.take(token)?.let(share::receive)
     }
 
     private companion object {

@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.ui.share
 
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,6 +24,7 @@ import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.data.project.ShareChoice
 import com.itsluminous.clearmovie.data.project.ShareDrafts
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
+import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.Project
@@ -32,9 +34,11 @@ import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.ui.media.IntakeState
 import com.itsluminous.clearmovie.ui.media.MediaIntake
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
@@ -50,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -133,6 +138,9 @@ enum class FailReason {
 
     /** The video could not be written: the phone is full. */
     PHONE_FULL,
+
+    /** The video open in the editor could not be written before a new one was started (the phone is full). */
+    OPEN_NOT_SAVED,
 
     /** The copy question's Choose fewer: a share cannot choose, so it says how. */
     CHOOSE_FEWER,
@@ -242,6 +250,15 @@ class ShareViewModel
         /** MIME types read while classifying, reused by the length estimate. */
         private val types = HashMap<Uri, String?>()
 
+        /** Authorities whose provider did not answer in time during this share: their other links are not asked again. */
+        private val silentAuthorities = HashSet<String>()
+
+        /** The video the editor shows right now (told by the navigation), or null when another screen shows. */
+        private var editorOnScreen: ProjectId? = null
+
+        /** Counts writes of the links file, so a clear queued by [settle] never wipes a later share's links. */
+        @Volatile private var fileSeq = 0
+
         /**
          * Calls into the sharing app's provider. It can be any app, and one
          * that hangs must never hang the share: each call has a time limit,
@@ -267,6 +284,11 @@ class ShareViewModel
             viewModelScope.launch {
                 try {
                     restore()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A database failure while coming back: the share is dropped rather than the app.
+                    settle()
                 } finally {
                     restoredState.value = true
                 }
@@ -311,7 +333,15 @@ class ShareViewModel
                 restored.join()
                 for (shared in incoming) {
                     stateFlow.first { !busy(it) }
-                    route(shared)
+                    try {
+                        route(shared)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // A database or file failure while routing: say so, keep the flow alive for the next share.
+                        target = null
+                        show(ShareState.Failed(FailReason.OTHER))
+                    }
                 }
             }
         }
@@ -332,6 +362,17 @@ class ShareViewModel
             incoming.trySend(shared)
         }
 
+        /** A share [ShareActivity] read and handed on through `ShareHandoff`. */
+        fun receive(shared: SharedLinks) {
+            incoming.trySend(shared)
+        }
+
+        /** The navigation's current screen: [projectId] when it is the editor showing that video, else null. */
+        fun screenShown(projectId: ProjectId?) {
+            editorOnScreen = projectId
+            if (projectId != null) editorShown(projectId)
+        }
+
         /** A share is being handled; a waiting share's pick (not while a preset is being applied) is not. */
         private fun busy(state: ShareState): Boolean = !(state is ShareState.Idle || (state is ShareState.Ready && !state.choosing))
 
@@ -345,22 +386,28 @@ class ShareViewModel
                 show(ShareState.Nothing(first))
                 return
             }
-            // The editor's video is the one named in the session (cm-flow D5); a review or pick draft is not.
-            val inEditor = (runCatching { repository.launchDecision() }.getOrNull() as? LaunchDecision.ReopenEditor)?.id
+            // The video in the editor: the one on screen, else the one the session names (the app in the
+            // background, or starting); a review or photo-step draft is neither (cm-flow D5).
+            val inEditor =
+                editorOnScreen ?: (runCatching { repository.launchDecision() }.getOrNull() as? LaunchDecision.ReopenEditor)?.id
             val open: ProjectId? = waiting?.draft ?: inEditor
             links = shared.uris
             notes = first
+            saveNotes()
+            fileSeq++
             withContext(fileIo) { pending.save(links) }
             manyConfirmed = false
+            savedState[KEY_MANY_CONFIRMED] = false
             usable = null
             types.clear()
+            silentAuthorities.clear()
             waitingShare = waiting
             if (open != null) {
                 target = open
                 draft = waiting?.draft
                 show(ShareState.Asking(links.size, open, toWaitingShare = waiting != null))
             } else {
-                dropEmptyLauncherDraft()
+                if (editorOnScreen == null) dropEmptyLauncherDraft()
                 startNew()
             }
         }
@@ -394,7 +441,7 @@ class ShareViewModel
             viewModelScope.launch {
                 if (!asking.toWaitingShare && !repository.close()) {
                     target = null
-                    show(ShareState.Failed(FailReason.PHONE_FULL))
+                    show(ShareState.Failed(FailReason.OPEN_NOT_SAVED))
                     return@launch
                 }
                 startNew()
@@ -435,6 +482,7 @@ class ShareViewModel
         fun continueMany() {
             val many = stateFlow.value as? ShareState.ManyItems ?: return
             manyConfirmed = true
+            savedState[KEY_MANY_CONFIRMED] = true
             show(ShareState.Waiting(many.count, target))
             begin(lastAccess)
         }
@@ -492,7 +540,10 @@ class ShareViewModel
             show(ready.copy(choosing = true))
             viewModelScope.launch {
                 val result = drafts.choose(ready.draft, preset)
-                (stateFlow.value as? ShareState.Ready)?.takeIf { it.draft == ready.draft }?.let { show(it.copy(choosing = false)) }
+                // Stays "choosing" (busy) until the editor shows it, so a share queued behind never sees a free pick in between.
+                if (result !is ShareChoice.Ready) {
+                    (stateFlow.value as? ShareState.Ready)?.takeIf { it.draft == ready.draft }?.let { show(it.copy(choosing = false)) }
+                }
                 when (result) {
                     is ShareChoice.Ready -> {
                         navChannel.send(ShareNav.ToEditor(result.projectId))
@@ -504,7 +555,7 @@ class ShareViewModel
 
                     ShareChoice.Gone -> {
                         draft = null
-                        show(ShareState.Nothing(ShareNotes(unreadable = ready.items)))
+                        show(ShareState.Failed(FailReason.OTHER))
                     }
 
                     ShareChoice.NotSaved -> {
@@ -536,7 +587,7 @@ class ShareViewModel
             var silent = 0
             for (uri in links) {
                 currentCoroutineContext().ensureActive()
-                val answer = ask { shareProbe.typeOf(uri) }
+                val answer = askFor(uri) { shareProbe.typeOf(uri) }
                 when {
                     answer === NoAnswer -> {
                         silent++
@@ -564,9 +615,26 @@ class ShareViewModel
          * share goes on without it.
          */
         private suspend fun ask(block: () -> Any?): Any? {
-            val call = providerScope.async { block() }
-            return withTimeoutOrNull(PROVIDER_TIMEOUT_MS) { call.await() }
-                ?: if (call.isCompleted) null else NoAnswer.also { call.cancel() }
+            // A provider that throws is a provider that did not answer: never an exception in this flow.
+            val call = providerScope.async { runCatching(block) }
+            val result = withTimeoutOrNull(PROVIDER_TIMEOUT_MS) { call.await() } ?: return NoAnswer.also { call.cancel() }
+            return result.getOrElse { NoAnswer }
+        }
+
+        /**
+         * [ask] about [uri]; once one link of a provider has not answered in
+         * time, its other links are not asked (each would cost the time limit
+         * again, and fill the provider threads), and count as not answered.
+         */
+        private suspend fun askFor(
+            uri: Uri,
+            block: () -> Any?,
+        ): Any? {
+            val authority = uri.authority.orEmpty()
+            if (authority in silentAuthorities) return NoAnswer
+            val answer = ask(block)
+            if (answer === NoAnswer) silentAuthorities += authority
+            return answer
         }
 
         private object NoAnswer
@@ -587,7 +655,7 @@ class ShareViewModel
             for (uri in items) {
                 currentCoroutineContext().ensureActive()
                 val video = types[uri].orEmpty().startsWith("video/")
-                total += if (video) (ask { shareProbe.durationMs(uri) } as? Long ?: photoMs) else photoMs
+                total += if (video) (askFor(uri) { shareProbe.durationMs(uri) } as? Long ?: photoMs) else photoMs
             }
             return ((total + MINUTE_MS / 2) / MINUTE_MS).toInt().coerceAtLeast(1)
         }
@@ -610,7 +678,12 @@ class ShareViewModel
                 withContext(io) { drafts.discard(stale) }
                 draft = null
             }
-            val made = drafts.create()
+            // Written whole even when Cancel comes in the middle, then thrown away if it did, so no empty draft is left behind.
+            val made = withContext(NonCancellable) { drafts.create() }
+            if (!currentCoroutineContext().isActive) {
+                made?.let { withContext(NonCancellable + io) { drafts.discard(it) } }
+                return null
+            }
             if (made == null) {
                 fail(FailReason.PHONE_FULL)
                 return null
@@ -634,7 +707,7 @@ class ShareViewModel
 
         private suspend fun putOnTimeline(items: List<IntakeItem>) {
             val project = target ?: draft ?: return
-            val times = items.map { captureTimes.takenAt(project, it) }
+            val times = items.map { item -> askTime(project, item) }
             val ordered = CaptureOrder.order(items.indices.toList()) { times[it] }.map { items[it] }
             val open =
                 repository.open.value?.takeIf { it.id == project }
@@ -657,7 +730,8 @@ class ShareViewModel
                     ?.takeIf { it.id == project }
                     ?.userItems() ?: made.clips.size
             when {
-                made.clips.isEmpty() && target == null -> {
+                made.clips.isEmpty() -> {
+                    // Nothing could be used (for an open video too: never "0 were added").
                     finishWithNothing()
                 }
 
@@ -673,6 +747,29 @@ class ShareViewModel
                     navChannel.send(ShareNav.ToEditor(project))
                 }
             }
+        }
+
+        /** [item]'s capture time, within the provider time limit (a link to a provider that hangs has no time). */
+        private suspend fun askTime(
+            project: ProjectId,
+            item: IntakeItem,
+        ): Long? {
+            val ref = item.ref
+            val authority =
+                (ref as? MediaRef.Store)
+                    ?.uri
+                    ?.toUri()
+                    ?.authority
+                    .orEmpty()
+            if (authority.isNotEmpty() && authority in silentAuthorities) return null
+            val call = providerScope.async { runCatching { captureTimes.takenAt(project, item) } }
+            val result = withTimeoutOrNull(PROVIDER_TIMEOUT_MS) { call.await() }
+            if (result == null) {
+                call.cancel()
+                if (authority.isNotEmpty()) silentAuthorities += authority
+                return null
+            }
+            return result.getOrNull()
         }
 
         private suspend fun finishWithNothing() {
@@ -692,7 +789,8 @@ class ShareViewModel
         /** Ends this share: the earlier share's pick shows again if there was one, else nothing is going on. */
         private fun settle() {
             val back = waitingShare
-            viewModelScope.launch(fileIo) { pending.clear() }
+            val seq = fileSeq
+            viewModelScope.launch(fileIo) { if (fileSeq == seq) pending.clear() }
             links = emptyList()
             notes = back?.notes ?: ShareNotes()
             target = null
@@ -709,16 +807,26 @@ class ShareViewModel
         private fun show(state: ShareState) {
             stateFlow.value = state
             pickFlow.value = state as? ShareState.Ready ?: waitingShare
+            val behind = waitingShare
             savedState[KEY_PHASE] =
                 when (state) {
-                    ShareState.Idle, is ShareState.Added, is ShareState.Nothing, is ShareState.Failed -> null
+                    // A message over a waiting share's pick: after a process death the pick comes back (the message does not).
+                    is ShareState.Added, is ShareState.Nothing, is ShareState.Failed -> if (behind != null) PHASE_READY else null
+
+                    ShareState.Idle -> null
+
                     is ShareState.Asking -> PHASE_ASKING
+
                     is ShareState.Waiting, is ShareState.Preparing, is ShareState.ManyItems -> PHASE_TAKING_IN
+
                     is ShareState.Ready -> PHASE_READY
                 }
             savedState[KEY_TARGET] = target?.value
-            savedState[KEY_DRAFT] = (state as? ShareState.Ready)?.draft?.value ?: draft?.value
+            val message = state is ShareState.Added || state is ShareState.Nothing || state is ShareState.Failed
+            savedState[KEY_DRAFT] =
+                (state as? ShareState.Ready)?.draft?.value ?: (if (message) behind?.draft?.value else null) ?: draft?.value
             savedState[KEY_WAITING_DRAFT] = waitingShare?.draft?.value
+            savedState[KEY_WAITING_NOTES] = waitingShare?.notes?.let { intArrayOf(it.notMedia, it.unreadable, it.overLimit) }
             savedState[KEY_ON_PICK] = onPick
         }
 
@@ -740,11 +848,19 @@ class ShareViewModel
             notes =
                 savedState.get<IntArray>(KEY_NOTES)?.takeIf { it.size == NOTE_FIELDS }?.let { ShareNotes(it[0], it[1], it[2]) }
                     ?: ShareNotes()
-            waitingShare = savedState.get<String>(KEY_WAITING_DRAFT)?.let(::idOrNull)?.let { readyOf(it, ShareNotes()) }
+            manyConfirmed = savedState.get<Boolean>(KEY_MANY_CONFIRMED) ?: false
+            val waitingNotes =
+                savedState
+                    .get<IntArray>(
+                        KEY_WAITING_NOTES,
+                    )?.takeIf { it.size == NOTE_FIELDS }
+                    ?.let { ShareNotes(it[0], it[1], it[2]) }
+            waitingShare = savedState.get<String>(KEY_WAITING_DRAFT)?.let(::idOrNull)?.let { readyOf(it, waitingNotes ?: ShareNotes()) }
             links = withContext(fileIo) { pending.load() }
             when (phase) {
                 PHASE_READY -> {
-                    val ready = draft?.let { readyOf(it, notes) }
+                    val ready = draft?.let { id -> if (id == waitingShare?.draft) waitingShare else readyOf(id, notes) }
+                    waitingShare = null
                     if (ready != null) show(ready) else settle()
                 }
 
@@ -795,6 +911,8 @@ class ShareViewModel
             const val KEY_WAITING_DRAFT = "share_waiting_draft"
             const val KEY_ON_PICK = "share_on_pick"
             const val KEY_NOTES = "share_notes"
+            const val KEY_WAITING_NOTES = "share_waiting_notes"
+            const val KEY_MANY_CONFIRMED = "share_many_confirmed"
             const val PHASE_ASKING = "asking"
             const val PHASE_TAKING_IN = "taking_in"
             const val PHASE_READY = "ready"

@@ -121,16 +121,15 @@ fun ClearMovieApp(
     }
 
     if (share != null) {
-        // A share whose video the editor now shows is done.
+        // The share knows which video the editor shows (a share whose video it is, is then done).
         LaunchedEffect(navController, share) {
             navController.currentBackStackEntryFlow.collect { entry ->
-                if (entry.destination.route == Routes.EDITOR) {
+                val editing =
                     entry.arguments
+                        ?.takeIf { entry.destination.route == Routes.EDITOR }
                         ?.getString(Routes.ARG_PROJECT)
-                        ?.let { id ->
-                            runCatching { ProjectId(id) }.getOrNull()
-                        }?.let(share::editorShown)
-                }
+                        ?.let { id -> runCatching { ProjectId(id) }.getOrNull() }
+                share.screenShown(editing)
             }
         }
     }

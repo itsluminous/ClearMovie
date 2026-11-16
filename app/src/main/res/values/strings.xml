@@ -295,15 +295,26 @@
     </plurals>
     <string name="share_not_saved">Your phone is full, so the shared photos and videos could not be added. Free up some space and share them again.</string>
     <string name="share_nothing_empty">There were no photos or videos in what was shared.</string>
-    <string name="share_add_waiting_title">Add to the photos you just shared?</string>
+    <string name="share_add_waiting_title">Put these with the ones you just shared?</string>
     <!-- %1$d is how many photos and videos were shared now. -->
     <plurals name="share_add_waiting_body">
-        <item quantity="one">Make one video of %1$d more photo or video and the ones you shared just before, or start a separate video with it?</item>
-        <item quantity="other">Make one video of these %1$d photos and videos and the ones you shared just before, or start a separate video with them?</item>
+        <item quantity="one">Put this %1$d photo or video with the ones you shared just before, in one video? If you keep it separate, the earlier ones stay in My videos.</item>
+        <item quantity="other">Put these %1$d photos and videos with the ones you shared just before, in one video? If you keep them separate, the earlier ones stay in My videos.</item>
     </plurals>
     <string name="share_failed_title">Nothing was added</string>
     <string name="share_choose_fewer_body">To use less space, go back to your gallery and share fewer photos and videos.</string>
     <string name="share_failed_body">Something went wrong, so the shared photos and videos could not be added. Please share them again.</string>
     <string name="share_choice_not_saved">Your phone is full, so the preset could not be added. Free up some space, then tap the preset again. Your photos and videos are still here.</string>
     <string name="share_could_not_start">ClearMovie could not take these items. Try sharing fewer at a time.</string>
+    <string name="share_together">Put them together</string>
+    <string name="share_separate">Keep them separate</string>
+    <!-- %1$d is how many shared photos and videos would be thrown away. -->
+    <plurals name="share_drop_title">
+        <item quantity="one">Throw away this %1$d photo or video?</item>
+        <item quantity="other">Throw away these %1$d photos and videos?</item>
+    </plurals>
+    <string name="share_drop_body">They stay in your gallery, but you would have to share them again.</string>
+    <string name="share_drop_keep">Keep them</string>
+    <string name="share_drop_confirm">Throw away</string>
+    <string name="share_open_not_saved">Your phone is full, so the video you have open can\'t be saved yet. Free up some space, then share again.</string>
 </resources>

@@ -25,7 +25,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 /** One link of an intake and what will happen to it. */
 data class PlannedItem(
@@ -91,8 +90,23 @@ class MediaAccess(
             .take(TOKEN_LENGTH)
     },
 ) {
-    /** Grants persisted by a [plan] whose [execute] or [abandon] has not run yet. */
-    private val pendingGrants: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /**
+     * Links a [plan] has marked or kept as about to be used, with how many
+     * plans hold each (the Photo Picker and a share can plan at the same
+     * time, and may hold the same link). Changed only under [grantMutex].
+     */
+    private val pendingGrants = HashMap<String, Int>()
+
+    private fun hold(uri: String) {
+        pendingGrants[uri] = (pendingGrants[uri] ?: 0) + 1
+    }
+
+    /** Drops one hold on [uri]; true when no plan holds it any more. */
+    private fun drop(uri: String): Boolean {
+        val left = (pendingGrants[uri] ?: 0) - 1
+        if (left > 0) pendingGrants[uri] = left else pendingGrants.remove(uri)
+        return left <= 0
+    }
 
     /**
      * Guards the short bookkeeping in [plan] and [reconcileGrants], never a
@@ -111,7 +125,8 @@ class MediaAccess(
                 // Every link is marked pending before it is resolved (which may persist its grant), so
                 // reconcileGrants never releases a grant this plan has just taken. Marks this plan added
                 // and did not need are dropped again afterwards.
-                val marked = grantMutex.withLock { uris.map { it.toString() }.filterTo(mutableSetOf()) { pendingGrants.add(it) } }
+                val marked = uris.map { it.toString() }.toSet()
+                grantMutex.withLock { marked.forEach(::hold) }
                 val items =
                     try {
                         uris.map { PlannedItem(it, mediaResolver.resolve(it, access)) }.also { resolved = it }
@@ -125,7 +140,7 @@ class MediaAccess(
                                             l.persistedGrant
                                         }?.uri
                                 }
-                        withContext(NonCancellable) { grantMutex.withLock { (marked - kept).forEach { pendingGrants -= it } } }
+                        withContext(NonCancellable) { grantMutex.withLock { (marked - kept).forEach { drop(it) } } }
                     }
                 val copies = items.mapNotNull { (it.resolution as? Resolution.NeedsCopy)?.let { c -> c.info.sizeBytes ?: -1L } }
                 IntakePlan(items, CopyBudget.evaluate(copies, freeBytes(), partialAccess = access == MediaAccessState.Partial))
@@ -146,8 +161,9 @@ class MediaAccess(
             plan.items.forEach { item ->
                 val linked = item.resolution as? Resolution.Linked ?: return@forEach
                 if (!linked.persistedGrant) return@forEach
-                pendingGrants -= linked.uri
-                if (db.grants().usersOf(linked.uri) == 0) grants.release(linked.uri)
+                // Released only when no other plan still holds it and no project uses it.
+                val free = grantMutex.withLock { drop(linked.uri) }
+                if (free && db.grants().usersOf(linked.uri) == 0) grants.release(linked.uri)
             }
         }
     }
@@ -160,7 +176,7 @@ class MediaAccess(
     suspend fun reconcileGrants(persisted: List<String>) {
         withContext(dispatcher) {
             grantMutex.withLock {
-                persisted.filter { it !in pendingGrants && db.grants().usersOf(it) == 0 }.forEach(grants::release)
+                persisted.filter { it !in pendingGrants.keys && db.grants().usersOf(it) == 0 }.forEach(grants::release)
             }
         }
     }
@@ -183,55 +199,65 @@ class MediaAccess(
             val made = mutableListOf<java.io.File>()
             val addedGrants = mutableListOf<String>()
             try {
-                plan.items.map { item ->
-                    when (val r = item.resolution) {
-                        is Resolution.Linked -> {
-                            if (r.persistedGrant) {
-                                if (db.grants().usersOf(r.uri, projectId.value) == 0) {
-                                    db.grants().add(MediaGrantEntity(r.uri, projectId.value))
-                                    addedGrants += r.uri
+                val result =
+                    plan.items.map { item ->
+                        when (val r = item.resolution) {
+                            is Resolution.Linked -> {
+                                if (r.persistedGrant) {
+                                    if (db.grants().usersOf(r.uri, projectId.value) == 0) {
+                                        db.grants().add(MediaGrantEntity(r.uri, projectId.value))
+                                        addedGrants += r.uri
+                                    }
                                 }
-                                pendingGrants -= r.uri
+                                IntakeItem(item.source, MediaRef.Store(r.uri), r.info)
                             }
-                            IntakeItem(item.source, MediaRef.Store(r.uri), r.info)
-                        }
 
-                        is Resolution.Unreadable -> {
-                            IntakeItem(item.source, null, null)
-                        }
-
-                        is Resolution.NeedsCopy -> {
-                            val name = SafeFileName.build(randomToken(), r.info.displayName, r.info.mime)
-                            val ref = MediaRef.Copied(name)
-                            val target = files.copiedFile(projectId, ref)
-                            val base = done
-                            try {
-                                val copied =
-                                    copier.copy(
-                                        open = { resolver.openInputStream(r.source) },
-                                        target = target,
-                                        expectedBytes = r.info.sizeBytes,
-                                        maxBytes = MediaCopier.limitFor(r.info.sizeBytes, freeBytes()),
-                                    ) { bytes, _ -> onProgress(base + bytes, total) }
-                                made += copied.file
-                                done = base + (r.info.sizeBytes ?: copied.sizeBytes)
-                                IntakeItem(item.source, ref, r.info)
-                            } catch (e: CopyFailedException) {
-                                if (e.reason == CopyFailedException.Reason.WRITE_FAILED) throw e
-                                done = base + (r.info.sizeBytes ?: 0L)
-                                IntakeItem(item.source, null, r.info)
+                            is Resolution.Unreadable -> {
+                                IntakeItem(item.source, null, null)
                             }
+
+                            is Resolution.NeedsCopy -> {
+                                val name = SafeFileName.build(randomToken(), r.info.displayName, r.info.mime)
+                                val ref = MediaRef.Copied(name)
+                                val target = files.copiedFile(projectId, ref)
+                                val base = done
+                                try {
+                                    val copied =
+                                        copier.copy(
+                                            open = { resolver.openInputStream(r.source) },
+                                            target = target,
+                                            expectedBytes = r.info.sizeBytes,
+                                            maxBytes = MediaCopier.limitFor(r.info.sizeBytes, freeBytes()),
+                                        ) { bytes, _ -> onProgress(base + bytes, total) }
+                                    made += copied.file
+                                    done = base + (r.info.sizeBytes ?: copied.sizeBytes)
+                                    IntakeItem(item.source, ref, r.info)
+                                } catch (e: CopyFailedException) {
+                                    if (e.reason == CopyFailedException.Reason.WRITE_FAILED) throw e
+                                    done = base + (r.info.sizeBytes ?: 0L)
+                                    IntakeItem(item.source, null, r.info)
+                                }
+                            }
+                        }
+                    }
+                // Done: this plan's holds go once, now its grants have project rows.
+                withContext(NonCancellable) {
+                    grantMutex.withLock {
+                        plan.items.forEach {
+                            (it.resolution as? Resolution.Linked)
+                                ?.takeIf { l ->
+                                    l.persistedGrant
+                                }?.let { l -> drop(l.uri) }
                         }
                     }
                 }
+                result
             } catch (e: Throwable) {
-                // Cancelled, or the phone is full: this intake leaves nothing behind.
+                // Cancelled, or the phone is full: this intake leaves nothing behind. abandon drops
+                // this plan's holds once and releases each grant no project and no other plan uses.
                 made.forEach { it.delete() }
                 withContext(NonCancellable) {
-                    for (uri in addedGrants) {
-                        db.grants().remove(uri, projectId.value)
-                        if (db.grants().usersOf(uri) == 0) grants.release(uri)
-                    }
+                    for (uri in addedGrants) db.grants().remove(uri, projectId.value)
                     abandon(plan)
                 }
                 throw e

@@ -118,6 +118,23 @@ class SharePickScreenTest {
     }
 
     @Test
+    fun `throwing the items away asks first, and Keep them is the safe choice`() {
+        val picked = mutableListOf<String>()
+        compose.setContent {
+            AtSize(ScreenSize.COMPACT, 2f) {
+                ClearMovieTheme(dynamicColor = false) {
+                    com.itsluminous.clearmovie.ui.share
+                        .DropShareDialog(12, onKeep = { picked += "keep" }, onDrop = { picked += "drop" })
+                }
+            }
+        }
+        compose.onNodeWithText(q(R.plurals.share_drop_title, 12)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.share_drop_keep)).performClick()
+        compose.onNodeWithText(s(R.string.share_drop_confirm)).performClick()
+        assertThat(picked).containsExactly("keep", "drop").inOrder()
+    }
+
+    @Test
     fun `while the items are taken in the cards wait`() {
         showAt(ScreenSize.COMPACT, share = ShareHeader(ready = false, items = 0))
         compose.onNodeWithText(s(R.string.share_getting_ready)).assertIsDisplayed()

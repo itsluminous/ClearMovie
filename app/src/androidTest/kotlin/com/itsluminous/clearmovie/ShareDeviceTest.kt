@@ -268,13 +268,18 @@ class ShareDeviceTest {
     }
 
     @Test
-    fun aShareWithoutAGrantSaysItCouldNotBeOpenedAndGoesHome() {
+    fun aShareWithoutAGrantIsDroppedNeverReadWithTheAppsOwnAccess() {
+        // The sender gives no read grant: ClearMovie never opens the links with its own access, and starts no video.
         shareFromOtherApp(listOf("n1~photo_blue.png", "n2~clip_dark.mp4"), grant = false)
-        waitFor(hasText(s(R.string.share_nothing_title)))
-        compose.onNodeWithText(q(R.plurals.share_skipped_unreadable, 2)).assertExists()
-        tap(s(R.string.action_ok))
-        waitFor(hasText(s(R.string.home_new_video)))
+        Thread.sleep(3_000)
+        assertThat(mainActivities()).isEmpty()
         assertThat(runBlocking { app.projectRepository.projectList() }).isEmpty()
+        assertThat(
+            app.appFiles.projectsRoot
+                .walk()
+                .filter { it.isFile }
+                .toList(),
+        ).isEmpty()
     }
 
     @Test
@@ -317,7 +322,15 @@ class ShareDeviceTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         waitFor(hasText(s(R.string.home_new_video)))
-        Thread.sleep(1_000)
+        // Nor a made-up hand-off: the internal action with links but no token from this process.
+        context.startActivity(
+            Intent(ShareLinks.ACTION_SHARED)
+                .setClass(context, MainActivity::class.java)
+                .putExtra(com.itsluminous.clearmovie.data.media.ShareHandoff.EXTRA_TOKEN, "made-up")
+                .putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(photo))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        Thread.sleep(1_500)
         compose.onNodeWithTag(SHARE_HEADER_TAG).assertDoesNotExist()
         assertThat(runBlocking { app.projectRepository.projectList() }).isEmpty()
     }
@@ -484,10 +497,16 @@ class ShareDeviceTest {
     fun activityScenarioRecreateOnThePickAndInTheEditorTakesTheShareOnce() {
         // The share as ShareActivity hands it on, started straight into a recreatable scenario.
         val items = arrayListOf(insert("fixtures/photo_quadrants.png", "image/png"), insert("fixtures/clip_dark.mp4", "video/mp4"))
+        val token =
+            com.itsluminous.clearmovie.data.media.ShareHandoff
+                .put(
+                    com.itsluminous.clearmovie.data.media
+                        .SharedLinks(items),
+                )
         val intent =
             Intent(context, MainActivity::class.java)
                 .setAction(ShareLinks.ACTION_SHARED)
-                .putParcelableArrayListExtra(Intent.EXTRA_STREAM, items)
+                .putExtra(com.itsluminous.clearmovie.data.media.ShareHandoff.EXTRA_TOKEN, token)
         ActivityScenario.launch<MainActivity>(intent).use { scenario ->
             readyHeader(2)
             scenario.recreate()

@@ -425,6 +425,26 @@ class MediaAccessTest {
         }
 
     @Test
+    fun `two intakes holding the same link, one turned down, keeps the other's grant, which it then stores`() =
+        runBlocking<Unit> {
+            val doc = Uri.parse("content://$PHOTOS/shared-twice")
+            photosApp.add(FakeMediaProvider.Row(doc, "s.jpg", 10, "image/jpeg"))
+            grants.persistable += doc.toString()
+            // The photo step and a share plan the same link.
+            val picker = access.plan(listOf(doc), MediaAccessState.Denied)
+            val share = access.plan(listOf(doc), MediaAccessState.Denied)
+
+            access.abandon(picker)
+            access.reconcileGrants(listOf(doc.toString()))
+            assertThat(grants.held).containsExactly(doc.toString())
+
+            access.execute(project, share)
+            access.reconcileGrants(listOf(doc.toString()))
+            assertThat(grants.held).containsExactly(doc.toString())
+            assertThat(db.grants().usersOf(doc.toString())).isEqualTo(1)
+        }
+
+    @Test
     fun `grants left over by a killed intake are released at the next launch`() =
         runBlocking<Unit> {
             db.grants().add(

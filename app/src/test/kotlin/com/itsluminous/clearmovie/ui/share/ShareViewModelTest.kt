@@ -774,6 +774,108 @@ class ShareViewModelTest {
         assertThat(shared.refused).isEqualTo(2)
     }
 
+    @Test
+    fun `a provider that hangs costs its links once, not once per link, and a provider that throws is no answer`() =
+        runBlocking<Unit> {
+            val stuckA = Uri.parse("content://$CHAT/files/a.jpg")
+            val stuckB = Uri.parse("content://$CHAT/files/b.jpg")
+            val stuckC = Uri.parse("content://$CHAT/files/c.jpg")
+            val throwing = Uri.parse("content://com.example.bad/x.jpg")
+            val probeOf =
+                object : ShareProbe {
+                    val real = ResolverShareProbe(context.contentResolver)
+
+                    override fun typeOf(uri: Uri): String? {
+                        if (uri.authority == CHAT) Thread.sleep(60_000)
+                        if (uri == throwing) throw SecurityException("no")
+                        return real.typeOf(uri)
+                    }
+
+                    override fun durationMs(uri: Uri): Long? = real.durationMs(uri)
+                }
+            val m = make(repository(), shareProbe = probeOf)
+            val good = photo("good.jpg")
+
+            val started = System.currentTimeMillis()
+            m.share(send(stuckA, stuckB, stuckC, throwing, good))
+            val ready = m.await<ShareState.Ready>()
+
+            // One time limit for the hanging provider, not three.
+            assertThat(System.currentTimeMillis() - started).isLessThan(2 * ShareViewModel.PROVIDER_TIMEOUT_MS)
+            assertThat(ready.items).isEqualTo(1)
+            assertThat(ready.notes.unreadable).isEqualTo(4)
+        }
+
+    @Test
+    fun `adding to the open video when nothing in the share can be used says nothing was added, never 0 were added`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val open = ProjectId("open6")
+            assertThat(repo.createDraft(ProjectFactory.blank(open), inEditor = true)).isTrue()
+            val m = make(repo)
+            val revoked = Uri.parse("content://$CHAT/files/gone2.jpg")
+            chat.add(FakeMediaProvider.Row(revoked, "gone2.jpg", 10, "image/jpeg", bytes = ByteArray(10)))
+            chat.forbidden += revoked.toString()
+
+            m.share(send(revoked))
+            m.on { addToOpen() }
+            m.on { begin(MediaAccessState.Full) }
+            val nothing = m.await<ShareState.Nothing>()
+
+            assertThat(nothing.notes.unreadable).isEqualTo(1)
+            assertThat(repo.projectList().map { it.id }).containsExactly(open)
+        }
+
+    @Test
+    fun `while a preset is applied the pick stays busy until the editor shows, so a queued share waits`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val m = make(repo)
+            m.share(send(photo("a.jpg")))
+            val ready = m.await<ShareState.Ready>()
+
+            m.on { choose(null) }
+            m.awaitNav { it == ShareNav.ToEditor(ready.draft) }
+            assertThat((m.vm.state.value as ShareState.Ready).choosing).isTrue()
+            m.on { receive(send(photo("later.jpg"))) }
+            Thread.sleep(300)
+            assertThat(m.vm.state.value).isInstanceOf(ShareState.Ready::class.java)
+
+            m.on { screenShown(ready.draft) }
+            // Now the queued share is asked about against the video the editor shows.
+            assertThat(m.await<ShareState.Asking>().target).isEqualTo(ready.draft)
+        }
+
+    @Test
+    fun `a process death while a message shows over a waiting share brings that share's pick back`() =
+        runBlocking<Unit> {
+            val saved = SavedStateHandle()
+            val m = make(repository(), saved)
+            m.share(send(photo("a.jpg"), photo("b.jpg")))
+            val first = m.await<ShareState.Ready>()
+            m.share(Intent(Intent.ACTION_SEND))
+            m.await<ShareState.Nothing>()
+
+            val again = make(repository(), SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) }))
+            val restored = again.await<ShareState.Ready>()
+            assertThat(restored.draft).isEqualTo(first.draft)
+            assertThat(restored.items).isEqualTo(2)
+        }
+
+    @Test
+    fun `the editor on screen counts as the open video even when the session names none`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val shown = ProjectId("shown")
+            // The editor shows a video that has no photos yet and is not in the session (a failed session write).
+            assertThat(repo.createDraft(ProjectFactory.blank(shown), inEditor = false)).isTrue()
+            val m = make(repo)
+            m.on { screenShown(shown) }
+
+            assertThat(m.share(send(photo("a.jpg")))).isEqualTo(ShareState.Asking(1, shown))
+            assertThat(repo.projectList().map { it.id }).contains(shown)
+        }
+
     private fun makeWithFree(
         repo: ProjectRepository,
         free: Long,

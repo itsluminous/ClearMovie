@@ -26,9 +26,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.media.MediaAccessState
 import com.itsluminous.clearmovie.data.media.ShareLinks
+import com.itsluminous.clearmovie.ui.components.WorkDialog
 import com.itsluminous.clearmovie.ui.home.HomeScreen
 import com.itsluminous.clearmovie.ui.home.HomeViewModel
 import com.itsluminous.clearmovie.ui.home.ShareHeader
+import com.itsluminous.clearmovie.ui.media.IntakeState
 import com.itsluminous.clearmovie.ui.media.MediaAccessExplainer
 import com.itsluminous.clearmovie.ui.media.MediaIntakeDialogs
 import com.itsluminous.clearmovie.ui.media.rememberMediaAccessController
@@ -59,16 +61,22 @@ fun ShareRoute(
     LaunchedEffect(state, restored) {
         if (restored && state == ShareState.Idle && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) onIdle()
     }
-    BackHandler(onBack = share::cancel)
     val askedBefore = asked ?: return
     val access = rememberMediaAccessController(askedBefore = askedBefore, onAsked = share::markAsked)
     var notNow by rememberSaveable { mutableStateOf(false) }
+    // His items are ready: Back or the X asks before they are thrown away.
+    var confirmDrop by rememberSaveable { mutableStateOf(false) }
+    val leave = {
+        if (share.pick.value != null && state is ShareState.Ready) confirmDrop = true else share.cancel()
+    }
     val waiting = state as? ShareState.Waiting
     val explain = waiting != null && waiting.target == null && access.state == MediaAccessState.NotAsked && !notNow
     LaunchedEffect(waiting, explain, access.state) {
         if (waiting != null && waiting.target == null && !explain) share.begin(access.state)
     }
     if (explain) {
+        // Back on the photo access question means Not now, never "throw the share away".
+        BackHandler { notNow = true }
         MediaAccessExplainer(
             state = access.state,
             onContinue = access::request,
@@ -87,6 +95,14 @@ fun ShareRoute(
             overLimit = ready?.notes?.overLimit ?: 0,
             limit = ShareLinks.MAX_ITEMS,
         )
+    BackHandler(onBack = leave)
+    val count = ready?.items ?: 0
+    if (confirmDrop && state is ShareState.Ready) {
+        DropShareDialog(count, onKeep = { confirmDrop = false }, onDrop = {
+            confirmDrop = false
+            share.cancel()
+        })
+    }
     HomeScreen(
         presets = presets,
         videos = emptyList(),
@@ -97,7 +113,23 @@ fun ShareRoute(
         onVideo = {},
         onOpenSettings = {},
         share = header,
-        onCancelShare = share::cancel,
+        onCancelShare = leave,
+    )
+}
+
+/** "Throw away these N photos and videos?", with Keep them (the default) and Throw away. */
+@Composable
+fun DropShareDialog(
+    count: Int,
+    onKeep: () -> Unit,
+    onDrop: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onKeep,
+        title = { Text(pluralStringResource(R.plurals.share_drop_title, count, count)) },
+        text = { Text(stringResource(R.string.share_drop_body)) },
+        confirmButton = { TextButton(onClick = onKeep) { Text(stringResource(R.string.share_drop_keep)) } },
+        dismissButton = { TextButton(onClick = onDrop) { Text(stringResource(R.string.share_drop_confirm)) } },
     )
 }
 
@@ -147,9 +179,9 @@ fun ShareDialogs(
     )
     when (val s = state) {
         is ShareState.Asking -> {
-            // Three plain choices, one per line; a tap beside the dialog does nothing (Back still cancels).
+            // Three plain choices, one per line; a tap beside the dialog does nothing, Back is Cancel.
             AlertDialog(
-                onDismissRequest = {},
+                onDismissRequest = share::cancel,
                 properties = DialogProperties(dismissOnClickOutside = false),
                 title = { Text(stringResource(if (s.toWaitingShare) R.string.share_add_waiting_title else R.string.share_add_title)) },
                 text = {
@@ -163,18 +195,28 @@ fun ShareDialogs(
                 },
                 confirmButton = {
                     Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = share::addToOpen) { Text(stringResource(R.string.share_add_here)) }
-                        TextButton(onClick = share::startNewVideo) { Text(stringResource(R.string.share_start_new)) }
+                        TextButton(onClick = share::addToOpen) {
+                            Text(stringResource(if (s.toWaitingShare) R.string.share_together else R.string.share_add_here))
+                        }
+                        TextButton(onClick = share::startNewVideo) {
+                            Text(stringResource(if (s.toWaitingShare) R.string.share_separate else R.string.share_start_new))
+                        }
                         TextButton(onClick = share::cancel) { Text(stringResource(R.string.action_cancel)) }
                     }
                 },
             )
-            BackHandler(onBack = share::cancel)
+        }
+
+        // Adding to the open video: say it is happening, with Cancel, until the copy dialogs or the result take over.
+        is ShareState.Preparing -> {
+            val quiet = intake is IntakeState.Idle || intake is IntakeState.Planning || intake is IntakeState.Done
+            if (s.target != null && quiet) WorkDialog(stringResource(R.string.pick_adding), null, share::cancel)
         }
 
         is ShareState.ManyItems -> {
             AlertDialog(
-                onDismissRequest = {},
+                onDismissRequest = share::cancel,
+                properties = DialogProperties(dismissOnClickOutside = false),
                 title = { Text(stringResource(R.string.share_many_title)) },
                 text = { Text(pluralStringResource(R.plurals.share_many_body, s.minutes, s.minutes)) },
                 confirmButton = { TextButton(onClick = share::continueMany) { Text(stringResource(R.string.share_continue)) } },
@@ -212,6 +254,7 @@ fun ShareDialogs(
                 when (s.reason) {
                     FailReason.OUT_OF_SPACE -> R.string.copy_no_space_title to R.string.pick_out_of_space
                     FailReason.PHONE_FULL -> R.string.copy_no_space_title to R.string.share_not_saved
+                    FailReason.OPEN_NOT_SAVED -> R.string.copy_no_space_title to R.string.share_open_not_saved
                     FailReason.CHOICE_NOT_SAVED -> R.string.copy_no_space_title to R.string.share_choice_not_saved
                     FailReason.CHOOSE_FEWER -> R.string.share_failed_title to R.string.share_choose_fewer_body
                     FailReason.OTHER -> R.string.share_failed_title to R.string.share_failed_body

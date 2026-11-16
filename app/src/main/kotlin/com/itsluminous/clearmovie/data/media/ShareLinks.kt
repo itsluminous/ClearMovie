@@ -28,25 +28,21 @@ object ShareLinks {
     /** The most photos and videos one share can add (review F25 allows more than the picker's 100, with a notice). */
     const val MAX_ITEMS = 500
 
-    /** The internal action `ShareActivity` forwards a share to `MainActivity` with. */
+    /** The internal action `ShareActivity` hands a share to `MainActivity` with; the share itself is in [ShareHandoff]. */
     const val ACTION_SHARED = "com.itsluminous.clearmovie.action.SHARED"
-
-    /** Counts the share layer carried over from the first reading (in `ShareActivity`). */
-    const val EXTRA_REFUSED = "com.itsluminous.clearmovie.extra.REFUSED"
-    const val EXTRA_OVER_LIMIT = "com.itsluminous.clearmovie.extra.OVER_LIMIT"
 
     /** Entries read from one intent at most, so a huge or crafted list can never make the app loop for long. */
     const val MAX_ENTRIES = 10_000
 
     /**
-     * The most characters of links one share keeps, so handing them on to
-     * `MainActivity` stays far below Android's 1 MB limit for one call
-     * (500 links of a normal length take about 30 KB).
+     * The most characters of links one share keeps, so the ClipData that
+     * carries their grants to `MainActivity` stays well under Android's 1 MB
+     * limit for one call (about 200 KB here; 500 links of a normal length
+     * take about 30 KB).
      */
-    const val MAX_TOTAL_CHARS = 200_000
+    const val MAX_TOTAL_CHARS = 100_000
 
-    fun isShare(intent: Intent?): Boolean =
-        intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE || intent?.action == ACTION_SHARED
+    fun isShare(intent: Intent?): Boolean = intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE
 
     /**
      * The links in [intent], or null when it is not a share. Every read is
@@ -59,19 +55,7 @@ object ShareLinks {
     ): SharedLinks? {
         if (intent == null || !isShare(intent)) return null
         val raw: List<Any?> = streamExtra(intent).ifEmpty { clipItems(intent) }
-        val carried =
-            if (intent.action == ACTION_SHARED) {
-                safely { intent.getIntExtra(EXTRA_REFUSED, 0) }.orZero() to safely { intent.getIntExtra(EXTRA_OVER_LIMIT, 0) }.orZero()
-            } else {
-                0 to 0
-            }
-        return sanitize(raw, maxItems).let {
-            it.copy(
-                refused = it.refused + carried.first.coerceIn(0, MAX_ENTRIES),
-                overLimit =
-                    it.overLimit + carried.second.coerceIn(0, MAX_ENTRIES),
-            )
-        }
+        return sanitize(raw, maxItems)
     }
 
     /** [read], with any failure (an intent built to break the app) counted as nothing shared. */
@@ -99,8 +83,10 @@ object ShareLinks {
         for (entry in raw.take(MAX_ENTRIES)) {
             val uri = entry as? Uri
             val text = uri?.let { safely { it.toString() } }
+            // A user part in the authority ("0@...") names a provider by another route; it is never a gallery link.
+            val authority = uri?.let { safely { it.authority } }
             if (uri == null || text == null || safely { uri.scheme } != ContentResolver.SCHEME_CONTENT ||
-                !MediaRef.isSafeContentUri(text)
+                !MediaRef.isSafeContentUri(text) || authority == null || '@' in authority
             ) {
                 refused++
                 continue

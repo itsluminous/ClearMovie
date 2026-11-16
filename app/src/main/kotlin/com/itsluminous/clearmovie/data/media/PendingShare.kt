@@ -21,7 +21,7 @@ class PendingShare(
         return try {
             file.parentFile?.mkdirs()
             tmp.writeText(uris.joinToString("\n") { it.toString() })
-            tmp.renameTo(file)
+            tmp.renameTo(file).also { if (!it) tmp.delete() }
         } catch (e: IOException) {
             tmp.delete()
             false
