@@ -93,11 +93,17 @@ class ReopenRecreateDeviceTest {
             .first { of in it }
     }
 
+    /** Play moves the playhead on (the elapsed part, not the length, which may still be loading). */
     private fun previewPlays() {
-        val atStart = timeLabel()
+        val of = h.context.getString(R.string.editor_time, "", "")
+        val elapsed = { timeLabel().substringBefore(of) }
+        val atStart = elapsed()
         compose.onNodeWithText(s(R.string.action_play)).performClick()
-        compose.waitUntil(TIMEOUT_MS) { timeLabel() != atStart }
-        compose.onNodeWithText(s(R.string.action_pause)).performClick()
+        compose.waitUntil(TIMEOUT_MS) { elapsed() != atStart }
+        // Paused again unless it already reached the end on a slow device.
+        if (compose.onAllNodes(hasText(s(R.string.action_pause))).fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithText(s(R.string.action_pause)).performClick()
+        }
     }
 
     /** Turns the display and waits until the activity has been created again for it. */
