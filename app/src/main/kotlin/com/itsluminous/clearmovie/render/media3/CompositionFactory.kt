@@ -360,10 +360,9 @@ internal class RetrieverProbe(
                         true
                 }
                     ?: return true
-            videoIsBt709(
-                if (format.containsKey(MediaFormat.KEY_COLOR_STANDARD)) format.getInteger(MediaFormat.KEY_COLOR_STANDARD) else null,
-                if (format.containsKey(MediaFormat.KEY_HEIGHT)) format.getInteger(MediaFormat.KEY_HEIGHT) else 0,
-            )
+
+            fun int(key: String) = if (format.containsKey(key)) runCatching { format.getInteger(key) }.getOrNull() else null
+            videoIsBt709(int(MediaFormat.KEY_COLOR_STANDARD), int(MediaFormat.KEY_HEIGHT) ?: 0, int(MediaFormat.KEY_COLOR_TRANSFER))
         } catch (ex: RuntimeException) {
             true
         } catch (ex: java.io.IOException) {
@@ -374,15 +373,24 @@ internal class RetrieverProbe(
     }
 
     companion object {
-        /** BT.709 when tagged so; BT.601 when tagged so; otherwise by height, 720 and up meaning BT.709. */
+        /**
+         * BT.709 when tagged so; BT.601 when tagged so; otherwise by height,
+         * 720 and up meaning BT.709. HDR (PQ or HLG) never is: Media3 converts
+         * HDR video itself.
+         */
         fun videoIsBt709(
             standard: Int?,
             height: Int,
+            transfer: Int? = null,
         ): Boolean =
-            when (standard) {
-                MediaFormat.COLOR_STANDARD_BT709 -> true
-                MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC, MediaFormat.COLOR_STANDARD_BT2020 -> false
-                else -> height >= 720
+            if (transfer == MediaFormat.COLOR_TRANSFER_ST2084 || transfer == MediaFormat.COLOR_TRANSFER_HLG) {
+                false
+            } else {
+                when (standard) {
+                    MediaFormat.COLOR_STANDARD_BT709 -> true
+                    MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC, MediaFormat.COLOR_STANDARD_BT2020 -> false
+                    else -> height >= 720
+                }
             }
     }
 }

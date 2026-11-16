@@ -46,11 +46,12 @@ import java.util.concurrent.atomic.AtomicReference
  * output's raw YUV (a `MediaCodec` decode to buffers, with no colour
  * conversion) against that RGB gives the encoder's matrix.
  *
- * The result is kept in memory and in `noBackupFilesDir/render`, keyed by
- * [Build.FINGERPRINT], so a system update measures again. A calibration that
- * fails or is ambiguous changes nothing ([DeviceColour.TRUSTED]); a failed one
- * is not stored, so the next export tries again. [of] blocks for the
- * calibration (about a second) and must not run on the main thread.
+ * The result is kept in memory for the process, and in
+ * `noBackupFilesDir/render` keyed by [Build.FINGERPRINT] (so a system update
+ * measures again) when it is a clear answer. A calibration that fails or is
+ * ambiguous changes nothing ([DeviceColour.TRUSTED]) and is tried again in the
+ * next process. [of] blocks for the calibration (about a second, at most
+ * [TIMEOUT_S]) and must not run on the main thread.
  */
 @UnstableApi
 object ColourCalibration {
@@ -59,7 +60,7 @@ object ColourCalibration {
 
     const val CLIP_WIDTH = 320
     const val CLIP_HEIGHT = 192
-    private const val VERSION = 1
+    private const val VERSION = 2
     private const val TAG = "ColourCalibration"
     private const val ASSET = "asset:///render/colour-calibration.mp4"
 
@@ -77,9 +78,11 @@ object ColourCalibration {
             val stored = runCatching { DeviceColour.parse(file.readText(), key) }.getOrNull()
             val result =
                 stored ?: measure(app)?.also { measured ->
-                    runCatching {
-                        file.parentFile?.mkdirs()
-                        file.writeText(measured.serialize(key))
+                    if (measured.measured) {
+                        runCatching {
+                            file.parentFile?.mkdirs()
+                            file.writeText(measured.serialize(key))
+                        }
                     }
                 } ?: DeviceColour.TRUSTED
             cached = result
@@ -103,8 +106,10 @@ object ColourCalibration {
         val latch = CountDownLatch(1)
         val error = AtomicReference<Throwable>()
         val encoder = AtomicReference<String>()
+        val running = AtomicReference<Transformer>()
+        val handler = Handler(thread.looper)
         try {
-            Handler(thread.looper).post {
+            handler.post {
                 try {
                     Transformer
                         .Builder(context)
@@ -131,28 +136,45 @@ object ColourCalibration {
                                 }
                             },
                         ).build()
+                        .also { running.set(it) }
                         .start(composition, out.absolutePath)
                 } catch (e: RuntimeException) {
                     error.set(e)
                     latch.countDown()
                 }
             }
-            if (!latch.await(TIMEOUT_S, TimeUnit.SECONDS) || error.get() != null) {
+            if (!latch.await(TIMEOUT_S, TimeUnit.SECONDS)) {
+                // Release its codecs before the real export needs them.
+                val cancelled = CountDownLatch(1)
+                handler.post {
+                    runCatching { running.get()?.cancel() }
+                    cancelled.countDown()
+                }
+                cancelled.await(5, TimeUnit.SECONDS)
+                Log.w(TAG, "Colour calibration timed out")
+                return null
+            }
+            if (error.get() != null) {
                 Log.w(TAG, "Colour calibration failed", error.get())
                 return null
             }
+            val gl = probe.mean(fromUs = 300_000)?.copyOfRange(0, 3) ?: return null
+            val yuv = RawYuv.meanAt(out, 500_000, CLIP_WIDTH / 2, CLIP_HEIGHT / 2) ?: return null
+            val result = classify(gl, yuv).copy(encoderName = encoder.get())
+            logResult(gl, yuv, result)
+            return result
         } finally {
             thread.quitSafely()
+            out.delete()
         }
-        val gl = probe.mean(fromUs = 300_000)?.copyOfRange(0, 3) ?: return null
-        val yuv = RawYuv.meanAt(out, 500_000, CLIP_WIDTH / 2, CLIP_HEIGHT / 2) ?: return null
-        out.delete()
-        val result = classify(gl, yuv)
-        Log.i(
-            TAG,
-            "GL sees ${gl.format()} for YUV ${CALIBRATION_YUV.format()}; the encoder (${encoder.get()}) wrote YUV ${yuv.format()}: $result",
-        )
-        return result
+    }
+
+    private fun logResult(
+        gl: DoubleArray,
+        yuv: DoubleArray,
+        result: DeviceColour,
+    ) {
+        Log.i(TAG, "GL sees ${gl.format()} for YUV ${CALIBRATION_YUV.format()}; the encoder wrote YUV ${yuv.format()}: $result")
     }
 
     /** [gl]: the RGB the GPU made of [CALIBRATION_YUV]; [encoded]: the YUV the encoder wrote for [gl]. */
@@ -179,7 +201,7 @@ object ColourCalibration {
 
     private fun DoubleArray.format() = joinToString(prefix = "(", postfix = ")") { "%.1f".format(Locale.ROOT, it) }
 
-    private const val TIMEOUT_S = 60L
+    private const val TIMEOUT_S = 20L
 }
 
 /**

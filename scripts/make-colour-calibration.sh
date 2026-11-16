@@ -2,8 +2,9 @@
 # Generates the colour calibration clip the renderer measures each device
 # with (render.media3.ColourCalibration): 1 s of flat #E42CE4 at 320x192,
 # 10 fps, H.264 main profile, BT.709 limited range with the full colour
-# description in the SPS. Its YUV decodes to (228,44,228) with BT.709 and to
-# about (214,12,222) with BT.601, and both forms re-encode 20 levels apart,
+# description in the SPS. As encoded its YUV is (97,191,201), which decodes to
+# about (225,42,227) with BT.709 and (211,10,221) with BT.601, and both forms
+# re-encode about 20 levels apart,
 # so one export tells which matrix the GPU and the encoder use.
 #
 # Usage: scripts/make-colour-calibration.sh [output-file]

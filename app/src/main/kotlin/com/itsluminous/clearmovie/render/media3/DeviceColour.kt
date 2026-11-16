@@ -15,20 +15,27 @@ package com.itsluminous.clearmovie.render.media3
  *   BT.601 and the file's tag matches what it holds.
  * @property measured false when the calibration could not tell (both flags
  *   are then false and nothing is corrected).
+ * @property encoderName the video encoder the calibration measured; the BT.601
+ *   tag is asked for only when an export gets that same encoder.
  */
 data class DeviceColour(
     val gpuDecodesBt709AsBt601: Boolean,
     val encoderWritesBt601: Boolean,
     val measured: Boolean = true,
+    val encoderName: String? = null,
 ) {
     /** One line for the cache file, tied to [key] (the calibration version and build fingerprint). */
-    fun serialize(key: String): String = "$key|${flag(gpuDecodesBt709AsBt601)}|${flag(encoderWritesBt601)}|${flag(measured)}"
+    fun serialize(key: String): String =
+        "$key|${flag(gpuDecodesBt709AsBt601)}|${flag(encoderWritesBt601)}|${flag(measured)}|${encoderName.orEmpty()}"
 
     companion object {
         /** Trust the device: no correction, no change of tag. */
         val TRUSTED = DeviceColour(gpuDecodesBt709AsBt601 = false, encoderWritesBt601 = false, measured = false)
 
         private fun flag(b: Boolean) = if (b) "1" else "0"
+
+        /** Codec names are dotted identifiers ("c2.android.avc.encoder"). */
+        private val CODEC_NAME = Regex("[A-Za-z0-9._-]{1,128}")
 
         /** The cached result for [key], or null when [line] is for another key or is malformed. */
         fun parse(
@@ -37,9 +44,13 @@ data class DeviceColour(
         ): DeviceColour? {
             val text = line.trim()
             if (!text.startsWith("$key|")) return null
-            val flags = text.removePrefix("$key|").split('|')
-            if (flags.size != 3 || flags.any { it != "0" && it != "1" }) return null
-            return DeviceColour(flags[0] == "1", flags[1] == "1", flags[2] == "1")
+            val fields = text.removePrefix("$key|").split('|')
+            if (fields.size != 4) return null
+            val flags = fields.take(3)
+            if (flags.any { it != "0" && it != "1" }) return null
+            val name = fields[3].takeIf { it.isNotEmpty() }
+            if (name != null && !CODEC_NAME.matches(name)) return null
+            return DeviceColour(flags[0] == "1", flags[1] == "1", flags[2] == "1", name)
         }
     }
 }

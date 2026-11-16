@@ -136,29 +136,56 @@ class RenderExporter(
             context: Context,
             spec: EncodeSpec,
             deviceColour: DeviceColour,
-        ): Codec.EncoderFactory {
-            val encoders =
+            base: () -> Codec.EncoderFactory = {
                 DefaultEncoderFactory
                     .Builder(context)
                     .setEnableFallback(true)
                     .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(spec.videoBitrate).build())
                     .setRequestedAudioEncoderSettings(AudioEncoderSettings.Builder().setBitrate(spec.audioBitrate).build())
                     .build()
-            return if (deviceColour.encoderWritesBt601) Bt601TaggedEncoders(encoders) else encoders
+            },
+        ): Codec.EncoderFactory {
+            val encoders = base()
+            return if (deviceColour.encoderWritesBt601) Bt601TaggedEncoders(encoders, deviceColour.encoderName) else encoders
         }
     }
 
-    /** Asks [delegate] for BT.601 SDR video instead of BT.709; HDR and audio are passed through unchanged. */
+    /**
+     * Asks [delegate] for BT.601 SDR video instead of BT.709, but only when it
+     * picks the encoder the calibration measured ([measuredEncoder]; another
+     * one, chosen for a different size, is opened again untagged). HDR and
+     * audio are passed through unchanged. Every method is forwarded: Kotlin's
+     * `by` does not forward a Java interface's default methods.
+     *
+     * BT.601 here is Media3's `COLOR_SPACE_BT601`, which also writes BT.470BG
+     * primaries; for SDR video that changes nothing a player shows.
+     */
     private class Bt601TaggedEncoders(
         private val delegate: Codec.EncoderFactory,
-    ) : Codec.EncoderFactory by delegate {
+        private val measuredEncoder: String?,
+    ) : Codec.EncoderFactory {
+        override fun createForAudioEncoding(
+            format: Format,
+            logSessionId: LogSessionId?,
+        ): Codec = delegate.createForAudioEncoding(format, logSessionId)
+
         override fun createForVideoEncoding(
             format: Format,
             logSessionId: LogSessionId?,
         ): Codec {
             val sdr = format.colorInfo == null || !ColorInfo.isTransferHdr(format.colorInfo)
-            val requested = if (sdr) format.buildUpon().setColorInfo(SDR_BT601_LIMITED).build() else format
-            return delegate.createForVideoEncoding(requested, logSessionId)
+            if (!sdr) return delegate.createForVideoEncoding(format, logSessionId)
+            val tagged = delegate.createForVideoEncoding(format.buildUpon().setColorInfo(SDR_BT601_LIMITED).build(), logSessionId)
+            if (measuredEncoder == null || tagged.name == measuredEncoder) return tagged
+            Log.i(TAG, "Encoder ${tagged.name} is not the calibrated $measuredEncoder; keeping its own tag")
+            tagged.release()
+            return delegate.createForVideoEncoding(format, logSessionId)
         }
+
+        override fun isVideoFormatSupported(format: Format): Boolean = delegate.isVideoFormatSupported(format)
+
+        override fun audioNeedsEncoding(): Boolean = delegate.audioNeedsEncoding()
+
+        override fun videoNeedsEncoding(): Boolean = delegate.videoNeedsEncoding()
     }
 }

@@ -80,9 +80,14 @@ class DeviceColourTest {
 
     @Test
     fun `the cache line is tied to its key and refuses anything else`() {
-        val c = DeviceColour(gpuDecodesBt709AsBt601 = true, encoderWritesBt601 = false)
+        val c = DeviceColour(gpuDecodesBt709AsBt601 = true, encoderWritesBt601 = false, encoderName = "c2.android.avc.encoder")
         val line = c.serialize("v1|fp")
         assertThat(DeviceColour.parse(line, "v1|fp")).isEqualTo(c)
+        val unnamed = DeviceColour(true, true)
+        assertThat(DeviceColour.parse(unnamed.serialize("v1|fp"), "v1|fp")).isEqualTo(unnamed)
+        // A name that is not a codec name is refused.
+        assertThat(DeviceColour.parse("v1|fp|1|1|1|bad name/../x", "v1|fp")).isNull()
+        assertThat(DeviceColour.parse("v1|fp|1|1|1|a|b", "v1|fp")).isNull()
         assertThat(DeviceColour.parse(line + "\n", "v1|fp")).isEqualTo(c)
         assertThat(DeviceColour.parse(line, "v1|other")).isNull()
         assertThat(DeviceColour.parse("v1|fp|1|0", "v1|fp")).isNull()
@@ -98,5 +103,15 @@ class DeviceColourTest {
         assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, 1080)).isFalse()
         // Values outside the public constants (the emulator reports 71) fall back to size.
         assertThat(RetrieverProbe.videoIsBt709(71, 1080)).isTrue()
+        // HDR is converted by Media3 itself, never corrected.
+        assertThat(RetrieverProbe.videoIsBt709(null, 2160, android.media.MediaFormat.COLOR_TRANSFER_HLG)).isFalse()
+        assertThat(
+            RetrieverProbe.videoIsBt709(
+                android.media.MediaFormat.COLOR_STANDARD_BT709,
+                1080,
+                android.media.MediaFormat.COLOR_TRANSFER_ST2084,
+            ),
+        ).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 1080, android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO)).isTrue()
     }
 }
