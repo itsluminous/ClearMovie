@@ -165,7 +165,11 @@
                     "id": "g1",
                     "durationMs": 6500,
                     "startMs": 0,
-                    "animations": {}
+                    "animations": {},
+                    "media": {
+                        "type": "preset",
+                        "slot": "intro"
+                    }
                 },
                 {
                     "type": "photo",
@@ -293,7 +297,11 @@
                     "durationMs": 6000,
                     "kind": "audio",
                     "startMs": 0,
-                    "animations": {}
+                    "animations": {},
+                    "media": {
+                        "type": "preset",
+                        "slot": "ending"
+                    }
                 }
             ],
             "muted": false,

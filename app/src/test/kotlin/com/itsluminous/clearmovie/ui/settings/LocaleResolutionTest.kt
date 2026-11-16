@@ -38,15 +38,15 @@ class LocaleResolutionTest {
         val resources = ApplicationProvider.getApplicationContext<Context>().resources
         assertThat(resources.getString(R.string.settings_section_language)).isEqualTo("Bhasha")
         assertThat(resources.getString(R.string.settings_version, "0.1.0")).isEqualTo("Version 0.1.0")
-        assertThat(resources.getQuantityString(R.plurals.home_saved_videos, 3, 3)).isEqualTo("3 videos saved hain")
+        assertThat(resources.getQuantityString(R.plurals.pick_skipped, 3, 3)).isEqualTo("3 items add nahi ho sake")
         // Hindi plural rules: 0 takes the "one" form.
-        assertThat(resources.getQuantityString(R.plurals.home_saved_videos, 0, 0)).isEqualTo("0 video saved hai")
+        assertThat(resources.getQuantityString(R.plurals.pick_skipped, 0, 0)).isEqualTo("0 item add nahi ho saka")
     }
 
     @Test
     fun `Hindi plurals and format arguments`() {
         val hindi = localized("hi").resources
-        assertThat(hindi.getQuantityString(R.plurals.home_saved_videos, 3, 3)).isEqualTo("3 वीडियो सेव हैं")
+        assertThat(hindi.getQuantityString(R.plurals.pick_skipped, 3, 3)).isEqualTo("3 चीज़ें नहीं जोड़ी जा सकीं")
         assertThat(hindi.getString(R.string.settings_version, "0.1.0")).isEqualTo("वर्शन 0.1.0")
     }
 

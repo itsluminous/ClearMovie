@@ -13,12 +13,6 @@
     <string name="action_back">Wapas</string>
 
     <string name="home_empty_title">Aapke videos yahan dikhenge</string>
-    <string name="home_empty_body">Video banane ki suvidha jaldi hi ek update me aayegi. Theme aur bhasha aap abhi Settings me chun sakte hain.</string>
-    <!-- Hindi plural rules (also used for hi-Latn) pick "one" for 0 and 1. -->
-    <plurals name="home_saved_videos">
-        <item quantity="one">%1$d video saved hai</item>
-        <item quantity="other">%1$d videos saved hain</item>
-    </plurals>
 
     <string name="settings_title">Settings</string>
     <string name="settings_section_theme">Theme</string>
@@ -85,4 +79,88 @@
     <string name="media_missing_label">Nahi mili</string>
     <string name="media_missing_body">Ye photo ya video hata di gayi ya kahin aur chali gayi. Ise phir se chunne ke liye Replace par tap karein.</string>
     <string name="media_no_access_body">ClearMovie ye photo ya video nahi khol sakta. Photos aur videos ki permission dein, ya Replace par tap karein.</string>
+
+    <!-- cm-flow: home, preset setup and review, the photo and video step, the editor shell, Settings. -->
+    <string name="action_ok">Theek hai</string>
+    <string name="action_next">Aage</string>
+    <string name="action_play">Play karein</string>
+    <string name="action_pause">Rokein</string>
+    <string name="action_close">Band karein</string>
+    <string name="duration_minutes_seconds">%1$d:%2$02d</string>
+    <string name="home_new_video">Naya video banayein</string>
+    <string name="home_preset_ready">Ready hai</string>
+    <string name="home_preset_needs_setup">Pehle iski files set up karein</string>
+    <string name="home_start_blank">Bina preset ke shuru karein</string>
+    <string name="home_start_blank_body">Sirf aapki photos aur videos, bina intro, frame ya ending ke</string>
+    <string name="home_my_videos">Mere videos</string>
+    <string name="home_video_draft">Video, %1$s</string>
+    <string name="home_video_edited">%1$s ko badla gaya</string>
+    <string name="new_video_not_saved">Aapka phone bhar gaya hai, isliye naya video shuru nahi ho saka. Thodi jagah khaali karein aur phir se koshish karein.</string>
+    <string name="preset_unnamed">Preset</string>
+    <string name="preset_setup_done">Ho gaya</string>
+    <string name="preset_guide_title">Shuru karne se pehle</string>
+    <string name="preset_guide_step_copy">Intro, frame aur ending ki files is phone par copy karein, jaise Download folder me.</string>
+    <string name="preset_guide_step_choose">Har hisse ke liye File chunein par tap karein aur uski file chunein.</string>
+    <string name="preset_guide_step_done">ClearMovie apni copy rakh leta hai, isliye baad me files delete karne par bhi koi dikkat nahi.</string>
+    <string name="preset_definition_title">Aapki apni preset file (zaroori nahi)</string>
+    <string name="preset_definition_body">Ek preset.json file is preset ko aapka apna naam aur caption style de sakti hai.</string>
+    <string name="preset_definition_in_use">Aapki apni preset file use ho rahi hai. Update karne ke liye use phir se chunein.</string>
+    <string name="preset_definition_added">Aapki preset file add ho gayi.</string>
+    <string name="preset_definition_invalid">Yeh preset file use nahi ho sakti. File check karein, ya iske bina aage badhein.</string>
+    <string name="preset_bind_copying">File copy ho rahi hai</string>
+    <string name="preset_bind_checking">File check ho rahi hai</string>
+    <string name="preset_bind_not_video">Yeh file aisa video nahi hai jo ClearMovie use kar sake. Doosri file chunein.</string>
+    <string name="preset_bind_not_sound">Yeh file aisi sound file nahi hai jo ClearMovie use kar sake. Doosri file chunein.</string>
+    <string name="preset_bind_unreadable">ClearMovie yeh file nahi khol saka. Ise phir se chunein.</string>
+    <string name="review_title">Yeh preset kya add karta hai</string>
+    <string name="review_body">Aapka video intro se shuru hoga aur ending par khatam hoga, aur frame aapki photos aur videos par chalega. Sirf is video ke liye aap koi bhi hissa badal ya chhod sakte hain. Apni photos aur videos chunne ke liye Aage par tap karein.</string>
+    <string name="review_from_preset">Preset se</string>
+    <string name="review_from_preset_length">Preset se, %1$s lamba</string>
+    <string name="review_skipped">Is video me nahi hai</string>
+    <string name="review_your_file">Aapki file: %1$s, %2$s lambi</string>
+    <string name="review_your_file_unnamed">aapki apni file</string>
+    <string name="review_intro_hint">Sabse pehle, poori screen par chalta hai.</string>
+    <string name="review_frame_hint">Aapki photos aur videos ke upar chalta hai. Hare hisse wala video use karein, jaisa preset ka frame hai.</string>
+    <string name="review_spoken_hint">Ek bola hua message, jo aapki aakhri photo ya video par chalta hai.</string>
+    <string name="review_video_ending_hint">Sabse aakhir me, poori screen par chalta hai.</string>
+    <string name="review_skip">Is video me chhodein</string>
+    <string name="review_use_preset">Preset wala lein</string>
+    <string name="review_play_part">%1$s play karein</string>
+    <string name="pick_adding">Aapki photos aur videos add ho rahi hain</string>
+    <string name="pick_out_of_space">Copy karte waqt phone ki jagah khatam ho gayi, isliye kuch add nahi hua. Thodi jagah khaali karein aur phir se koshish karein.</string>
+    <string name="editor_title_new">Naya video</string>
+    <string name="editor_export">Export</string>
+    <string name="editor_export_soon_title">Export jaldi aa raha hai</string>
+    <string name="editor_export_soon_body">Taiyaar video save karne ki suvidha jaldi hi ek update me aayegi. Aapka kaam saath-saath save ho raha hai.</string>
+    <string name="editor_time">%2$s me se %1$s</string>
+    <string name="editor_seek">Video kahan tak chala</string>
+    <string name="editor_exact">Bilkul export jaisa play karein</string>
+    <string name="editor_exact_preparing">Yeh hissa taiyaar ho raha hai</string>
+    <string name="editor_exact_failed">Yeh hissa taiyaar nahi ho saka. Kripya phir se koshish karein.</string>
+    <string name="editor_row_main">Photos aur videos</string>
+    <string name="editor_item_photo">Photo</string>
+    <string name="editor_item_video">Video</string>
+    <string name="editor_item_card">Card</string>
+    <string name="editor_item_description">%1$s, %2$s lamba. Yahan se play karne ke liye tap karein.</string>
+    <string name="editor_item_missing_description">%1$s, %2$s lamba, nahi mila. Yeh delete ho gaya ya kahin aur chala gaya.</string>
+    <string name="editor_add_media">Photos aur videos add karein</string>
+    <string name="editor_empty">Apna video shuru karne ke liye apni photos aur videos add karein.</string>
+    <string name="editor_brought_back">Humne aapka pichhla video wapas khol diya</string>
+    <string name="editor_preset_repair_body">Preset ki ek file delete ho gayi ya kahin aur chali gayi, isliye woh hissa preview me nahi hai.</string>
+    <string name="editor_fix_preset">Theek karein</string>
+    <string name="editor_not_saved">Phone bhar jaane ki wajah se aapke naye badlaav save nahi ho sake. Thodi jagah khaali karein; ClearMovie khula rehne tak kuch nahi khoyega.</string>
+    <string name="settings_section_presets">Presets</string>
+    <string name="settings_preset_files">Files</string>
+    <string name="settings_section_storage">Storage</string>
+    <string name="settings_storage_presets">Preset ki files: %1$s</string>
+    <string name="settings_storage_copied">Copy ki gayi photos aur videos: %1$s</string>
+    <string name="settings_storage_cache">Chhoti tasveerein, zaroorat par phir ban jaati hain: %1$s</string>
+    <plurals name="home_preset_missing">
+        <item quantity="one">%1$d file nahi mili, theek karne ke liye tap karein</item>
+        <item quantity="other">%1$d files nahi mili, theek karne ke liye tap karein</item>
+    </plurals>
+    <plurals name="pick_skipped">
+        <item quantity="one">%1$d item add nahi ho saka</item>
+        <item quantity="other">%1$d items add nahi ho sake</item>
+    </plurals>
 </resources>

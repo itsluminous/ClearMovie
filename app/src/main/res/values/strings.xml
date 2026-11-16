@@ -9,11 +9,6 @@
     <string name="action_back">Back</string>
 
     <string name="home_empty_title">Your videos will appear here</string>
-    <string name="home_empty_body">Making videos arrives in an update soon. You can already choose the theme and language in Settings.</string>
-    <plurals name="home_saved_videos">
-        <item quantity="one">%1$d saved video</item>
-        <item quantity="other">%1$d saved videos</item>
-    </plurals>
 
     <string name="settings_title">Settings</string>
     <string name="settings_section_theme">Theme</string>
@@ -95,4 +90,104 @@
     <string name="media_missing_label">Missing</string>
     <string name="media_missing_body">This photo or video was moved or deleted. Tap Replace to choose it again.</string>
     <string name="media_no_access_body">ClearMovie can\'t open this photo or video. Allow access to photos and videos, or tap Replace.</string>
+
+    <!-- cm-flow: home, preset setup and review, the photo and video step, the editor shell, Settings. -->
+    <string name="action_ok">OK</string>
+    <string name="action_next">Next</string>
+    <string name="action_play">Play</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_close">Close</string>
+    <!-- A length in minutes and seconds, such as 1:05. %1$d is minutes, %2$02d seconds. -->
+    <string name="duration_minutes_seconds">%1$d:%2$02d</string>
+    <string name="home_new_video">Make a new video</string>
+    <string name="home_preset_ready">Ready</string>
+    <string name="home_preset_needs_setup">Set up its files first</string>
+    <string name="home_start_blank">Start without a preset</string>
+    <string name="home_start_blank_body">Only your photos and videos, with no intro, frame or ending</string>
+    <string name="home_my_videos">My videos</string>
+    <!-- An unnamed video. %1$s is the date it was last changed, such as 14 Nov. -->
+    <string name="home_video_draft">Video, %1$s</string>
+    <!-- %1$s is a date, such as 14 Nov. -->
+    <string name="home_video_edited">Changed %1$s</string>
+    <string name="new_video_not_saved">Your phone is full, so the new video could not be started. Free up some space and try again.</string>
+    <string name="preset_unnamed">Preset</string>
+    <string name="preset_setup_done">Done</string>
+    <string name="preset_guide_title">Before you start</string>
+    <string name="preset_guide_step_copy">Copy the intro, frame and ending files onto this phone, for example into the Download folder.</string>
+    <string name="preset_guide_step_choose">Tap Choose file for each part and pick its file.</string>
+    <string name="preset_guide_step_done">ClearMovie keeps its own copy, so the files are safe even if you delete them later.</string>
+    <string name="preset_definition_title">Your own preset file (optional)</string>
+    <string name="preset_definition_body">A preset.json file can give this preset your own name and caption style.</string>
+    <string name="preset_definition_in_use">Your own preset file is in use. Choose it again to update it.</string>
+    <string name="preset_definition_added">Your preset file was added.</string>
+    <string name="preset_definition_invalid">This preset file can\'t be used. Check the file, or carry on without it.</string>
+    <string name="preset_bind_copying">Copying the file</string>
+    <string name="preset_bind_checking">Checking the file</string>
+    <string name="preset_bind_not_video">This file isn\'t a video ClearMovie can use. Choose another file.</string>
+    <string name="preset_bind_not_sound">This file isn\'t a sound file ClearMovie can use. Choose another file.</string>
+    <string name="preset_bind_unreadable">ClearMovie couldn\'t open this file. Choose it again.</string>
+    <string name="review_title">What this preset adds</string>
+    <string name="review_body">Your video starts with the intro and ends with the ending, and the frame runs over your photos and videos. You can replace or skip any part for this video only. Tap Next to choose your photos and videos.</string>
+    <string name="review_from_preset">From the preset</string>
+    <!-- %1$s is a length such as 0:06. -->
+    <string name="review_from_preset_length">From the preset, %1$s long</string>
+    <string name="review_skipped">Left out of this video</string>
+    <!-- %1$s is a file name, %2$s a length such as 0:06. -->
+    <string name="review_your_file">Your file: %1$s, %2$s long</string>
+    <!-- Used in place of the file name in review_your_file when it has none. -->
+    <string name="review_your_file_unnamed">your own file</string>
+    <string name="review_intro_hint">Plays first, over the whole screen.</string>
+    <string name="review_frame_hint">Runs over your photos and videos. Use a video with a green window, like the preset\'s frame.</string>
+    <string name="review_spoken_hint">A spoken message that plays over your last photo or video.</string>
+    <string name="review_video_ending_hint">Plays last, over the whole screen.</string>
+    <string name="review_skip">Skip for this video</string>
+    <string name="review_use_preset">Use the preset\'s</string>
+    <!-- For screen readers. %1$s is a part of the preset, such as Intro. -->
+    <string name="review_play_part">Play the %1$s</string>
+    <string name="pick_adding">Adding your photos and videos</string>
+    <string name="pick_out_of_space">Your phone ran out of space while copying, so nothing was added. Free up some space and try again.</string>
+    <string name="editor_title_new">New video</string>
+    <string name="editor_export">Export</string>
+    <string name="editor_export_soon_title">Export is coming soon</string>
+    <string name="editor_export_soon_body">Saving the finished video arrives in an update soon. Your work is saved as you go.</string>
+    <!-- %1$s is the playback position, %2$s the video's length, both such as 1:05. -->
+    <string name="editor_time">%1$s of %2$s</string>
+    <!-- For screen readers: the slider that moves through the video. -->
+    <string name="editor_seek">Playback position</string>
+    <string name="editor_exact">Play exactly as exported</string>
+    <string name="editor_exact_preparing">Getting this part ready</string>
+    <string name="editor_exact_failed">This part couldn\'t be made ready. Please try again.</string>
+    <string name="editor_row_main">Photos &amp; videos</string>
+    <string name="editor_item_photo">Photo</string>
+    <string name="editor_item_video">Video</string>
+    <string name="editor_item_card">Card</string>
+    <!-- For screen readers. %1$s is the kind of item, such as Photo, %2$s its length such as 0:03. -->
+    <string name="editor_item_description">%1$s, %2$s long. Tap to play from here.</string>
+    <!-- For screen readers. %1$s is the kind of item, %2$s its length. -->
+    <string name="editor_item_missing_description">%1$s, %2$s long, missing. It was moved or deleted.</string>
+    <string name="editor_add_media">Add photos and videos</string>
+    <string name="editor_empty">Add your photos and videos to start your video.</string>
+    <string name="editor_brought_back">We brought back your last video</string>
+    <string name="editor_preset_repair_body">A preset file was moved or deleted, so that part is missing from the preview.</string>
+    <string name="editor_fix_preset">Fix it</string>
+    <string name="editor_not_saved">Your latest changes could not be saved because the phone is full. Free up some space; nothing is lost while ClearMovie is open.</string>
+    <string name="settings_section_presets">Presets</string>
+    <string name="settings_preset_files">Files</string>
+    <string name="settings_section_storage">Storage</string>
+    <!-- %1$s is a size such as 180 MB. -->
+    <string name="settings_storage_presets">Preset files: %1$s</string>
+    <!-- %1$s is a size such as 1.2 GB. -->
+    <string name="settings_storage_copied">Copied photos and videos: %1$s</string>
+    <!-- %1$s is a size such as 4 MB. -->
+    <string name="settings_storage_cache">Small pictures, made again when needed: %1$s</string>
+    <!-- %1$d is a number of items. -->
+    <plurals name="home_preset_missing">
+        <item quantity="one">%1$d file missing, tap to fix</item>
+        <item quantity="other">%1$d files missing, tap to fix</item>
+    </plurals>
+    <!-- %1$d is a number of items. -->
+    <plurals name="pick_skipped">
+        <item quantity="one">%1$d item could not be added</item>
+        <item quantity="other">%1$d items could not be added</item>
+    </plurals>
 </resources>

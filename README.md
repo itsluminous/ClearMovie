@@ -91,10 +91,10 @@ Planned for the first release:
 What's planned, and what has shipped:
 
 **Making a video**
-- [ ] Preset picker, with "Start without a preset"
-- [ ] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
-- [ ] Preset review: replace or skip the intro, frame or ending for this video
-- [ ] Add photos and videos with the system photo picker
+- [x] Preset picker, with "Start without a preset"
+- [x] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
+- [x] Preset review: replace or skip the intro, frame or ending for this video
+- [x] Add photos and videos with the system photo picker
 - [ ] Share photos and videos from the gallery straight into a new video
 
 **Editing**

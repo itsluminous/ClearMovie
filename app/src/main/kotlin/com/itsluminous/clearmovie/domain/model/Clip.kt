@@ -296,7 +296,10 @@ data class CardClip(
     override fun withTransition(transition: Transition?) = copy(transitionToNext = transition)
 }
 
-/** The preset intro, pinned first on MAIN. */
+/**
+ * The preset intro, pinned first on MAIN. [media] is the preset's own intro,
+ * or the video the user chose instead for this video only (preset review).
+ */
 @Serializable
 @SerialName("intro")
 data class IntroClip(
@@ -305,6 +308,7 @@ data class IntroClip(
     override val startMs: Long = 0,
     override val transitionToNext: Transition? = null,
     override val animations: Animations = Animations.NONE,
+    val media: MediaRef = MediaRef.Preset(PresetSlot.INTRO),
 ) : MainClip {
     override fun withStartMs(ms: Long) = copy(startMs = ms)
 
@@ -318,7 +322,9 @@ data class IntroClip(
 /**
  * The preset ending, pinned last on MAIN. For an [EndingKind.AUDIO] ending
  * this is the held last frame; the speech itself is a VOICE clip on the
- * closing-message row, anchored to this clip.
+ * closing-message row, anchored to this clip, and [media] names the same
+ * file as that clip. For a video ending, [media] is the video played: the
+ * preset's own, or the one the user chose instead for this video only.
  */
 @Serializable
 @SerialName("ending")
@@ -329,6 +335,7 @@ data class EndingClip(
     override val startMs: Long = 0,
     override val transitionToNext: Transition? = null,
     override val animations: Animations = Animations.NONE,
+    val media: MediaRef = MediaRef.Preset(PresetSlot.ENDING),
 ) : MainClip {
     override fun withStartMs(ms: Long) = copy(startMs = ms)
 

@@ -5,12 +5,6 @@
     <string name="action_back">वापस</string>
 
     <string name="home_empty_title">आपके वीडियो यहाँ दिखेंगे</string>
-    <string name="home_empty_body">वीडियो बनाने की सुविधा जल्द ही एक अपडेट में आएगी। थीम और भाषा आप अभी सेटिंग्स में चुन सकते हैं।</string>
-    <!-- Hindi plural rules use "one" for 0 and 1, so "one" must read well for 0. -->
-    <plurals name="home_saved_videos">
-        <item quantity="one">%1$d वीडियो सेव है</item>
-        <item quantity="other">%1$d वीडियो सेव हैं</item>
-    </plurals>
 
     <string name="settings_title">सेटिंग्स</string>
     <string name="settings_section_theme">थीम</string>
@@ -77,4 +71,88 @@
     <string name="media_missing_label">नहीं मिली</string>
     <string name="media_missing_body">यह फ़ोटो या वीडियो हटा दी गई या कहीं और चली गई। इसे फिर से चुनने के लिए बदलें पर टैप करें।</string>
     <string name="media_no_access_body">ClearMovie यह फ़ोटो या वीडियो नहीं खोल सकता। फ़ोटो और वीडियो की अनुमति दें, या बदलें पर टैप करें।</string>
+
+    <!-- cm-flow: home, preset setup and review, the photo and video step, the editor shell, Settings. -->
+    <string name="action_ok">ठीक है</string>
+    <string name="action_next">आगे</string>
+    <string name="action_play">चलाएँ</string>
+    <string name="action_pause">रोकें</string>
+    <string name="action_close">बंद करें</string>
+    <string name="duration_minutes_seconds">%1$d:%2$02d</string>
+    <string name="home_new_video">नया वीडियो बनाएँ</string>
+    <string name="home_preset_ready">तैयार</string>
+    <string name="home_preset_needs_setup">पहले इसकी फ़ाइलें तैयार करें</string>
+    <string name="home_start_blank">बिना प्रीसेट के शुरू करें</string>
+    <string name="home_start_blank_body">सिर्फ़ आपकी फ़ोटो और वीडियो, बिना इंट्रो, फ़्रेम या अंत के</string>
+    <string name="home_my_videos">मेरे वीडियो</string>
+    <string name="home_video_draft">वीडियो, %1$s</string>
+    <string name="home_video_edited">%1$s को बदला गया</string>
+    <string name="new_video_not_saved">आपका फ़ोन भर गया है, इसलिए नया वीडियो शुरू नहीं हो सका। थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
+    <string name="preset_unnamed">प्रीसेट</string>
+    <string name="preset_setup_done">हो गया</string>
+    <string name="preset_guide_title">शुरू करने से पहले</string>
+    <string name="preset_guide_step_copy">इंट्रो, फ़्रेम और अंत की फ़ाइलें इस फ़ोन पर कॉपी करें, जैसे Download फ़ोल्डर में।</string>
+    <string name="preset_guide_step_choose">हर हिस्से के लिए फ़ाइल चुनें पर टैप करें और उसकी फ़ाइल चुनें।</string>
+    <string name="preset_guide_step_done">ClearMovie अपनी कॉपी रख लेता है, इसलिए बाद में फ़ाइलें हटाने पर भी कोई दिक्कत नहीं।</string>
+    <string name="preset_definition_title">आपकी अपनी प्रीसेट फ़ाइल (ज़रूरी नहीं)</string>
+    <string name="preset_definition_body">एक preset.json फ़ाइल इस प्रीसेट को आपका अपना नाम और कैप्शन का स्टाइल दे सकती है।</string>
+    <string name="preset_definition_in_use">आपकी अपनी प्रीसेट फ़ाइल इस्तेमाल हो रही है। बदलने के लिए उसे फिर से चुनें।</string>
+    <string name="preset_definition_added">आपकी प्रीसेट फ़ाइल जोड़ दी गई।</string>
+    <string name="preset_definition_invalid">यह प्रीसेट फ़ाइल इस्तेमाल नहीं हो सकती। फ़ाइल जाँचें, या इसके बिना आगे बढ़ें।</string>
+    <string name="preset_bind_copying">फ़ाइल की कॉपी बन रही है</string>
+    <string name="preset_bind_checking">फ़ाइल जाँची जा रही है</string>
+    <string name="preset_bind_not_video">यह फ़ाइल ऐसा वीडियो नहीं है जो ClearMovie इस्तेमाल कर सके। दूसरी फ़ाइल चुनें।</string>
+    <string name="preset_bind_not_sound">यह फ़ाइल ऐसी आवाज़ की फ़ाइल नहीं है जो ClearMovie इस्तेमाल कर सके। दूसरी फ़ाइल चुनें।</string>
+    <string name="preset_bind_unreadable">ClearMovie यह फ़ाइल नहीं खोल सका। इसे फिर से चुनें।</string>
+    <string name="review_title">यह प्रीसेट क्या जोड़ता है</string>
+    <string name="review_body">आपका वीडियो इंट्रो से शुरू होगा और अंत पर खत्म होगा, और फ़्रेम आपकी फ़ोटो और वीडियो पर चलेगा। सिर्फ़ इस वीडियो के लिए आप कोई भी हिस्सा बदल या छोड़ सकते हैं। अपनी फ़ोटो और वीडियो चुनने के लिए आगे पर टैप करें।</string>
+    <string name="review_from_preset">प्रीसेट से</string>
+    <string name="review_from_preset_length">प्रीसेट से, %1$s लंबा</string>
+    <string name="review_skipped">इस वीडियो में नहीं है</string>
+    <string name="review_your_file">आपकी फ़ाइल: %1$s, %2$s लंबी</string>
+    <string name="review_your_file_unnamed">आपकी अपनी फ़ाइल</string>
+    <string name="review_intro_hint">सबसे पहले, पूरी स्क्रीन पर चलता है।</string>
+    <string name="review_frame_hint">आपकी फ़ोटो और वीडियो के ऊपर चलता है। हरे हिस्से वाला वीडियो इस्तेमाल करें, जैसा प्रीसेट का फ़्रेम है।</string>
+    <string name="review_spoken_hint">एक बोला हुआ संदेश, जो आपकी आखिरी फ़ोटो या वीडियो पर चलता है।</string>
+    <string name="review_video_ending_hint">सबसे आखिर में, पूरी स्क्रीन पर चलता है।</string>
+    <string name="review_skip">इस वीडियो में छोड़ें</string>
+    <string name="review_use_preset">प्रीसेट वाला लें</string>
+    <string name="review_play_part">%1$s चलाएँ</string>
+    <string name="pick_adding">आपकी फ़ोटो और वीडियो जोड़ी जा रही हैं</string>
+    <string name="pick_out_of_space">कॉपी करते समय फ़ोन की जगह खत्म हो गई, इसलिए कुछ नहीं जोड़ा गया। थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
+    <string name="editor_title_new">नया वीडियो</string>
+    <string name="editor_export">एक्सपोर्ट</string>
+    <string name="editor_export_soon_title">एक्सपोर्ट जल्द आ रहा है</string>
+    <string name="editor_export_soon_body">तैयार वीडियो सेव करने की सुविधा जल्द ही एक अपडेट में आएगी। आपका काम साथ-साथ सेव हो रहा है।</string>
+    <string name="editor_time">%2$s में से %1$s</string>
+    <string name="editor_seek">वीडियो कहाँ तक चला</string>
+    <string name="editor_exact">ठीक वैसा चलाएँ जैसा एक्सपोर्ट होगा</string>
+    <string name="editor_exact_preparing">यह हिस्सा तैयार हो रहा है</string>
+    <string name="editor_exact_failed">यह हिस्सा तैयार नहीं हो सका। कृपया फिर से कोशिश करें।</string>
+    <string name="editor_row_main">फ़ोटो और वीडियो</string>
+    <string name="editor_item_photo">फ़ोटो</string>
+    <string name="editor_item_video">वीडियो</string>
+    <string name="editor_item_card">कार्ड</string>
+    <string name="editor_item_description">%1$s, %2$s लंबा। यहाँ से चलाने के लिए टैप करें।</string>
+    <string name="editor_item_missing_description">%1$s, %2$s लंबा, नहीं मिला। यह हटा दिया गया या कहीं और चला गया।</string>
+    <string name="editor_add_media">फ़ोटो और वीडियो जोड़ें</string>
+    <string name="editor_empty">अपना वीडियो शुरू करने के लिए अपनी फ़ोटो और वीडियो जोड़ें।</string>
+    <string name="editor_brought_back">हमने आपका पिछला वीडियो वापस खोल दिया</string>
+    <string name="editor_preset_repair_body">प्रीसेट की एक फ़ाइल हटा दी गई या कहीं और चली गई, इसलिए वह हिस्सा प्रीव्यू में नहीं है।</string>
+    <string name="editor_fix_preset">ठीक करें</string>
+    <string name="editor_not_saved">फ़ोन भर जाने की वजह से आपके नए बदलाव सेव नहीं हो सके। थोड़ी जगह खाली करें; ClearMovie खुला रहने तक कुछ नहीं खोएगा।</string>
+    <string name="settings_section_presets">प्रीसेट</string>
+    <string name="settings_preset_files">फ़ाइलें</string>
+    <string name="settings_section_storage">स्टोरेज</string>
+    <string name="settings_storage_presets">प्रीसेट की फ़ाइलें: %1$s</string>
+    <string name="settings_storage_copied">कॉपी की गई फ़ोटो और वीडियो: %1$s</string>
+    <string name="settings_storage_cache">छोटी तस्वीरें, ज़रूरत पर फिर बन जाती हैं: %1$s</string>
+    <plurals name="home_preset_missing">
+        <item quantity="one">%1$d फ़ाइल नहीं मिली, ठीक करने के लिए टैप करें</item>
+        <item quantity="other">%1$d फ़ाइलें नहीं मिलीं, ठीक करने के लिए टैप करें</item>
+    </plurals>
+    <plurals name="pick_skipped">
+        <item quantity="one">%1$d चीज़ नहीं जोड़ी जा सकी</item>
+        <item quantity="other">%1$d चीज़ें नहीं जोड़ी जा सकीं</item>
+    </plurals>
 </resources>

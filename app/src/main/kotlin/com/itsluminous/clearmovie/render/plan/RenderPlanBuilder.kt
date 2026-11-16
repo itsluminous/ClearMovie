@@ -18,7 +18,6 @@ import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.PipPlacement
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetRole
-import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.domain.model.TextClip
@@ -169,12 +168,12 @@ class RenderPlanBuilder(
         val window = ctx.window
         return when (val clip = slot.clip) {
             is IntroClip -> {
-                listOf(picture(durUs, Source.Video(MediaRef.Preset(PresetSlot.INTRO), durUs, 0, durUs), Placement.FullFrame))
+                listOf(picture(durUs, Source.Video(clip.media, durUs, 0, durUs), Placement.FullFrame))
             }
 
             is EndingClip -> {
                 if (clip.kind == EndingKind.VIDEO) {
-                    listOf(picture(durUs, Source.Video(MediaRef.Preset(PresetSlot.ENDING), durUs, 0, durUs), Placement.FullFrame))
+                    listOf(picture(durUs, Source.Video(clip.media, durUs, 0, durUs), Placement.FullFrame))
                 } else {
                     listOf(holdLast(ctx, slot, durUs))
                 }
@@ -223,7 +222,7 @@ class RenderPlanBuilder(
             is IntroClip -> {
                 // A spoken ending straight after the intro holds the intro's last frame, full frame.
                 val lastUs = (prev.durationMs * US - FRAME_US).coerceAtLeast(0)
-                picture(durUs, Source.VideoFrame(MediaRef.Preset(PresetSlot.INTRO), lastUs), Placement.FullFrame)
+                picture(durUs, Source.VideoFrame(prev.media, lastUs), Placement.FullFrame)
             }
 
             else -> {
@@ -536,8 +535,9 @@ class RenderPlanBuilder(
         )
     }
 
-    private class PresetSound(
-        private val slot: PresetSlot,
+    /** The intro's or a video ending's own sound: [media] from its start, for the whole slot. */
+    private class PartSound(
+        private val media: MediaRef,
         private val durUs: Long,
     ) : SlotSound {
         override fun copies(durUs: Long) = listOf(0L to durUs)
@@ -546,14 +546,14 @@ class RenderPlanBuilder(
             startUs: Long,
             lengthUs: Long,
             gain: GainEnvelope,
-        ) = AudioSegment.Sound(startUs, lengthUs, MediaRef.Preset(slot), durUs, 0, durUs, Speed.X1, gain)
+        ) = AudioSegment.Sound(startUs, lengthUs, media, durUs, 0, durUs, Speed.X1, gain)
     }
 
     private fun slotSound(slot: MainSlot): SlotSound? =
         when (val c = slot.clip) {
             is VideoClip -> VideoSound(c)
-            is IntroClip -> PresetSound(PresetSlot.INTRO, slot.durationMs * US)
-            is EndingClip -> if (c.kind == EndingKind.VIDEO) PresetSound(PresetSlot.ENDING, slot.durationMs * US) else null
+            is IntroClip -> PartSound(c.media, slot.durationMs * US)
+            is EndingClip -> if (c.kind == EndingKind.VIDEO) PartSound(c.media, slot.durationMs * US) else null
             else -> null
         }
 

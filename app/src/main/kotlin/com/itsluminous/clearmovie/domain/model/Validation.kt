@@ -286,8 +286,13 @@ private fun Project.checkClipRanges(
             }
         }
 
-        is IntroClip, is EndingClip -> {
-            Unit
+        is IntroClip -> {
+            // A preset file in the intro's place must be the preset's intro.
+            if ((clip.media as? MediaRef.Preset)?.slot.let { it != null && it != PresetSlot.INTRO }) bad("intro file")
+        }
+
+        is EndingClip -> {
+            if ((clip.media as? MediaRef.Preset)?.slot.let { it != null && it != PresetSlot.ENDING }) bad("ending file")
         }
     }
     if (clip is MediaClip) {

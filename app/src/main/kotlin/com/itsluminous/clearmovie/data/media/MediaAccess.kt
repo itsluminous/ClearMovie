@@ -10,6 +10,8 @@ import com.itsluminous.clearmovie.data.files.SafeFileName
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.EndingClip
+import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.MediaClip
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.OverlayClip
@@ -306,12 +308,14 @@ class MediaAccess(
     companion object {
         const val TOKEN_LENGTH = 8
 
-        /** The media a clip plays, if any (intro and ending clips play preset slots). */
+        /** The media a clip plays, if any (an intro or ending plays its preset slot unless it was replaced). */
         fun Clip.mediaRef(): MediaRef? =
             when (this) {
                 is MediaClip -> media
                 is OverlayClip -> media
                 is AudioClip -> media
+                is IntroClip -> media
+                is EndingClip -> media
                 else -> null
             }
     }

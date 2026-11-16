@@ -6,9 +6,11 @@ import androidx.room.Room
 import com.itsluminous.clearmovie.data.db.ClearMovieDatabase
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.files.StorageUsage
+import com.itsluminous.clearmovie.data.media.AndroidMediaFactsProbe
 import com.itsluminous.clearmovie.data.media.AndroidUriGrants
 import com.itsluminous.clearmovie.data.media.MediaAccess
 import com.itsluminous.clearmovie.data.media.MediaCopier
+import com.itsluminous.clearmovie.data.media.MediaFactsProbe
 import com.itsluminous.clearmovie.data.media.MediaResolver
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.data.media.UriGrants
@@ -128,6 +130,12 @@ object StorageModule {
         probe: MediaProbe,
         freeSpace: FreeSpace,
     ): PresetStore = PresetStore(context.assets, context.contentResolver, gateway, db, files, copier, probe, freeSpace::bytes)
+
+    @Provides
+    fun provideMediaFactsProbe(
+        @ApplicationContext context: Context,
+        files: AppFiles,
+    ): MediaFactsProbe = AndroidMediaFactsProbe(context, files)
 
     @Provides
     fun provideStorageUsage(

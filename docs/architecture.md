@@ -11,19 +11,21 @@ their imports.
 | Package | Owns | May not import |
 | --- | --- | --- |
 | `domain.model` | The project and preset model (below), `ThemeMode`, `AppSettings`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
-| `render.plan` | `RenderPlanBuilder` and the `RenderPlan` it makes: pure Kotlin | `android.*`, `androidx.*`, Media3, or any other app layer but `domain` |
+| `render.plan` | `RenderPlanBuilder` and the `RenderPlan` it makes, and the preview's `PreviewSchedule`: pure Kotlin | `android.*`, `androidx.*`, Media3, or any other app layer but `domain` |
 | `render.media3` | The Media3 mapping: `CompositionFactory`, the GL effects, the gain processor, `RenderExporter` | |
+| `render.preview` | The layered editor preview (`LayeredPreviewEngine`, `StillLoader`) and the exact draft (`ExactDraft`) | |
 | `data.settings` | `SettingsRepository` and its DataStore implementation | `ui` |
 | `data.db` | The Room database `ClearMovieDatabase` (projects, session, preset bindings and definitions, persisted link grants) | `ui` |
-| `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard` | `ui` |
+| `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard`, `NewVideos` (new drafts), `ProjectMedia` (a project's files) | `ui` |
 | `data.preset` | `PresetStore`, the key-colour check, `LoudnessMeter`, `MediaProbe` | `ui` |
-| `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants | `ui` |
+| `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants, `newMainItems` (picked items to clips) | `ui` |
 | `data.files` | `AppFiles` (where files live), `SafeFileName`, `StorageUsage` | `ui` |
 | `di` | Hilt modules (the settings DataStore, the database, the storage classes, the app scope) | |
 | `ui.theme` | `ClearMovieTheme`, the branded fallback colour schemes, `MediaColors` | |
-| `ui.navigation` | `ClearMovieApp`, the navigation graph | |
-| `ui.home`, `ui.settings` | The screens; `AppLanguage` (the in-app language picker) | |
-| `ui.media`, `ui.preset` | The photo-access explainer, the copy dialogs and `MediaIntake`, the missing-clip tile, the preset slot list (used by the screens from cm-flow on) | |
+| `ui.navigation` | `ClearMovieApp` (the navigation graph), `NewVideoFlow` (which screen follows which), `Routes` | |
+| `ui.layout` | `WindowClass`: Material window size classes from the space the screen has | |
+| `ui.home`, `ui.preset`, `ui.pick`, `ui.editor`, `ui.settings` | The screens and their view models; `AppLanguage` (the in-app language picker) | |
+| `ui.media`, `ui.components` | The photo-access explainer, the copy dialogs and `MediaIntake`, the missing-clip tile; progress and play-a-file dialogs | |
 
 `ClearMovieApplication` (`@HiltAndroidApp`) and `MainActivity` sit at the root.
 
@@ -171,6 +173,53 @@ The live editor preview does not play this composition: Media3's multi-input
 lower layer goes from a video to a photo. The editor therefore previews MAIN
 in a plain player with the other rows drawn over it, and offers an exact draft
 (a sliced plan, exported at a low height) on request.
+
+### The layered preview
+
+`PreviewSchedule.of(plan)` reads the same `RenderPlan` the export renders and
+lays it out for players:
+
+- **MAIN** becomes one ExoPlayer playlist and is the clock. A video is a
+  clipped item; anything else (a photo, the held last frame of a spoken
+  ending, a card) is a silent gap in the player, drawn by the UI over it.
+  Where a transition overlaps two items the preview cuts to the incoming one;
+  the exact draft shows the real blend.
+- **Frame rows** each play in a muted ExoPlayer with the export's
+  `ChromaKeyEffect` (plus `PremultiplyEffect`, since a TextureView blends
+  premultiplied colour) on a non-opaque TextureView over MAIN, in stacking order.
+- **Sound rows** (the frame's music, the closing message) each play in an
+  audio-only player. Every player's volume follows the plan's gain envelopes,
+  so the music ducks under clip sound as it will in the export.
+- **Captions** are drawn as text in their boxes. Picture-in-picture rows come
+  with cm-tracks; until then only the exact draft shows them.
+
+`LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. It is owned
+by `EditorViewModel`, so a rotation keeps playing and only the surfaces are
+attached again; the playhead and play state go into the saved state for a
+process death. Two device facts shape it: a player with video effects shows
+nothing after a seek until it plays, so a paused seek plays the frame player
+until its first frame lands; and a TextureView that is never drawn stops taking
+pictures and stalls its player, so a hidden layer is drawn almost transparent
+rather than not at all.
+
+## Screens and navigation
+
+Home (preset pick, Start without a preset, My videos) leads to preset setup or
+repair when a file is not ready (a missing file never crashes: it opens the
+repair heading), then preset review (Play, Replace or Skip for this video for
+the intro, frame and ending; the choices rebuild the new draft from the
+track template), then the photo step (the one-time access explainer, Try
+again after a refusal, the system Photo Picker, the intake), then the editor
+shell (Export at the top right, the layered preview, the read-only MAIN row).
+`NewVideoFlow` decides the order: with `EntryMode.MEDIA_CHOSEN` (shares, from
+cm-share) the preset pick goes straight to the editor.
+
+Layouts follow `WindowClass`: two panes for medium or expanded width, or
+compact height. State survives rotation and process death: the back stack,
+the review's choices, the picked links until they are on MAIN, whether the
+picker was already opened (so it never opens again by itself), and the
+editor's playhead. On a fresh start, `ProjectRepository.launchDecision`
+reopens the editor when the app stopped with a video open in it.
 
 ## Persistence
 

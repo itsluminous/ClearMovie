@@ -4,12 +4,28 @@ package com.itsluminous.clearmovie.domain.model
  * Lengths of the preset files bound on this phone (known after setup, from
  * cm-storage). A null length means that file is not there or is skipped for
  * this video, so its part is left out.
+ *
+ * [intro], [frame] and [ending] name the file each part plays: the preset's
+ * own by default, or a photo-library or copied file the user chose instead
+ * for this video only (preset review), with its length in the matching
+ * `...Ms` field.
  */
 data class PresetMedia(
     val introMs: Long? = null,
     val frameMs: Long? = null,
     val endingMs: Long? = null,
-)
+    val intro: MediaRef = MediaRef.Preset(PresetSlot.INTRO),
+    val frame: MediaRef = MediaRef.Preset(PresetSlot.FRAME),
+    val ending: MediaRef = MediaRef.Preset(PresetSlot.ENDING),
+) {
+    init {
+        require(intro.isFileFor(PresetSlot.INTRO) && frame.isFileFor(PresetSlot.FRAME) && ending.isFileFor(PresetSlot.ENDING)) {
+            "A preset part names another part's file"
+        }
+    }
+
+    private fun MediaRef.isFileFor(slot: PresetSlot) = this !is MediaRef.Preset || this.slot == slot
+}
 
 /** New projects (ARCHITECTURE section 6, "Defaults for a new project"). */
 object ProjectFactory {
@@ -52,9 +68,9 @@ object ProjectFactory {
             require(ms in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) { "A preset file has an unusable length" }
         }
         val mainClips = mutableListOf<MainClip>()
-        if (preset.intro != null && media.introMs != null) mainClips += IntroClip(ids.clipId(), media.introMs)
+        if (preset.intro != null && media.introMs != null) mainClips += IntroClip(ids.clipId(), media.introMs, media = media.intro)
         val ending = preset.ending?.takeIf { media.endingMs != null }
-        if (ending != null) mainClips += EndingClip(ids.clipId(), media.endingMs!!, ending.kind)
+        if (ending != null) mainClips += EndingClip(ids.clipId(), media.endingMs!!, ending.kind, media = media.ending)
 
         val text = Track(ids.trackId(), TrackType.TEXT)
         val main = Track(ids.trackId(), TrackType.MAIN, clips = mainClips)
@@ -68,7 +84,7 @@ object ProjectFactory {
             val overlay =
                 OverlayClip(
                     id = ids.clipId(),
-                    media = MediaRef.Preset(PresetSlot.FRAME),
+                    media = media.frame,
                     startMs = 0,
                     durationMs = 0,
                     sourceDurationMs = frameMs,
@@ -82,7 +98,7 @@ object ProjectFactory {
             val music =
                 AudioClip(
                     id = ids.clipId(),
-                    media = MediaRef.Preset(PresetSlot.FRAME),
+                    media = media.frame,
                     startMs = 0,
                     durationMs = 0,
                     sourceDurationMs = frameMs,
@@ -104,7 +120,7 @@ object ProjectFactory {
             val speech =
                 AudioClip(
                     id = ids.clipId(),
-                    media = MediaRef.Preset(PresetSlot.ENDING),
+                    media = media.ending,
                     startMs = 0,
                     durationMs = 0,
                     sourceDurationMs = media.endingMs!!,

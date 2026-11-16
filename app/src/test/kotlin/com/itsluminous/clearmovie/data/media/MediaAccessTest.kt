@@ -266,13 +266,13 @@ class MediaAccessTest {
 
             assertThat(missing).containsExactly(ClipId("del"), MediaStatus.MISSING, ClipId("copygone"), MediaStatus.MISSING)
             assertThat(access.check(p, MediaAccessState.Full)[ClipId("keep")]).isEqualTo(MediaStatus.AVAILABLE)
-            // Preset files (the frame, its music, the closing message) are PresetStore's to check.
+            // Preset files (the intro, the frame, its music, the ending, the closing message) are PresetStore's to check.
             val presetClips =
                 p.tracks
                     .flatMap { it.clips }
                     .filter { it.mediaRef() is MediaRef.Preset }
                     .map { it.id }
-            assertThat(presetClips).hasSize(3)
+            assertThat(presetClips).hasSize(5)
             assertThat(presetClips.map { access.check(p, MediaAccessState.Full)[it] }.toSet()).containsExactly(MediaStatus.AVAILABLE)
         }
 

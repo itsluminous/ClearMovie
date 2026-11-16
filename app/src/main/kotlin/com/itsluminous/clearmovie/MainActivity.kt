@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             ClearMovieTheme(themeMode = loaded.themeMode, dynamicColor = loaded.dynamicColor) {
-                ClearMovieApp()
+                ClearMovieApp(launchDecision = viewModel::launchDecision)
             }
         }
     }
