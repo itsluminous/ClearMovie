@@ -70,6 +70,7 @@ class ColourCalibrationTest {
         val caller = Thread.currentThread()
         // Threads left by other tests end on their own; this one must be this test's.
         val earlier = calibrationThreads().toSet()
+        val earlierPlayers = playbackThreads().toSet()
         // Interrupt once the calibration's own thread is up, so the wait is inside the export.
         val interrupter =
             Thread {
@@ -83,10 +84,35 @@ class ColourCalibrationTest {
         interrupter.join()
         assertWithMessage("an interrupted calibration answered").that(result).isNull()
         assertWithMessage("the caller's interrupt was lost").that(stillInterrupted).isTrue()
-        // Media3's cancel releases the codecs on that thread; allow a slow emulator 30 s.
+        // Allow a slow emulator 30 s for the calibration's looper to end.
         val deadline = System.nanoTime() + 30_000_000_000L
         while ((calibrationThreads() - earlier).isNotEmpty() && System.nanoTime() < deadline) Thread.sleep(50)
         assertWithMessage("the calibration thread is still running").that(calibrationThreads() - earlier).isEmpty()
+        // Media3 releases the player's decoders on its own playback thread, with its own timeout.
+        val released = System.nanoTime() + 30_000_000_000L
+        while ((playbackThreads() - earlierPlayers).isNotEmpty() && System.nanoTime() < released) Thread.sleep(50)
+        report("interrupted calibration: playback threads still alive ${(playbackThreads() - earlierPlayers).size}")
+        // Cancelling during decoder set-up can crash an emulator's codec service (the x86_64
+        // c2.goldfish decoder does, in its own code), which then restarts; the first try after
+        // that may time out. Leave the codecs working for the next test: a later calibration must
+        // measure again, to a clear answer, as calibrationMeasuresThisDevice requires.
+        var attempt = 0
+        var recovered = false
+        while (!recovered && attempt < RECOVERY_TRIES) {
+            attempt++
+            val started = System.nanoTime()
+            recovered = ColourCalibration.measure(RenderHarness.context)?.measured == true
+            report(
+                "calibration after an interrupted one: try $attempt measured=$recovered in ${(System.nanoTime() - started) / 1_000_000} ms",
+            )
+        }
+        assertWithMessage("no calibration measured after an interrupted one").that(recovered).isTrue()
+    }
+
+    private fun playbackThreads() = Thread.getAllStackTraces().keys.filter { it.name == "ExoPlayer:Playback" && it.isAlive }
+
+    private companion object {
+        const val RECOVERY_TRIES = 3
     }
 
     private fun calibrationThreads() = Thread.getAllStackTraces().keys.filter { it.name == "colour-calibration" && it.isAlive }
