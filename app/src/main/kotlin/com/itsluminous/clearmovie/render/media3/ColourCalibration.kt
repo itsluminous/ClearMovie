@@ -5,7 +5,6 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.net.Uri
 import android.opengl.GLES20
 import android.os.Build
 import android.os.Handler
@@ -95,7 +94,7 @@ object ColourCalibration {
         val probe = GlColourProbe(listOf(CLIP_WIDTH / 2 to CLIP_HEIGHT / 2))
         val item =
             EditedMediaItem
-                .Builder(MediaItem.fromUri(Uri.parse(ASSET)))
+                .Builder(MediaItem.fromUri(ASSET))
                 .setRemoveAudio(true)
                 .setEffects(Effects(listOf(), listOf(probe)))
                 .build()
