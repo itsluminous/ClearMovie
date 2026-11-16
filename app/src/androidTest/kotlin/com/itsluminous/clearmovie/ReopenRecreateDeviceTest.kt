@@ -4,6 +4,7 @@ import android.app.UiAutomation
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
@@ -12,9 +13,11 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -93,17 +96,17 @@ class ReopenRecreateDeviceTest {
             .first { of in it }
     }
 
-    /** Play moves the playhead on (the elapsed part, not the length, which may still be loading). */
+    /**
+     * Play moves the playhead on (the elapsed part of the label; the length may
+     * still be loading). It is not paused again: Play and Pause swap at every
+     * junction, so a Pause button found a moment ago may be gone.
+     */
     private fun previewPlays() {
         val of = h.context.getString(R.string.editor_time, "", "")
         val elapsed = { timeLabel().substringBefore(of) }
         val atStart = elapsed()
         compose.onNodeWithText(s(R.string.action_play)).performClick()
         compose.waitUntil(TIMEOUT_MS) { elapsed() != atStart }
-        // Paused again unless it already reached the end on a slow device.
-        if (compose.onAllNodes(hasText(s(R.string.action_pause))).fetchSemanticsNodes().isNotEmpty()) {
-            compose.onNodeWithText(s(R.string.action_pause)).performClick()
-        }
     }
 
     /** Turns the display and waits until the activity has been created again for it. */
@@ -190,8 +193,15 @@ class ReopenRecreateDeviceTest {
     fun aReopenedEditorShowsTheSamePreviewFrameAfterRecreate() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             editorShown()
-            // A known time: the start of the first video on MAIN (tapping a tile seeks there, paused).
+            // A known time inside the first video on MAIN (0:04 to 0:07), away from its
+            // crossfades, so the paused picture is one frame of one clip and not a mix.
             compose.onAllNodes(hasContentDescription(s(R.string.editor_item_video), substring = true)).onFirst().performClick()
+            val fraction = KNOWN_TIME_US.toFloat() / h.plannedUs(project)
+            compose
+                .onNodeWithContentDescription(
+                    s(R.string.editor_seek),
+                ).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
+            compose.waitUntil(TIMEOUT_MS) { timeLabel().startsWith("0:05") }
             val at = timeLabel()
             val before = settledFrame()
 
@@ -204,21 +214,29 @@ class ReopenRecreateDeviceTest {
             save(after, "reopen-preview-after-recreate.png")
             val diff = meanAbsDiff(before, after)
             Log.i(ExportHarness.TAG, "Preview at $at: before spread ${spread(before)}, after spread ${spread(after)}, mean abs diff $diff")
+            // A coarse picture of each capture in the log, for a run whose PNGs stay on its device (CI).
+            Log.i(ExportHarness.TAG, "Preview before (3x3 mean RGB): ${grid(before)}")
+            Log.i(ExportHarness.TAG, "Preview after (3x3 mean RGB): ${grid(after)}")
             // A picture, not a blank surface, and the same one after the recreate.
             assertThat(spread(before)).isGreaterThan(MIN_SPREAD)
             assertThat(diff).isLessThan(MAX_DIFF)
         }
     }
 
-    /** The preview, once two captures a moment apart agree (the frame has landed). */
+    /**
+     * The preview once its picture has stopped changing: three captures in a
+     * row, 700 ms apart, agree (a slow software GPU lands a paused seek late).
+     */
     private fun settledFrame(): Bitmap {
         var last = compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
+        var same = 0
         val end = System.currentTimeMillis() + TIMEOUT_MS
         while (System.currentTimeMillis() < end) {
-            Thread.sleep(500)
+            Thread.sleep(700)
             val now = compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
-            if (spread(now) > MIN_SPREAD && meanAbsDiff(last, now) < 1.0) return now
+            same = if (spread(now) > MIN_SPREAD && meanAbsDiff(last, now) < 1.0) same + 1 else 0
             last = now
+            if (same >= 2) return now
         }
         return last
     }
@@ -234,6 +252,9 @@ class ReopenRecreateDeviceTest {
     private companion object {
         const val TIMEOUT_MS = 20_000L
 
+        /** Inside the first video on MAIN, which plays from 0:04 to 0:07. */
+        const val KNOWN_TIME_US = 5_300_000L
+
         /** Brightest minus darkest luma: a blank or single-colour surface is near 0. */
         const val MIN_SPREAD = 40
 
@@ -243,6 +264,28 @@ class ReopenRecreateDeviceTest {
         fun pixels(b: Bitmap): IntArray = IntArray(b.width * b.height).also { b.getPixels(it, 0, b.width, 0, 0, b.width, b.height) }
 
         fun luma(p: Int): Int = (299 * ((p shr 16) and 0xFF) + 587 * ((p shr 8) and 0xFF) + 114 * (p and 0xFF)) / 1000
+
+        fun grid(b: Bitmap): String {
+            val p = pixels(b)
+            return (0 until 9).joinToString(" ") { cell ->
+                val x0 = (cell % 3) * b.width / 3
+                val y0 = (cell / 3) * b.height / 3
+                var r = 0L
+                var g = 0L
+                var bl = 0L
+                var n = 0
+                for (y in y0 until y0 + b.height / 3) {
+                    for (x in x0 until x0 + b.width / 3) {
+                        val c = p[y * b.width + x]
+                        r += (c shr 16) and 0xFF
+                        g += (c shr 8) and 0xFF
+                        bl += c and 0xFF
+                        n++
+                    }
+                }
+                "${r / n},${g / n},${bl / n}"
+            }
+        }
 
         fun spread(b: Bitmap): Int = pixels(b).map(::luma).let { it.max() - it.min() }
 
