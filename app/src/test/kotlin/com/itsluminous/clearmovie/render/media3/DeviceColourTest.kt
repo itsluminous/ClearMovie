@@ -90,6 +90,14 @@ class DeviceColourTest {
         assertThat(DeviceColour.parse("v1|fp|0|0|0|", "v1|fp")).isNull()
         val rk = DeviceColour(false, true, encoderName = "OMX.rk.video_encoder.avc")
         assertThat(DeviceColour.parse(rk.serialize("v1|fp"), "v1|fp")).isEqualTo(rk)
+        // Names with a plus or a colon, as some vendors use.
+        for (name in listOf("c2.vendor.h264+secure.encoder", "OMX.vendor:avc.encoder")) {
+            val named = DeviceColour(false, true, encoderName = name)
+            assertThat(DeviceColour.parse(named.serialize("v1|fp"), "v1|fp")).isEqualTo(named)
+        }
+        // A name that is not a codec name is never written, so the line is not usable.
+        assertThat(DeviceColour(false, true, encoderName = "bad|name").serialize("v1|fp")).isEqualTo("v1|fp|0|1|1|")
+        assertThat(DeviceColour.parse(DeviceColour(false, true, encoderName = "bad|name").serialize("v1|fp"), "v1|fp")).isNull()
         // A name that is not a codec name is refused.
         assertThat(DeviceColour.parse("v1|fp|1|1|1|bad name/../x", "v1|fp")).isNull()
         assertThat(DeviceColour.parse("v1|fp|1|1|1|a|b", "v1|fp")).isNull()

@@ -20,7 +20,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BaseGlShaderProgram
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
-import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbMatrix
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -40,9 +39,11 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Measures how this device decodes and encodes BT.709 video ([DeviceColour]),
- * once per build of the system: a 1 s, 320x192 export of a flat BT.709 clip
+ * once per build of the system: a 1 s, 1280x720 export of a flat BT.709 clip
  * (`assets/render/colour-calibration.mp4`, YUV [CALIBRATION_YUV]) through the
- * same encoder settings as an export. A GL readback where the first effect
+ * encoder settings of a Standard (720p) export. The clip is HD like the
+ * videos it stands for, so a decoder that picks its matrix by size answers
+ * as it does for them. A GL readback where the first effect
  * sits gives the RGB the GPU made of the clip, so the decode matrix; the
  * output's raw YUV (a `MediaCodec` decode to buffers, with no colour
  * conversion) against that RGB gives the encoder's matrix.
@@ -51,7 +52,8 @@ import java.util.concurrent.atomic.AtomicReference
  * `noBackupFilesDir/render` keyed by [Build.FINGERPRINT] (so a system update
  * measures again) when it is a clear answer. A calibration that fails or is
  * ambiguous changes nothing ([DeviceColour.TRUSTED]) and is tried again in the
- * next process. [of] blocks for the calibration (about a second; a stalled
+ * next process; one that was interrupted is tried again on the next call.
+ * [of] blocks for the calibration (about a second; a stalled
  * one is cancelled after [TIMEOUT_S], and Media3's cancel itself can block a
  * little longer) and must not run on the main thread. Nothing it throws
  * reaches the export.
@@ -61,10 +63,9 @@ object ColourCalibration {
     /** The calibration clip's measured Y, Cb, Cr (scripts/make-colour-calibration.sh). */
     val CALIBRATION_YUV = doubleArrayOf(97.0, 191.0, 201.0)
 
-    const val CLIP_WIDTH = 320
-    const val CLIP_HEIGHT = 192
-    private const val MEASURED_HEIGHT = 720
-    private const val VERSION = 2
+    const val CLIP_WIDTH = 1280
+    const val CLIP_HEIGHT = 720
+    private const val VERSION = 3
     private const val TAG = "ColourCalibration"
     private const val ASSET = "asset:///render/colour-calibration.mp4"
 
@@ -81,7 +82,8 @@ object ColourCalibration {
             val key = "v$VERSION|${Build.FINGERPRINT}"
             val stored = runCatching { DeviceColour.parse(file.readText(), key) }.getOrNull()
             val result = stored ?: measureAndStore(app, file, key) ?: DeviceColour.TRUSTED
-            cached = result
+            // An interrupted calibration says nothing about the device.
+            if (!Thread.currentThread().isInterrupted) cached = result
             return result
         }
     }
@@ -93,9 +95,16 @@ object ColourCalibration {
     ): DeviceColour? {
         val measured = runCatching { measure(context) }.onFailure { Log.w(TAG, "Colour calibration failed", it) }.getOrNull()
         if (measured?.measured == true) {
-            runCatching {
-                file.parentFile?.mkdirs()
-                file.writeText(measured.serialize(key))
+            val line = measured.serialize(key)
+            // Only a line the next process accepts is written, so a result it would
+            // refuse is measured again rather than read back wrong.
+            if (DeviceColour.parse(line, key) == measured) {
+                runCatching {
+                    file.parentFile?.mkdirs()
+                    file.writeText(line)
+                }
+            } else {
+                Log.w(TAG, "Not storing $measured: the encoder name cannot be stored")
             }
         }
         return measured
@@ -110,9 +119,9 @@ object ColourCalibration {
             EditedMediaItem
                 .Builder(MediaItem.fromUri(ASSET))
                 .setRemoveAudio(true)
-                // Encoded at 720p, the size class of High and Standard exports: an
+                // Encoded at the clip's own 720p, the size of a Standard export: an
                 // encoder may choose its matrix by size.
-                .setEffects(Effects(listOf(), listOf(probe, Presentation.createForHeight(MEASURED_HEIGHT))))
+                .setEffects(Effects(listOf(), listOf(probe)))
                 .build()
         val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build()).build()
         val thread = HandlerThread("colour-calibration").apply { start() }
@@ -128,8 +137,9 @@ object ColourCalibration {
                         .Builder(context)
                         .setLooper(thread.looper)
                         .setVideoMimeType(MimeTypes.VIDEO_H264)
-                        .setEncoderFactory(RenderExporter.encoderFactory(context, EncodeSpec(2_000_000), DeviceColour.TRUSTED))
-                        .addListener(
+                        .setEncoderFactory(
+                            RenderExporter.encoderFactory(context, EncodeSpec.forHeight(CLIP_HEIGHT), DeviceColour.TRUSTED),
+                        ).addListener(
                             object : Transformer.Listener {
                                 override fun onCompleted(
                                     composition: Composition,
@@ -158,12 +168,7 @@ object ColourCalibration {
             }
             if (!latch.await(TIMEOUT_S, TimeUnit.SECONDS)) {
                 // Release its codecs before the real export needs them.
-                val cancelled = CountDownLatch(1)
-                handler.post {
-                    runCatching { running.get()?.cancel() }
-                    cancelled.countDown()
-                }
-                cancelled.await(5, TimeUnit.SECONDS)
+                cancel(handler, running).await(5, TimeUnit.SECONDS)
                 Log.w(TAG, "Colour calibration timed out")
                 return null
             }
@@ -171,18 +176,42 @@ object ColourCalibration {
                 Log.w(TAG, "Colour calibration failed", error.get())
                 return null
             }
-            val gl = probe.mean(fromUs = 300_000)?.copyOfRange(0, 3) ?: return null
-            val yuv = RawYuv.meanAt(out, 500_000, MEASURED_HEIGHT * CLIP_WIDTH / CLIP_HEIGHT / 2, MEASURED_HEIGHT / 2) ?: return null
+            val gl = probe.mean(fromUs = 300_000)?.copyOfRange(0, 3)
+            if (gl == null) {
+                Log.w(TAG, "Colour calibration: no GL readback")
+                return null
+            }
+            val yuv = RawYuv.meanAt(out, 500_000, CLIP_WIDTH / 2, CLIP_HEIGHT / 2)
+            if (yuv == null) {
+                Log.w(TAG, "Colour calibration: the output could not be read")
+                return null
+            }
             val result = classify(gl, yuv).copy(encoderName = encoder.get())
             logResult(gl, yuv, result)
             return result
         } catch (e: InterruptedException) {
+            // Release its codecs without waiting; the caller was interrupted.
+            cancel(handler, running)
             Thread.currentThread().interrupt()
+            Log.w(TAG, "Colour calibration interrupted")
             return null
         } finally {
             thread.quitSafely()
             out.delete()
         }
+    }
+
+    /** Posts a cancel of the running export to its own looper; the latch opens once it returned. */
+    private fun cancel(
+        handler: Handler,
+        running: AtomicReference<Transformer>,
+    ): CountDownLatch {
+        val cancelled = CountDownLatch(1)
+        handler.post {
+            runCatching { running.get()?.cancel() }
+            cancelled.countDown()
+        }
+        return cancelled
     }
 
     private fun logResult(

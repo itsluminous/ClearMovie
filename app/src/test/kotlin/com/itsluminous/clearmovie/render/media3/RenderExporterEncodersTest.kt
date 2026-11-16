@@ -8,6 +8,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Codec
+import androidx.media3.transformer.ExportException
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -47,6 +48,7 @@ class RenderExporterEncodersTest {
     private class Fake(
         val names: ArrayDeque<String>,
         val released: MutableList<String>,
+        val refuseBt601: Boolean = false,
         val make: (String) -> Codec,
     ) : Codec.EncoderFactory {
         val requested = mutableListOf<Format>()
@@ -61,6 +63,13 @@ class RenderExporterEncodersTest {
             logSessionId: LogSessionId?,
         ): Codec {
             requested += format
+            if (refuseBt601 && format.colorInfo == RenderExporter.SDR_BT601_LIMITED) {
+                throw ExportException.createForCodec(
+                    IllegalArgumentException("BT.601 not supported"),
+                    ExportException.ERROR_CODE_ENCODER_INIT_FAILED,
+                    ExportException.CodecInfo("refused", true, true, null),
+                )
+            }
             return make(names.removeFirst())
         }
 
@@ -74,9 +83,10 @@ class RenderExporterEncodersTest {
     private fun wrapped(
         names: List<String>,
         measured: String?,
+        refuseBt601: Boolean = false,
     ): Pair<Codec.EncoderFactory, Fake> {
         val released = mutableListOf<String>()
-        val fake = Fake(ArrayDeque(names), released) { codec(it, released) }
+        val fake = Fake(ArrayDeque(names), released, refuseBt601) { codec(it, released) }
         val factory =
             RenderExporter.encoderFactory(context, EncodeSpec(1_000_000), DeviceColour(false, true, encoderName = measured)) { fake }
         return factory to fake
@@ -97,6 +107,16 @@ class RenderExporterEncodersTest {
             fake.requested.map { it.colorInfo },
         ).containsExactly(RenderExporter.SDR_BT601_LIMITED, ColorInfo.SDR_BT709_LIMITED).inOrder()
         assertThat(fake.released).containsExactly("enc.b")
+    }
+
+    @Test
+    fun `an encoder that refuses the BT601 tag is opened with the requested one`() {
+        val (factory, fake) = wrapped(listOf("enc.a"), "enc.a", refuseBt601 = true)
+        assertThat(factory.createForVideoEncoding(sdr, null).name).isEqualTo("enc.a")
+        assertThat(
+            fake.requested.map { it.colorInfo },
+        ).containsExactly(RenderExporter.SDR_BT601_LIMITED, ColorInfo.SDR_BT709_LIMITED).inOrder()
+        assertThat(fake.released).isEmpty()
     }
 
     @OptIn(ExperimentalApi::class)

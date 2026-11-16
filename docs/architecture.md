@@ -173,9 +173,11 @@ with the GPU's `samplerExternalOES`, so the YUV-to-RGB matrix is the
 driver's, and the encoder chooses its own RGB-to-YUV matrix. Both Android
 emulators decode BT.709 video with the BT.601 matrix, and the Android 10
 emulator's encoder writes BT.601 YUV under a BT.709 tag. `ColourCalibration`
-therefore exports a 1 s, 320x192 flat BT.709 clip once per build fingerprint
-(cached in `noBackupFilesDir/render`): a GL readback gives the decode matrix
-and the output's raw YUV gives the encoder's. On a GPU that misdecodes, every
+therefore exports a 1 s, 1280x720 flat BT.709 clip once per build fingerprint
+(cached in `noBackupFilesDir/render`) with a Standard export's encoder
+settings: a GL readback gives the decode matrix and the output's raw YUV gives
+the encoder's. The BT.601 tag is asked for only when an export opens the
+encoder that was measured. Small (480p) exports reuse the 720p answer. On a GPU that misdecodes, every
 BT.709 video item starts with `Bt709Correction`; on an encoder that writes
 BT.601, the export asks for BT.601 so the file's tag matches its YUV. A
 calibration that fails or cannot tell changes nothing. Colours whose BT.601
