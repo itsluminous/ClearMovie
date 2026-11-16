@@ -20,8 +20,9 @@ import com.itsluminous.clearmovie.data.media.MediaFactsProbe
 import com.itsluminous.clearmovie.data.media.MediaResolver
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.data.media.PendingShare
-import com.itsluminous.clearmovie.data.media.ResolverMimeLookup
+import com.itsluminous.clearmovie.data.media.ResolverShareProbe
 import com.itsluminous.clearmovie.data.media.ShareLinks
+import com.itsluminous.clearmovie.data.media.ShareProbe
 import com.itsluminous.clearmovie.data.preset.FrameSample
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.PresetStoreTest
@@ -178,6 +179,7 @@ class ShareViewModelTest {
     private fun make(
         repo: ProjectRepository,
         saved: SavedStateHandle = SavedStateHandle(),
+        shareProbe: ShareProbe = ResolverShareProbe(context.contentResolver),
     ): Made {
         val vm =
             runBlocking(main) {
@@ -187,7 +189,7 @@ class ShareViewModelTest {
                     access(),
                     probe,
                     times,
-                    ResolverMimeLookup(context.contentResolver),
+                    shareProbe,
                     ShareDrafts(presets, repo),
                     PendingShare(pendingFile),
                     settings,
@@ -370,7 +372,7 @@ class ShareViewModelTest {
             val done = m.await<ShareState.Added>()
 
             assertThat(done.added).isEqualTo(1)
-            assertThat(m.nav).contains(ShareNav.ToEditor(open))
+            m.awaitNav { it == ShareNav.ToEditor(open) }
             assertThat(m.nav).doesNotContain(ShareNav.ToPick)
             val clips =
                 repo.open.value!!
@@ -593,7 +595,7 @@ class ShareViewModelTest {
             m.share(send(photo("a.jpg", taken = 5)))
             val first = m.await<ShareState.Ready>()
 
-            assertThat(m.share(send(photo("b.jpg", taken = 1)))).isEqualTo(ShareState.Asking(1, first.draft))
+            assertThat(m.share(send(photo("b.jpg", taken = 1)))).isEqualTo(ShareState.Asking(1, first.draft, toWaitingShare = true))
             m.on { cancel() }
             assertThat(m.vm.state.value).isEqualTo(first)
 
@@ -620,6 +622,197 @@ class ShareViewModelTest {
             Thread.sleep(300)
             assertThat(m.vm.state.value).isEqualTo(ShareState.Idle)
         }
+
+    @Test
+    fun `Start a new video from the editor closes it, so neither a later share nor a restart takes it for open`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val open = ProjectId("open4")
+            assertThat(repo.createDraft(ProjectFactory.blank(open), inEditor = true)).isTrue()
+            val m = make(repo)
+            val many = (1..101).map { photo("m$it.jpg") }.toTypedArray()
+
+            m.share(send(*many))
+            m.on { startNewVideo() }
+            m.awaitNav { it == ShareNav.ToPick }
+            m.on { begin(MediaAccessState.Full) }
+            m.await<ShareState.ManyItems>()
+            m.on { cancel() }
+            m.awaitNav { it == ShareNav.Home }
+
+            assertThat(repo.launchDecision()).isEqualTo(LaunchDecision.Home)
+            // The next share starts a new video straight away instead of asking about the closed one.
+            assertThat(m.share(send(photo("next.jpg")))).isEqualTo(ShareState.Waiting(1, null))
+            assertThat(repo.projectList().map { it.id }).contains(open)
+        }
+
+    @Test
+    fun `a share arriving on a launcher video's review or photo screen does not leave that empty video behind`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val launcher = ProjectId("fromlauncher")
+            assertThat(repo.createDraft(ProjectFactory.blank(launcher), inEditor = false)).isTrue()
+            val m = make(repo)
+
+            m.share(send(photo("a.jpg")))
+            val ready = m.await<ShareState.Ready>()
+
+            assertThat(repo.projectList().map { it.id }).containsExactly(ready.draft)
+        }
+
+    @Test
+    fun `shares that arrive while one is being taken in are handled after it, in order, none lost`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val m = make(repo)
+            val many = (1..101).map { photo("q$it.jpg") }.toTypedArray()
+            m.share(send(*many))
+            m.await<ShareState.ManyItems>()
+            // Two more shares come in while the notice is up.
+            m.on { receive(send(photo("second.jpg"))) }
+            m.on { receive(send(photo("third.jpg"))) }
+            Thread.sleep(200)
+            assertThat(m.vm.state.value).isInstanceOf(ShareState.ManyItems::class.java)
+
+            m.on { continueMany() }
+            val first = m.await<ShareState.Ready>()
+            // The second is asked about at once, against the waiting share.
+            val asking = m.await<ShareState.Asking>()
+            assertThat(asking).isEqualTo(ShareState.Asking(1, first.draft, toWaitingShare = true))
+            m.on { addToOpen() }
+            m.on { begin(MediaAccessState.Full) }
+            runBlocking { withTimeout(TIMEOUT_MS) { m.vm.state.first { it is ShareState.Asking } } }
+            m.on { addToOpen() }
+            m.on { begin(MediaAccessState.Full) }
+            val all = runBlocking { withTimeout(TIMEOUT_MS) { m.vm.state.first { it is ShareState.Ready && it.items == 103 } } }
+            assertThat((all as ShareState.Ready).draft).isEqualTo(first.draft)
+        }
+
+    @Test
+    fun `Choose fewer on the copy question says how to share fewer, and the draft and its copies go`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val m = makeWithFree(repo, free = 3_000_000_000L)
+            val big = Uri.parse("content://$CHAT/files/big.mp4")
+            chat.add(FakeMediaProvider.Row(big, "big.mp4", 1_500_000_000L, "video/mp4", bytes = ByteArray(10)))
+
+            m.share(send(big))
+            runBlocking {
+                withTimeout(
+                    TIMEOUT_MS,
+                ) {
+                    m.vm.intake.state
+                        .first { it is com.itsluminous.clearmovie.ui.media.IntakeState.Confirm }
+                }
+            }
+            m.on { chooseFewer() }
+            val failed = m.await<ShareState.Failed>()
+
+            assertThat(failed.reason).isEqualTo(FailReason.CHOOSE_FEWER)
+            assertThat(repo.projectList()).isEmpty()
+            m.on { dismiss() }
+            m.awaitNav { it == ShareNav.Home }
+        }
+
+    @Test
+    fun `a provider that never answers is counted as could not be opened, and the rest go on`() =
+        runBlocking<Unit> {
+            val stuck = Uri.parse("content://$CHAT/files/stuck.jpg")
+            val hanging =
+                object : ShareProbe {
+                    val real = ResolverShareProbe(context.contentResolver)
+
+                    override fun typeOf(uri: Uri): String? {
+                        if (uri == stuck) Thread.sleep(60_000)
+                        return real.typeOf(uri)
+                    }
+
+                    override fun durationMs(uri: Uri): Long? = real.durationMs(uri)
+                }
+            val repo = repository()
+            val m = make(repo, shareProbe = hanging)
+            val good = photo("good.jpg")
+
+            val started = System.currentTimeMillis()
+            m.share(send(stuck, good))
+            val ready = m.await<ShareState.Ready>()
+
+            assertThat(System.currentTimeMillis() - started).isLessThan(ShareViewModel.PROVIDER_TIMEOUT_MS + 10_000)
+            assertThat(ready.items).isEqualTo(1)
+            assertThat(ready.notes.unreadable).isEqualTo(1)
+        }
+
+    @Test
+    fun `a process death on the add-or-new question asks again`() =
+        runBlocking<Unit> {
+            val repo = repository()
+            val open = ProjectId("open5")
+            assertThat(repo.createDraft(ProjectFactory.blank(open), inEditor = true)).isTrue()
+            val saved = SavedStateHandle()
+            val m = make(repo, saved)
+            m.share(send(photo("a.jpg"), photo("b.jpg")))
+            assertThat(m.vm.state.value).isEqualTo(ShareState.Asking(2, open))
+
+            val again = make(repository(), SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) }))
+            assertThat(again.await<ShareState.Asking>()).isEqualTo(ShareState.Asking(2, open))
+            again.on { addToOpen() }
+            again.on { begin(MediaAccessState.Full) }
+            assertThat(again.await<ShareState.Added>().added).isEqualTo(2)
+        }
+
+    @Test
+    fun `a list of other parcelables in place of links is refused, never a crash`() {
+        val intent =
+            Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(
+                Intent.EXTRA_STREAM,
+                arrayListOf<android.os.Parcelable>(Intent(), android.os.Bundle(), photo("ok.jpg")),
+            )
+        val shared = ShareLinks.readSafely(intent)!!
+        assertThat(shared.uris).hasSize(1)
+        assertThat(shared.refused).isEqualTo(2)
+    }
+
+    private fun makeWithFree(
+        repo: ProjectRepository,
+        free: Long,
+    ): Made {
+        val gateway = MediaStoreGateway(context)
+        val tight =
+            MediaAccess(
+                context.contentResolver,
+                MediaResolver(
+                    gateway,
+                    grants,
+                    context.packageName,
+                ),
+                gateway,
+                grants,
+                MediaCopier(),
+                files,
+                db,
+                {
+                    free
+                },
+            )
+        val vm =
+            runBlocking(main) {
+                ShareViewModel(
+                    SavedStateHandle(),
+                    repo,
+                    tight,
+                    probe,
+                    times,
+                    ResolverShareProbe(context.contentResolver),
+                    ShareDrafts(presets, repo),
+                    PendingShare(pendingFile),
+                    settings,
+                    Dispatchers.IO,
+                )
+            }
+        val nav = CopyOnWriteArrayList<ShareNav>()
+        scope().launch { vm.nav.collect { nav += it } }
+        return Made(vm, nav)
+    }
 
     private fun bindPreset() =
         runBlocking {

@@ -2,19 +2,38 @@ package com.itsluminous.clearmovie.data.media
 
 import android.content.ContentResolver
 import android.net.Uri
+import android.provider.MediaStore
 
-/** The MIME type a provider gives a link; null when it gives none or fails. Behind an interface so JVM tests can fake it. */
-fun interface MimeLookup {
+/**
+ * Quick questions about a shared link, asked of the provider that sent it
+ * (any app's). Every answer may be missing; a provider that throws counts as
+ * giving none. Behind an interface so JVM tests can fake it.
+ */
+interface ShareProbe {
+    /** The MIME type the provider gives the link. */
     fun typeOf(uri: Uri): String?
+
+    /** The length a provider such as MediaStore gives a video, in ms, without opening the file. */
+    fun durationMs(uri: Uri): Long?
 }
 
-/** [MimeLookup] on a [ContentResolver]; a provider that throws counts as giving no type. */
-class ResolverMimeLookup(
+/** [ShareProbe] on a [ContentResolver]. */
+class ResolverShareProbe(
     private val resolver: ContentResolver,
-) : MimeLookup {
+) : ShareProbe {
     override fun typeOf(uri: Uri): String? =
         try {
             resolver.getType(uri)
+        } catch (e: Exception) {
+            null
+        }
+
+    override fun durationMs(uri: Uri): Long? =
+        try {
+            resolver.query(uri, arrayOf(MediaStore.MediaColumns.DURATION), null, null, null)?.use { c ->
+                val i = c.getColumnIndex(MediaStore.MediaColumns.DURATION)
+                if (i >= 0 && c.moveToFirst() && !c.isNull(i)) c.getLong(i).takeIf { it > 0 } else null
+            }
         } catch (e: Exception) {
             null
         }

@@ -82,8 +82,12 @@ fun ClearMovieApp(
         }
     }
 
+    /** Home, once: the share can ask for it from two places (its own screen and its flow), and Home already showing stays as it is. */
     fun goHome() {
-        if (!navController.popBackStack(Routes.HOME, inclusive = false)) navController.navigate(Routes.HOME)
+        if (navController.currentDestination?.route == Routes.HOME) return
+        if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
+            navController.navigate(Routes.HOME) { launchSingleTop = true }
+        }
     }
 
     fun onShare(nav: ShareNav) {
@@ -103,7 +107,7 @@ fun ClearMovieApp(
             }
 
             is ShareNav.ToSetup -> {
-                navController.navigate(Routes.setup(nav.presetId, newVideo = true, shareDraft = nav.draft))
+                navController.navigate(Routes.setup(nav.presetId, newVideo = true, shareDraft = nav.draft)) { launchSingleTop = true }
             }
 
             ShareNav.Home -> {

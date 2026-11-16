@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.data.media
 import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
+import android.os.Parcelable
 import androidx.core.content.IntentCompat
 import com.itsluminous.clearmovie.domain.model.MediaRef
 
@@ -35,7 +36,14 @@ object ShareLinks {
     const val EXTRA_OVER_LIMIT = "com.itsluminous.clearmovie.extra.OVER_LIMIT"
 
     /** Entries read from one intent at most, so a huge or crafted list can never make the app loop for long. */
-    private const val MAX_ENTRIES = 10_000
+    const val MAX_ENTRIES = 10_000
+
+    /**
+     * The most characters of links one share keeps, so handing them on to
+     * `MainActivity` stays far below Android's 1 MB limit for one call
+     * (500 links of a normal length take about 30 KB).
+     */
+    const val MAX_TOTAL_CHARS = 200_000
 
     fun isShare(intent: Intent?): Boolean =
         intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE || intent?.action == ACTION_SHARED
@@ -50,9 +58,7 @@ object ShareLinks {
         maxItems: Int = MAX_ITEMS,
     ): SharedLinks? {
         if (intent == null || !isShare(intent)) return null
-        val raw = mutableListOf<Uri?>()
-        raw += streamExtra(intent)
-        if (raw.isEmpty()) raw += clipItems(intent)
+        val raw: List<Any?> = streamExtra(intent).ifEmpty { clipItems(intent) }
         val carried =
             if (intent.action == ACTION_SHARED) {
                 safely { intent.getIntExtra(EXTRA_REFUSED, 0) }.orZero() to safely { intent.getIntExtra(EXTRA_OVER_LIMIT, 0) }.orZero()
@@ -68,39 +74,68 @@ object ShareLinks {
         }
     }
 
-    /** Keeps `content://` links the model accepts, once each and in order, up to [maxItems]. */
+    /** [read], with any failure (an intent built to break the app) counted as nothing shared. */
+    fun readSafely(intent: Intent?): SharedLinks? =
+        try {
+            read(intent)
+        } catch (e: RuntimeException) {
+            if (isShare(intent)) SharedLinks(emptyList()) else null
+        }
+
+    /**
+     * Keeps `content://` links the model accepts, once each and in order, up
+     * to [maxItems] and [MAX_TOTAL_CHARS]. Anything else in [raw] (null, a
+     * string, another kind of parcelable smuggled into the list) is refused.
+     */
     fun sanitize(
-        raw: List<Uri?>,
+        raw: List<Any?>,
         maxItems: Int = MAX_ITEMS,
     ): SharedLinks {
         val seen = LinkedHashSet<String>()
         val kept = mutableListOf<Uri>()
         var refused = 0
         var over = 0
-        for (uri in raw.take(MAX_ENTRIES)) {
-            val text = uri?.toString()
-            if (uri == null || text == null || uri.scheme != ContentResolver.SCHEME_CONTENT || !MediaRef.isSafeContentUri(text)) {
+        var chars = 0
+        for (entry in raw.take(MAX_ENTRIES)) {
+            val uri = entry as? Uri
+            val text = uri?.let { safely { it.toString() } }
+            if (uri == null || text == null || safely { uri.scheme } != ContentResolver.SCHEME_CONTENT ||
+                !MediaRef.isSafeContentUri(text)
+            ) {
                 refused++
                 continue
             }
             if (!seen.add(text)) continue
-            if (kept.size >= maxItems) over++ else kept += uri
+            if (kept.size >= maxItems || chars + text.length > MAX_TOTAL_CHARS) {
+                over++
+            } else {
+                kept += uri
+                chars += text.length
+            }
         }
         return SharedLinks(kept, refused, over + (raw.size - MAX_ENTRIES).coerceAtLeast(0))
     }
 
-    private fun streamExtra(intent: Intent): List<Uri?> =
+    /**
+     * EXTRA_STREAM read as plain parcelables, never as `Uri`: on Android 10
+     * to 12 a typed read is an unchecked cast, so a list holding other kinds
+     * of parcelable would only fail later, outside this guard. [sanitize]
+     * keeps the real links.
+     */
+    private fun streamExtra(intent: Intent): List<Any?> =
         when (intent.action) {
             Intent.ACTION_SEND -> {
-                listOfNotNull(safely { IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) })
+                listOfNotNull(safely { IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Parcelable::class.java) })
             }
 
             else -> {
-                safely { IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) }.orEmpty()
+                safely { IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Parcelable::class.java) }
+                    ?.let { list -> safely { list.toList<Any?>() } }
+                    .orEmpty()
             }
         }
 
-    private fun clipItems(intent: Intent): List<Uri?> {
+    private fun clipItems(intent: Intent): List<Any?> {
         val clip = safely { intent.clipData } ?: return emptyList()
         val count = safely { clip.itemCount }.orZero().coerceAtMost(MAX_ENTRIES)
         return (0 until count).map { i -> safely { clip.getItemAt(i)?.uri } }

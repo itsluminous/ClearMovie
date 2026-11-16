@@ -293,6 +293,91 @@ class ShareDeviceTest {
     }
 
     @Test
+    fun theShareTargetIsOfferedForPhotosAndVideosOnlyAndMainActivityIgnoresADirectSend() {
+        val pm = context.packageManager
+
+        fun offered(
+            action: String,
+            type: String,
+        ) = pm.queryIntentActivities(Intent(action).setType(type).setPackage(context.packageName), 0).map { it.activityInfo.name }
+        val share = "com.itsluminous.clearmovie.ShareActivity"
+        assertThat(offered(Intent.ACTION_SEND, "image/jpeg")).containsExactly(share)
+        assertThat(offered(Intent.ACTION_SEND, "video/mp4")).containsExactly(share)
+        assertThat(offered(Intent.ACTION_SEND_MULTIPLE, "image/*")).containsExactly(share)
+        assertThat(offered(Intent.ACTION_SEND, "application/pdf")).isEmpty()
+        assertThat(offered(Intent.ACTION_SEND, "text/plain")).isEmpty()
+
+        // MainActivity is exported (the launcher entry), but takes shares only from ShareActivity.
+        val photo = insert("fixtures/photo_blue.png", "image/png")
+        context.startActivity(
+            Intent(Intent.ACTION_SEND)
+                .setClass(context, MainActivity::class.java)
+                .setType("image/png")
+                .putExtra(Intent.EXTRA_STREAM, photo)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        waitFor(hasText(s(R.string.home_new_video)))
+        Thread.sleep(1_000)
+        compose.onNodeWithTag(SHARE_HEADER_TAG).assertDoesNotExist()
+        assertThat(runBlocking { app.projectRepository.projectList() }).isEmpty()
+    }
+
+    @Test
+    fun aPhotosOwnExifDateIsReadWhenTheProviderGivesNone() {
+        val project =
+            com.itsluminous.clearmovie.domain.model
+                .ProjectId("exif-check")
+        val ref = MediaRef.Copied("exif_test.jpg")
+        val file = app.appFiles.copiedFile(project, ref).apply { parentFile?.mkdirs() }
+        try {
+            file.outputStream().use { out ->
+                android.graphics.Bitmap
+                    .createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+                    .compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            androidx.exifinterface.media.ExifInterface(file.path).apply {
+                setAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL, "2026:11:14 09:00:00")
+                setAttribute(androidx.exifinterface.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL, "+05:30")
+                saveAttributes()
+            }
+            val reader =
+                com.itsluminous.clearmovie.data.media
+                    .AndroidCaptureTimeReader(context, app.appFiles)
+            val info =
+                com.itsluminous.clearmovie.data.media
+                    .SourceInfo("exif_test.jpg", file.length(), "image/jpeg", null)
+            val taken =
+                runBlocking {
+                    reader.takenAt(
+                        project,
+                        com.itsluminous.clearmovie.data.media
+                            .IntakeItem(Uri.EMPTY, ref, info),
+                    )
+                }
+            assertThat(taken).isEqualTo(1_794_627_000_000L)
+            // A video with no creation time in it has no date: it keeps its shared place.
+            val video = MediaRef.Copied("nodate.mp4")
+            app.appFiles.copiedFile(project, video).outputStream().use { out ->
+                testAssets.open("fixtures/clip_light.mp4").use { it.copyTo(out) }
+            }
+            val videoInfo =
+                com.itsluminous.clearmovie.data.media
+                    .SourceInfo("nodate.mp4", null, "video/mp4", null)
+            assertThat(
+                runBlocking {
+                    reader.takenAt(
+                        project,
+                        com.itsluminous.clearmovie.data.media
+                            .IntakeItem(Uri.EMPTY, video, videoInfo),
+                    )
+                },
+            ).isNull()
+        } finally {
+            app.appFiles.projectDir(project).deleteRecursively()
+        }
+    }
+
+    @Test
     fun oddAndHostileIntentsAreReportedNeverCrashOrReadPrivateFiles() {
         // No extras at all.
         sendRaw(Intent(Intent.ACTION_SEND).setType("image/*"))
@@ -314,6 +399,15 @@ class ShareDeviceTest {
         // Only text: not a photo or video.
         shareFromOtherApp(listOf("note.txt"))
         waitFor(hasText(q(R.plurals.share_skipped_not_media, 1)))
+        tap(s(R.string.action_ok))
+
+        // A list of other parcelables where the links should be (an unchecked cast on Android 10 to 12).
+        sendRaw(
+            Intent(Intent.ACTION_SEND_MULTIPLE)
+                .setType("image/*")
+                .putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf<android.os.Parcelable>(Intent(), android.os.Bundle())),
+        )
+        waitFor(hasText(s(R.string.share_nothing_title)))
         tap(s(R.string.action_ok))
 
         // An extra of the wrong type.

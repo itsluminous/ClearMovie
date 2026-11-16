@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -30,9 +31,19 @@ class MediaAccessController internal constructor(
     state: MediaAccessState,
     private val launch: () -> Unit,
     private val settings: () -> Unit,
+    private val answerCount: () -> Int = { 0 },
 ) {
     var state: MediaAccessState by mutableStateOf(state)
         internal set
+
+    /**
+     * How many answers to [request] have arrived, kept across rotation and
+     * process death. A screen that must act on the answer (Allow all photos,
+     * then take the items in again) notes this before it asks and acts when
+     * it changes: a resume alone can come before the answer, with the old
+     * [state].
+     */
+    val answers: Int get() = answerCount()
 
     /** Shows Android's own request (also "Allow all photos" under partial access). */
     fun request() = launch()
@@ -54,10 +65,12 @@ fun rememberMediaAccessController(
     val context = LocalContext.current
     var asked by rememberSaveable { mutableStateOf(askedBefore) }
     if (askedBefore) asked = true
+    var answers by rememberSaveable { mutableIntStateOf(0) }
     val holder = remember { arrayOfNulls<MediaAccessController>(1) }
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             holder[0]?.state = readState(context, asked = true)
+            answers++
         }
     val controller =
         remember {
@@ -76,6 +89,7 @@ fun rememberMediaAccessController(
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     runCatching { context.startActivity(intent) }
                 },
+                answerCount = { answers },
             ).also { holder[0] = it }
         }
     LifecycleResumeEffect(asked) {

@@ -9,12 +9,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -111,7 +114,8 @@ fun ShareDialogs(
     val intake by share.intake.state.collectAsStateWithLifecycle()
     // Adding to the open video needs no explainer: the items go in with the access there is.
     val access = rememberMediaAccessController(askedBefore = true, onAsked = share::markAsked)
-    var retryAfterAccess by rememberSaveable { mutableStateOf(false) }
+    // The access answer count when Allow all photos asked; -1 when not waiting for one.
+    var retryAfterAccess by rememberSaveable { mutableIntStateOf(-1) }
     val waiting = state as? ShareState.Waiting
     LaunchedEffect(waiting) {
         if (waiting?.target != null) share.begin(access.state)
@@ -119,37 +123,52 @@ fun ShareDialogs(
     LaunchedEffect(share) {
         share.nav.collect {
             if (it == ShareNav.AskForAccess) {
-                retryAfterAccess = true
+                retryAfterAccess = access.answers
                 access.request()
             } else {
                 onNav(it)
             }
         }
     }
-    // Back from Android's question (Allow all photos): the access it left, read before this resume.
-    LifecycleResumeEffect(retryAfterAccess) {
-        if (retryAfterAccess) {
-            retryAfterAccess = false
+    // Android answered the Allow all photos question: take the items in again with the access it left.
+    LaunchedEffect(access.answers, retryAfterAccess) {
+        if (retryAfterAccess >= 0 && access.answers != retryAfterAccess) {
+            retryAfterAccess = -1
             share.retry(access.state)
         }
-        onPauseOrDispose {}
     }
     MediaIntakeDialogs(
         state = intake,
         onCopyAnyway = share.intake::copyAnyway,
-        onChooseFewer = share.intake::chooseFewer,
+        onChooseFewer = share::chooseFewer,
         onAllowAll = share.intake::allowAll,
         onCancel = share.intake::cancel,
     )
     when (val s = state) {
         is ShareState.Asking -> {
+            // Three plain choices, one per line; a tap beside the dialog does nothing (Back still cancels).
             AlertDialog(
-                onDismissRequest = share::cancel,
-                title = { Text(stringResource(R.string.share_add_title)) },
-                text = { Text(pluralStringResource(R.plurals.share_add_body, s.count, s.count)) },
-                confirmButton = { TextButton(onClick = share::addToOpen) { Text(stringResource(R.string.share_add_here)) } },
-                dismissButton = { TextButton(onClick = share::startNewVideo) { Text(stringResource(R.string.share_start_new)) } },
+                onDismissRequest = {},
+                properties = DialogProperties(dismissOnClickOutside = false),
+                title = { Text(stringResource(if (s.toWaitingShare) R.string.share_add_waiting_title else R.string.share_add_title)) },
+                text = {
+                    Text(
+                        pluralStringResource(
+                            if (s.toWaitingShare) R.plurals.share_add_waiting_body else R.plurals.share_add_body,
+                            s.count,
+                            s.count,
+                        ),
+                    )
+                },
+                confirmButton = {
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = share::addToOpen) { Text(stringResource(R.string.share_add_here)) }
+                        TextButton(onClick = share::startNewVideo) { Text(stringResource(R.string.share_start_new)) }
+                        TextButton(onClick = share::cancel) { Text(stringResource(R.string.action_cancel)) }
+                    }
+                },
             )
+            BackHandler(onBack = share::cancel)
         }
 
         is ShareState.ManyItems -> {
@@ -162,31 +181,41 @@ fun ShareDialogs(
             )
         }
 
+        // Always said, so items added to a video he was not looking at never arrive unnoticed.
         is ShareState.Added -> {
-            LaunchedEffect(s) { if (!s.notes.any) share.dismiss() }
-            if (s.notes.any) {
-                Message(
-                    title = stringResource(R.string.share_added_title),
-                    lines = listOf(pluralStringResource(R.plurals.share_added_body, s.added, s.added)) + noteLines(s.notes),
-                    onOk = share::dismiss,
-                )
-            }
+            Message(
+                title = stringResource(R.string.share_added_title),
+                lines = listOf(pluralStringResource(R.plurals.share_added_body, s.added, s.added)) + noteLines(s.notes),
+                onOk = share::dismiss,
+            )
         }
 
         is ShareState.Nothing -> {
+            // The first line says why; the notes below give the counts.
+            val n = s.notes
+            val why =
+                when {
+                    n.notMedia + n.unreadable + n.overLimit == 0 -> stringResource(R.string.share_nothing_empty)
+                    n.notMedia > 0 && n.unreadable == 0 -> stringResource(R.string.share_nothing_body)
+                    else -> null
+                }
             Message(
                 title = stringResource(R.string.share_nothing_title),
-                lines = listOf(stringResource(R.string.share_nothing_body)) + noteLines(s.notes),
+                lines = listOfNotNull(why) + noteLines(n),
                 onOk = share::dismiss,
             )
         }
 
         is ShareState.Failed -> {
-            Message(
-                title = stringResource(R.string.copy_no_space_title),
-                lines = listOf(stringResource(if (s.outOfSpace) R.string.pick_out_of_space else R.string.share_not_saved)),
-                onOk = share::dismiss,
-            )
+            val (title, body) =
+                when (s.reason) {
+                    FailReason.OUT_OF_SPACE -> R.string.copy_no_space_title to R.string.pick_out_of_space
+                    FailReason.PHONE_FULL -> R.string.copy_no_space_title to R.string.share_not_saved
+                    FailReason.CHOICE_NOT_SAVED -> R.string.copy_no_space_title to R.string.share_choice_not_saved
+                    FailReason.CHOOSE_FEWER -> R.string.share_failed_title to R.string.share_choose_fewer_body
+                    FailReason.OTHER -> R.string.share_failed_title to R.string.share_failed_body
+                }
+            Message(title = stringResource(title), lines = listOf(stringResource(body)), onOk = share::dismiss)
         }
 
         else -> {

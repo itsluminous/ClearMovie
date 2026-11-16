@@ -94,7 +94,11 @@ class MediaAccess(
     /** Grants persisted by a [plan] whose [execute] or [abandon] has not run yet. */
     private val pendingGrants: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
-    /** [plan] and [reconcileGrants] never overlap, so a grant just persisted is never released as an orphan. */
+    /**
+     * Guards the short bookkeeping in [plan] and [reconcileGrants], never a
+     * call into another app's provider: a shared link can name any app's
+     * provider, and one that hangs must not block every later intake.
+     */
     private val grantMutex = Mutex()
 
     suspend fun plan(
@@ -104,17 +108,24 @@ class MediaAccess(
         var resolved: List<PlannedItem>? = null
         try {
             return withContext(dispatcher) {
+                // Every link is marked pending before it is resolved (which may persist its grant), so
+                // reconcileGrants never releases a grant this plan has just taken. Marks this plan added
+                // and did not need are dropped again afterwards.
+                val marked = grantMutex.withLock { uris.map { it.toString() }.filterTo(mutableSetOf()) { pendingGrants.add(it) } }
                 val items =
-                    grantMutex.withLock {
-                        uris.map { PlannedItem(it, mediaResolver.resolve(it, access)) }.also { planned ->
-                            planned.forEach {
-                                (it.resolution as? Resolution.Linked)?.takeIf { l -> l.persistedGrant }?.let { l ->
-                                    pendingGrants +=
-                                        l.uri
+                    try {
+                        uris.map { PlannedItem(it, mediaResolver.resolve(it, access)) }.also { resolved = it }
+                    } finally {
+                        val kept =
+                            resolved
+                                .orEmpty()
+                                .mapNotNullTo(mutableSetOf()) {
+                                    (it.resolution as? Resolution.Linked)
+                                        ?.takeIf { l ->
+                                            l.persistedGrant
+                                        }?.uri
                                 }
-                            }
-                            resolved = planned
-                        }
+                        withContext(NonCancellable) { grantMutex.withLock { (marked - kept).forEach { pendingGrants -= it } } }
                     }
                 val copies = items.mapNotNull { (it.resolution as? Resolution.NeedsCopy)?.let { c -> c.info.sizeBytes ?: -1L } }
                 IntakePlan(items, CopyBudget.evaluate(copies, freeBytes(), partialAccess = access == MediaAccessState.Partial))

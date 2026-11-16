@@ -255,4 +255,15 @@
         <item quantity="other">%1$d photos aur videos add hue.</item>
     </plurals>
     <string name="share_not_saved">Aapka phone bhar gaya hai, isliye share ki gayi photos aur videos add nahi ho sake. Thodi jagah khaali karein aur unhe phir se share karein.</string>
+    <string name="share_nothing_empty">Jo share kiya gaya, usme koi photo ya video nahi tha.</string>
+    <string name="share_add_waiting_title">Abhi share ki gayi photos ke saath add karein?</string>
+    <plurals name="share_add_waiting_body">
+        <item quantity="one">Is %1$d aur photo ya video aur pehle share ki gayi photos ka ek hi video banayein, ya isse alag video shuru karein?</item>
+        <item quantity="other">In %1$d photos aur videos aur pehle share ki gayi photos ka ek hi video banayein, ya inse alag video shuru karein?</item>
+    </plurals>
+    <string name="share_failed_title">Kuch bhi add nahi hua</string>
+    <string name="share_choose_fewer_body">Kam jagah lage, iske liye apni gallery me wapas jaayein aur kam photos aur videos share karein.</string>
+    <string name="share_failed_body">Kuch gadbad ho gayi, isliye share ki gayi photos aur videos add nahi ho sake. Kripya unhe phir se share karein.</string>
+    <string name="share_choice_not_saved">Aapka phone bhar gaya hai, isliye preset add nahi ho saka. Thodi jagah khaali karein, phir preset par dobara tap karein. Aapki photos aur videos yahin hain.</string>
+    <string name="share_could_not_start">ClearMovie yeh items nahi le saka. Ek baar me kam items share karke dekhein.</string>
 </resources>

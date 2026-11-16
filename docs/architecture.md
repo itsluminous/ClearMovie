@@ -34,7 +34,7 @@ their imports.
 
 ## Start-up
 
-`MainActivity` is the only activity with a screen (`AppCompatActivity`, `singleTop`). It
+`MainActivity` is the only activity with a screen (`AppCompatActivity`, `singleTask`, so there is only ever one, in ClearMovie's own task). It
 installs the `core-splashscreen` splash (`Theme.ClearMovie.Starting`) and keeps
 it on screen until `MainViewModel` has read the settings, so the content never
 appears in the wrong theme first. It then draws edge to edge, with system
@@ -309,15 +309,19 @@ reopens the editor when the app stopped with a video open in it.
 task, so it shows nothing: it reads the intent as untrusted
 (`ShareLinks`: `content://` links only, each once, at most 500; `file://`
 and malformed entries are counted, never read), hands only those links on
-to `MainActivity` in ClearMovie's own task (`CLEAR_TOP | SINGLE_TOP`, with a
-read grant), and finishes. A share while the app is open, in front or in
-the background, so reaches the one `MainActivity` through `onNewIntent`.
+to `MainActivity` in ClearMovie's own task (in the ClipData, with a read
+grant), and finishes. A share while the app is open, in front or in the
+background, so reaches the one `MainActivity` through `onNewIntent`.
+`MainActivity` takes shares only in that handed-on form. Questions to the
+sharing app's provider (the type, a video's length) have a 5 s limit on a
+few threads of their own, so a provider that hangs costs only its items.
 
 `ShareViewModel` (one per activity) runs the share:
 
-- **Routing.** A video open in the editor (or an earlier share still on its
-  preset pick) is asked about first: "Add to this video" or "Start a new
-  video", which leaves the open one saved in My videos.
+- **Routing.** Shares are handled one at a time, in the order they came. A
+  video open in the editor (or an earlier share still on its preset pick)
+  is asked about first: "Add to this video", "Start a new video" (the open
+  one is closed, saved in My videos) or Cancel.
 - **Intake, at once.** Share grants last only as long as the activity, so
   the items are taken in straight away with `MediaIntake` (cm-storage):
   MediaStore links are kept as links, other apps' files are matched to

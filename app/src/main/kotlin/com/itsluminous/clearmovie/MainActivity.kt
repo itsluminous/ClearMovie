@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.itsluminous.clearmovie.data.media.ShareLinks
 import com.itsluminous.clearmovie.ui.navigation.ClearMovieApp
 import com.itsluminous.clearmovie.ui.share.ShareViewModel
 import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
@@ -44,7 +45,7 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         // A share that started the app. After a rotation or a process death the
         // share's own saved state carries on instead, so it is never taken twice.
-        if (savedInstanceState == null) share.receive(intent)
+        if (savedInstanceState == null) receiveShare(intent)
 
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -74,7 +75,12 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        share.receive(intent)
+        receiveShare(intent)
+    }
+
+    /** Only shares handed on by [ShareActivity]; a SEND sent here directly (it is exported as the launcher) is ignored. */
+    private fun receiveShare(intent: Intent?) {
+        if (intent?.action == ShareLinks.ACTION_SHARED) share.receive(intent)
     }
 
     private companion object {

@@ -247,4 +247,15 @@
         <item quantity="other">%1$d फ़ोटो और वीडियो जोड़े गए।</item>
     </plurals>
     <string name="share_not_saved">आपका फ़ोन भर गया है, इसलिए शेयर की गई फ़ोटो और वीडियो नहीं जोड़े जा सके। थोड़ी जगह खाली करें और उन्हें फिर से शेयर करें।</string>
+    <string name="share_nothing_empty">जो शेयर किया गया, उसमें कोई फ़ोटो या वीडियो नहीं था।</string>
+    <string name="share_add_waiting_title">अभी शेयर की गई फ़ोटो के साथ जोड़ें?</string>
+    <plurals name="share_add_waiting_body">
+        <item quantity="one">इस %1$d और फ़ोटो या वीडियो और पहले शेयर की गई फ़ोटो का एक ही वीडियो बनाएँ, या इससे अलग वीडियो शुरू करें?</item>
+        <item quantity="other">इन %1$d फ़ोटो और वीडियो और पहले शेयर की गई फ़ोटो का एक ही वीडियो बनाएँ, या इनसे अलग वीडियो शुरू करें?</item>
+    </plurals>
+    <string name="share_failed_title">कुछ भी नहीं जोड़ा गया</string>
+    <string name="share_choose_fewer_body">कम जगह लगे, इसके लिए अपनी गैलरी में वापस जाएँ और कम फ़ोटो और वीडियो शेयर करें।</string>
+    <string name="share_failed_body">कुछ गड़बड़ हो गई, इसलिए शेयर की गई फ़ोटो और वीडियो नहीं जोड़े जा सके। कृपया उन्हें फिर से शेयर करें।</string>
+    <string name="share_choice_not_saved">आपका फ़ोन भर गया है, इसलिए प्रीसेट नहीं जोड़ा जा सका। थोड़ी जगह खाली करें, फिर प्रीसेट पर दोबारा टैप करें। आपकी फ़ोटो और वीडियो यहीं हैं।</string>
+    <string name="share_could_not_start">ClearMovie ये चीज़ें नहीं ले सका। एक बार में कम चीज़ें शेयर करके देखें।</string>
 </resources>

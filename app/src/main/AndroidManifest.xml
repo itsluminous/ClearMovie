@@ -44,13 +44,14 @@
         android:theme="@style/Theme.ClearMovie">
 
         <!-- The app's one screen-holding activity. Exported because it is the
-             launcher entry. singleTop: ShareActivity hands a share to it with
-             CLEAR_TOP | SINGLE_TOP in its own task, so a share while ClearMovie
-             is open reaches onNewIntent instead of stacking a second editor. -->
+             launcher entry. singleTask: there is only ever one, in ClearMovie's
+             own task, so a share while ClearMovie is open (handed on by
+             ShareActivity) reaches onNewIntent instead of a second editor, and
+             no other app can start a second copy inside its own task. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.ClearMovie.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

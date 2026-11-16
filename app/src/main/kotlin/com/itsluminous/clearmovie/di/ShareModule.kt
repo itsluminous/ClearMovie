@@ -4,9 +4,9 @@ import android.content.Context
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.media.AndroidCaptureTimeReader
 import com.itsluminous.clearmovie.data.media.CaptureTimeReader
-import com.itsluminous.clearmovie.data.media.MimeLookup
 import com.itsluminous.clearmovie.data.media.PendingShare
-import com.itsluminous.clearmovie.data.media.ResolverMimeLookup
+import com.itsluminous.clearmovie.data.media.ResolverShareProbe
+import com.itsluminous.clearmovie.data.media.ShareProbe
 import com.itsluminous.clearmovie.ui.share.ShareViewModel
 import dagger.Module
 import dagger.Provides
@@ -23,9 +23,9 @@ import javax.inject.Named
 @InstallIn(SingletonComponent::class)
 object ShareModule {
     @Provides
-    fun provideMimeLookup(
+    fun provideShareProbe(
         @ApplicationContext context: Context,
-    ): MimeLookup = ResolverMimeLookup(context.contentResolver)
+    ): ShareProbe = ResolverShareProbe(context.contentResolver)
 
     @Provides
     fun provideCaptureTimeReader(

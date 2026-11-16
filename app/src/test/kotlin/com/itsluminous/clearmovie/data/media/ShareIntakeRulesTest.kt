@@ -82,6 +82,15 @@ class ShareIntakeRulesTest {
     }
 
     @Test
+    fun `very long links stop at the character budget, so handing them on stays well under the binder limit`() {
+        val long = (1..200).map { "content://media/external/images/media/$it?pad=" + "x".repeat(1_900) }.map { it.toUri() }
+        val shared = ShareLinks.read(multiple(long))!!
+        assertThat(shared.uris.sumOf { it.toString().length }).isAtMost(ShareLinks.MAX_TOTAL_CHARS)
+        assertThat(shared.uris.size + shared.overLimit).isEqualTo(200)
+        assertThat(shared.overLimit).isGreaterThan(0)
+    }
+
+    @Test
     fun `counts handed on by ShareActivity are added, within bounds`() {
         val forwarded =
             multiple(listOf(media(1)))

@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -64,7 +65,8 @@ fun MediaPickRoute(
     val adding by viewModel.adding.collectAsStateWithLifecycle()
     val intake by viewModel.intake.state.collectAsStateWithLifecycle()
     val step = rememberPickStepState()
-    var retryAfterAccess by rememberSaveable { mutableStateOf(false) }
+    // The access answer count when Allow all photos asked; -1 when not waiting for one.
+    var retryAfterAccess by rememberSaveable { mutableIntStateOf(-1) }
     var outOfSpace by rememberSaveable { mutableStateOf(false) }
     var notSaved by rememberSaveable { mutableStateOf(false) }
     val picker =
@@ -83,7 +85,7 @@ fun MediaPickRoute(
                 }
 
                 PickEvent.AskForAccess -> {
-                    retryAfterAccess = true
+                    retryAfterAccess = access.answers
                     access.request()
                 }
 
@@ -105,9 +107,10 @@ fun MediaPickRoute(
     LaunchedEffect(viewModel) {
         if (step.launched && viewModel.pending != null && !viewModel.adding.value) viewModel.start(access.state)
     }
-    LaunchedEffect(access.state, retryAfterAccess) {
-        if (retryAfterAccess && access.state != MediaAccessState.NotAsked) {
-            retryAfterAccess = false
+    // Allow all photos: take the items in again once Android's answer is in, with the access it left.
+    LaunchedEffect(access.answers, retryAfterAccess) {
+        if (retryAfterAccess >= 0 && access.answers != retryAfterAccess) {
+            retryAfterAccess = -1
             viewModel.start(access.state)
         }
     }

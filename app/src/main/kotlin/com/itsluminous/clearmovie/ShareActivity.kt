@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import com.itsluminous.clearmovie.data.media.ShareLinks
 
 /**
@@ -16,12 +17,13 @@ import com.itsluminous.clearmovie.data.media.ShareLinks
  * The intent is untrusted. Only its `content://` links go on, in a new
  * intent with nothing else of the original: no other extras, no flags but a
  * read grant, so the links stay readable after this activity finishes. It
- * shows nothing and finishes at once.
+ * shows nothing and finishes at once (a short note if the share cannot be
+ * handed on).
  */
 class ShareActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val shared = ShareLinks.read(intent)
+        val shared = ShareLinks.readSafely(intent)
         if (shared != null && intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
             forward(shared.uris.isNotEmpty(), forwardIntent(shared))
         }
@@ -38,7 +40,8 @@ class ShareActivity : Activity() {
             // A link this app cannot hand on (it was never granted one): pass the links without the grant; they then count as unreadable.
             if (withGrant) runCatching { startActivity(intent.apply { removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }) }
         } catch (e: RuntimeException) {
-            // Nothing to do: the share is dropped rather than crash in the sharing app's task.
+            // The share is dropped rather than crash in the sharing app's task; say so.
+            runCatching { Toast.makeText(this, R.string.share_could_not_start, Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -46,7 +49,7 @@ class ShareActivity : Activity() {
         val uris = ArrayList(shared.uris)
         return Intent(this, MainActivity::class.java).apply {
             action = ShareLinks.ACTION_SHARED
-            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            // The links travel once, in the ClipData that carries their read grant.
             putExtra(ShareLinks.EXTRA_REFUSED, shared.refused)
             putExtra(ShareLinks.EXTRA_OVER_LIMIT, shared.overLimit)
             if (uris.isNotEmpty()) {

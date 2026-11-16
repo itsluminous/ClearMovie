@@ -24,6 +24,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** The share variant of the preset pick at the three sizes and font scale 2.0 (cm-share, ROADMAP global criteria). */
 @RunWith(RobolectricTestRunner::class)
@@ -99,6 +100,22 @@ class SharePickScreenTest {
 
     @Test
     fun `expanded at font scale 2`() = showAt(ScreenSize.EXPANDED, fontScale = 2f).also { assertAllShown() }
+
+    @Test
+    @Config(qualifiers = "hi")
+    fun `in Hindi at font scale 2`() {
+        showAt(ScreenSize.COMPACT, fontScale = 2f)
+        assertThat(s(R.string.share_choose_preset)).isEqualTo("अपने वीडियो के लिए प्रीसेट चुनें")
+        assertAllShown()
+    }
+
+    @Test
+    @Config(qualifiers = "b+hi+Latn")
+    fun `in Hinglish at font scale 2`() {
+        showAt(ScreenSize.MEDIUM, fontScale = 2f)
+        assertThat(s(R.string.share_choose_preset)).isEqualTo("Apne video ke liye preset chunein")
+        assertAllShown()
+    }
 
     @Test
     fun `while the items are taken in the cards wait`() {
