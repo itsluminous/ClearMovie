@@ -9,8 +9,10 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -85,33 +87,48 @@ class ReopenRecreateDeviceTest {
             compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
         }
 
+    /**
+     * The editor with its preview loaded: the players know the length (the
+     * label no longer reads "0:00 of 0:00") and Play takes a tap. Nothing here
+     * parses the label, so it holds in every app language.
+     */
     private fun editorShown() {
         waitFor(hasTestTag(EDITOR_EXPORT_TAG))
         waitFor(hasTestTag(PREVIEW_TAG))
+        val unloaded = h.context.getString(R.string.editor_time, "0:00", "0:00")
+        compose.waitUntil(TIMEOUT_MS) { runCatching { timeLabel() != unloaded }.getOrDefault(false) }
+        waitFor(hasText(s(R.string.action_play)).and(isEnabled()).or(hasText(s(R.string.action_pause)).and(isEnabled())))
         compose.waitForIdle()
     }
 
-    /** The playhead label, "0:05 of 0:14". */
-    private fun timeLabel(): String {
-        val of = h.context.getString(R.string.editor_time, "", "")
-        return compose
-            .onAllNodes(hasText(of, substring = true))
+    /** Where the playhead is, 0 to 1 of the length (the label's progress semantics). */
+    private fun progress(): Float =
+        compose
+            .onAllNodes(hasContentDescription(s(R.string.editor_seek)))
             .fetchSemanticsNodes()
-            .flatMap { n -> n.config.getOrElse(SemanticsProperties.Text) { emptyList() }.map { it.text } }
-            .first { of in it }
-    }
+            .firstOrNull()
+            ?.config
+            ?.getOrElseNullable(SemanticsProperties.ProgressBarRangeInfo) { null }
+            ?.current ?: 0f
+
+    /** The playhead label, "0:05 of 0:14" (the text of the node TalkBack calls Playback position). */
+    private fun timeLabel(): String =
+        compose
+            .onAllNodes(hasContentDescription(s(R.string.editor_seek)))
+            .fetchSemanticsNodes()
+            .first()
+            .config
+            .getOrElse(SemanticsProperties.Text) { emptyList() }
+            .joinToString("") { it.text }
 
     /**
-     * Play moves the playhead on (the elapsed part of the label; the length may
-     * still be loading). It is not paused again: Play and Pause swap at every
-     * junction, so a Pause button found a moment ago may be gone.
+     * Play moves the playhead on. It is not paused again: Play and Pause swap
+     * at every junction, so a Pause button found a moment ago may be gone.
      */
     private fun previewPlays() {
-        val of = h.context.getString(R.string.editor_time, "", "")
-        val elapsed = { timeLabel().substringBefore(of) }
-        val atStart = elapsed()
+        val atStart = progress()
         compose.onNodeWithText(s(R.string.action_play)).performClick()
-        compose.waitUntil(TIMEOUT_MS) { elapsed() != atStart }
+        compose.waitUntil(TIMEOUT_MS) { progress() > atStart + 0.02f }
     }
 
     /** Turns the display and waits until the activity has been created again for it. */
@@ -240,14 +257,15 @@ class ReopenRecreateDeviceTest {
                 .onNodeWithContentDescription(
                     s(R.string.editor_seek),
                 ).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
-            compose.waitUntil(TIMEOUT_MS) { timeLabel().startsWith("0:06") }
+            compose.waitUntil(TIMEOUT_MS) { abs(progress() - fraction) < 0.01f }
             val at = timeLabel()
             val before = settledFrame()
 
             scenario.recreate()
             editorShown()
-            assertThat(timeLabel()).isEqualTo(at)
-            val after = settledFrame()
+            // The restored playhead, and then its picture, which the players land after it.
+            compose.waitUntil(TIMEOUT_MS) { timeLabel() == at }
+            val after = settledFrame(like = before)
 
             save(before, "reopen-preview-before-recreate.png")
             save(after, "reopen-preview-after-recreate.png")
@@ -265,17 +283,29 @@ class ReopenRecreateDeviceTest {
     /**
      * The preview once its picture has stopped changing: three captures in a
      * row, 700 ms apart, agree (a slow software GPU lands a paused seek late).
+     * With [like], it also waits (up to the timeout) for a settled picture
+     * that matches [like]: right after a recreate the new surfaces can hold an
+     * earlier frame steady for a while before the restored seek lands. A
+     * preview that never shows [like] again still fails the test.
      */
-    private fun settledFrame(): Bitmap {
+    private fun settledFrame(like: Bitmap? = null): Bitmap {
         var last = compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
         var same = 0
+        var settled = 0
         val end = System.currentTimeMillis() + TIMEOUT_MS
         while (System.currentTimeMillis() < end) {
             Thread.sleep(700)
             val now = compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
             same = if (spread(now) > MIN_SPREAD && meanAbsDiff(last, now) < 1.0) same + 1 else 0
             last = now
-            if (same >= 2) return now
+            if (same >= 2) {
+                settled++
+                if (like == null || meanAbsDiff(like, now) < MAX_DIFF) {
+                    Log.i(ExportHarness.TAG, "Preview settled after $settled steady picture(s)")
+                    return now
+                }
+                Log.i(ExportHarness.TAG, "Preview steady but not yet the frame before (diff ${meanAbsDiff(like, now)}): ${grid(now)}")
+            }
         }
         return last
     }
