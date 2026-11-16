@@ -83,8 +83,13 @@ class DeviceColourTest {
         val c = DeviceColour(gpuDecodesBt709AsBt601 = true, encoderWritesBt601 = false, encoderName = "c2.android.avc.encoder")
         val line = c.serialize("v1|fp")
         assertThat(DeviceColour.parse(line, "v1|fp")).isEqualTo(c)
-        val unnamed = DeviceColour(true, true)
+        val unnamed = DeviceColour(true, false)
         assertThat(DeviceColour.parse(unnamed.serialize("v1|fp"), "v1|fp")).isEqualTo(unnamed)
+        // A BT.601 encoder without a name, or a result that was not measured, is never stored as usable.
+        assertThat(DeviceColour.parse(DeviceColour(true, true).serialize("v1|fp"), "v1|fp")).isNull()
+        assertThat(DeviceColour.parse("v1|fp|0|0|0|", "v1|fp")).isNull()
+        val rk = DeviceColour(false, true, encoderName = "OMX.rk.video_encoder.avc")
+        assertThat(DeviceColour.parse(rk.serialize("v1|fp"), "v1|fp")).isEqualTo(rk)
         // A name that is not a codec name is refused.
         assertThat(DeviceColour.parse("v1|fp|1|1|1|bad name/../x", "v1|fp")).isNull()
         assertThat(DeviceColour.parse("v1|fp|1|1|1|a|b", "v1|fp")).isNull()

@@ -1,9 +1,11 @@
 package com.itsluminous.clearmovie.render.media3
 
 import android.media.metrics.LogSessionId
+import androidx.annotation.OptIn
 import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Codec
 import androidx.test.core.app.ApplicationProvider
@@ -41,6 +43,7 @@ class RenderExporterEncodersTest {
             }
         } as Codec
 
+    @OptIn(ExperimentalApi::class)
     private class Fake(
         val names: ArrayDeque<String>,
         val released: MutableList<String>,
@@ -96,6 +99,7 @@ class RenderExporterEncodersTest {
         assertThat(fake.released).containsExactly("enc.b")
     }
 
+    @OptIn(ExperimentalApi::class)
     @Test
     fun `the interface's default methods are forwarded`() {
         val (factory, _) = wrapped(listOf("enc.a"), "enc.a")
@@ -105,8 +109,13 @@ class RenderExporterEncodersTest {
     }
 
     @Test
-    fun `a device whose encoder is right gets the plain factory`() {
+    fun `a device whose encoder is right, or was not named, gets the plain factory`() {
         val fake = Fake(ArrayDeque(listOf("x")), mutableListOf()) { codec(it, mutableListOf()) }
         assertThat(RenderExporter.encoderFactory(context, EncodeSpec(1_000_000), DeviceColour(true, false)) { fake }).isSameInstanceAs(fake)
+        assertThat(
+            RenderExporter.encoderFactory(context, EncodeSpec(1_000_000), DeviceColour(false, true, encoderName = null)) {
+                fake
+            },
+        ).isSameInstanceAs(fake)
     }
 }

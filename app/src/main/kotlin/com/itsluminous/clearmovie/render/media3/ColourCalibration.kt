@@ -20,6 +20,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BaseGlShaderProgram
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
+import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbMatrix
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -50,8 +51,10 @@ import java.util.concurrent.atomic.AtomicReference
  * `noBackupFilesDir/render` keyed by [Build.FINGERPRINT] (so a system update
  * measures again) when it is a clear answer. A calibration that fails or is
  * ambiguous changes nothing ([DeviceColour.TRUSTED]) and is tried again in the
- * next process. [of] blocks for the calibration (about a second, at most
- * [TIMEOUT_S]) and must not run on the main thread.
+ * next process. [of] blocks for the calibration (about a second; a stalled
+ * one is cancelled after [TIMEOUT_S], and Media3's cancel itself can block a
+ * little longer) and must not run on the main thread. Nothing it throws
+ * reaches the export.
  */
 @UnstableApi
 object ColourCalibration {
@@ -60,6 +63,7 @@ object ColourCalibration {
 
     const val CLIP_WIDTH = 320
     const val CLIP_HEIGHT = 192
+    private const val MEASURED_HEIGHT = 720
     private const val VERSION = 2
     private const val TAG = "ColourCalibration"
     private const val ASSET = "asset:///render/colour-calibration.mp4"
@@ -77,14 +81,15 @@ object ColourCalibration {
             val key = "v$VERSION|${Build.FINGERPRINT}"
             val stored = runCatching { DeviceColour.parse(file.readText(), key) }.getOrNull()
             val result =
-                stored ?: measure(app)?.also { measured ->
-                    if (measured.measured) {
-                        runCatching {
-                            file.parentFile?.mkdirs()
-                            file.writeText(measured.serialize(key))
+                stored
+                    ?: runCatching { measure(app) }.onFailure { Log.w(TAG, "Colour calibration failed", it) }.getOrNull()?.also { measured ->
+                        if (measured.measured) {
+                            runCatching {
+                                file.parentFile?.mkdirs()
+                                file.writeText(measured.serialize(key))
+                            }
                         }
-                    }
-                } ?: DeviceColour.TRUSTED
+                    } ?: DeviceColour.TRUSTED
             cached = result
             return result
         }
@@ -99,7 +104,9 @@ object ColourCalibration {
             EditedMediaItem
                 .Builder(MediaItem.fromUri(ASSET))
                 .setRemoveAudio(true)
-                .setEffects(Effects(listOf(), listOf(probe)))
+                // Encoded at 720p, the size class of High and Standard exports: an
+                // encoder may choose its matrix by size.
+                .setEffects(Effects(listOf(), listOf(probe, Presentation.createForHeight(MEASURED_HEIGHT))))
                 .build()
         val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build()).build()
         val thread = HandlerThread("colour-calibration").apply { start() }
@@ -138,7 +145,7 @@ object ColourCalibration {
                         ).build()
                         .also { running.set(it) }
                         .start(composition, out.absolutePath)
-                } catch (e: RuntimeException) {
+                } catch (e: Throwable) {
                     error.set(e)
                     latch.countDown()
                 }
@@ -159,10 +166,13 @@ object ColourCalibration {
                 return null
             }
             val gl = probe.mean(fromUs = 300_000)?.copyOfRange(0, 3) ?: return null
-            val yuv = RawYuv.meanAt(out, 500_000, CLIP_WIDTH / 2, CLIP_HEIGHT / 2) ?: return null
+            val yuv = RawYuv.meanAt(out, 500_000, MEASURED_HEIGHT * CLIP_WIDTH / CLIP_HEIGHT / 2, MEASURED_HEIGHT / 2) ?: return null
             val result = classify(gl, yuv).copy(encoderName = encoder.get())
             logResult(gl, yuv, result)
             return result
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
         } finally {
             thread.quitSafely()
             out.delete()
@@ -343,6 +353,8 @@ internal object RawYuv {
             }
             return null
         } catch (e: RuntimeException) {
+            return null
+        } catch (e: java.io.IOException) {
             return null
         } finally {
             runCatching { codec?.stop() }

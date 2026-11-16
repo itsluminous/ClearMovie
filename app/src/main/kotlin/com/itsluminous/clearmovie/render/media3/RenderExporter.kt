@@ -148,7 +148,8 @@ class RenderExporter(
             },
         ): Codec.EncoderFactory {
             val encoders = base()
-            return if (deviceColour.encoderWritesBt601) Bt601TaggedEncoders(encoders, deviceColour.encoderName) else encoders
+            val measured = deviceColour.encoderName
+            return if (deviceColour.encoderWritesBt601 && measured != null) Bt601TaggedEncoders(encoders, measured) else encoders
         }
     }
 
@@ -164,7 +165,7 @@ class RenderExporter(
      */
     private class Bt601TaggedEncoders(
         private val delegate: Codec.EncoderFactory,
-        private val measuredEncoder: String?,
+        private val measuredEncoder: String,
     ) : Codec.EncoderFactory {
         override fun createForAudioEncoding(
             format: Format,
@@ -177,8 +178,14 @@ class RenderExporter(
         ): Codec {
             val sdr = format.colorInfo == null || !ColorInfo.isTransferHdr(format.colorInfo)
             if (!sdr) return delegate.createForVideoEncoding(format, logSessionId)
-            val tagged = delegate.createForVideoEncoding(format.buildUpon().setColorInfo(SDR_BT601_LIMITED).build(), logSessionId)
-            if (measuredEncoder == null || tagged.name == measuredEncoder) return tagged
+            val tagged =
+                try {
+                    delegate.createForVideoEncoding(format.buildUpon().setColorInfo(SDR_BT601_LIMITED).build(), logSessionId)
+                } catch (e: ExportException) {
+                    Log.w(TAG, "The encoder refused the BT.601 tag; keeping its own", e)
+                    return delegate.createForVideoEncoding(format, logSessionId)
+                }
+            if (tagged.name == measuredEncoder) return tagged
             Log.i(TAG, "Encoder ${tagged.name} is not the calibrated $measuredEncoder; keeping its own tag")
             tagged.release()
             return delegate.createForVideoEncoding(format, logSessionId)
