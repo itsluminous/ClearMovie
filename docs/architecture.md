@@ -17,9 +17,9 @@ their imports.
 | `render.preview` | The layered editor preview (`LayeredPreviewEngine`, `StillLoader`) and the exact draft (`ExactDraft`) | |
 | `data.settings` | `SettingsRepository` and its DataStore implementation | `ui` |
 | `data.db` | The Room database `ClearMovieDatabase` (projects, session, preset bindings and definitions, persisted link grants) | `ui` |
-| `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard`, `NewVideos` (new drafts), `ProjectMedia` (a project's files) | `ui` |
+| `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard`, `NewVideos` (new drafts), `ShareDrafts` (a share's pending draft), `ProjectMedia` (a project's files) | `ui` |
 | `data.preset` | `PresetStore`, the key-colour check, `LoudnessMeter`, `MediaProbe` | `ui` |
-| `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants, `newMainItems` (picked items to clips) | `ui` |
+| `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants, `newMainItems` (picked items to clips); for shares `ShareLinks`, `ShareTypes`, `CaptureOrder` and `CaptureDates`, `PendingShare` | `ui` |
 | `data.files` | `AppFiles` (where files live), `SafeFileName`, `StorageUsage` | `ui` |
 | `data.export` | `ExportStore`: the export's hidden-then-shown entry in `Movies/ClearMovie` | `ui` |
 | `work` | `ExportWorker` (the foreground worker), `ExportPipeline` (what one export does), its notifications and Stop receiver | |
@@ -27,14 +27,14 @@ their imports.
 | `ui.theme` | `ClearMovieTheme`, the branded fallback colour schemes, `MediaColors` | |
 | `ui.navigation` | `ClearMovieApp` (the navigation graph), `NewVideoFlow` (which screen follows which), `Routes` | |
 | `ui.layout` | `WindowClass`: Material window size classes from the space the screen has | |
-| `ui.home`, `ui.preset`, `ui.pick`, `ui.editor`, `ui.export`, `ui.settings` | The screens and their view models; `AppLanguage` (the in-app language picker) | |
+| `ui.home`, `ui.preset`, `ui.pick`, `ui.share`, `ui.editor`, `ui.export`, `ui.settings` | The screens and their view models; `AppLanguage` (the in-app language picker) | |
 | `ui.media`, `ui.components` | The photo-access explainer, the copy dialogs and `MediaIntake`, the missing-clip tile; progress and play-a-file dialogs | |
 
-`ClearMovieApplication` (`@HiltAndroidApp`) and `MainActivity` sit at the root.
+`ClearMovieApplication` (`@HiltAndroidApp`), `MainActivity` and the share entry `ShareActivity` sit at the root.
 
 ## Start-up
 
-`MainActivity` is the only activity (`AppCompatActivity`, `singleTop`). It
+`MainActivity` is the only activity with a screen (`AppCompatActivity`, `singleTop`). It
 installs the `core-splashscreen` splash (`Theme.ClearMovie.Starting`) and keeps
 it on screen until `MainViewModel` has read the settings, so the content never
 appears in the wrong theme first. It then draws edge to edge, with system
@@ -301,6 +301,47 @@ the review's choices, the picked links until they are on MAIN, whether the
 picker was already opened (so it never opens again by itself), and the
 editor's playhead. On a fresh start, `ProjectRepository.launchDecision`
 reopens the editor when the app stopped with a video open in it.
+
+## Share from the gallery
+
+`ShareActivity` holds the `SEND` and `SEND_MULTIPLE` filters (`image/*` and
+`video/*` only). Android starts a share target inside the sharing app's
+task, so it shows nothing: it reads the intent as untrusted
+(`ShareLinks`: `content://` links only, each once, at most 500; `file://`
+and malformed entries are counted, never read), hands only those links on
+to `MainActivity` in ClearMovie's own task (`CLEAR_TOP | SINGLE_TOP`, with a
+read grant), and finishes. A share while the app is open, in front or in
+the background, so reaches the one `MainActivity` through `onNewIntent`.
+
+`ShareViewModel` (one per activity) runs the share:
+
+- **Routing.** A video open in the editor (or an earlier share still on its
+  preset pick) is asked about first: "Add to this video" or "Start a new
+  video", which leaves the open one saved in My videos.
+- **Intake, at once.** Share grants last only as long as the activity, so
+  the items are taken in straight away with `MediaIntake` (cm-storage):
+  MediaStore links are kept as links, other apps' files are matched to
+  MediaStore by name and size or copied into the project within the copy
+  budget. Items whose type is clearly not a photo or video (a PDF, text)
+  are skipped and counted; links that can't be opened are counted. More
+  than 100 items show a length notice (Continue or Cancel) first.
+- **Order.** `CaptureOrder`: by capture time (MediaStore `DATE_TAKEN`, else
+  EXIF `DateTimeOriginal`, else the video's creation time), oldest first;
+  an item with no time keeps its shared place, and ties keep the shared
+  order.
+- **Pending draft.** A new video's items go onto the MAIN row of a blank
+  draft (`ShareDrafts`), written before the share's preset pick shows and
+  left out of the session. The pick (`HomeScreen` with a share header)
+  then rebuilds the draft from the chosen preset, keeping its id, copies and
+  grants, and opens the editor; a preset file that is not ready opens setup
+  or repair first, whose Done does the same. Cancel or Back drops the share
+  and its draft.
+- **Process death.** Where the flow is, the draft id and the notes are in
+  the saved state; the links are in a small file (`PendingShare`), so a
+  share half taken in is taken in again (its grants belong to the activity
+  record, which Android keeps), and one on its preset pick comes back as it
+  was. A share replayed from Recents (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`)
+  is ignored.
 
 ## Persistence
 

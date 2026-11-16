@@ -95,7 +95,7 @@ What's planned, and what has shipped:
 - [x] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
 - [x] Preset review: replace or skip the intro, frame or ending for this video
 - [x] Add photos and videos with the system photo picker
-- [ ] Share photos and videos from the gallery straight into a new video
+- [x] Share photos and videos from the gallery straight into a new video
 
 **Editing**
 - [ ] Drag-to-reorder main row, with Move left and Move right buttons as well
