@@ -49,6 +49,8 @@ internal class BlurPasses(
         )
         program.setFloatUniform("uTurns", g.quarterTurns.toFloat())
         program.setFloatUniform("uUnpremultiply", if (fromBitmap) 1f else 0f)
+        // A quarter of one small row, in the small texture's own height.
+        program.setFloatUniform("uRowStep", 0.25f / height)
         // Across, from the picture.
         GlUtil.focusFramebufferUsingCurrentContext(acrossFbo, width, height)
         program.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
@@ -93,6 +95,7 @@ uniform vec2 uStep;
 uniform float uFirst;
 uniform float uTurns;
 uniform float uUnpremultiply;
+uniform float uRowStep;
 varying vec2 vUv;
 
 vec4 picture(vec2 q) {
@@ -114,8 +117,13 @@ vec4 picture(vec2 q) {
 
 vec4 tap(vec2 uv) {
   if (uFirst > 0.5) {
+    // Each small pixel stands for about 8x8 picture pixels: average four rows of it, so the
+    // first pass filters down as well as across (no shimmer from skipped rows).
     vec2 p = vec2(uv.x, 1.0 - uv.y);
-    return picture(uBackground.xy + p * uBackground.zw);
+    vec2 q = uBackground.xy + p * uBackground.zw;
+    float dy = uBackground.w * uRowStep;
+    return (picture(q + vec2(0.0, -1.5 * dy)) + picture(q + vec2(0.0, -0.5 * dy)) +
+            picture(q + vec2(0.0, 0.5 * dy)) + picture(q + vec2(0.0, 1.5 * dy))) * 0.25;
   }
   return texture2D(uTexSampler, clamp(uv, 0.0, 1.0));
 }

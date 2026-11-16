@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -172,11 +173,9 @@ fun EditPanel(
 ) {
     val close = { onPanel(null) }
     val clip = project.mainSlot(open.clipId)?.clip
-    // The item went away (an undo): nothing to show.
-    if (clip == null) {
-        close()
-        return
-    }
+    // The item went away (an undo): the panel closes, after this frame rather than during it.
+    LaunchedEffect(clip == null) { if (clip == null) close() }
+    if (clip == null) return
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth().testTag(PANEL_TAG)) {
         Column(
             Modifier
@@ -265,7 +264,8 @@ private fun TrimPanel(
     var start by rememberSaveable(clip.id.value) { mutableFloatStateOf(clip.trimStartMs.toFloat()) }
     var end by rememberSaveable(clip.id.value) { mutableFloatStateOf(clip.trimEndMs.toFloat()) }
     var showingEnd by rememberSaveable(clip.id.value) { mutableStateOf(false) }
-    val minGap = maxOf(Limits.MIN_CLIP_MS, clip.speed.sourceMs(TrimMath.MIN_VIDEO_MS)).toFloat()
+    // Never more than the whole file: a 1 s video at 4x is already shorter than the usual minimum.
+    val minGap = minOf(maxOf(Limits.MIN_CLIP_MS, clip.speed.sourceMs(TrimMath.MIN_VIDEO_MS)), clip.sourceDurationMs).toFloat()
     PanelTitle(
         stringResource(R.string.trim_title),
         onDone = {
@@ -284,6 +284,7 @@ private fun TrimPanel(
         }
     }
     val label = stringResource(R.string.trim_title)
+    val shownRange = stringResource(R.string.trim_range, preciseDurationText(start.roundToLong()), preciseDurationText(end.roundToLong()))
     RangeSlider(
         value = start..end,
         onValueChange = { r ->
@@ -297,11 +298,15 @@ private fun TrimPanel(
                     s = e - minGap
                 }
             }
-            start = s.coerceIn(0f, clip.sourceDurationMs - minGap)
-            end = e.coerceIn(start + minGap, clip.sourceDurationMs.toFloat())
+            start = s.coerceIn(0f, (clip.sourceDurationMs - minGap).coerceAtLeast(0f))
+            end = e.coerceIn((start + minGap).coerceAtMost(clip.sourceDurationMs.toFloat()), clip.sourceDurationMs.toFloat())
         },
         valueRange = 0f..clip.sourceDurationMs.toFloat(),
-        modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
+        modifier =
+            Modifier.fillMaxWidth().semantics {
+                contentDescription = label
+                stateDescription = shownRange
+            },
     )
 }
 
@@ -312,6 +317,8 @@ private fun DurationPanel(
     close: () -> Unit,
 ) {
     var ms by rememberSaveable(clip.id.value) { mutableFloatStateOf(clip.durationMs.toFloat()) }
+    // The slider reaches at least as far as the item already is (a handle can make it longer).
+    val top = maxOf(MAX_DURATION_SLIDER_MS, clip.durationMs.toFloat(), ms)
     PanelTitle(
         stringResource(R.string.duration_title),
         onDone = {
@@ -332,14 +339,14 @@ private fun DurationPanel(
             modifier = Modifier.weight(1f),
         )
         StepButton(R.drawable.ic_add, R.string.duration_longer) {
-            ms = (ms + STEP_MS).coerceAtMost(MAX_DURATION_SLIDER_MS)
+            ms = (ms + STEP_MS).coerceAtMost(TrimMath.MAX_STILL_MS.toFloat())
         }
     }
     val label = stringResource(R.string.duration_title)
     Slider(
-        value = ms.coerceIn(TrimMath.MIN_STILL_MS.toFloat(), MAX_DURATION_SLIDER_MS),
+        value = ms.coerceIn(TrimMath.MIN_STILL_MS.toFloat(), top),
         onValueChange = { ms = ((it / STEP_MS).roundToInt() * STEP_MS).coerceAtLeast(TrimMath.MIN_STILL_MS.toFloat()) },
-        valueRange = TrimMath.MIN_STILL_MS.toFloat()..MAX_DURATION_SLIDER_MS,
+        valueRange = TrimMath.MIN_STILL_MS.toFloat()..top,
         modifier =
             Modifier.fillMaxWidth().semantics {
                 contentDescription = label
@@ -394,12 +401,17 @@ private fun SplitPanel(
         Text(stringResource(R.string.split_at, preciseDurationText(at.roundToLong())), style = MaterialTheme.typography.bodyLarge)
     }
     val label = stringResource(R.string.split_title)
+    val cutAt = stringResource(R.string.split_at, preciseDurationText(at.roundToLong()))
     Slider(
         value = at.coerceIn(min, max),
         onValueChange = { at = it },
         onValueChangeFinished = { callbacks.seek(slot.startMs + at.roundToLong()) },
         valueRange = min..max,
-        modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
+        modifier =
+            Modifier.fillMaxWidth().semantics {
+                contentDescription = label
+                stateDescription = cutAt
+            },
     )
 }
 

@@ -192,7 +192,24 @@ fun EditorScreen(
     val rows = project?.let { timelineRows(it) }.orEmpty()
     val missing = ui.missing.filterValues { it != MediaStatus.AVAILABLE }.keys
 
+    // A delete's "Undo" belongs to that delete only: any later change to the video closes it.
+    // [undoArmed] is set by a delete; the next project seen is the one the delete made, and any
+    // change after that closes the snackbar.
+    var undoArmed by remember { mutableStateOf(false) }
+    var deletedAt by remember { mutableStateOf<Project?>(null) }
+    LaunchedEffect(project) {
+        if (undoArmed) {
+            undoArmed = false
+            deletedAt = project
+        } else if (deletedAt != null && project != deletedAt) {
+            snackbar.currentSnackbarData?.dismiss()
+            deletedAt = null
+        }
+    }
+
     fun deleted(clip: MainClip) {
+        deletedAt = null
+        undoArmed = true
         scope.launch {
             val message =
                 if (clip is IntroClip || clip is EndingClip) {
@@ -208,6 +225,7 @@ fun EditorScreen(
                     withDismissAction = true,
                     duration = SnackbarDuration.Long,
                 )
+            // Undo here undoes the delete: any later change closes the snackbar first (below).
             if (result == SnackbarResult.ActionPerformed) actions.undo()
         }
     }
@@ -296,8 +314,10 @@ fun EditorScreen(
         }
     }
 
+    // The bar's (or panel's) measured height: snackbars sit above it, never over its buttons.
+    var bottomDp by remember { mutableFloatStateOf(0f) }
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = bottomDp.dp)) },
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
         AdaptiveScreen(Modifier.fillMaxSize().padding(padding)) { window ->
@@ -305,7 +325,6 @@ fun EditorScreen(
             val windowWidth = maxWidth.value.toDouble()
             var topDp by remember { mutableFloatStateOf(0f) }
             var controlsDp by remember { mutableFloatStateOf(0f) }
-            var bottomDp by remember { mutableFloatStateOf(0f) }
             val density = LocalDensity.current
             // In two panes the playback controls sit under the preview, so only the right pane's bars count.
             val chrome =
@@ -578,6 +597,8 @@ private fun barActions(
         canMoveLeft = index > 0,
         canMoveRight = index < count - 1,
         canJoin = joinTarget(project, slots, selected) != null,
+        // A looped video is split only once its loop is off (the model refuses it otherwise).
+        canSplit = (selected.clip as? VideoClip)?.loops?.let { it == 1 } ?: true,
     )
 }
 
@@ -624,7 +645,7 @@ private fun TopBar(
         LabelledIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo)
         Button(
             onClick = actions::export,
-            modifier = Modifier.heightIn(min = 48.dp).padding(start = 4.dp, end = 8.dp).testTag(EDITOR_EXPORT_TAG),
+            modifier = Modifier.heightIn(min = 56.dp).padding(start = 4.dp, end = 8.dp).testTag(EDITOR_EXPORT_TAG),
         ) {
             Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(6.dp))
@@ -659,7 +680,7 @@ private fun LabelledIcon(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(22.dp))
-            Text(stringResource(label), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            Text(stringResource(label), style = MaterialTheme.typography.labelSmall, maxLines = 2, textAlign = TextAlign.Center)
         }
     }
 }
@@ -791,7 +812,7 @@ private fun FloatingPreview(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val w = maxWidth * 0.45f
-        val h = w * 9f / 16f + 40.dp
+        val h = w * 9f / 16f + 48.dp
         val margin = 12.dp
 
         fun place(c: PopupCorner): IntOffset =
@@ -856,7 +877,7 @@ private fun FloatingPreview(
         ) {
             Column {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) { preview(Modifier.fillMaxSize()) }
-                Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = { onMoved(nextCorner(corner)) },
                         modifier = Modifier.size(48.dp).testTag(EDITOR_POPUP_MOVE_TAG).semantics { contentDescription = moveLabel },

@@ -130,6 +130,9 @@ sealed interface EditorEvent {
 
     /** The copies did not fit on the phone. */
     data object OutOfSpace : EditorEvent
+
+    /** An edit could not be made (an item too short for that speed, say). */
+    data object CantDoThat : EditorEvent
 }
 
 /** What a chosen file had to be. */
@@ -329,8 +332,11 @@ class EditorViewModel
 
         /** Applies [change] to the project as one undo step. False when it was refused (nothing changes). */
         fun edit(change: Project.() -> Project): Boolean {
-            val applied = session.edit(change) == EditResult.Applied
+            val result = session.edit(change)
+            val applied = result == EditResult.Applied
             if (applied) session.current?.let(::write)
+            // The bar only offers edits that apply; one that is refused all the same is said, never silent.
+            if (result is EditResult.Refused) viewModelScope.launch { eventChannel.send(EditorEvent.CantDoThat) }
             publishHistory()
             return applied
         }
@@ -353,7 +359,8 @@ class EditorViewModel
          */
         private fun write(next: Project) {
             uiState.update { it.copy(project = next) }
-            repository.update { next }
+            // Refused only when the video is no longer open (Back in flight): say it was not kept.
+            if (!repository.update { next }) viewModelScope.launch { eventChannel.send(EditorEvent.NotSaved) }
         }
 
         private fun publishHistory() = uiState.update { it.copy(canUndo = session.canUndo, canRedo = session.canRedo) }
@@ -498,7 +505,8 @@ class EditorViewModel
             val missing = access?.let { mediaAccess.missing(project, it) }.orEmpty()
             uiState.update {
                 it.copy(
-                    project = project,
+                    // An edit made while the files were being looked up is newer than [project]: keep it.
+                    project = session.current ?: project,
                     preset = set.preset,
                     presetNeedsRepair = set.presetStatus?.needsRepair?.isNotEmpty() == true,
                     missing = missing,

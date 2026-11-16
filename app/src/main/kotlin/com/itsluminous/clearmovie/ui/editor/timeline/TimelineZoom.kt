@@ -160,13 +160,18 @@ object TimelineZoom {
         return ZoomState(scale, state.scrollMs.coerceIn(0.0, maxScrollMs(scale, totalMs, widthDp)), fitAll = false)
     }
 
-    /** Ruler label spacing for [msPerDp]: labels at least [MIN_TICK_DP] apart. */
-    fun tickMs(msPerDp: Double): Long {
-        for (t in TICKS_MS) if (t / msPerDp >= MIN_TICK_DP - EPSILON) return t
+    /** Ruler label spacing for [msPerDp]: labels at least [MIN_TICK_DP] apart, times the font scale. */
+    fun tickMs(
+        msPerDp: Double,
+        fontScale: Float = 1f,
+    ): Long {
+        // Labels grow with the text, so their spacing does too.
+        val minDp = MIN_TICK_DP * fontScale.coerceAtLeast(1f)
+        for (t in TICKS_MS) if (t / msPerDp >= minDp - EPSILON) return t
         // Beyond a minute between labels: whole multiples of a minute.
         val minutes =
             kotlin.math
-                .ceil(MIN_TICK_DP * msPerDp / 60_000.0)
+                .ceil(minDp * msPerDp / 60_000.0)
                 .toLong()
                 .coerceAtLeast(1)
         return minutes * 60_000

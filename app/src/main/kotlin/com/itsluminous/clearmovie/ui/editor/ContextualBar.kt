@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -130,7 +131,6 @@ private fun androidx.compose.foundation.layout.BoxScope.Fade(
     // The gradient runs from clear to the bar's colour at the edge with more buttons.
     val leftToRight = towardsEnd != rtl
     val colours = if (leftToRight) listOf(surface.copy(alpha = 0f), surface) else listOf(surface, surface.copy(alpha = 0f))
-    val more = stringResource(R.string.bar_more)
     // matchParentSize: the fade takes the bar's height without making the bar any taller.
     Box(Modifier.matchParentSize()) {
         Box(
@@ -140,7 +140,8 @@ private fun androidx.compose.foundation.layout.BoxScope.Fade(
                 .fillMaxHeight()
                 .background(Brush.horizontalGradient(colours))
                 .testTag(tag)
-                .semantics { contentDescription = more },
+                // Decoration: the partly shown last button already says there is more, and TalkBack scrolls the row itself.
+                .clearAndSetSemantics { },
             contentAlignment = if (towardsEnd) Alignment.CenterEnd else Alignment.CenterStart,
         ) {
             Icon(

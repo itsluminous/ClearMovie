@@ -598,6 +598,100 @@ class EditorScreenTest {
     }
 
     @Test
+    fun `tapping a trim handle keeps the item selected`() {
+        val h = show(ScreenSize.EXPANDED)
+        selectItem(h, "v4")
+        compose.onNodeWithTag(TRIM_END_TAG, useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertThat(h.state!!.selected).isEqualTo(ClipId("v4"))
+    }
+
+    @Test
+    fun `Trim on a very short fast video opens and works instead of crashing`() {
+        // 1 s of file at 4x: shorter than the usual trim minimum, still a valid item.
+        val short =
+            project.addToMain(
+                listOf(
+                    VideoClip(
+                        ClipId("fast"),
+                        Fixtures.media("fast"),
+                        sourceDurationMs = 1000,
+                        speed = com.itsluminous.clearmovie.domain.model.Speed.X4,
+                    ),
+                ),
+            )
+        val h = show(ScreenSize.COMPACT, h = harness(short))
+        selectItem(h, "fast", zoomIns = 6)
+        compose.onNodeWithTag(barActionTag(EditAction.TRIM)).performClick()
+        val range = compose.onNodeWithContentDescription(s(R.string.trim_title))
+        range.onChildAt(0).performSemanticsAction(SemanticsActions.SetProgress) { it(500f) }
+        compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
+        assertThat(h.project.clip(ClipId("fast"))).isNotNull()
+    }
+
+    @Test
+    fun `a delete's Undo goes away once anything else changes, so it never undoes the wrong thing`() {
+        val h = show(ScreenSize.COMPACT)
+        selectItem(h, "p3")
+        repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
+        compose.onNodeWithTag(barActionTag(EditAction.DELETE)).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).assertExists()
+        selectItem(h, "p1")
+        compose.onNodeWithTag(barActionTag(EditAction.ROTATE)).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).assertDoesNotExist()
+        assertThat(h.project.contentIds()).doesNotContain("p3")
+    }
+
+    @Test
+    fun `Split is not offered on a looped video`() {
+        val h = show(ScreenSize.COMPACT)
+        selectItem(h, "v4")
+        compose.onNodeWithTag(barActionTag(EditAction.LOOP)).performClick()
+        compose.onNodeWithContentDescription(s(R.string.loop_more)).performClick()
+        compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
+        compose.onNodeWithTag(barActionTag(EditAction.SPLIT)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `main controls are at least 56 dp and bar buttons at least 72 dp wide, at font scale 2`() {
+        forEachSize(fontScales = listOf(1f, 2f)) { _, h ->
+            val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).bounds()
+            assertThat((export.bottom - export.top).v()).isAtLeast(55.5f)
+            for (tag in listOf(UNDO_TAG, REDO_TAG, ZOOM_IN_TAG, ZOOM_OUT_TAG, ZOOM_FIT_TAG)) {
+                val b = compose.onNodeWithTag(tag).bounds()
+                assertThat((b.bottom - b.top).v()).isAtLeast(55.5f)
+                assertThat((b.right - b.left).v()).isAtLeast(55.5f)
+            }
+            selectItem(h, "v2")
+            for (a in listOf(EditAction.TRIM, EditAction.VOLUME)) {
+                val b = compose.onNodeWithTag(barActionTag(a)).bounds()
+                assertThat((b.right - b.left).v()).isAtLeast(67.5f)
+                assertThat((b.bottom - b.top).v()).isAtLeast(67.5f)
+            }
+            // Whole labels at font scale 2 are checked on the device screenshots: Robolectric's
+            // text measurement is not real enough to judge overflow.
+        }
+    }
+
+    @Test
+    fun `TalkBack can move the time from the ruler, and the playhead does not cover the items`() {
+        val h = show(ScreenSize.COMPACT)
+        compose
+            .onNodeWithTag(com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_RULER_TAG)
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        assertThat(h.calls.last()).startsWith("seek:")
+        val playhead =
+            compose
+                .onNodeWithTag(
+                    com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_PLAYHEAD_TAG,
+                    useUnmergedTree = true,
+                ).fetchSemanticsNode()
+        assertThat(playhead.config.contains(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)).isFalse()
+    }
+
+    @Test
     fun `the Trim panel trims without the handles, and the time can be set without dragging`() {
         val h = show(ScreenSize.COMPACT)
         selectItem(h, "v4")

@@ -59,13 +59,19 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,6 +103,10 @@ const val TIMELINE_ROWS_TOGGLE_TAG = "timeline_rows_toggle"
 const val TIMELINE_MAIN_HEADER_TAG = "timeline_header_main"
 
 fun clipTag(id: ClipId) = "timeline_clip_${id.value}"
+
+/** The ruler's label spacing (ms), for tests: it changes with the zoom. Never read aloud. */
+val RulerTickKey = SemanticsPropertyKey<Long>("RulerTick")
+var SemanticsPropertyReceiver.rulerTick by RulerTickKey
 
 fun plusTag(boundary: Int) = "timeline_plus_$boundary"
 
@@ -217,8 +227,10 @@ fun TimelineView(
             if (zoom == null || clamped != zoom) onZoom(clamped)
         }
         // While playing, the view follows the playhead.
-        LaunchedEffect(playheadMs, playing) {
-            if (playing) {
+        // A finger on the timeline wins: the view follows the playhead only when nobody is touching it.
+        var touching by remember { mutableStateOf(false) }
+        LaunchedEffect(playheadMs, playing, touching) {
+            if (playing && !touching) {
                 val revealed = TimelineZoom.reveal(z, playheadMs.toDouble(), totalMs, spanWidth)
                 if (revealed != z) onZoom(revealed)
             }
@@ -254,6 +266,39 @@ fun TimelineView(
             shown.takeWhile { it.type != RowType.MAIN }.sumOf { metrics.heightOf(it.type) + PreviewLayoutReducer.ROW_GAP_DP }
         val haptics = LocalHapticFeedback.current
         val density = LocalDensity.current
+        // The handler outlives recompositions: it always calls the latest callbacks.
+        val latestOnZoom by rememberUpdatedState(onZoom)
+        val latestActionsState = rememberUpdatedState(actions)
+        val latestActions =
+            remember {
+                object : TimelineActions {
+                    override fun select(id: ClipId?) = latestActionsState.value.select(id)
+
+                    override fun seek(ms: Long) = latestActionsState.value.seek(ms)
+
+                    override fun trim(
+                        id: ClipId,
+                        edge: TrimEdge,
+                        deltaMs: Double,
+                    ) = latestActionsState.value.trim(id, edge, deltaMs)
+
+                    override fun move(
+                        id: ClipId,
+                        toContentIndex: Int,
+                    ) = latestActionsState.value.move(id, toContentIndex)
+
+                    override fun insert(
+                        anchor: ClipId,
+                        side: InsertSide,
+                    ) = latestActionsState.value.insert(anchor, side)
+
+                    override fun menu(id: ClipId) = latestActionsState.value.menu(id)
+
+                    override fun showAllRows() = latestActionsState.value.showAllRows()
+
+                    override fun showFewerRows() = latestActionsState.value.showFewerRows()
+                }
+            }
         val current by rememberUpdatedState(Current(z, geometry, spans, slots, spanWidth, totalMs, mainTopInRows, selectedIndex))
 
         Column(Modifier.fillMaxWidth()) {
@@ -261,22 +306,23 @@ fun TimelineView(
                 Modifier
                     .weight(1f, fill = false)
                     .fillMaxWidth()
-                    .pointerInput(metrics) {
+                    .pointerInput(metrics, rowScroll) {
                         timelineGestures(
                             density = { density.density },
                             current = { current },
                             metrics = metrics,
                             rowScroll = rowScroll,
-                            onZoom = onZoom,
-                            actions = actions,
+                            onZoom = { latestOnZoom(it) },
+                            actions = latestActions,
                             longPressed = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
                             trimChanged = { trim = it },
                             dragChanged = { drag = it },
+                            touched = { touching = it },
                         )
                     },
             ) {
                 Column(Modifier.fillMaxWidth()) {
-                    Ruler(z, totalMs, metrics, spanWidth, actions)
+                    Ruler(z, totalMs, playheadMs, metrics, spanWidth, latestActions)
                     Column(Modifier.fillMaxWidth().verticalScroll(rowScroll, enabled = false)) {
                         for (row in shown) {
                             Row(Modifier.fillMaxWidth().height(metrics.heightOf(row.type).dp).testTag(rowTag(row.key))) {
@@ -379,6 +425,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
     longPressed: () -> Unit,
     trimChanged: (TrimPreview?) -> Unit,
     dragChanged: (DragPreview?) -> Unit,
+    touched: (Boolean) -> Unit,
 ) {
     awaitPointerEventScope {
         while (true) {
@@ -392,7 +439,14 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
             val arbiter = TimelineGestureArbiter(dp(viewConfiguration.touchSlop))
             arbiter.down(first.id.value, dp(first.position.x), dp(first.position.y), first.uptimeMillis, start.kind)
             first.consume()
+            touched(true)
+            // Any other finger already down in the same event (two fingers landing together).
+            firstEvent.changes
+                .filter { it.pressed && !it.previousPressed && it.id != first.id }
+                .forEach { arbiter.down(it.id.value, dp(it.position.x), dp(it.position.y), it.uptimeMillis, start.kind) }
             val downAt = first.uptimeMillis
+            // Only an item can be long-pressed (the row header's menu is cm-tracks'); nothing else waits.
+            var waiting = start is Hit.OnClip && c0.slots.getOrNull(start.index) != null
             var lastSpread: Double? = null
             var lastCentroid: Offset? = null
             var lastScroll = first.position
@@ -404,7 +458,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
             // this gesture's own latest value, not on the last composed one.
             var live = c0.zoom
             while (arbiter.isActive) {
-                val wait = if (arbiter.mode == GestureMode.PENDING) (downAt + TimelineGestureArbiter.LONG_PRESS_MS + 1) else null
+                val wait = if (waiting && arbiter.mode == GestureMode.PENDING) (downAt + TimelineGestureArbiter.LONG_PRESS_MS + 1) else null
                 val event =
                     if (wait != null) {
                         withTimeoutOrNull(maxOf(1L, wait - now)) { awaitPointerEvent(PointerEventPass.Main) }
@@ -412,6 +466,8 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         awaitPointerEvent(PointerEventPass.Main)
                     }
                 if (event == null) {
+                    // Timed out once: the long-press fired or never will; no more timed waits.
+                    waiting = false
                     now = downAt + TimelineGestureArbiter.LONG_PRESS_MS
                     if (arbiter.tick(now) == GestureMode.LONG_PRESSED) longPressed()
                     continue
@@ -433,7 +489,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         }
                     }
                 }
-                if (before == GestureMode.PENDING && arbiter.mode == GestureMode.LONG_PRESSED) longPressed()
+                if (before == GestureMode.PENDING && arbiter.mode == GestureMode.LONG_PRESSED && start is Hit.OnClip) longPressed()
                 val c = current()
                 val pressed = event.changes.filter { it.pressed }
                 when (arbiter.mode) {
@@ -460,6 +516,10 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                             }
                             lastSpread = spread
                             lastCentroid = centroid
+                        } else {
+                            // A finger lifted: the next two-finger event starts the ratio afresh, with no jump.
+                            lastSpread = null
+                            lastCentroid = null
                         }
                         trimChanged(null)
                         dragChanged(null)
@@ -542,6 +602,11 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
                             }
 
+                            // A tap on a trim handle keeps the item selected (it is about to be dragged).
+                            is Hit.OnTrim -> {
+                                Unit
+                            }
+
                             else -> {
                                 actions.select(null)
                             }
@@ -604,6 +669,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                     dragChanged(null)
                 }
             }
+            touched(false)
         }
     }
 }
@@ -670,23 +736,32 @@ private fun hit(
 private fun Ruler(
     zoom: ZoomState,
     totalMs: Long,
+    playheadMs: Long,
     metrics: RowMetrics,
     spanWidth: Double,
     actions: TimelineActions,
 ) {
-    val tick = TimelineZoom.tickMs(zoom.msPerDp)
+    val tick = TimelineZoom.tickMs(zoom.msPerDp, metrics.fontScale)
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     val line = MaterialTheme.colorScheme.outlineVariant
     val label = stringResource(R.string.timeline_ruler)
-    val tickText = durationText(tick * 1000)
+    val now = stringResource(R.string.timeline_playhead, durationText(playheadMs * 1000))
+    val total = totalMs.coerceAtLeast(1)
     Row(
         Modifier
             .fillMaxWidth()
             .height(metrics.rulerDp.dp)
             .testTag(TIMELINE_RULER_TAG)
-            .semantics {
+            // One TalkBack stop that reads the time and moves it (the tick labels are not read one by one).
+            .clearAndSetSemantics {
                 contentDescription = label
-                stateDescription = tickText
+                stateDescription = now
+                rulerTick = tick
+                progressBarRangeInfo = ProgressBarRangeInfo(playheadMs.toFloat() / total, 0f..1f)
+                setProgress { f ->
+                    actions.seek((f.coerceIn(0f, 1f) * total).toLong())
+                    true
+                }
             },
     ) {
         Spacer(Modifier.width(metrics.headerDp.dp))
@@ -730,14 +805,14 @@ private fun Playhead(
 ) {
     val color = MaterialTheme.colorScheme.primary
     val x = metrics.headerDp + PAD_DP + zoom.xOf(playheadMs.toDouble())
-    val description = stringResource(R.string.timeline_playhead, durationText(playheadMs * 1000))
     Box(
         Modifier
             .offset(x = (x - 8).dp)
             .width(16.dp)
             .fillMaxHeight()
             .testTag(TIMELINE_PLAYHEAD_TAG)
-            .semantics { contentDescription = description },
+            // Drawn only: its time is the ruler's, and it must not cover the items under it for TalkBack.
+            .clearAndSetSemantics { },
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val cx = size.width / 2
@@ -853,16 +928,19 @@ private fun MainRowContent(
         t += (slots[i].durationMs - slots[i].overlapToNextMs)
     }
     val contentCount = slots.count { it.clip.isContent() }
+    // Each item's place among the photos, videos and cards, worked out once rather than per item.
+    val contentBefore = remember(slots) { slots.runningFold(0) { n, sl -> if (sl.clip.isContent()) n + 1 else n } }
     Box(Modifier.fillMaxSize().testTag(TIMELINE_MAIN_ROW_TAG)) {
         val visible = geometry.visible()
         for (i in slots.indices) {
             val slot = slots[i]
             val dragged = drag?.index == i
             if (i !in visible && !dragged) continue
-            val start = if (drag != null) reflowStart.getValue(i) else slot.startMs.toDouble()
+            // The others make room; the dragged one stays under the finger (from where it was).
+            val start = if (drag != null && !dragged) reflowStart.getValue(i) else slot.startMs.toDouble()
             val x = PAD_DP + zoom.xOf(start) + if (dragged) drag.dxDp else 0.0
             val w = slot.durationMs / zoom.msPerDp
-            val contentIndex = slots.take(i).count { it.clip.isContent() }
+            val contentIndex = contentBefore[i]
             ClipTile(
                 playing = playheadMs in slot.startMs until slot.endMs,
                 slot = slot,
@@ -925,7 +1003,8 @@ private fun ClipTile(
             .fillMaxHeight()
             // The tag and semantics cover the item's whole time span; the padding below is the visible gap.
             .testTag(clipTag(clip.id))
-            .semantics {
+            // One TalkBack stop per item; the length drawn on it is already in the description.
+            .semantics(mergeDescendants = true) {
                 contentDescription = description
                 role = Role.Button
                 this.selected = selected
@@ -976,7 +1055,13 @@ private fun ClipTile(
             )
             if (widthDp >= 56) {
                 Spacer(Modifier.width(2.dp))
-                Text(length, style = MaterialTheme.typography.labelSmall, color = onFill, maxLines = 1)
+                Text(
+                    length,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onFill,
+                    maxLines = 1,
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
             }
         }
     }
@@ -1007,8 +1092,6 @@ private fun TrimHandles(
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val onPrimary = MaterialTheme.colorScheme.onPrimary
-    val startLabel = stringResource(R.string.timeline_trim_start)
-    val endLabel = stringResource(R.string.timeline_trim_end)
     for ((edge, x) in listOf(TrimEdge.START to geometry.left(index), TrimEdge.END to geometry.right(index) - TimelineGeometry.HANDLE_DP)) {
         Box(
             Modifier
@@ -1037,7 +1120,8 @@ private fun TrimHandles(
                     ),
                 ).background(primary)
                 .testTag(if (edge == TrimEdge.START) TRIM_START_TAG else TRIM_END_TAG)
-                .semantics { contentDescription = if (edge == TrimEdge.START) startLabel else endLabel },
+                // A drag target only; TalkBack trims from the bar's Trim or Duration panel.
+                .clearAndSetSemantics { },
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.size(width = 4.dp, height = 20.dp)) {

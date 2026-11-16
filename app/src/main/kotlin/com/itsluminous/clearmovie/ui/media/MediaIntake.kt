@@ -172,9 +172,11 @@ class MediaIntake(
         val planned = plan ?: return
         if (stateFlow.value !is IntakeState.Confirm && stateFlow.value !is IntakeState.NoSpace) return
         plan = null
+        // Published only if no newer intake started meanwhile (its state is not this one's to replace).
+        val id = current
         scope.launch {
             media.abandon(planned)
-            stateFlow.value = next
+            publish(id, next)
         }
     }
 }

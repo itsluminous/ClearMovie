@@ -287,7 +287,6 @@
     <string name="action_colour">रंग</string>
     <string name="bar_description">इस %1$s के लिए काम</string>
     <string name="bar_description_nothing">काम</string>
-    <string name="bar_more">इस तरफ़ और काम हैं</string>
     <string name="card_add">जोड़ें</string>
     <string name="card_colour_title">रंग चुनें</string>
     <string name="card_text_hint">आपकी लिखावट</string>
@@ -357,8 +356,6 @@
     <string name="timeline_ruler">समय। कोई पल चुनने के लिए यहाँ छुएँ या खींचें।</string>
     <string name="timeline_selected">चुना हुआ</string>
     <string name="timeline_show_fewer_rows">कम पंक्तियाँ दिखाएँ</string>
-    <string name="timeline_trim_start">इसकी शुरुआत। छोटा करने के लिए खींचें।</string>
-    <string name="timeline_trim_end">इसका अंत। छोटा करने के लिए खींचें।</string>
     <string name="trim_title">छोटा करें</string>
     <string name="trim_from">%1$s से शुरू</string>
     <string name="trim_to">%1$s पर ख़त्म</string>
@@ -382,4 +379,6 @@
     <string name="editor_exact_short">जैसा बनेगा</string>
     <!-- An item and its place among the photos, videos and cards: "Video 2". -->
     <string name="timeline_item_numbered">%1$s %2$d</string>
+    <string name="editor_cant_do_that">इस पर यह नहीं हो सकता।</string>
+    <string name="trim_range">%1$s से %2$s तक</string>
 </resources>

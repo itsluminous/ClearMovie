@@ -77,8 +77,10 @@ class EditorHarness(
             }
 
             override fun edit(change: Project.() -> Project): Boolean {
-                val ok = session.edit(change) == EditResult.Applied
+                val result = session.edit(change)
+                val ok = result == EditResult.Applied
                 if (ok) project = session.current!!
+                if (result is EditResult.Refused) calls += "refused"
                 return ok
             }
 

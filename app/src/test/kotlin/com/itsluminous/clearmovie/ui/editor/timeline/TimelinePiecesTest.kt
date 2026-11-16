@@ -64,6 +64,13 @@ class TimelinePiecesTest {
     }
 
     @Test
+    fun `Split is shown but not offered on a looped video`() {
+        val split = ClipActions.forSelection(SelectionKind.VIDEO, canSplit = false).first { it.action == EditAction.SPLIT }
+        assertThat(split.enabled).isFalse()
+        assertThat(ClipActions.forSelection(SelectionKind.VIDEO).first { it.action == EditAction.SPLIT }.enabled).isTrue()
+    }
+
+    @Test
     fun `the bar's buttons are sized so that the last visible one is always cut in half`() {
         val w = barItemWidth(400.dp, 72.dp, 11)
         val visible = 400.dp / w

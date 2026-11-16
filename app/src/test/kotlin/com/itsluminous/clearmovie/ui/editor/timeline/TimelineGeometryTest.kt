@@ -107,6 +107,39 @@ class TimelineGeometryTest {
     }
 
     @Test
+    fun `a plus kept only for the playhead stays clear of the selected item's handles`() {
+        // Item 2 selected; item 3 is narrow (20 dp) and the playhead sits on the boundary after it,
+        // 20 dp from item 2's end handle: that "+" would cover the handle, so it is not drawn.
+        val narrow =
+            listOf(
+                SlotSpan("intro", 0, 2000, content = false),
+                SlotSpan("a", 2000, 5000, content = true),
+                SlotSpan("b", 5000, 8000, content = true),
+                SlotSpan("c", 8000, 8200, content = true),
+                SlotSpan("d", 8200, 11_000, content = true),
+            )
+        val g =
+            TimelineGeometry(
+                narrow,
+                ZoomState(10.0, 0.0, false),
+                2000.0,
+                28.0,
+                72.0,
+                selected = 2,
+                playheadMs = 8200.0,
+                selectedTrimmable = true,
+            )
+        val handles = g.handleHitAreas()!!.toList()
+        val half = TimelineGeometry.PLUS_HIT_DP / 2 + TimelineGeometry.HANDLE_GAP_DP
+        for (p in g.plusPoints()) {
+            for (h in handles) assertThat(p.xDp + half <= h.start + 1e-9 || p.xDp - half >= h.endInclusive - 1e-9).isTrue()
+        }
+        // The playhead's boundary (x 820) is 20 dp past the end handle: no "+" there.
+        assertThat(g.plusPoints().map { it.boundary }).doesNotContain(4)
+        assertThat(g.hitTest(795.0, g.mainCentre)).isEqualTo(HitTarget.TrimEnd(2))
+    }
+
+    @Test
     fun `the intro and ending have no handles, so their plus points stay on the boundary`() {
         val g = geometry(10.0, selected = 0, trimmable = false, playheadMs = -1e6)
         assertThat(g.handleHitAreas()).isNull()

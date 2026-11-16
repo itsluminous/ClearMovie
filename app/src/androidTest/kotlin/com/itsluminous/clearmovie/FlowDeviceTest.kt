@@ -41,6 +41,7 @@ import com.itsluminous.clearmovie.ui.editor.PANEL_TAG
 import com.itsluminous.clearmovie.ui.editor.ZOOM_IN_TAG
 import com.itsluminous.clearmovie.ui.editor.barActionTag
 import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
+import com.itsluminous.clearmovie.ui.editor.timeline.RulerTickKey
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_RULER_TAG
 import com.itsluminous.clearmovie.ui.home.HOME_LIST_TAG
 import kotlinx.coroutines.runBlocking
@@ -237,12 +238,12 @@ class FlowDeviceTest {
     }
 
     /** The ruler's label spacing: it changes with the zoom. */
-    private fun tick(): String =
+    private fun tick(): Long =
         compose
             .onNodeWithTag(TIMELINE_RULER_TAG)
             .fetchSemanticsNode()
             .config
-            .getOrElse(SemanticsProperties.StateDescription) { "" }
+            .getOrElse(RulerTickKey) { -1L }
 
     @Test
     fun aPresetFileThatWentMissingOpensTheRepairScreen() {

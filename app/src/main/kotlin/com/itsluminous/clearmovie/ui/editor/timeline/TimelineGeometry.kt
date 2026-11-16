@@ -139,8 +139,18 @@ class TimelineGeometry(
                 candidates += PlusPoint(b, anchor, side, x, displaced = false) to if (underPlayhead) 1 else 2
             }
         }
+        // No other "+" may come within the gap of a trim handle's hit area (the selected
+        // item's own are placed clear of them already).
+        val handles = handleHitAreas()?.toList().orEmpty()
+
+        fun clearOfHandles(p: PlusPoint): Boolean =
+            handles.all { h ->
+                p.xDp + PLUS_HIT_DP / 2 + HANDLE_GAP_DP <= h.start ||
+                    p.xDp - PLUS_HIT_DP / 2 - HANDLE_GAP_DP >= h.endInclusive
+            }
         val kept = mutableListOf<PlusPoint>()
-        for ((point, _) in candidates.sortedWith(compareBy({ it.second }, { it.first.boundary }))) {
+        for ((point, priority) in candidates.sortedWith(compareBy({ it.second }, { it.first.boundary }))) {
+            if (priority > 0 && !clearOfHandles(point)) continue
             if (kept.none { abs(it.xDp - point.xDp) < PLUS_HIT_DP }) kept += point
         }
         return kept.sortedBy { it.boundary }

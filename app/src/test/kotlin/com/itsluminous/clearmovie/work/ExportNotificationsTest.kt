@@ -69,8 +69,17 @@ class ExportNotificationsTest {
     @Test
     fun `the Stop receiver cancels only the export it names`() {
         val workManager = androidx.work.WorkManager.getInstance(context)
-        // A stand-in export that runs until it is cancelled.
-        val request = OneTimeWorkRequestBuilder<HoldWorker>().build()
+        // A stand-in export, held back by a constraint the test never meets, so it waits
+        // ENQUEUED until it is cancelled. (Letting it run raced the worker's own failure on
+        // cancellation against WorkManager's CANCELLED, and the test was flaky.)
+        val request =
+            OneTimeWorkRequestBuilder<HoldWorker>()
+                .setConstraints(
+                    androidx.work.Constraints
+                        .Builder()
+                        .setRequiresCharging(true)
+                        .build(),
+                ).build()
         workManager.enqueue(request).result.get()
         ExportStopReceiver().onReceive(context, Intent("other.action").putExtra(ExportStopReceiver.EXTRA_WORK_ID, request.id.toString()))
         ExportStopReceiver().onReceive(

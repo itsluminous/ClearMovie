@@ -24,7 +24,7 @@ import com.itsluminous.clearmovie.render.plan.Placement
  * consecutive items with the same placement instead of rebuilding them.
  *
  * Fit with blur (cm-timeline): the background is the picture's cover crop
- * blurred by a separable Gaussian at a quarter of the window's size, in two
+ * blurred by a separable Gaussian at an eighth of the window's size, in two
  * passes of their own ([BlurPasses]) before the final one, which scales it
  * up (bilinear, so smoother still). The earlier single pass of 49 spaced
  * taps showed ghost copies of sharp edges.

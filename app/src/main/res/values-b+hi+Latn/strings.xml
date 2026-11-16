@@ -295,7 +295,6 @@
     <string name="action_colour">Colour</string>
     <string name="bar_description">Is %1$s ke liye actions</string>
     <string name="bar_description_nothing">Actions</string>
-    <string name="bar_more">Is taraf aur actions hain</string>
     <string name="card_add">Add karein</string>
     <string name="card_colour_title">Colour chunein</string>
     <string name="card_text_hint">Aapka text</string>
@@ -365,8 +364,6 @@
     <string name="timeline_ruler">Time. Koi pal chunne ke liye yahan touch karein ya kheenchein.</string>
     <string name="timeline_selected">Chuna hua</string>
     <string name="timeline_show_fewer_rows">Kam rows dikhayein</string>
-    <string name="timeline_trim_start">Iski shuruaat. Trim karne ke liye kheenchein.</string>
-    <string name="timeline_trim_end">Iska ant. Trim karne ke liye kheenchein.</string>
     <string name="trim_title">Trim karein</string>
     <string name="trim_from">%1$s se shuru</string>
     <string name="trim_to">%1$s par khatam</string>
@@ -390,4 +387,6 @@
     <string name="editor_exact_short">Jaisa banega</string>
     <!-- An item and its place among the photos, videos and cards: "Video 2". -->
     <string name="timeline_item_numbered">%1$s %2$d</string>
+    <string name="editor_cant_do_that">Is par yeh nahi ho sakta.</string>
+    <string name="trim_range">%1$s se %2$s tak</string>
 </resources>

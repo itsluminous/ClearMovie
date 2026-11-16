@@ -208,7 +208,9 @@ private fun Still(
 /**
  * The fit-with-blur background in the preview: the picture shrunk to a few
  * dozen pixels and stretched back over the window, which blurs it on every
- * Android version, darkened as the export darkens it.
+ * Android version, darkened as the export darkens it. For a video it is the
+ * item's first frame, held (the export blurs every frame; the preview keeps
+ * one decoder per row).
  */
 @Composable
 private fun SoftBackdrop(
@@ -217,11 +219,14 @@ private fun SoftBackdrop(
     stills: StillLoader,
     resolver: MediaResolver?,
 ) {
-    val bitmap by produceState<Bitmap?>(null, source, resolver) {
+    val bitmap by produceState<Bitmap?>(null, source, resolver, rotation) {
         value =
             resolver?.let { stills.load(source, it) }?.let { b ->
-                val small = BACKDROP_PX
-                b.scale(small, (small * b.height / b.width.coerceAtLeast(1)).coerceAtLeast(1))
+                // Turned first (so a rotated picture covers the window as the export's does), then
+                // halved step by step: each step averages pixels, where one big step would skip most.
+                var out = if (rotation == Rotation.R0) b else b.rotated(rotation.degrees)
+                while (out.width > BACKDROP_PX * 2) out = out.scale(out.width / 2, (out.height / 2).coerceAtLeast(1))
+                out.scale(BACKDROP_PX, (BACKDROP_PX * out.height / out.width.coerceAtLeast(1)).coerceAtLeast(1))
             }
     }
     bitmap?.let {
@@ -231,10 +236,13 @@ private fun SoftBackdrop(
             contentScale = ContentScale.Crop,
             filterQuality = FilterQuality.High,
             colorFilter = ColorFilter.tint(Color(0xFFCCCCCC), BlendMode.Multiply),
-            modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = rotation.degrees.toFloat() },
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }
+
+private fun Bitmap.rotated(degrees: Int): Bitmap =
+    Bitmap.createBitmap(this, 0, 0, width, height, android.graphics.Matrix().apply { postRotate(degrees.toFloat()) }, true)
 
 @OptIn(UnstableApi::class)
 @Composable

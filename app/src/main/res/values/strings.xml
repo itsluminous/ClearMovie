@@ -334,7 +334,6 @@
     <string name="action_colour">Colour</string>
     <string name="bar_description">Actions for this %1$s</string>
     <string name="bar_description_nothing">Actions</string>
-    <string name="bar_more">More actions this way</string>
     <string name="card_add">Add</string>
     <string name="card_colour_title">Choose a colour</string>
     <string name="card_text_hint">Your text</string>
@@ -404,8 +403,6 @@
     <string name="timeline_ruler">Time. Tap or drag here to choose a moment.</string>
     <string name="timeline_selected">Selected</string>
     <string name="timeline_show_fewer_rows">Show fewer rows</string>
-    <string name="timeline_trim_start">Start of this item. Drag to trim.</string>
-    <string name="timeline_trim_end">End of this item. Drag to trim.</string>
     <string name="trim_title">Trim</string>
     <string name="trim_from">Starts at %1$s</string>
     <string name="trim_to">Ends at %1$s</string>
@@ -429,4 +426,6 @@
     <string name="editor_exact_short">As exported</string>
     <!-- An item and its place among the photos, videos and cards: "Video 2". -->
     <string name="timeline_item_numbered">%1$s %2$d</string>
+    <string name="editor_cant_do_that">That can\'t be done to this item.</string>
+    <string name="trim_range">From %1$s to %2$s</string>
 </resources>

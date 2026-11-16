@@ -153,6 +153,10 @@ fun EditorRoute(
                 EditorEvent.OutOfSpace -> {
                     outOfSpace = true
                 }
+
+                EditorEvent.CantDoThat -> {
+                    snackbar.showSnackbar(resources.getString(R.string.editor_cant_do_that))
+                }
             }
         }
     }

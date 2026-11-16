@@ -105,6 +105,14 @@ class TimelineZoomTest {
     }
 
     @Test
+    fun `ruler labels spread out as the text grows`() {
+        assertThat(TimelineZoom.tickMs(10.0, fontScale = 1f)).isEqualTo(1000)
+        // At twice the text size, 1 s at 10 ms per dp (100 dp) is too close for labels 128 dp wide.
+        assertThat(TimelineZoom.tickMs(10.0, fontScale = 2f)).isEqualTo(5000)
+        assertThat(TimelineZoom.tickMs(10.0, fontScale = 0.85f)).isEqualTo(1000)
+    }
+
+    @Test
     fun `reveal brings the playhead back on screen while playing`() {
         val z = TimelineZoom.zoomAround(TimelineZoom.fitAll(total, width), 6.0, 0.0, total, width)
         val off = 40_000.0

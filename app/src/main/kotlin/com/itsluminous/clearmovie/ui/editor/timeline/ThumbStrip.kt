@@ -123,19 +123,24 @@ fun ThumbStripContent(
     }
     BoxWithConstraints(modifier) {
         val cellDp = (maxHeight.value * 4.0 / 3).coerceAtLeast(32.0)
-        val cells = ThumbPlan.cells(widthDp, cellDp)
         val bucket = ThumbPlan.bucketOf(msPerDp)
         var settled by remember(clip.id) { mutableStateOf(bucket) }
         LaunchedEffect(bucket) {
             delay(ThumbPlan.SETTLE_MS)
             settled = bucket
         }
-        val times = ThumbPlan.frameTimes(clip, cells, cellDp, ThumbPlan.msPerDpOf(settled))
+        // Planned for the settled zoom only, so a pinch in progress asks for nothing new: the
+        // cells are stretched to the live width until the zoom holds still.
+        val settledMsPerDp = ThumbPlan.msPerDpOf(settled)
+        val cells = ThumbPlan.cells(clip.durationMs / settledMsPerDp, cellDp)
+        val times = remember(clip, cells, settled) { ThumbPlan.frameTimes(clip, cells, cellDp, settledMsPerDp) }
         val loaded = remember(clip) { mutableStateMapOf<Long, Bitmap>() }
         LaunchedEffect(clip, times) {
             for (t in times.distinct()) {
                 if (t !in loaded) thumbnail(clip, t)?.let { loaded[t] = it }
             }
+            // Only this zoom's pictures are kept (the loader's own cache holds recent ones).
+            loaded.keys.retainAll(times.toSet())
         }
         val plan = "$settled:$cells"
         Row(Modifier.fillMaxSize().semantics { thumbPlan = plan }) {
@@ -179,6 +184,7 @@ private fun CardThumb(
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                // Merged into the item's description, so TalkBack reads what the card says.
                 modifier = Modifier.padding(horizontal = 6.dp),
             )
         }
