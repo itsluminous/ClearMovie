@@ -4,10 +4,12 @@ import android.content.Context
 import android.media.metrics.LogSessionId
 import android.os.Looper
 import android.util.Log
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.transformer.AudioEncoderSettings
@@ -182,6 +184,7 @@ class RenderExporter(
             return delegate.createForVideoEncoding(format, logSessionId)
         }
 
+        @OptIn(ExperimentalApi::class)
         override fun isVideoFormatSupported(format: Format): Boolean = delegate.isVideoFormatSupported(format)
 
         override fun audioNeedsEncoding(): Boolean = delegate.audioNeedsEncoding()
