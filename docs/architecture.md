@@ -183,7 +183,8 @@ Android's size defaults for untagged video put 854x480, 1280x720 and
 to them answers alike at all three sizes. Low drafts (below 854x480) and SD
 BT.709-tagged sources on a decoder that ignores the tag are outside that
 argument; they reuse the answer unmeasured. A source's matrix comes from its
-container tag (`colr`), else for H.264 from the stream's own (SPS VUI), else
+container tag (`colr`), else for H.264 from the stream's own matrix
+coefficients (SPS VUI; the matrix, not the primaries, decides the decode), else
 from the same size rule (`RetrieverProbe.videoIsBt709`); HEVC sources without
 a container tag fall to the size rule. On a GPU that misdecodes, every
 BT.709 video item starts with `Bt709Correction`; on an encoder that writes

@@ -132,6 +132,47 @@ class DeviceColourTest {
         assertThat(RetrieverProbe.avcVui(null)).isEqualTo(Vui.NONE)
         assertThat(RetrieverProbe.avcVui(hex("00000001"))).isEqualTo(Vui.NONE)
         assertThat(RetrieverProbe.avcVui(hex("0000000167"))).isEqualTo(Vui.NONE)
+        // Cut short anywhere, an SPS reads as untagged rather than throwing.
+        for (n in 6 until bt709.length / 2) {
+            assertThat(
+                RetrieverProbe.avcVui(hex(bt709).copyOf(n)),
+            ).isAnyOf(Vui.NONE, RetrieverProbe.avcVui(hex(bt709)))
+        }
+    }
+
+    @Test
+    fun `the stream's matrix decides its standard, whatever its primaries`() {
+        val sdr = android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+        // BT.709 primaries and transfer with the BT.601 matrix, as many SD files are: the decoder uses BT.601.
+        val bt709Primaries601Matrix = "00000001674d400aeca213602d4040419000000300100000030020f1225960"
+        assertThat(
+            RetrieverProbe.avcVui(hex(bt709Primaries601Matrix)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr))
+        // High profile (chroma format and bit depths in the SPS): BT.709, and BT.2020 PQ.
+        val high709 = "000000016764000aacd94426c05a808080a000000300200000030041e244b2c0"
+        val highPq = "000000016764000aacd94426c05a848804a000000300200000030041e244b2c0"
+        assertThat(RetrieverProbe.avcVui(hex(high709))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(highPq)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT2020, android.media.MediaFormat.COLOR_TRANSFER_ST2084))
+    }
+
+    @Test
+    fun `the container's tag wins over the stream's, which wins over size`() {
+        val bt709 = Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, null)
+        val bt601 = Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, null)
+        val pq = Vui(null, android.media.MediaFormat.COLOR_TRANSFER_ST2084)
+        assertThat(RetrieverProbe.classify(bt601, bt709, 1920, 1080)).isFalse()
+        assertThat(RetrieverProbe.classify(bt709, bt601, 640, 480)).isTrue()
+        assertThat(RetrieverProbe.classify(Vui.NONE, bt709, 640, 480)).isTrue()
+        assertThat(RetrieverProbe.classify(Vui.NONE, bt601, 1920, 1080)).isFalse()
+        assertThat(RetrieverProbe.classify(Vui.NONE, Vui.NONE, 640, 480)).isFalse()
+        assertThat(RetrieverProbe.classify(Vui.NONE, Vui.NONE, 1920, 1080)).isTrue()
+        // HDR in either place is never corrected, even under a BT.709 standard.
+        assertThat(RetrieverProbe.classify(bt709, pq, 1920, 1080)).isFalse()
+        assertThat(RetrieverProbe.classify(pq, bt709, 1920, 1080)).isFalse()
+        // No size: 1280x720, as Codec2 assumes.
+        assertThat(RetrieverProbe.classify(Vui.NONE, Vui.NONE, null, null)).isTrue()
     }
 
     @Test

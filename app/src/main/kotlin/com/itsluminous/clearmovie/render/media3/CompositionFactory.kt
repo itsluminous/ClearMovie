@@ -20,6 +20,7 @@ import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.container.NalUnitUtil
+import androidx.media3.container.ParsableNalUnitBitArray
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -352,8 +353,8 @@ internal class RetrieverProbe(
 
     /**
      * From the container's colour tag (`colr`), else the H.264 stream's own
-     * (SPS VUI, which Media3 and the decoder read too), else by size, as
-     * Android decides for untagged video.
+     * (SPS VUI), else by size, as Android decides for untagged video
+     * ([classify]).
      */
     private fun isBt709(uri: Uri): Boolean {
         val e = MediaExtractor()
@@ -370,19 +371,18 @@ internal class RetrieverProbe(
             val vui =
                 if (format.getString(MediaFormat.KEY_MIME) == MimeTypes.VIDEO_H264) {
                     avcVui(
-                        runCatching { format.getByteBuffer("csd-0") }.getOrNull()?.let { b ->
+                        runCatching { format.getByteBuffer("csd-0") }.getOrNull()?.takeIf { it.remaining() <= MAX_CSD_BYTES }?.let { b ->
                             ByteArray(b.remaining()).also { b.duplicate().get(it) }
                         },
                     )
                 } else {
                     Vui.NONE
                 }
-            // Android's codecs assume 1280x720 when a format names no size.
-            videoIsBt709(
-                int(MediaFormat.KEY_COLOR_STANDARD) ?: vui.standard,
-                int(MediaFormat.KEY_WIDTH) ?: 1280,
-                int(MediaFormat.KEY_HEIGHT) ?: 720,
-                int(MediaFormat.KEY_COLOR_TRANSFER) ?: vui.transfer,
+            classify(
+                Vui(int(MediaFormat.KEY_COLOR_STANDARD), int(MediaFormat.KEY_COLOR_TRANSFER)),
+                vui,
+                int(MediaFormat.KEY_WIDTH),
+                int(MediaFormat.KEY_HEIGHT),
             )
         } catch (ex: RuntimeException) {
             true
@@ -404,7 +404,34 @@ internal class RetrieverProbe(
             }
         }
 
-        /** The colour an H.264 `csd-0` (Annex B, holding the SPS) declares in its VUI. */
+        /** Larger than any real SPS and PPS; a bigger `csd-0` is not read. */
+        private const val MAX_CSD_BYTES = 64 * 1024
+
+        /**
+         * [container]'s tag (a `colr` box, as `MediaExtractor` reports it), else
+         * [stream]'s, each of standard and transfer on its own, else by size.
+         * A format with no size is taken as 1280x720, as Codec2 does.
+         */
+        fun classify(
+            container: Vui,
+            stream: Vui,
+            width: Int?,
+            height: Int?,
+        ): Boolean =
+            videoIsBt709(
+                container.standard ?: stream.standard,
+                width ?: 1280,
+                height ?: 720,
+                container.transfer ?: stream.transfer,
+            )
+
+        /**
+         * The colour an H.264 `csd-0` (Annex B, holding the SPS) declares in
+         * its VUI. The standard follows the matrix coefficients, which decide
+         * how the decoder turns YUV into RGB (Media3's own SPS parser reads only
+         * the primaries); an unstated matrix leaves the standard to the size
+         * rule, as Android does.
+         */
         @OptIn(UnstableApi::class)
         fun avcVui(csd0: ByteArray?): Vui {
             if (csd0 == null) return Vui.NONE
@@ -413,27 +440,95 @@ internal class RetrieverProbe(
             while (start + 3 < csd0.size) {
                 val header = start + 3
                 val next = NalUnitUtil.findNalUnit(csd0, header, csd0.size, found)
-                if (csd0[header].toInt() and 0x1F == NalUnitUtil.NAL_UNIT_TYPE_SPS) {
-                    val sps = runCatching { NalUnitUtil.parseSpsNalUnit(csd0, header, next) }.getOrNull() ?: return Vui.NONE
-                    val standard =
-                        when (sps.colorSpace) {
-                            C.COLOR_SPACE_BT709 -> MediaFormat.COLOR_STANDARD_BT709
-                            C.COLOR_SPACE_BT601 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
-                            C.COLOR_SPACE_BT2020 -> MediaFormat.COLOR_STANDARD_BT2020
-                            else -> null
-                        }
-                    val transfer =
-                        when (sps.colorTransfer) {
-                            C.COLOR_TRANSFER_ST2084 -> MediaFormat.COLOR_TRANSFER_ST2084
-                            C.COLOR_TRANSFER_HLG -> MediaFormat.COLOR_TRANSFER_HLG
-                            C.COLOR_TRANSFER_SDR -> MediaFormat.COLOR_TRANSFER_SDR_VIDEO
-                            else -> null
-                        }
-                    return Vui(standard, transfer)
+                if (csd0[header].toInt() and 0x1F == NalUnitUtil.H264_NAL_UNIT_TYPE_SPS) {
+                    // A truncated or malformed SPS reads past its end: no tag.
+                    return try {
+                        spsColour(ParsableNalUnitBitArray(csd0, header + 1, next))
+                    } catch (e: RuntimeException) {
+                        Vui.NONE
+                    }
                 }
                 start = next
             }
             return Vui.NONE
+        }
+
+        /** Profiles whose SPS carries chroma format, bit depths and scaling lists (H.264 7.3.2.1.1). */
+        private val HIGH_PROFILES = setOf(100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135)
+
+        @OptIn(UnstableApi::class)
+        private fun spsColour(a: ParsableNalUnitBitArray): Vui {
+            val profile = a.readBits(8)
+            a.skipBits(16) // constraint flags, level
+            a.readUnsignedExpGolombCodedInt() // seq_parameter_set_id
+            if (profile in HIGH_PROFILES) {
+                val chroma = a.readUnsignedExpGolombCodedInt()
+                if (chroma == 3) a.skipBit()
+                a.readUnsignedExpGolombCodedInt() // bit_depth_luma_minus8
+                a.readUnsignedExpGolombCodedInt() // bit_depth_chroma_minus8
+                a.skipBit() // qpprime_y_zero_transform_bypass_flag
+                if (a.readBit()) {
+                    for (i in 0 until if (chroma != 3) 8 else 12) if (a.readBit()) skipScalingList(a, if (i < 6) 16 else 64)
+                }
+            }
+            a.readUnsignedExpGolombCodedInt() // log2_max_frame_num_minus4
+            when (a.readUnsignedExpGolombCodedInt()) {
+                0 -> {
+                    a.readUnsignedExpGolombCodedInt()
+                }
+
+                1 -> {
+                    a.skipBit()
+                    a.readSignedExpGolombCodedInt()
+                    a.readSignedExpGolombCodedInt()
+                    val cycle = a.readUnsignedExpGolombCodedInt()
+                    if (cycle > 255) return Vui.NONE
+                    repeat(cycle) { a.readSignedExpGolombCodedInt() }
+                }
+            }
+            a.readUnsignedExpGolombCodedInt() // max_num_ref_frames
+            a.skipBit() // gaps_in_frame_num_value_allowed_flag
+            a.readUnsignedExpGolombCodedInt() // pic_width_in_mbs_minus1
+            a.readUnsignedExpGolombCodedInt() // pic_height_in_map_units_minus1
+            if (!a.readBit()) a.skipBit() // frame_mbs_only_flag, mb_adaptive_frame_field_flag
+            a.skipBit() // direct_8x8_inference_flag
+            if (a.readBit()) repeat(4) { a.readUnsignedExpGolombCodedInt() } // frame cropping
+            if (!a.readBit()) return Vui.NONE // vui_parameters_present_flag
+            if (a.readBit() && a.readBits(8) == 255) a.skipBits(32) // aspect ratio, extended SAR
+            if (a.readBit()) a.skipBit() // overscan
+            if (!a.readBit()) return Vui.NONE // video_signal_type_present_flag
+            a.skipBits(4) // video_format, video_full_range_flag
+            if (!a.readBit()) return Vui.NONE // colour_description_present_flag
+            a.skipBits(8) // colour_primaries
+            val transfer =
+                when (a.readBits(8)) {
+                    16 -> MediaFormat.COLOR_TRANSFER_ST2084
+                    18 -> MediaFormat.COLOR_TRANSFER_HLG
+                    1, 6, 14, 15 -> MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+                    else -> null
+                }
+            val standard =
+                when (a.readBits(8)) {
+                    1 -> MediaFormat.COLOR_STANDARD_BT709
+                    5 -> MediaFormat.COLOR_STANDARD_BT601_PAL
+                    6 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
+                    9, 10 -> MediaFormat.COLOR_STANDARD_BT2020
+                    else -> null
+                }
+            return Vui(standard, transfer)
+        }
+
+        @OptIn(UnstableApi::class)
+        private fun skipScalingList(
+            a: ParsableNalUnitBitArray,
+            size: Int,
+        ) {
+            var last = 8
+            var next = 8
+            repeat(size) {
+                if (next != 0) next = (last + a.readSignedExpGolombCodedInt() + 256) % 256
+                if (next != 0) last = next
+            }
         }
 
         /**

@@ -35,6 +35,7 @@ import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -142,9 +143,14 @@ object ColourCalibration {
         // Waits for the looper itself: HandlerThread.getLooper() swallows an
         // interrupt on Android 10 and 11, so the caller's would be lost there.
         val prepared = CountDownLatch(1)
+        val abandoned = AtomicBoolean(false)
         val thread =
             object : HandlerThread("colour-calibration") {
-                override fun onLooperPrepared() = prepared.countDown()
+                override fun onLooperPrepared() {
+                    prepared.countDown()
+                    // Given up on before it started: end at once.
+                    if (abandoned.get()) quit()
+                }
             }.apply { start() }
         val latch = CountDownLatch(1)
         val error = AtomicReference<Throwable>()
@@ -152,9 +158,12 @@ object ColourCalibration {
         val running = AtomicReference<Transformer>()
         var handler: Handler? = null
         try {
-            prepared.await()
-            val looper = Handler(thread.looper).also { handler = it }
-            looper.post {
+            if (!prepared.await(TIMEOUT_S, TimeUnit.SECONDS) || !thread.isAlive) {
+                Log.w(TAG, "Colour calibration: its thread did not start")
+                return null
+            }
+            val looperHandler = Handler(thread.looper).also { handler = it }
+            looperHandler.post {
                 try {
                     Transformer
                         .Builder(context)
@@ -191,7 +200,7 @@ object ColourCalibration {
             }
             if (!latch.await(TIMEOUT_S, TimeUnit.SECONDS)) {
                 // Release its codecs before the real export needs them.
-                val done = cancel(looper, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS)
+                val done = cancel(looperHandler, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS)
                 Log.w(TAG, if (done) "Colour calibration timed out" else "Colour calibration timed out; its cancel has not returned")
                 return null
             }
@@ -222,7 +231,13 @@ object ColourCalibration {
             Log.w(TAG, "Colour calibration interrupted")
             return null
         } finally {
-            thread.quitSafely()
+            // quitSafely() waits for the looper through getLooper(), which on
+            // Android 10 and 11 swallows an interrupt: hold it back meanwhile.
+            val interrupted = Thread.interrupted()
+            abandoned.set(true)
+            // Only a started looper is waited for; one that never started quits itself.
+            if (prepared.count == 0L) thread.quitSafely()
+            if (interrupted) Thread.currentThread().interrupt()
             out.delete()
         }
     }
