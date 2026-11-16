@@ -479,8 +479,9 @@ internal class RetrieverProbe(
          * The colour an H.264 `csd-0` (Annex B, holding the SPS) declares in
          * its VUI. The standard follows the matrix coefficients, which decide
          * how the decoder turns YUV into RGB (Media3's own SPS parser reads only
-         * the primaries); an unstated matrix leaves the standard to the size
-         * rule, as Android does.
+         * the primaries), and [Vui.configured] the primaries Media3 configures
+         * the decoder with; [classify] falls back from one to the other, then
+         * to the container and the size rule.
          */
         @OptIn(UnstableApi::class)
         fun avcVui(csd0: ByteArray?): Vui {
