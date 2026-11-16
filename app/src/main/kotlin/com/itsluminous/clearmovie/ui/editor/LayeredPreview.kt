@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.scale
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
@@ -220,7 +221,7 @@ private fun SoftBackdrop(
         value =
             resolver?.let { stills.load(source, it) }?.let { b ->
                 val small = BACKDROP_PX
-                Bitmap.createScaledBitmap(b, small, (small * b.height / b.width.coerceAtLeast(1)).coerceAtLeast(1), true)
+                b.scale(small, (small * b.height / b.width.coerceAtLeast(1)).coerceAtLeast(1))
             }
     }
     bitmap?.let {
