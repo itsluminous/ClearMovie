@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.render
 
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.net.Uri
 import androidx.media3.common.util.UnstableApi
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
@@ -21,6 +22,7 @@ import com.itsluminous.clearmovie.render.media3.DeviceColour
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
 import com.itsluminous.clearmovie.render.media3.RawYuv
 import com.itsluminous.clearmovie.render.media3.RenderExporter
+import com.itsluminous.clearmovie.render.media3.RetrieverProbe
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,6 +42,17 @@ class ColourCalibrationTest {
         val colour = checkNotNull(ColourCalibration.measure(RenderHarness.context)) { "The calibration export failed" }
         report("colour calibration: $colour")
         assertWithMessage("calibration could not tell the matrices apart").that(colour.measured).isTrue()
+    }
+
+    @Test
+    fun aStreamTagWithoutAContainerTagDecidesTheMatrix() {
+        val probe = RetrieverProbe(RenderHarness.context)
+        // Both disagree with the size rule, so only the stream's own tag gets them right.
+        val sd709 = checkNotNull(probe.probe(Uri.fromFile(File(RenderHarness.fixtureDir, "tag_sd709.mp4"))))
+        val hd601 = checkNotNull(probe.probe(Uri.fromFile(File(RenderHarness.fixtureDir, "tag_hd601.mp4"))))
+        report("stream tags: 640x480 BT.709 -> bt709=${sd709.bt709}, 1280x720 BT.601 -> bt709=${hd601.bt709}")
+        assertWithMessage("640x480 tagged BT.709 in its stream").that(sd709.bt709).isTrue()
+        assertWithMessage("1280x720 tagged BT.601 in its stream").that(hd601.bt709).isFalse()
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.render.media3
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.render.media3.ColourMath.Matrix.BT601
 import com.itsluminous.clearmovie.render.media3.ColourMath.Matrix.BT709
+import com.itsluminous.clearmovie.render.media3.RetrieverProbe.Companion.Vui
 import org.junit.Test
 import kotlin.math.abs
 
@@ -108,6 +109,31 @@ class DeviceColourTest {
         assertThat(DeviceColour.parse("", "v1|fp")).isNull()
     }
 
+    private fun hex(s: String) = ByteArray(s.length / 2) { s.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
+
+    @Test
+    fun `the colour an H264 stream states in its SPS is read`() {
+        // SPS NAL units from libx264 (64x64 main), with BT.709, SMPTE 170M, BT.2020 HLG and no colour description.
+        val bt709 = "00000001674d400aeca213602d4040405000000300100000030020f1225960"
+        val bt601 = "00000001674d400aeca213602d4181819000000300100000030020f1225960"
+        val hlg = "00000001674d400aeca213602d4244825000000300100000030020f1225960"
+        val none = "00000001674d400aeca2136022000003000200000300041e244b2c"
+        val sdr = android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+        assertThat(RetrieverProbe.avcVui(hex(bt709))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(bt601)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(hlg)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT2020, android.media.MediaFormat.COLOR_TRANSFER_HLG))
+        assertThat(RetrieverProbe.avcVui(hex(none))).isEqualTo(Vui.NONE)
+        // A PPS after the SPS, as in csd-0, changes nothing.
+        assertThat(RetrieverProbe.avcVui(hex(bt601 + "0000000168ee3c80"))).isEqualTo(RetrieverProbe.avcVui(hex(bt601)))
+        assertThat(RetrieverProbe.avcVui(null)).isEqualTo(Vui.NONE)
+        assertThat(RetrieverProbe.avcVui(hex("00000001"))).isEqualTo(Vui.NONE)
+        assertThat(RetrieverProbe.avcVui(hex("0000000167"))).isEqualTo(Vui.NONE)
+    }
+
     @Test
     fun `untagged video is BT709 by size as Android assumes`() {
         assertThat(RetrieverProbe.videoIsBt709(null, 1920, 1080)).isTrue()
@@ -122,6 +148,19 @@ class DeviceColourTest {
         assertThat(RetrieverProbe.videoIsBt709(null, 3840, 2160)).isFalse()
         assertThat(RetrieverProbe.videoIsBt709(null, 2160, 3840)).isFalse()
         assertThat(RetrieverProbe.videoIsBt709(null, 0, 0)).isFalse()
+        // The edges of Android's rule, each side of every bound.
+        assertThat(RetrieverProbe.videoIsBt709(null, 720, 480)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 721, 480)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 720, 481)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 720, 576)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 720, 577)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 480, 720)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 480, 721)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 576, 720)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 577, 720)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 3839, 1080)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(null, 3000, 2092)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(null, 3000, 2091)).isTrue()
         assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT709, 640, 480)).isTrue()
         assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, 1920, 1080)).isFalse()
         // Values outside the public constants (the emulator reports 71) fall back to size.

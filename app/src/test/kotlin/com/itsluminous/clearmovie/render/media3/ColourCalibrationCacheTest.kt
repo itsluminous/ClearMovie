@@ -41,13 +41,14 @@ class ColourCalibrationCacheTest {
 
     @Test
     fun `an answer from an older measurement is measured again`() {
-        val file = folder.newFile()
-        // Version 2 encoded the clip at 320x192 and is not this measurement.
-        file.writeText(bt601.serialize("v2|" + key.substringAfter('|')))
         val fresh = DeviceColour(gpuDecodesBt709AsBt601 = true, encoderWritesBt601 = false, encoderName = "c2.android.avc.encoder")
-        assertThat(key).startsWith("v3|")
-        assertThat(ColourCalibration.lookUp(file, key) { fresh }).isEqualTo(fresh to true)
-        assertThat(DeviceColour.parse(file.readText(), key)).isEqualTo(fresh)
+        // Version 2 encoded a 320x192 clip, version 3 a clip without a colr box.
+        for (older in listOf("v2|", "v3|")) {
+            val file = folder.newFile()
+            file.writeText(bt601.serialize(older + key.substringAfter('|')))
+            assertThat(ColourCalibration.lookUp(file, key) { fresh }).isEqualTo(fresh to true)
+            assertThat(DeviceColour.parse(file.readText(), key)).isEqualTo(fresh)
+        }
     }
 
     @Test

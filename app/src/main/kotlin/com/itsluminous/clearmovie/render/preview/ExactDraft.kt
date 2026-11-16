@@ -18,6 +18,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -68,8 +69,9 @@ class ExactDraft(
         val dir = File(context.cacheDir, DIR).apply { mkdirs() }
         val out = File(dir, FILE)
         out.delete()
-        // The device's measured colour handling, the same for the composition and the encoder.
-        val colour = withContext(Dispatchers.IO) { ColourCalibration.of(context) }
+        // The device's measured colour handling, the same for the composition and the
+        // encoder. Interruptible, so cancelling the draft stops a calibration in flight.
+        val colour = runInterruptible(Dispatchers.IO) { ColourCalibration.of(context) }
         val composition =
             try {
                 withContext(Dispatchers.IO) { CompositionFactory(context, resolver) { colour }.build(slice) }

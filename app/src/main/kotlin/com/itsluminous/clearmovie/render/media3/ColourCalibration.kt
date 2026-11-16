@@ -66,7 +66,7 @@ object ColourCalibration {
 
     const val CLIP_WIDTH = 1280
     const val CLIP_HEIGHT = 720
-    private const val VERSION = 3
+    private const val VERSION = 4
     private const val TAG = "ColourCalibration"
     private const val ASSET = "asset:///render/colour-calibration.mp4"
 
@@ -139,14 +139,22 @@ object ColourCalibration {
                 .setEffects(Effects(listOf(), listOf(probe)))
                 .build()
         val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build()).build()
-        val thread = HandlerThread("colour-calibration").apply { start() }
+        // Waits for the looper itself: HandlerThread.getLooper() swallows an
+        // interrupt on Android 10 and 11, so the caller's would be lost there.
+        val prepared = CountDownLatch(1)
+        val thread =
+            object : HandlerThread("colour-calibration") {
+                override fun onLooperPrepared() = prepared.countDown()
+            }.apply { start() }
         val latch = CountDownLatch(1)
         val error = AtomicReference<Throwable>()
         val encoder = AtomicReference<String>()
         val running = AtomicReference<Transformer>()
-        val handler = Handler(thread.looper)
+        var handler: Handler? = null
         try {
-            handler.post {
+            prepared.await()
+            val looper = Handler(thread.looper).also { handler = it }
+            looper.post {
                 try {
                     Transformer
                         .Builder(context)
@@ -183,7 +191,7 @@ object ColourCalibration {
             }
             if (!latch.await(TIMEOUT_S, TimeUnit.SECONDS)) {
                 // Release its codecs before the real export needs them.
-                val done = cancel(handler, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS)
+                val done = cancel(looper, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS)
                 Log.w(TAG, if (done) "Colour calibration timed out" else "Colour calibration timed out; its cancel has not returned")
                 return null
             }
@@ -209,7 +217,7 @@ object ColourCalibration {
             // Release its codecs before the output is deleted: wait briefly with the
             // interrupt held back, then restore it for the caller.
             Thread.interrupted()
-            runCatching { cancel(handler, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS) }
+            handler?.let { h -> runCatching { cancel(h, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS) } }
             Thread.currentThread().interrupt()
             Log.w(TAG, "Colour calibration interrupted")
             return null

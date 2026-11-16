@@ -19,6 +19,7 @@ import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.container.NalUnitUtil
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -42,7 +43,7 @@ import kotlin.math.roundToInt
 data class SourceInfo(
     val durationUs: Long,
     val hasAudio: Boolean,
-    /** The picture is BT.709 (tagged so, or HD and untagged, as Android assumes); false for BT.601 and other SD video. */
+    /** The picture is BT.709: tagged so (container, else stream), or untagged and sized so by Android's rule. */
     val bt709: Boolean = true,
 )
 
@@ -349,7 +350,11 @@ internal class RetrieverProbe(
         return if (info.second) info.first.copy(bt709 = isBt709(uri)) else info.first
     }
 
-    /** From the video track's colour standard, else by size, as Android decides for untagged video. */
+    /**
+     * From the container's colour tag (`colr`), else the H.264 stream's own
+     * (SPS VUI, which Media3 and the decoder read too), else by size, as
+     * Android decides for untagged video.
+     */
     private fun isBt709(uri: Uri): Boolean {
         val e = MediaExtractor()
         return try {
@@ -362,11 +367,22 @@ internal class RetrieverProbe(
                     ?: return true
 
             fun int(key: String) = if (format.containsKey(key)) runCatching { format.getInteger(key) }.getOrNull() else null
+            val vui =
+                if (format.getString(MediaFormat.KEY_MIME) == MimeTypes.VIDEO_H264) {
+                    avcVui(
+                        runCatching { format.getByteBuffer("csd-0") }.getOrNull()?.let { b ->
+                            ByteArray(b.remaining()).also { b.duplicate().get(it) }
+                        },
+                    )
+                } else {
+                    Vui.NONE
+                }
+            // Android's codecs assume 1280x720 when a format names no size.
             videoIsBt709(
-                int(MediaFormat.KEY_COLOR_STANDARD),
-                int(MediaFormat.KEY_WIDTH) ?: 0,
-                int(MediaFormat.KEY_HEIGHT) ?: 0,
-                int(MediaFormat.KEY_COLOR_TRANSFER),
+                int(MediaFormat.KEY_COLOR_STANDARD) ?: vui.standard,
+                int(MediaFormat.KEY_WIDTH) ?: 1280,
+                int(MediaFormat.KEY_HEIGHT) ?: 720,
+                int(MediaFormat.KEY_COLOR_TRANSFER) ?: vui.transfer,
             )
         } catch (ex: RuntimeException) {
             true
@@ -378,6 +394,48 @@ internal class RetrieverProbe(
     }
 
     companion object {
+        /** A stream's colour standard and transfer as [MediaFormat] constants, null when not stated. */
+        data class Vui(
+            val standard: Int?,
+            val transfer: Int?,
+        ) {
+            companion object {
+                val NONE = Vui(null, null)
+            }
+        }
+
+        /** The colour an H.264 `csd-0` (Annex B, holding the SPS) declares in its VUI. */
+        @OptIn(UnstableApi::class)
+        fun avcVui(csd0: ByteArray?): Vui {
+            if (csd0 == null) return Vui.NONE
+            val found = BooleanArray(3)
+            var start = NalUnitUtil.findNalUnit(csd0, 0, csd0.size, found)
+            while (start + 3 < csd0.size) {
+                val header = start + 3
+                val next = NalUnitUtil.findNalUnit(csd0, header, csd0.size, found)
+                if (csd0[header].toInt() and 0x1F == NalUnitUtil.NAL_UNIT_TYPE_SPS) {
+                    val sps = runCatching { NalUnitUtil.parseSpsNalUnit(csd0, header, next) }.getOrNull() ?: return Vui.NONE
+                    val standard =
+                        when (sps.colorSpace) {
+                            C.COLOR_SPACE_BT709 -> MediaFormat.COLOR_STANDARD_BT709
+                            C.COLOR_SPACE_BT601 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
+                            C.COLOR_SPACE_BT2020 -> MediaFormat.COLOR_STANDARD_BT2020
+                            else -> null
+                        }
+                    val transfer =
+                        when (sps.colorTransfer) {
+                            C.COLOR_TRANSFER_ST2084 -> MediaFormat.COLOR_TRANSFER_ST2084
+                            C.COLOR_TRANSFER_HLG -> MediaFormat.COLOR_TRANSFER_HLG
+                            C.COLOR_TRANSFER_SDR -> MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+                            else -> null
+                        }
+                    return Vui(standard, transfer)
+                }
+                start = next
+            }
+            return Vui.NONE
+        }
+
         /**
          * BT.709 when tagged so; BT.601 or BT.2020 when tagged so; otherwise by
          * size, as Android's codecs default untagged video

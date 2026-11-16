@@ -105,6 +105,19 @@ drawbox=x=320:y=0:w=320:h=180:color=0x00FF00:t=fill,\
 drawbox=x=0:y=180:w=320:h=180:color=0x0000FF:t=fill" \
   -frames:v 1 "$out/photo_quadrants.png"
 
+# tag_sd709.mp4 / tag_hd601.mp4: one grey frame each whose colour tag is
+# only in the stream (SPS VUI), with no colr box, and disagrees with what
+# Android's size rule would assume: 640x480 tagged BT.709, 1280x720 tagged
+# SMPTE 170M (BT.601). The probe must follow the stream's tag.
+tagged() {
+  "${ff[@]}" -f lavfi -i "color=c=gray:s=$1:r=1:d=1" -vf format=yuv420p \
+    -c:v libx264 -preset veryslow -crf 30 -profile:v main -bf 0 \
+    -bsf:v "h264_metadata=video_full_range_flag=0:colour_primaries=$2:transfer_characteristics=$2:matrix_coefficients=$2" \
+    -frames:v 1 -an "$out/$3"
+}
+tagged 640x480 1 tag_sd709.mp4
+tagged 1280x720 6 tag_hd601.mp4
+
 for f in "$out"/*; do
   size=$(wc -c < "$f")
   if [ "$size" -ge 307200 ]; then
