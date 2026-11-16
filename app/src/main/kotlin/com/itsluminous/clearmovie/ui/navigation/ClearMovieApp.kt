@@ -103,7 +103,8 @@ fun ClearMovieApp(
                 val top = navController.currentBackStackEntry
                 val showing =
                     top?.destination?.route == Routes.EDITOR && top.arguments?.getString(Routes.ARG_PROJECT) == nav.projectId.value
-                if (!showing) openEditor(nav.projectId)
+                // Already on screen: no navigation happens, so tell the share directly (it would wait for one).
+                if (showing) share?.screenShown(nav.projectId) else openEditor(nav.projectId)
             }
 
             is ShareNav.ToSetup -> {
