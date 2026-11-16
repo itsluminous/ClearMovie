@@ -4,22 +4,13 @@ import android.content.Context
 import android.net.Uri
 import android.os.Looper
 import android.view.TextureView
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
-import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ClippingMediaSource
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.exoplayer.source.SilenceMediaSource
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.Speed
-import com.itsluminous.clearmovie.render.media3.ChromaKeyEffect
 import com.itsluminous.clearmovie.render.media3.MediaResolver
 import com.itsluminous.clearmovie.render.plan.GainEnvelope
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
@@ -67,12 +58,14 @@ data class PreviewState(
  * Photos, held frames and cards are drawn by the UI over the MAIN player,
  * which plays silence for their length. Every method must be called on the
  * main thread. [release] frees every player; the owner (the editor's view
- * model) calls it when it is cleared, so a rotation keeps playing.
+ * model) calls it when it is cleared, so a rotation keeps playing. The
+ * players come from [players], so tests can drive the engine with fakes.
  */
 @UnstableApi
 class LayeredPreviewEngine(
-    private val context: Context,
+    context: Context,
     private val scope: CoroutineScope,
+    private val players: PreviewPlayerFactory = ExoPreviewPlayers(context),
 ) {
     private val stateFlow = MutableStateFlow(PreviewState())
     val state: StateFlow<PreviewState> = stateFlow.asStateFlow()
@@ -80,9 +73,9 @@ class LayeredPreviewEngine(
     var schedule: PreviewSchedule? = null
         private set
 
-    private var main: ExoPlayer? = null
-    private val overlays = mutableListOf<ExoPlayer?>()
-    private val sounds = mutableListOf<ExoPlayer?>()
+    private var main: PreviewPlayer? = null
+    private val overlays = mutableListOf<PreviewPlayer?>()
+    private val sounds = mutableListOf<PreviewPlayer?>()
     private var ticker: Job? = null
     private var loads = 0
 
@@ -91,7 +84,6 @@ class LayeredPreviewEngine(
     private val overlaysAttached = mutableSetOf<Int>()
     private var mainSurface: TextureView? = null
     private val overlaySurfaces = mutableMapOf<Int, TextureView>()
-    private val sourceFactory by lazy { DefaultMediaSourceFactory(context) }
 
     /** Plays [next] from [startUs], replacing whatever was loaded. */
     fun load(
@@ -121,9 +113,8 @@ class LayeredPreviewEngine(
                 if (video != null && u != null) clipped(u, video.clipStartUs, video.clipEndUs(e.durationUs)) else silence(e.durationUs)
             }
         main =
-            ExoPlayer.Builder(context).build().apply {
-                setAudioAttributes(MOVIE_AUDIO, true)
-                setMediaSources(mainSources)
+            players.create(PlayerRole.MAIN, null).apply {
+                setSegments(mainSources)
                 addListener(MainListener())
                 mainSurface?.let {
                     setVideoTextureView(it)
@@ -140,12 +131,8 @@ class LayeredPreviewEngine(
                 if (sources.all { it == null }) {
                     null
                 } else {
-                    ExoPlayer.Builder(context).build().apply {
-                        volume = 0f
-                        trackSelectionParameters =
-                            trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true).build()
-                        if (key != null) setVideoEffects(listOf(ChromaKeyEffect(key), PremultiplyEffect()))
-                        setMediaSources(lane.entries.mapIndexed { j, e -> sources[j] ?: silence(e.durationUs) })
+                    players.create(PlayerRole.OVERLAY, key).apply {
+                        setSegments(lane.entries.mapIndexed { j, e -> sources[j] ?: silence(e.durationUs) })
                         addListener(FollowerListener(this))
                         overlaySurfaces[i]?.let {
                             setVideoTextureView(it)
@@ -163,10 +150,8 @@ class LayeredPreviewEngine(
                 if (sources.all { it == null }) {
                     null
                 } else {
-                    ExoPlayer.Builder(context).build().apply {
-                        trackSelectionParameters =
-                            trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build()
-                        setMediaSources(lane.entries.mapIndexed { j, e -> sources[j] ?: silence(e.durationUs) })
+                    players.create(PlayerRole.SOUND, null).apply {
+                        setSegments(lane.entries.mapIndexed { j, e -> sources[j] ?: silence(e.durationUs) })
                         addListener(FollowerListener(this))
                     }
                 }
@@ -288,7 +273,7 @@ class LayeredPreviewEngine(
         sounds.clear()
     }
 
-    private fun allPlayers(): List<ExoPlayer> = listOfNotNull(main) + overlays.filterNotNull() + sounds.filterNotNull()
+    private fun allPlayers(): List<PreviewPlayer> = listOfNotNull(main) + overlays.filterNotNull() + sounds.filterNotNull()
 
     private fun startTicker() {
         if (ticker?.isActive == true) return
@@ -336,10 +321,10 @@ class LayeredPreviewEngine(
     }
 
     /** Followers playing only to show their first frame after a seek, with the request each is for. */
-    private val stillPending = mutableMapOf<ExoPlayer, Int>()
+    private val stillPending = mutableMapOf<PreviewPlayer, Int>()
     private var stillRequests = 0
 
-    private fun showStill(player: ExoPlayer) {
+    private fun showStill(player: PreviewPlayer) {
         val request = ++stillRequests
         stillPending[player] = request
         player.playWhenReady = true
@@ -359,7 +344,7 @@ class LayeredPreviewEngine(
         val playing = isPlaying
 
         fun check(
-            player: ExoPlayer,
+            player: PreviewPlayer,
             entries: List<LaneEntry>,
         ) {
             player.playWhenReady = playing
@@ -371,7 +356,7 @@ class LayeredPreviewEngine(
     }
 
     private fun laneTimeUs(
-        player: ExoPlayer,
+        player: PreviewPlayer,
         entries: List<LaneEntry>,
     ): Long? {
         val e = entries.getOrNull(player.currentMediaItemIndex) ?: return null
@@ -381,7 +366,7 @@ class LayeredPreviewEngine(
     }
 
     private fun seekLane(
-        player: ExoPlayer,
+        player: PreviewPlayer,
         entries: List<LaneEntry>,
         t: Long,
     ) {
@@ -397,7 +382,7 @@ class LayeredPreviewEngine(
         val e = schedule?.main?.getOrNull(index) ?: return
         val speed = (e.content as? MainContent.Video)?.speed ?: Speed.X1
         val wanted = speed.numerator.toFloat() / speed.denominator
-        main?.let { if (it.playbackParameters.speed != wanted) it.playbackParameters = PlaybackParameters(wanted) }
+        main?.let { if (it.speed != wanted) it.speed = wanted }
     }
 
     private fun publish(at: Long? = null) {
@@ -454,7 +439,7 @@ class LayeredPreviewEngine(
     }
 
     private inner class FollowerListener(
-        private val player: ExoPlayer,
+        private val player: PreviewPlayer,
     ) : Player.Listener {
         override fun onMediaItemTransition(
             mediaItem: MediaItem?,
@@ -484,18 +469,9 @@ class LayeredPreviewEngine(
         uri: Uri,
         startUs: Long,
         endUs: Long,
-    ): MediaSource =
-        ClippingMediaSource
-            .Builder(sourceFactory.createMediaSource(MediaItem.fromUri(uri)))
-            .setStartPositionUs(startUs)
-            .setEndPositionUs(maxOf(endUs, startUs + PreviewSchedule.MIN_ENTRY_US))
-            .build()
+    ): Segment = Segment.Media(uri, startUs, endUs)
 
-    private fun silence(durationUs: Long): MediaSource =
-        SilenceMediaSource
-            .Factory()
-            .setDurationUs(durationUs.coerceAtLeast(PreviewSchedule.MIN_ENTRY_US))
-            .createMediaSource()
+    private fun silence(durationUs: Long): Segment = Segment.Silence(durationUs)
 
     private fun checkMainThread() = check(Looper.myLooper() == Looper.getMainLooper()) { "Use the preview on the main thread" }
 
@@ -504,13 +480,6 @@ class LayeredPreviewEngine(
         const val MAX_DRIFT_US = 200_000L
         private const val STILL_TIMEOUT_MS = 10_000L
         private const val STILL_SETTLE_MS = 300L
-
-        private val MOVIE_AUDIO: AudioAttributes =
-            AudioAttributes
-                .Builder()
-                .setUsage(C.USAGE_MEDIA)
-                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                .build()
 
         internal fun gainOf(db: Double?): Float = if (db == null) 0f else GainEnvelope.dbToGain(db).coerceIn(0f, 1f)
 

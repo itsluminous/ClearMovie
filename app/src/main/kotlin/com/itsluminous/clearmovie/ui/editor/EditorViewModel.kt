@@ -2,32 +2,47 @@ package com.itsluminous.clearmovie.ui.editor
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
+import com.itsluminous.clearmovie.data.media.IntakeItem
 import com.itsluminous.clearmovie.data.media.MediaAccess
 import com.itsluminous.clearmovie.data.media.MediaAccessState
+import com.itsluminous.clearmovie.data.media.MediaFactsProbe
 import com.itsluminous.clearmovie.data.media.MediaStatus
+import com.itsluminous.clearmovie.data.media.newMainItems
 import com.itsluminous.clearmovie.data.preset.SlotStatus
 import com.itsluminous.clearmovie.data.project.OpenResult
 import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.data.project.ProjectMediaSet
 import com.itsluminous.clearmovie.data.project.ProjectRepository
+import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.EditResult
 import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.IntroClip
+import com.itsluminous.clearmovie.domain.model.Limits
+import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
+import com.itsluminous.clearmovie.domain.model.RandomIds
+import com.itsluminous.clearmovie.domain.model.Side
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.insertAt
 import com.itsluminous.clearmovie.domain.model.mainLayout
+import com.itsluminous.clearmovie.domain.model.replaceMainItem
+import com.itsluminous.clearmovie.domain.model.replacePresetPart
 import com.itsluminous.clearmovie.render.media3.MediaResolver
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
@@ -35,6 +50,8 @@ import com.itsluminous.clearmovie.render.plan.Source
 import com.itsluminous.clearmovie.render.preview.ExactDraft
 import com.itsluminous.clearmovie.render.preview.LayeredPreviewEngine
 import com.itsluminous.clearmovie.render.preview.StillLoader
+import com.itsluminous.clearmovie.ui.media.IntakeState
+import com.itsluminous.clearmovie.ui.media.MediaIntake
 import com.itsluminous.clearmovie.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -66,6 +83,8 @@ data class EditorUi(
     /** The project could not be opened (gone, or unreadable). */
     val failed: Boolean = false,
     val schedule: PreviewSchedule? = null,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
 ) {
     /** MAIN in play order: intro, the user's items, ending. */
     val slots: List<MainSlot> get() = project?.mainLayout().orEmpty()
@@ -93,13 +112,84 @@ sealed interface EditorEvent {
 
     /** Leaving failed because the latest edits could not be written (the phone is full). */
     data object NotSaved : EditorEvent
+
+    /** New items went in; the first one is selected. */
+    data class Inserted(
+        val first: ClipId,
+    ) : EditorEvent
+
+    /** Some picked items could not be used. */
+    data class Skipped(
+        val count: Int,
+    ) : EditorEvent
+
+    /** The chosen file can't be used for what it was chosen for. */
+    data class WrongFile(
+        val wanted: WantedFile,
+    ) : EditorEvent
+
+    /** The copies did not fit on the phone. */
+    data object OutOfSpace : EditorEvent
+}
+
+/** What a chosen file had to be. */
+enum class WantedFile { PHOTO_OR_VIDEO, VIDEO, SOUND }
+
+/**
+ * Why photos or videos are being taken in from the gallery. Kept in the
+ * saved state with the links, so a process death during the copy takes them
+ * in again for the same purpose.
+ */
+sealed interface IntakePurpose {
+    /** "Add photos and videos": at the end, before the ending. */
+    data object Add : IntakePurpose
+
+    /** A "+": next to [anchor]. */
+    data class Insert(
+        val anchor: ClipId,
+        val side: Side,
+    ) : IntakePurpose
+
+    /** "Replace" on a photo, video or card. */
+    data class Replace(
+        val clipId: ClipId,
+    ) : IntakePurpose
+
+    /** "Replace (this video only)" on the intro or the ending. */
+    data class ReplacePart(
+        val clipId: ClipId,
+    ) : IntakePurpose
+
+    fun encode(): String =
+        when (this) {
+            Add -> "add"
+            is Insert -> "insert:${side.name}:${anchor.value}"
+            is Replace -> "replace:${clipId.value}"
+            is ReplacePart -> "part:${clipId.value}"
+        }
+
+    companion object {
+        fun decode(text: String): IntakePurpose? =
+            runCatching {
+                val parts = text.split(':', limit = 3)
+                when (parts[0]) {
+                    "add" -> Add
+                    "insert" -> Insert(ClipId(parts[2]), Side.valueOf(parts[1]))
+                    "replace" -> Replace(ClipId(parts[1]))
+                    "part" -> ReplacePart(ClipId(parts[1]))
+                    else -> null
+                }
+            }.getOrNull()
+    }
 }
 
 /**
- * The editor shell (cm-flow): the open project, its layered preview and the
- * read-only MAIN row. It owns the preview's players, so a rotation keeps
- * playing and only the surfaces are reattached; the playhead and whether it
- * was playing are kept in the saved state for a process death.
+ * The editor: the open project, its layered preview, the edits made on the
+ * timeline (each one an undo step, see [EditSession]) and the photos and
+ * videos taken in from the gallery for "+", Replace and Add. It owns the
+ * preview's players, so a rotation keeps playing and only the surfaces are
+ * reattached; the playhead and whether it was playing are kept in the saved
+ * state for a process death, as are links picked but not yet taken in.
  */
 @OptIn(UnstableApi::class)
 @HiltViewModel
@@ -111,6 +201,7 @@ class EditorViewModel
         private val repository: ProjectRepository,
         private val projectMedia: ProjectMedia,
         private val mediaAccess: MediaAccess,
+        private val probe: MediaFactsProbe,
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -119,7 +210,14 @@ class EditorViewModel
 
         val engine = LayeredPreviewEngine(context, viewModelScope)
         val stills = StillLoader(context)
-        private val thumbs = StillLoader(context, maxSide = THUMB_SIDE)
+
+        /** The timeline's thumbnail strips: many small pictures. */
+        private val strips = StillLoader(context, maxSide = STRIP_SIDE, cacheSize = STRIP_CACHE)
+
+        private val session = EditSession()
+
+        /** Photos and videos being taken in for "+", Replace or Add. */
+        val intake = MediaIntake(mediaAccess, viewModelScope)
 
         private val draftState = MutableStateFlow<DraftState>(DraftState.Idle)
         val draft: StateFlow<DraftState> = draftState.asStateFlow()
@@ -164,7 +262,10 @@ class EditorViewModel
                     .filterNotNull()
                     .filter { it.id == projectId }
                     .distinctUntilChanged()
-                    .collect { load(it) }
+                    .collect {
+                        session.adopt(it)
+                        load(it)
+                    }
             }
             // The playhead goes into the saved state, for a process death.
             viewModelScope.launch {
@@ -181,8 +282,202 @@ class EditorViewModel
         /** Re-reads the preset files and the media: after the repair screen, or when access changed. */
         fun refresh(access: MediaAccessState) {
             this.access = access
+            // Links picked before a process death are taken in again, once.
+            if (!resumed) {
+                resumed = true
+                val purpose = savedState.get<String>(KEY_INTAKE_PURPOSE)?.let(IntakePurpose::decode)
+                val uris = savedState.get<ArrayList<String>>(KEY_INTAKE_URIS)
+                if (purpose != null && uris != null && intake.state.value == IntakeState.Idle) {
+                    intakePurpose = purpose
+                    intake.start(projectId, uris.map { it.toUri() }, access)
+                }
+            }
             val project = uiState.value.project ?: return
             viewModelScope.launch { load(project) }
+        }
+
+        private var resumed = false
+        private var intakePurpose: IntakePurpose? = null
+
+        init {
+            viewModelScope.launch {
+                intake.state.collect { state ->
+                    when (state) {
+                        is IntakeState.Done -> {
+                            intake.consumed()
+                            finishIntake(state.items)
+                        }
+
+                        IntakeState.Cancelled, IntakeState.AllowAllRequested -> {
+                            intake.consumed()
+                            clearIntake()
+                        }
+
+                        IntakeState.OutOfSpace -> {
+                            intake.consumed()
+                            clearIntake()
+                            eventChannel.send(EditorEvent.OutOfSpace)
+                        }
+
+                        else -> {
+                            Unit
+                        }
+                    }
+                }
+            }
+        }
+
+        /** Applies [change] to the project as one undo step. False when it was refused (nothing changes). */
+        fun edit(change: Project.() -> Project): Boolean {
+            val applied = session.edit(change) == EditResult.Applied
+            if (applied) {
+                val next = session.current
+                if (next != null) repository.update { next }
+            }
+            publishHistory()
+            return applied
+        }
+
+        fun undo() {
+            session.undo()?.let { p -> repository.update { p } }
+            publishHistory()
+        }
+
+        fun redo() {
+            session.redo()?.let { p -> repository.update { p } }
+            publishHistory()
+        }
+
+        private fun publishHistory() = uiState.update { it.copy(canUndo = session.canUndo, canRedo = session.canRedo) }
+
+        /** A text or colour card at a "+" (section 11.6), 3 s long. */
+        fun insertCard(
+            anchor: ClipId,
+            side: Side,
+            text: String?,
+            color: ArgbColor,
+        ) {
+            val card = CardClip(RandomIds.clipId(), Limits.DEFAULT_CARD_MS, color, text)
+            if (edit { insertAt(main.id, anchor, side, card) }) {
+                viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(card.id)) }
+            }
+        }
+
+        /** Takes in [uris] picked in the gallery for [purpose]. Nothing picked does nothing. */
+        fun takeIn(
+            purpose: IntakePurpose,
+            uris: List<Uri>,
+            access: MediaAccessState,
+        ) {
+            if (uris.isEmpty()) return
+            intakePurpose = purpose
+            savedState[KEY_INTAKE_PURPOSE] = purpose.encode()
+            savedState[KEY_INTAKE_URIS] = ArrayList(uris.map { it.toString() })
+            intake.start(projectId, uris, access)
+        }
+
+        private fun clearIntake() {
+            intakePurpose = null
+            savedState.remove<String>(KEY_INTAKE_PURPOSE)
+            savedState.remove<ArrayList<String>>(KEY_INTAKE_URIS)
+        }
+
+        private suspend fun finishIntake(items: List<IntakeItem>) {
+            val purpose = intakePurpose
+            val project = session.current
+            clearIntake()
+            if (purpose == null || project == null) return
+            when (purpose) {
+                is IntakePurpose.ReplacePart -> {
+                    replacePart(purpose.clipId, items.firstOrNull(), project)
+                }
+
+                else -> {
+                    val made = newMainItems(projectId, items, project.photoDurationMs, project.defaultFit, probe)
+                    if (made.skipped > 0) eventChannel.send(EditorEvent.Skipped(made.skipped))
+                    val clips = made.clips
+                    if (clips.isEmpty()) return
+                    val applied =
+                        when (purpose) {
+                            IntakePurpose.Add -> {
+                                edit { addToMain(clips) }
+                            }
+
+                            is IntakePurpose.Insert -> {
+                                edit {
+                                    var p = this
+                                    var anchor = purpose.anchor
+                                    var side = purpose.side
+                                    for (c in clips) {
+                                        p = p.insertAt(p.main.id, anchor, side, c)
+                                        anchor = c.id
+                                        side = Side.AFTER
+                                    }
+                                    p
+                                }
+                            }
+
+                            is IntakePurpose.Replace -> {
+                                edit { replaceMainItem(purpose.clipId, clips.first()) }
+                            }
+                        }
+                    if (applied) {
+                        val first = if (purpose is IntakePurpose.Replace) purpose.clipId else clips.first().id
+                        eventChannel.send(EditorEvent.Inserted(first))
+                    }
+                }
+            }
+        }
+
+        private suspend fun replacePart(
+            clipId: ClipId,
+            item: IntakeItem?,
+            project: Project,
+        ) {
+            val part = project.mainClips.firstOrNull { it.id == clipId } ?: return
+            val wantSound = part is EndingClip && part.kind == EndingKind.AUDIO
+            val ref = item?.ref
+            val facts = ref?.let { probe.probe(projectId, it, item.info?.mime) }
+            val ms = facts?.durationMs
+            val fits = facts != null && (if (wantSound) facts.hasAudio else facts.hasVideo)
+            if (ref == null || !fits || ms == null || ms !in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) {
+                eventChannel.send(EditorEvent.WrongFile(if (wantSound) WantedFile.SOUND else WantedFile.VIDEO))
+                return
+            }
+            edit { replacePresetPart(clipId, ref, ms) }
+        }
+
+        /** What Play plays for the intro or the ending: its file, or null when it can't be opened. */
+        fun playable(clipId: ClipId): Uri? {
+            val clip = session.current?.mainClips?.firstOrNull { it.id == clipId } ?: return null
+            val ref =
+                when (clip) {
+                    is IntroClip -> clip.media
+                    is EndingClip -> clip.media
+                    else -> return null
+                }
+            return runCatching { resolver?.resolve(ref) }.getOrNull()
+        }
+
+        /** Whether Play for [clipId] plays sound only (a spoken ending). */
+        fun isSoundPart(clipId: ClipId): Boolean =
+            (session.current?.mainClips?.firstOrNull { it.id == clipId } as? EndingClip)?.kind == EndingKind.AUDIO
+
+        /** A picture for a thumbnail strip: [clip] at [sourceMs] of its file. */
+        suspend fun stripFrame(
+            clip: MainClip,
+            sourceMs: Long,
+        ): Bitmap? {
+            val r = resolver ?: return null
+            val source =
+                when (clip) {
+                    is PhotoClip -> Source.Photo(clip.media)
+                    is VideoClip -> Source.VideoFrame(clip.media, sourceMs * 1000)
+                    is IntroClip -> Source.VideoFrame(clip.media, sourceMs * 1000)
+                    is EndingClip -> if (clip.kind == EndingKind.VIDEO) Source.VideoFrame(clip.media, sourceMs * 1000) else return null
+                    else -> return null
+                }
+            return strips.load(source, r)
         }
 
         private suspend fun load(project: Project) {
@@ -227,35 +522,11 @@ class EditorViewModel
 
         fun seekTo(us: Long) = engine.seekTo(us)
 
-        /** A picture for a MAIN item's tile, or null. */
-        suspend fun thumbnail(slot: MainSlot): Bitmap? {
-            val r = resolver ?: return null
-            val source =
-                when (val c = slot.clip) {
-                    is PhotoClip -> {
-                        Source.Photo(c.media)
-                    }
-
-                    is VideoClip -> {
-                        Source.VideoFrame(
-                            c.media,
-                            (c.trimStartMs + THUMB_AT_MS.coerceAtMost(c.trimEndMs - c.trimStartMs - 1)) * 1000,
-                        )
-                    }
-
-                    is IntroClip -> {
-                        Source.VideoFrame(c.media, THUMB_AT_MS * 1000)
-                    }
-
-                    is EndingClip -> {
-                        if (c.kind == EndingKind.VIDEO) Source.VideoFrame(c.media, 0) else return null
-                    }
-
-                    else -> {
-                        return null
-                    }
-                }
-            return thumbs.load(source, r)
+        /** Drops any intake in flight and its saved links (the screen is leaving). */
+        override fun onCleared() {
+            intake.cancel()
+            draftJob?.cancel()
+            engine.release()
         }
 
         /** Renders the exact draft around the playhead. */
@@ -304,11 +575,6 @@ class EditorViewModel
             }
         }
 
-        override fun onCleared() {
-            draftJob?.cancel()
-            engine.release()
-        }
-
         data class ArrivalNotes(
             val skipped: Int,
             val broughtBack: Boolean,
@@ -317,8 +583,10 @@ class EditorViewModel
         companion object {
             /** The preview's plan height; only bitmaps depend on it, the players play the files as they are. */
             const val PREVIEW_HEIGHT = 720
-            const val THUMB_SIDE = 320
-            const val THUMB_AT_MS = 1000L
+            const val STRIP_SIDE = 160
+            const val STRIP_CACHE = 96
+            const val KEY_INTAKE_PURPOSE = "editor_intake_purpose"
+            const val KEY_INTAKE_URIS = "editor_intake_uris"
             const val SAVE_POSITION_MS = 500L
             const val KEY_POSITION = "editor_position_us"
             const val KEY_PLAYING = "editor_playing"

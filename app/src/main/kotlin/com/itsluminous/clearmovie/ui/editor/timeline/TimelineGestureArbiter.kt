@@ -1,0 +1,172 @@
+package com.itsluminous.clearmovie.ui.editor.timeline
+
+import kotlin.math.hypot
+
+/** Where a gesture started, from [TimelineGeometry.hitTest] (or a row header). */
+enum class GestureStart { CLIP, TRIM_START, TRIM_END, RULER, PLUS, HEADER, EMPTY }
+
+/** What a gesture has turned out to be. */
+enum class GestureMode {
+    /** Not decided yet: the finger is down and has not moved past the slop. */
+    PENDING,
+    PINCH,
+    SCROLL,
+    TRIM,
+    SCRUB,
+
+    /** Held 500 ms without moving: lifted, waiting for a drag or a release. */
+    LONG_PRESSED,
+    DRAG,
+
+    /** Finished as a tap on [TimelineGestureArbiter.start]. */
+    TAP,
+
+    /** Finished as a long-press released without moving: opens the menu. */
+    MENU,
+    CANCELLED,
+    ENDED,
+}
+
+/**
+ * The timeline's pointer state machine (ARCHITECTURE section 11.5), pure so
+ * it is tested with synthetic pointer streams. Times are in ms, positions in
+ * dp. The rules:
+ *
+ * 1. A second finger before a long-press fires makes it a **pinch** (a
+ *    scroll in progress gives way; a trim or scrub does only within the first
+ *    [PINCH_WINDOW_MS]).
+ * 2. Movement past the touch slop before [LONG_PRESS_MS] is a **scroll**, or
+ *    a **trim** or **scrub** when it started on a handle or the ruler.
+ * 3. [LONG_PRESS_MS] without movement on an item or a row header is a
+ *    **long-press**; moving afterwards **drags**, releasing opens the
+ *    **menu**.
+ * 4. Releasing before that without moving is a **tap** on what was touched.
+ *
+ * Handles and the ruler beat the items under them because [start] comes from
+ * the geometry's hit test, which ranks them first.
+ */
+class TimelineGestureArbiter(
+    private val touchSlopDp: Double = DEFAULT_SLOP_DP,
+) {
+    var mode: GestureMode = GestureMode.ENDED
+        private set
+    var start: GestureStart = GestureStart.EMPTY
+        private set
+
+    private var firstId = -1L
+    private var downAt = 0L
+    private var downX = 0.0
+    private var downY = 0.0
+    private val pointers = mutableSetOf<Long>()
+
+    val isActive: Boolean get() = mode !in DONE
+
+    /** A finger went down. */
+    fun down(
+        id: Long,
+        x: Double,
+        y: Double,
+        timeMs: Long,
+        target: GestureStart,
+    ): GestureMode {
+        if (!isActive) {
+            pointers.clear()
+            pointers += id
+            firstId = id
+            downAt = timeMs
+            downX = x
+            downY = y
+            start = target
+            mode = GestureMode.PENDING
+            return mode
+        }
+        pointers += id
+        if (pointers.size >= 2) {
+            val early = timeMs - downAt <= PINCH_WINDOW_MS
+            mode =
+                when (mode) {
+                    GestureMode.PENDING, GestureMode.SCROLL -> GestureMode.PINCH
+                    GestureMode.TRIM, GestureMode.SCRUB -> if (early) GestureMode.PINCH else mode
+                    else -> mode
+                }
+        }
+        return mode
+    }
+
+    /** A finger moved. */
+    fun move(
+        id: Long,
+        x: Double,
+        y: Double,
+        timeMs: Long,
+    ): GestureMode {
+        tick(timeMs)
+        if (id != firstId) return mode
+        val moved = hypot(x - downX, y - downY) > touchSlopDp
+        if (!moved) return mode
+        mode =
+            when (mode) {
+                GestureMode.PENDING -> {
+                    when (start) {
+                        GestureStart.TRIM_START, GestureStart.TRIM_END -> GestureMode.TRIM
+                        GestureStart.RULER -> GestureMode.SCRUB
+                        else -> GestureMode.SCROLL
+                    }
+                }
+
+                GestureMode.LONG_PRESSED -> {
+                    GestureMode.DRAG
+                }
+
+                else -> {
+                    mode
+                }
+            }
+        return mode
+    }
+
+    /** Time passed with the finger still down: fires the long-press. */
+    fun tick(timeMs: Long): GestureMode {
+        if (mode == GestureMode.PENDING && timeMs - downAt >= LONG_PRESS_MS && start in LONG_PRESSABLE) {
+            mode = GestureMode.LONG_PRESSED
+        }
+        return mode
+    }
+
+    /** A finger lifted. */
+    fun up(
+        id: Long,
+        timeMs: Long,
+    ): GestureMode {
+        tick(timeMs)
+        pointers -= id
+        if (pointers.isNotEmpty() && mode == GestureMode.PINCH) return mode
+        if (pointers.isNotEmpty() && id != firstId) return mode
+        mode =
+            when (mode) {
+                GestureMode.PENDING -> GestureMode.TAP
+                GestureMode.LONG_PRESSED -> GestureMode.MENU
+                else -> GestureMode.ENDED
+            }
+        pointers.clear()
+        return mode
+    }
+
+    /** The system took the gesture away (a rotation, a scroll parent): nothing happens. */
+    fun cancel(): GestureMode {
+        pointers.clear()
+        mode = GestureMode.CANCELLED
+        return mode
+    }
+
+    companion object {
+        const val LONG_PRESS_MS = 500L
+        const val PINCH_WINDOW_MS = 150L
+
+        /** Android's usual touch slop (8 dp). */
+        const val DEFAULT_SLOP_DP = 8.0
+
+        private val LONG_PRESSABLE = setOf(GestureStart.CLIP, GestureStart.HEADER)
+        private val DONE = setOf(GestureMode.TAP, GestureMode.MENU, GestureMode.CANCELLED, GestureMode.ENDED)
+    }
+}

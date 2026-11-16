@@ -700,3 +700,120 @@ fun Project.setAnimation(
         }
         clip.withAnimations(clip.animations.with(slot, anim))
     }
+
+// ---------------------------------------------------------------- duplicate and replace (section 11.2)
+
+/**
+ * "Duplicate": a copy of a MAIN photo, video or card right after it. The
+ * copy takes over the transition to the next item (as the second half of a
+ * split does), the original keeps none, and the copy belongs to no split.
+ */
+fun Project.duplicateClip(
+    clipId: ClipId,
+    newId: ClipId = RandomIds.clipId(),
+): Project {
+    val clips = main.clips
+    val i = clips.indexOfFirst { it.id == clipId }
+    require(i >= 0) { "No such clip on the MAIN row" }
+    require(clip(newId) == null) { "Clip id already used" }
+    val original = clips[i] as MainClip
+    requireContentClip(original)
+    val copy =
+        when (original) {
+            is VideoClip -> original.copy(id = newId, splitGroup = null)
+            else -> original.withId(newId) as MainClip
+        }
+    val placed =
+        clips.toMutableList().apply {
+            set(i, original.withTransition(null))
+            add(i + 1, copy)
+        }
+    return withTrackClips(main.id, placed).normalized()
+}
+
+/**
+ * "Replace" on a MAIN photo, video or card: [replacement] takes its place
+ * and its id (so it stays selected), with the transition into the next item,
+ * the fit and, for an item of the same kind, the animations. A photo's
+ * length comes from the replacement; a video plays whole.
+ */
+fun Project.replaceMainItem(
+    clipId: ClipId,
+    replacement: MainClip,
+): Project {
+    val clips = main.clips
+    val i = clips.indexOfFirst { it.id == clipId }
+    require(i >= 0) { "No such clip on the MAIN row" }
+    val old = clips[i] as MainClip
+    requireContentClip(old)
+    requireContentClip(replacement)
+    var next = (replacement.withId(old.id) as MainClip).withTransition(old.transitionToNext)
+    if (old is MediaClip && next is MediaClip) next = next.withFit(old.fit)
+    if (old::class == next::class) next = next.withAnimations(old.animations) as MainClip
+    val placed = clips.toMutableList().apply { set(i, next.withStartMs(0)) }
+    return withTrackClips(main.id, placed).normalized()
+}
+
+/**
+ * "Replace (this video only)" for the intro or the ending: plays [media],
+ * [durationMs] long, instead. For a spoken ending the closing message plays
+ * the new sound as well, so the held last frame and the speech stay the same
+ * length.
+ */
+fun Project.replacePresetPart(
+    clipId: ClipId,
+    media: MediaRef,
+    durationMs: Long,
+): Project {
+    require(media !is MediaRef.Preset) { "A replacement is the user's own file" }
+    require(durationMs in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) { "A replacement needs a usable length" }
+    val clips = main.clips
+    val i = clips.indexOfFirst { it.id == clipId }
+    require(i >= 0) { "No such clip on the MAIN row" }
+    val part = clips[i]
+    var project =
+        when (part) {
+            is IntroClip -> {
+                withTrackClips(
+                    main.id,
+                    clips.toMutableList().apply { set(i, part.copy(media = media, durationMs = durationMs)) },
+                )
+            }
+
+            is EndingClip -> {
+                withTrackClips(
+                    main.id,
+                    clips.toMutableList().apply { set(i, part.copy(media = media, durationMs = durationMs)) },
+                )
+            }
+
+            else -> {
+                throw IllegalArgumentException("Only the intro and the ending are replaced this way")
+            }
+        }
+    if (part is EndingClip && part.kind == EndingKind.AUDIO) {
+        for (t in project.tracks) {
+            val spoken = t.clips.filter { it is AudioClip && it.anchor == SpanAnchor.Ending }
+            if (spoken.isEmpty()) continue
+            val renewed =
+                t.clips.map {
+                    if (it is AudioClip && it.anchor == SpanAnchor.Ending) {
+                        it.copy(media = media, sourceDurationMs = durationMs, trimStartMs = 0, trimEndMs = durationMs)
+                    } else {
+                        it
+                    }
+                }
+            project = project.withTrackClips(t.id, renewed)
+        }
+    }
+    return project.normalized()
+}
+
+/** The background colour of a text or colour card; it must be opaque, as a card fills the window. */
+fun Project.setCardColor(
+    clipId: ClipId,
+    color: ArgbColor,
+): Project {
+    require(color.alpha == 0xFF) { "A card's colour is opaque" }
+    return updateTyped<CardClip>(clipId, "cards") { it.copy(color = color) }
+}

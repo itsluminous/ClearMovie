@@ -20,14 +20,16 @@ import java.io.File
  * Loads the pictures the preview draws itself: photos, decoded no larger
  * than [maxSide] on their long side (a 48 MP photo never reaches memory at
  * full size, review F8), and held video frames. A few are kept, so stepping
- * back and forth does not decode again. Null when the file can't be read.
+ * back and forth does not decode again ([cacheSize] pictures; the timeline's
+ * thumbnail strips keep more, smaller ones). Null when the file can't be read.
  */
 class StillLoader(
     private val context: Context,
     private val maxSide: Int = DEFAULT_MAX_SIDE,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    cacheSize: Int = CACHE_SIZE,
 ) {
-    private val cache = LruCache<Key, Bitmap>(CACHE_SIZE)
+    private val cache = LruCache<Key, Bitmap>(cacheSize)
 
     private data class Key(
         val media: MediaRef,
@@ -95,6 +97,6 @@ class StillLoader(
 
     companion object {
         const val DEFAULT_MAX_SIDE = 1280
-        private const val CACHE_SIZE = 4
+        const val CACHE_SIZE = 4
     }
 }

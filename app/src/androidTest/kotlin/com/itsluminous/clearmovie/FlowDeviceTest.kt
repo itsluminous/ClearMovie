@@ -142,10 +142,11 @@ class FlowDeviceTest {
         videos: Int,
     ) {
         waitFor(hasTestTag(EDITOR_TIMELINE_TAG))
-        val photo = context.getString(R.string.editor_item_description, s(R.string.editor_item_photo), "0:03")
-        waitFor(hasContentDescription(photo), photos)
-        assertThat(compose.onAllNodes(hasContentDescription(photo)).fetchSemanticsNodes()).hasSize(photos)
-        val video = hasContentDescription(s(R.string.editor_item_video), substring = true)
+        // Each tile reads "Photo, 1 of 3, 0:03 long" (timeline_item_description); the "+" points name items differently.
+        val photo = hasContentDescription(s(R.string.editor_item_photo) + ",", substring = true)
+        waitFor(photo, photos)
+        assertThat(compose.onAllNodes(photo).fetchSemanticsNodes()).hasSize(photos)
+        val video = hasContentDescription(s(R.string.editor_item_video) + ",", substring = true)
         waitFor(video, videos)
         assertThat(compose.onAllNodes(video).fetchSemanticsNodes()).hasSize(videos)
     }

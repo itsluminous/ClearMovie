@@ -3,7 +3,11 @@ package com.itsluminous.clearmovie.ui.editor
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,39 +48,111 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.EndingClip
+import com.itsluminous.clearmovie.domain.model.EndingKind
+import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.PresetId
-import com.itsluminous.clearmovie.domain.model.ProjectId
+import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.Side
 import com.itsluminous.clearmovie.ui.components.PlayFileDialog
 import com.itsluminous.clearmovie.ui.components.WorkDialog
+import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
+import com.itsluminous.clearmovie.ui.editor.timeline.itemName
+import com.itsluminous.clearmovie.ui.media.MediaIntakeDialogs
 import com.itsluminous.clearmovie.ui.export.ExportBlock
 import com.itsluminous.clearmovie.ui.export.ExportFlow
 import com.itsluminous.clearmovie.ui.media.rememberMediaAccessController
 import com.itsluminous.clearmovie.ui.preset.presetName
 
-/** The editor shell wired to its view model and the layered preview. */
+/**
+ * The editor wired to its view model, the layered preview and the gallery:
+ * "+" and Add open the system photo picker for several items, Replace for
+ * one (a video only for the intro, a sound file for a spoken ending), and
+ * what comes back is taken in by the view model with the copy questions
+ * shown here. The picker's answer arrives even after a rotation, and is
+ * taken in once.
+ */
 @OptIn(UnstableApi::class)
 @Composable
 fun EditorRoute(
     onClosed: () -> Unit,
-    onAddMedia: (ProjectId) -> Unit,
     onFixPreset: (PresetId) -> Unit,
     viewModel: EditorViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val preview by viewModel.engine.state.collectAsStateWithLifecycle()
     val draft by viewModel.draft.collectAsStateWithLifecycle()
+    val intake by viewModel.intake.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val screen = rememberEditorScreenState()
     var exportInfo by rememberSaveable { mutableStateOf(false) }
     var notSaved by rememberSaveable { mutableStateOf(false) }
+    var outOfSpace by rememberSaveable { mutableStateOf(false) }
+    var playingPart by rememberSaveable { mutableStateOf<String?>(null) }
+    // Where the picker's answer goes; saved, as the answer can arrive after a rotation.
+    var pending by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val resources = LocalResources.current
     val access = rememberMediaAccessController(askedBefore = false, onAsked = {})
 
+    fun taken(uris: List<Uri>) {
+        val purpose = pending?.let(IntakePurpose::decode)
+        pending = null
+        if (purpose != null) viewModel.takeIn(purpose, uris, access.state)
+    }
+    val pickMany = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { taken(it) }
+    val pickOne = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { taken(listOfNotNull(it)) }
+    val pickSound = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { taken(listOfNotNull(it)) }
+
+    fun pick(
+        purpose: IntakePurpose,
+        launch: () -> Unit,
+    ) {
+        viewModel.pause()
+        pending = purpose.encode()
+        if (runCatching(launch).isFailure) {
+            pending = null
+            screen.panel = null
+        }
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.events.collect {
             when (it) {
-                EditorEvent.Closed -> onClosed()
-                EditorEvent.NotSaved -> notSaved = true
+                EditorEvent.Closed -> {
+                    onClosed()
+                }
+
+                EditorEvent.NotSaved -> {
+                    notSaved = true
+                }
+
+                is EditorEvent.Inserted -> {
+                    screen.selected = it.first
+                    screen.panel = null
+                }
+
+                is EditorEvent.Skipped -> {
+                    snackbar.showSnackbar(resources.getQuantityString(R.plurals.pick_skipped, it.count, it.count))
+                }
+
+                is EditorEvent.WrongFile -> {
+                    snackbar.showSnackbar(
+                        resources.getString(
+                            when (it.wanted) {
+                                WantedFile.PHOTO_OR_VIDEO -> R.string.editor_wrong_photo_video
+                                WantedFile.VIDEO -> R.string.editor_wrong_video
+                                WantedFile.SOUND -> R.string.editor_wrong_sound
+                            },
+                        ),
+                    )
+                }
+
+                EditorEvent.OutOfSpace -> {
+                    outOfSpace = true
+                }
             }
         }
     }
@@ -96,13 +172,91 @@ fun EditorRoute(
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (context.findActivity()?.isChangingConfigurations != true) viewModel.pause()
     }
-    BackHandler(onBack = viewModel::close)
+    BackHandler(enabled = screen.panel == null, onBack = viewModel::close)
+    BackHandler(enabled = screen.panel != null) { screen.panel = null }
 
     if (ui.failed) {
         CannotOpen(onBack = onClosed)
         return
     }
     val title = ui.project?.name ?: ui.preset?.let { presetName(it) } ?: stringResource(R.string.editor_title_new)
+    val actions =
+        remember(viewModel) {
+            object : EditorActions {
+                override fun back() = viewModel.close()
+
+                override fun export() {
+                    viewModel.pause()
+                    exportInfo = true
+                }
+
+                override fun togglePlay() = viewModel.togglePlay()
+
+                override fun exact() = viewModel.requestDraft()
+
+                override fun fixPreset() {
+                    viewModel.ui.value.project
+                        ?.presetId
+                        ?.let(onFixPreset)
+                }
+
+                override fun edit(change: Project.() -> Project): Boolean = viewModel.edit(change)
+
+                override fun undo() = viewModel.undo()
+
+                override fun redo() = viewModel.redo()
+
+                override fun seek(ms: Long) = viewModel.seekTo(ms * 1000)
+
+                override fun pickForInsert(
+                    anchor: ClipId,
+                    side: InsertSide,
+                ) = pick(IntakePurpose.Insert(anchor, if (side == InsertSide.BEFORE) Side.BEFORE else Side.AFTER)) {
+                    pickMany.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                }
+
+                override fun pickForReplace(clipId: ClipId) {
+                    val clip =
+                        viewModel.ui.value.project
+                            ?.mainClips
+                            ?.firstOrNull { it.id == clipId } ?: return
+                    when {
+                        clip is IntroClip || (clip is EndingClip && clip.kind == EndingKind.VIDEO) -> {
+                            pick(IntakePurpose.ReplacePart(clipId)) {
+                                pickOne.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                            }
+                        }
+
+                        clip is EndingClip -> {
+                            pick(IntakePurpose.ReplacePart(clipId)) { pickSound.launch(arrayOf("audio/*")) }
+                        }
+
+                        else -> {
+                            pick(IntakePurpose.Replace(clipId)) {
+                                pickOne.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                            }
+                        }
+                    }
+                }
+
+                override fun pickToAdd() =
+                    pick(IntakePurpose.Add) {
+                        pickMany.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                    }
+
+                override fun insertCard(
+                    anchor: ClipId,
+                    side: InsertSide,
+                    text: String?,
+                    color: ArgbColor,
+                ) = viewModel.insertCard(anchor, if (side == InsertSide.BEFORE) Side.BEFORE else Side.AFTER, text, color)
+
+                override fun playPart(clipId: ClipId) {
+                    viewModel.pause()
+                    playingPart = clipId.value
+                }
+            }
+        }
     EditorScreen(
         ui = ui,
         title = title,
@@ -113,22 +267,32 @@ fun EditorRoute(
                 LayeredPreview(viewModel.engine, schedule, preview, viewModel.stills, viewModel.resolver, modifier)
             }
         },
-        thumbnail = viewModel::thumbnail,
-        onBack = viewModel::close,
-        onExport = {
-            viewModel.pause()
-            exportInfo = true
-        },
-        onTogglePlay = viewModel::togglePlay,
-        onSeek = viewModel::seekTo,
-        onExact = viewModel::requestDraft,
-        onAddMedia = {
-            viewModel.pause()
-            onAddMedia(viewModel.projectId)
-        },
-        onFixPreset = { ui.project?.presetId?.let(onFixPreset) },
+        thumbnail = viewModel::stripFrame,
+        actions = actions,
+        state = screen,
         snackbar = snackbar,
     )
+    MediaIntakeDialogs(
+        state = intake,
+        onCopyAnyway = viewModel.intake::copyAnyway,
+        onChooseFewer = viewModel.intake::chooseFewer,
+        // Allow all photos: Android's own question; the items are then chosen again with full access.
+        onAllowAll = {
+            viewModel.intake.chooseFewer()
+            access.request()
+        },
+        onCancel = viewModel.intake::cancel,
+    )
+    playingPart?.let { id ->
+        val clipId = runCatching { ClipId(id) }.getOrNull()
+        val uri = clipId?.let(viewModel::playable)
+        val clip = clipId?.let { c -> ui.project?.mainClips?.firstOrNull { it.id == c } }
+        if (uri == null || clip == null) {
+            playingPart = null
+        } else {
+            PlayFileDialog(uri, stringResource(itemName(clip)), audioOnly = viewModel.isSoundPart(clipId), onClose = { playingPart = null })
+        }
+    }
     if (exportInfo) {
         ExportFlow(title = title, blocked = exportBlock(ui), onDismiss = { exportInfo = false })
     }
@@ -138,6 +302,14 @@ fun EditorRoute(
             title = { Text(stringResource(R.string.copy_no_space_title)) },
             text = { Text(stringResource(R.string.editor_not_saved)) },
             confirmButton = { TextButton(onClick = { notSaved = false }) { Text(stringResource(R.string.action_ok)) } },
+        )
+    }
+    if (outOfSpace) {
+        AlertDialog(
+            onDismissRequest = { outOfSpace = false },
+            title = { Text(stringResource(R.string.copy_no_space_title)) },
+            text = { Text(stringResource(R.string.pick_out_of_space)) },
+            confirmButton = { TextButton(onClick = { outOfSpace = false }) { Text(stringResource(R.string.action_ok)) } },
         )
     }
     when (val d = draft) {

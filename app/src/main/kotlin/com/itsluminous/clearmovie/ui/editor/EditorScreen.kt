@@ -1,17 +1,14 @@
 package com.itsluminous.clearmovie.ui.editor
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -22,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -29,11 +27,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,49 +38,104 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.media.MediaStatus
+import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.CardClip
+import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EndingClip
-import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.IntroClip
+import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
 import com.itsluminous.clearmovie.domain.model.PhotoClip
+import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.canJoin
+import com.itsluminous.clearmovie.domain.model.deleteClip
+import com.itsluminous.clearmovie.domain.model.duplicateClip
+import com.itsluminous.clearmovie.domain.model.joinClips
+import com.itsluminous.clearmovie.domain.model.moveMainClip
+import com.itsluminous.clearmovie.domain.model.rotate
+import com.itsluminous.clearmovie.domain.model.setPhotoDuration
+import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.ui.components.durationText
+import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
+import com.itsluminous.clearmovie.ui.editor.timeline.ClipActions
+import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
+import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
+import com.itsluminous.clearmovie.ui.editor.timeline.LayoutEvent
+import com.itsluminous.clearmovie.ui.editor.timeline.LayoutInput
+import com.itsluminous.clearmovie.ui.editor.timeline.PopupCorner
+import com.itsluminous.clearmovie.ui.editor.timeline.PreviewLayout
+import com.itsluminous.clearmovie.ui.editor.timeline.RowMetrics
+import com.itsluminous.clearmovie.ui.editor.timeline.RowSpec
+import com.itsluminous.clearmovie.ui.editor.timeline.RowType
+import com.itsluminous.clearmovie.ui.editor.timeline.SelectionKind
+import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
+import com.itsluminous.clearmovie.ui.editor.timeline.TimelineActions
+import com.itsluminous.clearmovie.ui.editor.timeline.TimelineRow
+import com.itsluminous.clearmovie.ui.editor.timeline.TimelineView
+import com.itsluminous.clearmovie.ui.editor.timeline.TimelineZoom
+import com.itsluminous.clearmovie.ui.editor.timeline.TrimEdge
+import com.itsluminous.clearmovie.ui.editor.timeline.TrimMath
+import com.itsluminous.clearmovie.ui.editor.timeline.itemName
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** Test tags. */
 const val EDITOR_TIMELINE_TAG = "editor_timeline"
 const val EDITOR_EXPORT_TAG = "editor_export"
+const val EDITOR_PREVIEW_BOX_TAG = "editor_preview_box"
+const val EDITOR_POPUP_TAG = "editor_preview_popup"
+const val EDITOR_POPUP_CLOSE_TAG = "editor_preview_popup_close"
+const val EDITOR_POPUP_MOVE_TAG = "editor_preview_popup_move"
+const val ZOOM_IN_TAG = "zoom_in"
+const val ZOOM_OUT_TAG = "zoom_out"
+const val ZOOM_FIT_TAG = "zoom_fit_all"
+const val UNDO_TAG = "editor_undo"
+const val REDO_TAG = "editor_redo"
+const val EXACT_TAG = "editor_exact"
+const val EMPTY_ADD_TAG = "editor_empty_add"
 
 /** The playhead and play state the controls show. */
 data class PlayheadUi(
@@ -94,15 +144,28 @@ data class PlayheadUi(
     val playing: Boolean = false,
 )
 
+/** Everything the editor screen asks of its owner. */
+interface EditorActions : EditorCallbacks {
+    fun back()
+
+    fun export()
+
+    fun togglePlay()
+
+    fun exact()
+
+    fun fixPreset()
+}
+
 /**
- * The editor shell (requirement 4, ARCHITECTURE section 11.1): the top bar
- * with Back and the always-visible Export (top right), the preview with
- * Play/Pause, the time, a position slider and Play exactly as exported, and
- * the read-only MAIN row. On a phone held upright the preview is on top; in
- * two panes (medium or expanded width, or a phone held sideways) the
- * preview is on the left at full height and the bar, banners and row on the
- * right. The full timeline arrives with cm-timeline. Stateless: [preview]
- * draws the picture.
+ * The editor (requirement 4, ARCHITECTURE sections 11.1 to 11.7): the top
+ * bar with Back, Undo, Redo and the always-visible Export at the top right;
+ * the preview with Play, the time and the zoom buttons; the timeline; and the
+ * contextual bar, or the panel of the action being used. On a phone held
+ * upright the preview is on top and shrinks as the rows need room
+ * ([PreviewLayout]); when all rows are asked for and they don't fit, it
+ * floats over them in a corner. In two panes the preview fills the left pane.
+ * Stateless apart from [state], which is saved with the screen.
  */
 @Composable
 fun EditorScreen(
@@ -110,37 +173,229 @@ fun EditorScreen(
     title: String,
     playhead: PlayheadUi,
     preview: @Composable (Modifier) -> Unit,
-    thumbnail: suspend (MainSlot) -> Bitmap?,
-    onBack: () -> Unit,
-    onExport: () -> Unit,
-    onTogglePlay: () -> Unit,
-    onSeek: (Long) -> Unit,
-    onExact: () -> Unit,
-    onAddMedia: () -> Unit,
-    onFixPreset: () -> Unit,
+    thumbnail: ThumbSource,
+    actions: EditorActions,
+    state: EditorScreenState = rememberEditorScreenState(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    val project = ui.project
+    val slots = ui.slots
+    val resources = LocalResources.current
+    val scope = rememberCoroutineScope()
+    // A selection or panel whose item went away (an undo, a delete) is dropped.
+    val selectedSlot = slots.firstOrNull { it.clip.id == state.selected }
+    LaunchedEffect(selectedSlot == null, state.selected) { if (selectedSlot == null && state.selected != null) state.selected = null }
+    val playheadMs = playhead.positionUs / 1000
+    val metrics = RowMetrics(LocalDensity.current.fontScale)
+    val rows = project?.let { timelineRows(it) }.orEmpty()
+    val missing = ui.missing.filterValues { it != MediaStatus.AVAILABLE }.keys
+
+    fun deleted(clip: MainClip) {
+        scope.launch {
+            val message =
+                if (clip is IntroClip || clip is EndingClip) {
+                    resources.getString(R.string.editor_part_skipped, resources.getString(itemName(clip)))
+                } else {
+                    resources.getString(R.string.editor_deleted)
+                }
+            val result = snackbar.showSnackbar(message, actionLabel = resources.getString(R.string.action_undo), withDismissAction = true)
+            if (result == SnackbarResult.ActionPerformed) actions.undo()
+        }
+    }
+
+    val timelineActions =
+        remember(actions, state) {
+            object : TimelineActions {
+                override fun select(id: ClipId?) {
+                    state.selected = id
+                    if (state.panel?.clipId != id) state.panel = null
+                }
+
+                override fun seek(ms: Long) = actions.seek(ms)
+
+                override fun trim(
+                    id: ClipId,
+                    edge: TrimEdge,
+                    deltaMs: Double,
+                ) {
+                    actions.edit {
+                        val slot = mainLayoutClip(this, id) ?: return@edit this
+                        replaceTrimmed(this, slot, TrimMath.dragged(slot, edge, deltaMs))
+                    }
+                }
+
+                override fun move(
+                    id: ClipId,
+                    toContentIndex: Int,
+                ) {
+                    actions.edit { moveMainClip(id, toContentIndex) }
+                }
+
+                override fun insert(
+                    anchor: ClipId,
+                    side: InsertSide,
+                ) {
+                    state.panel = OpenPanel(Panel.INSERT, anchor, side)
+                }
+
+                override fun menu(id: ClipId) {
+                    state.selected = id
+                    state.panel = OpenPanel(Panel.ITEM_MENU, id)
+                }
+
+                override fun showAllRows() = state.layoutEvent(LayoutEvent.ShowAllRows)
+
+                override fun showFewerRows() = state.layoutEvent(LayoutEvent.ShowFewerRows)
+            }
+        }
+
+    fun onBar(action: EditAction) {
+        val slot = selectedSlot
+        val id = slot?.clip?.id
+        when (action) {
+            EditAction.ADD_MEDIA -> {
+                actions.pickToAdd()
+            }
+
+            EditAction.FIT_ALL -> {
+                fitAll(state, slots)
+            }
+
+            else -> {
+                if (id == null || project == null) return
+                when (action) {
+                    EditAction.TRIM -> state.panel = OpenPanel(Panel.TRIM, id)
+                    EditAction.DURATION -> state.panel = OpenPanel(Panel.DURATION, id)
+                    EditAction.SPLIT -> state.panel = OpenPanel(Panel.SPLIT, id)
+                    EditAction.SPEED -> state.panel = OpenPanel(Panel.SPEED, id)
+                    EditAction.LOOP -> state.panel = OpenPanel(Panel.LOOP, id)
+                    EditAction.VOLUME -> state.panel = OpenPanel(Panel.VOLUME, id)
+                    EditAction.FIT -> state.panel = OpenPanel(Panel.FIT, id)
+                    EditAction.EDIT_TEXT -> state.panel = OpenPanel(Panel.CARD_TEXT, id)
+                    EditAction.COLOUR -> state.panel = OpenPanel(Panel.CARD_COLOUR, id)
+                    EditAction.ROTATE -> actions.edit { rotate(id) }
+                    EditAction.REPLACE -> actions.pickForReplace(id)
+                    EditAction.DUPLICATE -> actions.edit { duplicateClip(id) }
+                    EditAction.MOVE_LEFT -> contentIndex(slots, slot).let { i -> if (i > 0) actions.edit { moveMainClip(id, i - 1) } }
+                    EditAction.MOVE_RIGHT -> contentIndex(slots, slot).let { i -> actions.edit { moveMainClip(id, i + 1) } }
+                    EditAction.JOIN -> joinTarget(project, slots, slot)?.let { (a, b) -> actions.edit { joinClips(a, b) } }
+                    EditAction.PLAY -> actions.playPart(id)
+                    EditAction.DELETE, EditAction.SKIP -> if (actions.edit { deleteClip(id) }) deleted(slot.clip)
+                    else -> Unit
+                }
+            }
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
         AdaptiveScreen(Modifier.fillMaxSize().padding(padding)) { window ->
-            val canPlay = ui.schedule?.main?.isNotEmpty() == true
+            val windowHeight = maxHeight.value.toDouble()
+            val windowWidth = maxWidth.value.toDouble()
+            var topDp by remember { mutableFloatStateOf(0f) }
+            var controlsDp by remember { mutableFloatStateOf(0f) }
+            var bottomDp by remember { mutableFloatStateOf(0f) }
+            val density = LocalDensity.current
+            // In two panes the playback controls sit under the preview, so only the right pane's bars count.
+            val chrome =
+                if (window.twoPane) {
+                    (topDp + bottomDp).toDouble() + insetsDp()
+                } else {
+                    (topDp + controlsDp + bottomDp).toDouble() +
+                        insetsDp()
+                }
+            val input =
+                LayoutInput(
+                    twoPane = window.twoPane,
+                    windowWidthDp = windowWidth,
+                    windowHeightDp = windowHeight,
+                    chromeHeightDp = chrome,
+                    rulerDp = metrics.rulerDp,
+                    rows = rows.map { RowSpec(it.key, metrics.heightOf(it.type), it.type == RowType.MAIN) },
+                    toggleDp = metrics.toggleDp,
+                    selectedRow =
+                        project
+                            ?.main
+                            ?.id
+                            ?.value
+                            ?.takeIf { selectedSlot != null },
+                )
+            LaunchedEffect(input) { state.layoutEvent(LayoutEvent.Measured(input)) }
+            val layout = state.layout.layout
+            val visible = layout?.visibleRows ?: rows.map { it.key }
+            val hidden = rows.filter { it.key in layout?.hiddenRows.orEmpty() }
+
+            val timeline: @Composable (Modifier) -> Unit = { m ->
+                Column(m.testTag(EDITOR_TIMELINE_TAG)) {
+                    Banners(ui, actions::fixPreset)
+                    if (!ui.hasContent) EmptyHint(actions::pickToAdd)
+                    TimelineView(
+                        slots = slots,
+                        rows = rows,
+                        visibleRows = visible,
+                        hiddenRows = hidden,
+                        allRowsRequested = state.layout.allRowsRequested,
+                        selected = selectedSlot?.clip?.id,
+                        missing = missing,
+                        playheadMs = playheadMs,
+                        playing = playhead.playing,
+                        zoom = state.zoom,
+                        onZoom = { state.zoom = it },
+                        onSpanWidth = { state.spanWidth = it },
+                        thumbnail = thumbnail,
+                        actions = timelineActions,
+                        rowScroll = rememberScrollState(),
+                        metrics = metrics,
+                    )
+                }
+            }
+            val bottom: @Composable (Modifier) -> Unit = { m ->
+                Box(m.onSizeChanged { bottomDp = with(density) { it.height.toDp().value } }) {
+                    val open = state.panel
+                    if (open != null && project != null) {
+                        EditPanel(open, project, playheadMs, thumbnail, actions, onPanel = { state.panel = it }, onDeleted = {
+                            selectedSlot?.clip?.let(::deleted)
+                        })
+                    } else {
+                        ContextualBar(
+                            actions = barActions(project, slots, selectedSlot, missing),
+                            onAction = ::onBar,
+                            description =
+                                selectedSlot?.let { stringResource(R.string.bar_description, stringResource(itemName(it.clip))) }
+                                    ?: stringResource(R.string.bar_description_nothing),
+                        )
+                    }
+                }
+            }
+            val controls: @Composable (Modifier) -> Unit = { m ->
+                Controls(
+                    playhead = playhead,
+                    enabled = ui.schedule?.main?.isNotEmpty() == true,
+                    actions = actions,
+                    onZoomIn = { zoomButton(state, slots, playheadMs, zoomIn = true) },
+                    onZoomOut = { zoomButton(state, slots, playheadMs, zoomIn = false) },
+                    onFitAll = { fitAll(state, slots) },
+                    canZoomIn = state.zoom?.let { it.msPerDp > TimelineZoom.closeUpMsPerDp * 1.0001 } ?: true,
+                    canZoomOut = state.zoom?.fitAll != true,
+                    modifier = m.onSizeChanged { controlsDp = with(density) { it.height.toDp().value } },
+                )
+            }
+
             if (window.twoPane) {
                 Row(Modifier.fillMaxSize()) {
-                    // The picture may run under the status bar on the left; no control does.
                     Column(
                         Modifier
-                            .weight(1.4f)
+                            .weight(1.2f)
                             .fillMaxHeight()
                             .background(LocalMediaColors.current.previewBackground)
                             .windowInsetsPadding(WindowInsets.safeDrawing.pane(left = true)),
                     ) {
-                        // As large as the pane allows, at 16:9: full width, or full height when that is the limit.
-                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).fillMaxWidth().testTag(EDITOR_PREVIEW_BOX_TAG), contentAlignment = Alignment.Center) {
                             preview(Modifier.aspectRatio(16f / 9f))
                         }
-                        Surface(Modifier.fillMaxWidth()) { Controls(playhead, canPlay, onTogglePlay, onSeek, onExact) }
+                        Surface(Modifier.fillMaxWidth()) { controls(Modifier) }
                     }
                     Column(
                         Modifier
@@ -148,23 +403,48 @@ fun EditorScreen(
                             .fillMaxHeight()
                             .windowInsetsPadding(WindowInsets.safeDrawing.pane(left = false)),
                     ) {
-                        TopBar(title, onBack, onExport)
-                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                            Banners(ui, onFixPreset)
-                            Timeline(ui, playhead.positionUs, thumbnail, onSeek, onAddMedia)
-                        }
+                        TopBar(title, ui, actions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
+                        timeline(Modifier.weight(1f).fillMaxWidth())
+                        bottom(Modifier)
                     }
                 }
             } else {
-                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                    TopBar(title, onBack, onExport)
-                    Box(Modifier.fillMaxWidth().background(LocalMediaColors.current.previewBackground)) {
-                        preview(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    Column(Modifier.fillMaxSize()) {
+                        TopBar(title, ui, actions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
+                        val previewDp =
+                            when (layout) {
+                                is PreviewLayout.Full -> layout.previewDp
+                                is PreviewLayout.Shrunk -> layout.previewDp
+                                is PreviewLayout.Partial -> layout.previewDp
+                                is PreviewLayout.Floating -> 0.0
+                                else -> windowWidth * 9 / 16
+                            }
+                        if (layout !is PreviewLayout.Floating) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(previewDp.dp)
+                                    .background(LocalMediaColors.current.previewBackground)
+                                    .testTag(EDITOR_PREVIEW_BOX_TAG),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                preview(Modifier.fillMaxHeight().aspectRatio(16f / 9f, matchHeightConstraintsFirst = true))
+                            }
+                        }
+                        controls(Modifier)
+                        timeline(Modifier.weight(1f).fillMaxWidth())
+                        bottom(Modifier)
                     }
-                    Controls(playhead, canPlay, onTogglePlay, onSeek, onExact)
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        Banners(ui, onFixPreset)
-                        Timeline(ui, playhead.positionUs, thumbnail, onSeek, onAddMedia)
+                    if (layout is PreviewLayout.Floating) {
+                        FloatingPreview(
+                            corner = layout.corner,
+                            topDp = topDp,
+                            bottomDp = bottomDp,
+                            preview = preview,
+                            onMoved = { state.layoutEvent(LayoutEvent.PopupMoved(it)) },
+                            onClose = { state.layoutEvent(LayoutEvent.ShowFewerRows) },
+                        )
                     }
                 }
             }
@@ -172,34 +452,202 @@ fun EditorScreen(
     }
 }
 
+/** The vertical insets the stacked layout pads by (status and navigation bars), in dp. */
+@Composable
+private fun insetsDp(): Double {
+    val density = LocalDensity.current
+    val insets = WindowInsets.safeDrawing
+    return with(density) { (insets.getTop(this) + insets.getBottom(this)).toDp().value.toDouble() }
+}
+
+private fun zoomButton(
+    state: EditorScreenState,
+    slots: List<MainSlot>,
+    playheadMs: Long,
+    zoomIn: Boolean,
+) {
+    val z = state.zoom ?: return
+    val total = slots.lastOrNull()?.endMs ?: 0L
+    val width = state.spanWidth ?: return
+    state.zoom = TimelineZoom.zoomButton(z, zoomIn, playheadMs.toDouble(), total, width)
+}
+
+/** Fit all: the whole video across the timeline. */
+private fun fitAll(
+    state: EditorScreenState,
+    slots: List<MainSlot>,
+) {
+    val width = state.spanWidth ?: return
+    state.zoom = TimelineZoom.fitAll(slots.lastOrNull()?.endMs ?: 0L, width)
+}
+
 /** Insets for one of the two panes: the left pane takes the start edge, the right pane the end edge; both take the top and bottom. */
 private fun WindowInsets.pane(left: Boolean): WindowInsets =
     only(if (left) WindowInsetsSides.Start + WindowInsetsSides.Vertical else WindowInsetsSides.End + WindowInsetsSides.Vertical)
 
+/** The rows the timeline shows, in screen order. */
+fun timelineRows(project: Project): List<TimelineRow> =
+    project.tracks.map { t ->
+        val type =
+            when (t.type) {
+                TrackType.MAIN -> {
+                    RowType.MAIN
+                }
+
+                TrackType.TEXT -> {
+                    RowType.TEXT
+                }
+
+                TrackType.OVERLAY -> {
+                    RowType.FRAME
+                }
+
+                TrackType.VISUAL -> {
+                    RowType.PIP
+                }
+
+                TrackType.AUDIO -> {
+                    when (t.audioRole) {
+                        AudioRole.MUSIC -> RowType.MUSIC
+                        AudioRole.VOICE -> RowType.VOICE
+                        else -> RowType.SOUND
+                    }
+                }
+            }
+        TimelineRow(t.id.value, type, if (t.type == TrackType.MAIN) emptyList() else t.clips.map { it.startMs to it.endMs }, t.enabled)
+    }
+
+private fun selectionKind(clip: MainClip?): SelectionKind =
+    when (clip) {
+        null -> SelectionKind.NOTHING
+        is PhotoClip -> SelectionKind.PHOTO
+        is VideoClip -> SelectionKind.VIDEO
+        is CardClip -> if (clip.text.isNullOrBlank()) SelectionKind.COLOUR_CARD else SelectionKind.TEXT_CARD
+        is IntroClip -> SelectionKind.INTRO
+        is EndingClip -> SelectionKind.ENDING
+    }
+
+private fun contentIndex(
+    slots: List<MainSlot>,
+    slot: MainSlot,
+): Int = slots.take(slot.index).count { it.clip.isContentClip() }
+
+private fun MainClip.isContentClip() = this is PhotoClip || this is VideoClip || this is CardClip
+
+/** The split partner next to [slot] that Join joins it with: the next one first. */
+private fun joinTarget(
+    project: Project,
+    slots: List<MainSlot>,
+    slot: MainSlot,
+): Pair<ClipId, ClipId>? {
+    val next = slots.getOrNull(slot.index + 1)?.clip?.id
+    val prev = slots.getOrNull(slot.index - 1)?.clip?.id
+    return when {
+        next != null && project.canJoin(slot.clip.id, next) -> slot.clip.id to next
+        prev != null && project.canJoin(prev, slot.clip.id) -> prev to slot.clip.id
+        else -> null
+    }
+}
+
+private fun barActions(
+    project: Project?,
+    slots: List<MainSlot>,
+    selected: MainSlot?,
+    missing: Set<ClipId>,
+): List<BarAction> {
+    val clip = selected?.clip
+    val kind = selectionKind(clip)
+    if (selected == null || project == null) return ClipActions.forSelection(kind)
+    val index = contentIndex(slots, selected)
+    val count = slots.count { it.clip.isContentClip() }
+    return ClipActions.forSelection(
+        kind = kind,
+        missing = selected.clip.id in missing,
+        canMoveLeft = index > 0,
+        canMoveRight = index < count - 1,
+        canJoin = joinTarget(project, slots, selected) != null,
+    )
+}
+
+private fun mainLayoutClip(
+    project: Project,
+    id: ClipId,
+): MainClip? = project.mainClips.firstOrNull { it.id == id }
+
+/** The project with MAIN item [old] at its trimmed form, through the model's own operations. */
+private fun replaceTrimmed(
+    project: Project,
+    old: MainClip,
+    trimmed: MainClip,
+): Project =
+    when (trimmed) {
+        is VideoClip -> project.trimVideo(old.id, trimmed.trimStartMs, trimmed.trimEndMs)
+        is PhotoClip -> project.setPhotoDuration(old.id, trimmed.durationMs)
+        is CardClip -> project.setPhotoDuration(old.id, trimmed.durationMs)
+        else -> project
+    }
+
 @Composable
 private fun TopBar(
     title: String,
-    onBack: () -> Unit,
-    onExport: () -> Unit,
+    ui: EditorUi,
+    actions: EditorActions,
+    modifier: Modifier,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 4.dp),
+        modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.size(56.dp)) {
+        IconButton(onClick = actions::back, modifier = Modifier.size(56.dp)) {
             Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
         }
         Text(
             title,
             style = MaterialTheme.typography.titleLarge,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
         )
-        Button(onClick = onExport, modifier = Modifier.heightIn(min = 48.dp).padding(end = 8.dp).testTag(EDITOR_EXPORT_TAG)) {
+        LabelledIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo)
+        LabelledIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo)
+        Button(
+            onClick = actions::export,
+            modifier = Modifier.heightIn(min = 48.dp).padding(start = 4.dp, end = 8.dp).testTag(EDITOR_EXPORT_TAG),
+        ) {
             Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.editor_export))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.editor_export), maxLines = 1)
+        }
+    }
+}
+
+/** An icon with its name under it (ARCHITECTURE section 11: every control has a label). */
+@Composable
+private fun LabelledIcon(
+    icon: Int,
+    label: Int,
+    enabled: Boolean,
+    tag: String,
+    onClick: () -> Unit,
+    description: String? = null,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        contentPadding =
+            androidx.compose.foundation.layout
+                .PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+        modifier =
+            Modifier
+                .widthIn(min = 56.dp)
+                .heightIn(min = 56.dp)
+                .testTag(tag)
+                .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(22.dp))
+            Text(stringResource(label), style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
     }
 }
@@ -209,51 +657,63 @@ private fun TopBar(
 private fun Controls(
     playhead: PlayheadUi,
     enabled: Boolean,
-    onTogglePlay: () -> Unit,
-    onSeek: (Long) -> Unit,
-    onExact: () -> Unit,
+    actions: EditorActions,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onFitAll: () -> Unit,
+    canZoomIn: Boolean,
+    canZoomOut: Boolean,
+    modifier: Modifier,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-        val duration = playhead.durationUs.coerceAtLeast(1)
-        // While the thumb is dragged it follows the finger, and the preview moves only on release:
-        // seeking every player on every frame of a drag makes the thumb jump back under a slow hand.
-        var dragging by remember { mutableStateOf<Float?>(null) }
-        val shownUs = dragging?.let { (it * duration).toLong() } ?: playhead.positionUs
-        val position = durationText(shownUs)
-        val total = durationText(playhead.durationUs)
-        val seekLabel = stringResource(R.string.editor_seek)
-        val timeLabel = stringResource(R.string.editor_time, position, total)
-        Slider(
-            value = dragging ?: (playhead.positionUs.toFloat() / duration).coerceIn(0f, 1f),
-            onValueChange = { dragging = it },
-            onValueChangeFinished = {
-                dragging?.let { onSeek((it * duration).toLong()) }
-                dragging = null
-            },
+    val position = durationText(playhead.positionUs)
+    val total = durationText(playhead.durationUs)
+    val timeLabel = stringResource(R.string.editor_time, position, total)
+    val seekLabel = stringResource(R.string.editor_seek)
+    val duration = playhead.durationUs.coerceAtLeast(1)
+    // One row on a phone; it wraps at large text sizes, and the layout makes room for it.
+    FlowRow(
+        modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        FilledTonalButton(
+            onClick = actions::togglePlay,
             enabled = enabled,
+            contentPadding =
+                androidx.compose.foundation.layout
+                    .PaddingValues(horizontal = 12.dp),
+            modifier = Modifier.heightIn(min = 56.dp),
+        ) {
+            Icon(painterResource(if (playhead.playing) R.drawable.ic_pause else R.drawable.ic_play), contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Text(stringResource(if (playhead.playing) R.string.action_pause else R.string.action_play))
+        }
+        // The time, which TalkBack can also move (the timeline's ruler is the gesture for it).
+        Text(
+            timeLabel,
+            style = MaterialTheme.typography.titleSmall,
             modifier =
-                Modifier.fillMaxWidth().semantics {
+                Modifier.padding(horizontal = 4.dp).semantics {
                     contentDescription = seekLabel
                     stateDescription = timeLabel
+                    progressBarRangeInfo = ProgressBarRangeInfo(playhead.positionUs.toFloat() / duration, 0f..1f)
+                    setProgress { f ->
+                        actions.seek((f.coerceIn(0f, 1f) * duration / 1000).toLong())
+                        true
+                    }
                 },
         )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            FilledTonalButton(onClick = onTogglePlay, enabled = enabled, modifier = Modifier.heightIn(min = 56.dp)) {
-                Icon(painterResource(if (playhead.playing) R.drawable.ic_pause else R.drawable.ic_play), contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(if (playhead.playing) R.string.action_pause else R.string.action_play))
-            }
-            Text(timeLabel, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 8.dp))
-            OutlinedButton(onClick = onExact, enabled = enabled, modifier = Modifier.heightIn(min = 56.dp)) {
-                Icon(painterResource(R.drawable.ic_visibility), contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.editor_exact))
-            }
-        }
+        LabelledIcon(R.drawable.ic_zoom_out, R.string.zoom_out, canZoomOut, ZOOM_OUT_TAG, onZoomOut)
+        LabelledIcon(R.drawable.ic_zoom_in, R.string.zoom_in, canZoomIn, ZOOM_IN_TAG, onZoomIn)
+        LabelledIcon(R.drawable.ic_fit_screen, R.string.zoom_fit_all, canZoomOut, ZOOM_FIT_TAG, onFitAll)
+        LabelledIcon(
+            R.drawable.ic_visibility,
+            R.string.editor_exact_short,
+            enabled,
+            EXACT_TAG,
+            actions::exact,
+            description = stringResource(R.string.editor_exact),
+        )
     }
 }
 
@@ -264,205 +724,174 @@ private fun Banners(
 ) {
     if (!ui.presetNeedsRepair) return
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
             ),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(painterResource(R.drawable.ic_warning), contentDescription = null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(stringResource(R.string.preset_repair_title), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.editor_preset_repair_body), style = MaterialTheme.typography.bodyLarge)
-                }
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_warning), contentDescription = null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.preset_repair_title), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.editor_preset_repair_body), style = MaterialTheme.typography.bodyMedium)
             }
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = onFixPreset, modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.editor_fix_preset))
-            }
-        }
-    }
-}
-
-/** The read-only MAIN row: a tile per item in play order; tapping one moves the playhead there. */
-@Composable
-private fun Timeline(
-    ui: EditorUi,
-    positionUs: Long,
-    thumbnail: suspend (MainSlot) -> Bitmap?,
-    onSeek: (Long) -> Unit,
-    onAddMedia: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag(EDITOR_TIMELINE_TAG)) {
-        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painterResource(R.drawable.ic_photo_library),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                stringResource(R.string.editor_row_main),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics { heading() },
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        val slots = ui.slots
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-        ) {
-            itemsIndexed(slots, key = { _, s -> s.clip.id.value }) { _, slot ->
-                val current = positionUs / 1000 in slot.startMs until slot.endMs
-                Tile(slot, current, ui.missing[slot.clip.id], thumbnail, onClick = { onSeek(slot.startMs * 1000) })
-            }
-            if (ui.hasContent) item(key = "add") { AddTile(onAddMedia) }
-        }
-        if (!ui.hasContent) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    stringResource(R.string.editor_empty),
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = onAddMedia, modifier = Modifier.heightIn(min = 56.dp).widthIn(min = 200.dp)) {
-                    Icon(painterResource(R.drawable.ic_add), contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.editor_add_media))
-                }
-            }
+            Button(onClick = onFixPreset, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.editor_fix_preset)) }
         }
     }
 }
 
 @Composable
-private fun Tile(
-    slot: MainSlot,
-    current: Boolean,
-    status: MediaStatus?,
-    thumbnail: suspend (MainSlot) -> Bitmap?,
-    onClick: () -> Unit,
-) {
-    val media = LocalMediaColors.current
-    val clip = slot.clip
-    val (labelRes, icon) =
-        when (clip) {
-            is IntroClip -> {
-                R.string.preset_slot_intro to R.drawable.ic_videocam
-            }
-
-            is EndingClip -> {
-                R.string.preset_slot_ending to
-                    if (clip.kind == EndingKind.AUDIO) R.drawable.ic_music_note else R.drawable.ic_videocam
-            }
-
-            is PhotoClip -> {
-                R.string.editor_item_photo to R.drawable.ic_image
-            }
-
-            is VideoClip -> {
-                R.string.editor_item_video to R.drawable.ic_videocam
-            }
-
-            is CardClip -> {
-                R.string.editor_item_card to R.drawable.ic_image
-            }
-        }
-    val label = stringResource(labelRes)
-    val length = durationText(slot.durationMs * 1000)
-    val missing = status != null && status != MediaStatus.AVAILABLE
-    val description =
-        stringResource(if (missing) R.string.editor_item_missing_description else R.string.editor_item_description, label, length)
-    val picture by produceState<Bitmap?>(null, clip, missing) { value = if (missing) null else thumbnail(slot) }
-    val nowPlaying = stringResource(R.string.editor_item_current)
-    Column(
-        Modifier
-            .width(TILE_WIDTH)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) {
-                contentDescription = description
-                if (current) stateDescription = nowPlaying
-            }.padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (missing) MaterialTheme.colorScheme.errorContainer else media.visualClip)
-                .then(
-                    if (current) {
-                        Modifier.border(
-                            BorderStroke(3.dp, MaterialTheme.colorScheme.primary),
-                            RoundedCornerShape(6.dp),
-                        )
-                    } else {
-                        Modifier
-                    },
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            val bmp = picture
-            if (bmp != null) {
-                Image(bmp.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            } else {
-                Icon(
-                    painterResource(if (missing) R.drawable.ic_broken_image else icon),
-                    contentDescription = null,
-                    tint = if (missing) MaterialTheme.colorScheme.onErrorContainer else media.onVisualClip,
-                    modifier = Modifier.size(32.dp),
-                )
-            }
-        }
+private fun EmptyHint(onAdd: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            if (missing) stringResource(R.string.media_missing_label) else label,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 2,
+            stringResource(R.string.editor_empty),
+            style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(length, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun AddTile(onClick: () -> Unit) {
-    val label = stringResource(R.string.editor_add_media)
-    Column(
-        Modifier
-            .width(TILE_WIDTH)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) {}
-            .padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(6.dp))
-                .border(BorderStroke(2.dp, MaterialTheme.colorScheme.outline), RoundedCornerShape(6.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painterResource(R.drawable.ic_add),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32.dp),
-            )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onAdd, modifier = Modifier.heightIn(min = 56.dp).widthIn(min = 200.dp).testTag(EMPTY_ADD_TAG)) {
+            Icon(painterResource(R.drawable.ic_add), contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.editor_add_media))
         }
-        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 3, textAlign = TextAlign.Center)
     }
 }
 
-private val TILE_WIDTH = 112.dp
+/**
+ * The preview as a small window over the rows (ARCHITECTURE section 11.4,
+ * Floating): about 45% of the width, dragged anywhere and snapped to the
+ * nearest corner on release, with a close button (back to fewer rows). A
+ * Move button, and TalkBack actions, move it without dragging.
+ */
+@Composable
+private fun FloatingPreview(
+    corner: PopupCorner,
+    topDp: Float,
+    bottomDp: Float,
+    preview: @Composable (Modifier) -> Unit,
+    onMoved: (PopupCorner) -> Unit,
+    onClose: () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val w = maxWidth * 0.45f
+        val h = w * 9f / 16f + 40.dp
+        val margin = 12.dp
+
+        fun place(c: PopupCorner): IntOffset =
+            with(density) {
+                val start = c == PopupCorner.TOP_START || c == PopupCorner.BOTTOM_START
+                val top = c == PopupCorner.TOP_START || c == PopupCorner.TOP_END
+                val x = if (start) margin else maxWidth - w - margin
+                val y = if (top) topDp.dp + margin else maxHeight - h - bottomDp.dp - margin
+                IntOffset(x.roundToPx(), y.roundToPx())
+            }
+        var drag by remember { mutableStateOf<IntOffset?>(null) }
+        val target = drag ?: place(corner)
+        val shown by animateIntOffsetAsState(target)
+        val moveLabel = stringResource(R.string.preview_popup_move)
+        val names = PopupCorner.entries.associateWith { stringResource(cornerName(it)) }
+        val description = stringResource(R.string.preview_popup)
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = LocalMediaColors.current.previewBackground,
+            modifier =
+                Modifier
+                    .offset { if (drag != null) target else shown }
+                    .width(w)
+                    .shadow(12.dp, RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp))
+                    .testTag(EDITOR_POPUP_TAG)
+                    .semantics {
+                        contentDescription = description
+                        customActions =
+                            PopupCorner.entries.filter { it != corner }.map { c ->
+                                CustomAccessibilityAction(names.getValue(c)) {
+                                    onMoved(c)
+                                    true
+                                }
+                            }
+                    }.pointerInputDrag(
+                        onDrag = { delta ->
+                            drag =
+                                (drag ?: place(corner)).let { IntOffset(it.x + delta.x.roundToInt(), it.y + delta.y.roundToInt()) }
+                        },
+                        onEnd = {
+                            val at = drag
+                            drag = null
+                            if (at != null) {
+                                with(density) {
+                                    val centreX = at.x + (w / 2).toPx()
+                                    val centreY = at.y + (h / 2).toPx()
+                                    val right = centreX > (maxWidth / 2).toPx()
+                                    val bottom = centreY > (maxHeight / 2).toPx()
+                                    onMoved(
+                                        when {
+                                            !right && !bottom -> PopupCorner.TOP_START
+                                            right && !bottom -> PopupCorner.TOP_END
+                                            !right -> PopupCorner.BOTTOM_START
+                                            else -> PopupCorner.BOTTOM_END
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    ),
+        ) {
+            Column {
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) { preview(Modifier.fillMaxSize()) }
+                Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { onMoved(nextCorner(corner)) },
+                        modifier = Modifier.size(48.dp).testTag(EDITOR_POPUP_MOVE_TAG).semantics { contentDescription = moveLabel },
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_picture_in_picture),
+                            contentDescription = null,
+                            tint = LocalMediaColors.current.onPreviewBackground,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onClose, modifier = Modifier.size(48.dp).testTag(EDITOR_POPUP_CLOSE_TAG)) {
+                        Icon(
+                            painterResource(R.drawable.ic_close),
+                            contentDescription = stringResource(R.string.preview_popup_close),
+                            tint = LocalMediaColors.current.onPreviewBackground,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun nextCorner(c: PopupCorner): PopupCorner =
+    when (c) {
+        PopupCorner.TOP_START -> PopupCorner.TOP_END
+        PopupCorner.TOP_END -> PopupCorner.BOTTOM_END
+        PopupCorner.BOTTOM_END -> PopupCorner.BOTTOM_START
+        PopupCorner.BOTTOM_START -> PopupCorner.TOP_START
+    }
+
+private fun cornerName(c: PopupCorner): Int =
+    when (c) {
+        PopupCorner.TOP_START -> R.string.corner_top_start
+        PopupCorner.TOP_END -> R.string.corner_top_end
+        PopupCorner.BOTTOM_START -> R.string.corner_bottom_start
+        PopupCorner.BOTTOM_END -> R.string.corner_bottom_end
+    }
+
+private fun Modifier.pointerInputDrag(
+    onDrag: (androidx.compose.ui.geometry.Offset) -> Unit,
+    onEnd: () -> Unit,
+): Modifier =
+    pointerInput(Unit) {
+        detectDragGestures(onDragEnd = onEnd, onDragCancel = onEnd) { change, amount ->
+            change.consume()
+            onDrag(amount)
+        }
+    }

@@ -34,6 +34,13 @@ fun durationText(us: Long): String {
     return stringResource(R.string.duration_minutes_seconds, totalSeconds / 60, totalSeconds % 60)
 }
 
+/** A length to a tenth of a second, such as "0:03.5", from milliseconds (the ruler, trim and split). */
+@Composable
+fun preciseDurationText(ms: Long): String {
+    val tenths = (ms.coerceAtLeast(0) + 50) / 100
+    return stringResource(R.string.duration_minutes_seconds_tenths, tenths / 600, (tenths / 10) % 60, tenths % 10)
+}
+
 /**
  * Heavy work in progress, with Cancel (ARCHITECTURE section 11). [fraction]
  * null shows a moving bar. It cannot be dismissed by a stray tap.

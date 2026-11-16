@@ -227,7 +227,6 @@ fun ClearMovieApp(
         ) {
             EditorRoute(
                 onClosed = { if (!navController.popBackStack(Routes.HOME, inclusive = false)) navController.navigate(Routes.HOME) },
-                onAddMedia = { navController.navigate(Routes.pick(it)) },
                 onFixPreset = { navController.navigate(Routes.setup(it, newVideo = false)) },
             )
         }
