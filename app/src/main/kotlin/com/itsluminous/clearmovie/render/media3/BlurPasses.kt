@@ -6,24 +6,29 @@ import androidx.media3.common.util.GlUtil
 import androidx.media3.common.util.UnstableApi
 
 /**
- * The fit-with-blur background in two passes of a separable Gaussian, at an
- * eighth of the frame window's size: the first samples the picture's cover
- * crop (rotated as the item is) and blurs across, the second blurs down.
- * The taps are one small pixel apart (taps further apart turn a sharp edge
- * into a staircase of copies), [TAPS] of them with a sigma of [SIGMA] small
- * pixels, about 2.5% of the window's width; the final pass scales the result
- * up with bilinear filtering. Must be made, drawn and released on the GL
- * thread.
+ * The fit-with-blur background, at an eighth of the frame window's size, in
+ * three passes: the first shrinks the picture's cover crop (rotated as the
+ * item is) to the small size, averaging each small pixel's 8x8 picture
+ * pixels; the second and third are the two halves of a separable Gaussian,
+ * across and then down. The taps are one small pixel apart (taps further
+ * apart turn a sharp edge into a staircase of copies), [TAPS] each side with
+ * a sigma of [SIGMA] small pixels, about 2.5% of the window's width; the
+ * final pass scales the result up with bilinear filtering.
+ *
+ * Each shader is one short, flat loop of texture reads. A single shader doing
+ * the shrink inside the blur (31 x 16 reads a pixel, through nested function
+ * calls) drew only black on CI's emulator GL (SwiftShader 4.0), though it
+ * worked on newer GL. Must be made, drawn and released on the GL thread.
  */
 @UnstableApi
 internal class BlurPasses(
     private val width: Int,
     private val height: Int,
 ) {
-    private val program: GlProgram =
-        GlProgram(SinglePassShaderProgram.VERTEX_SHADER, FRAGMENT).also {
-            it.setBufferAttribute("aFramePosition", GlUtil.getNormalizedCoordinateBounds(), GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE)
-        }
+    private val shrink: GlProgram = program(SHRINK)
+    private val gauss: GlProgram = program(GAUSS)
+    private val cells = GlUtil.createTexture(width, height, false)
+    private val cellsFbo = GlUtil.createFboForTexture(cells)
     private val across = GlUtil.createTexture(width, height, false)
     private val acrossFbo = GlUtil.createFboForTexture(across)
     private val down = GlUtil.createTexture(width, height, false)
@@ -32,7 +37,7 @@ internal class BlurPasses(
     /** The finished background. */
     val resultTexId: Int get() = down
 
-    /** Draws both passes from the picture [inputTexId], then puts the caller's framebuffer and viewport back. */
+    /** Draws the passes from the picture [inputTexId], then puts the caller's framebuffer and viewport back. */
     fun draw(
         inputTexId: Int,
         g: PlacementGeometry,
@@ -42,39 +47,48 @@ internal class BlurPasses(
         val viewport = IntArray(4)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, fbo, 0)
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
-        program.use()
-        program.setFloatsUniform(
+
+        // Shrink: the cover crop of the picture, turned, one small pixel per 8x8 of it.
+        GlUtil.focusFramebufferUsingCurrentContext(cellsFbo, width, height)
+        shrink.use()
+        shrink.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
+        shrink.setFloatsUniform(
             "uBackground",
             floatArrayOf(g.background.x.toFloat(), g.background.y.toFloat(), g.background.w.toFloat(), g.background.h.toFloat()),
         )
-        program.setFloatUniform("uTurns", g.quarterTurns.toFloat())
-        program.setFloatUniform("uUnpremultiply", if (fromBitmap) 1f else 0f)
+        shrink.setFloatUniform("uTurns", g.quarterTurns.toFloat())
+        shrink.setFloatUniform("uUnpremultiply", if (fromBitmap) 1f else 0f)
         // A quarter of one small pixel, across and down, in the small texture's own size.
-        program.setFloatsUniform("uCellStep", floatArrayOf(0.25f / width, 0.25f / height))
-        // Across, from the picture.
-        GlUtil.focusFramebufferUsingCurrentContext(acrossFbo, width, height)
-        program.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
-        program.setFloatUniform("uFirst", 1f)
-        program.setFloatsUniform("uStep", floatArrayOf(1f / width, 0f))
-        program.bindAttributesAndUniforms()
+        shrink.setFloatsUniform("uCellStep", floatArrayOf(0.25f / width, 0.25f / height))
+        shrink.bindAttributesAndUniforms()
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        // Down, from the first pass.
+
+        gauss.use()
+        // Across.
+        GlUtil.focusFramebufferUsingCurrentContext(acrossFbo, width, height)
+        gauss.setSamplerTexIdUniform("uTexSampler", cells, 0)
+        gauss.setFloatsUniform("uStep", floatArrayOf(1f / width, 0f))
+        gauss.bindAttributesAndUniforms()
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        // Down.
         GlUtil.focusFramebufferUsingCurrentContext(downFbo, width, height)
-        program.setSamplerTexIdUniform("uTexSampler", across, 0)
-        program.setFloatUniform("uFirst", 0f)
-        program.setFloatsUniform("uStep", floatArrayOf(0f, 1f / height))
-        program.bindAttributesAndUniforms()
+        gauss.setSamplerTexIdUniform("uTexSampler", across, 0)
+        gauss.setFloatsUniform("uStep", floatArrayOf(0f, 1f / height))
+        gauss.bindAttributesAndUniforms()
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GlUtil.checkGlError()
         GlUtil.focusFramebufferUsingCurrentContext(fbo[0], viewport[2], viewport[3])
     }
 
     fun release() {
+        runCatching { GlUtil.deleteFbo(cellsFbo) }
         runCatching { GlUtil.deleteFbo(acrossFbo) }
         runCatching { GlUtil.deleteFbo(downFbo) }
+        runCatching { GlUtil.deleteTexture(cells) }
         runCatching { GlUtil.deleteTexture(across) }
         runCatching { GlUtil.deleteTexture(down) }
-        runCatching { program.delete() }
+        runCatching { shrink.delete() }
+        runCatching { gauss.delete() }
     }
 
     companion object {
@@ -85,63 +99,67 @@ internal class BlurPasses(
         /** A side at an eighth of the window, never under 8 pixels. */
         fun size(windowPx: Int): Int = (windowPx / 8).coerceAtLeast(8)
 
-        // vUv is the small texture's own space, (0, 0) bottom left. On the first pass it maps
-        // into the background crop of the picture (y down), turned as the item is.
-        private const val FRAGMENT = """
-precision mediump float;
+        private fun program(fragment: String): GlProgram =
+            GlProgram(SinglePassShaderProgram.VERTEX_SHADER, fragment).also {
+                it.setBufferAttribute("aFramePosition", GlUtil.getNormalizedCoordinateBounds(), GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE)
+            }
+
+        // vUv is the small texture's own space, (0, 0) bottom left; it maps into the
+        // background crop of the picture (y down), turned as the item is. Each small pixel
+        // stands for about 8x8 picture pixels: a 4x4 grid of bilinear reads (each of 2x2
+        // pixels) covers all of them, so no thin line is skipped and nothing shimmers.
+        private const val SHRINK = """
+precision highp float;
 uniform sampler2D uTexSampler;
 uniform vec4 uBackground;
-uniform vec2 uStep;
-uniform float uFirst;
 uniform float uTurns;
 uniform float uUnpremultiply;
 uniform vec2 uCellStep;
 varying vec2 vUv;
 
-vec4 picture(vec2 q) {
-  q = clamp(q, 0.0, 1.0);
-  vec2 s = q;
-  if (uTurns > 0.5 && uTurns < 1.5) {
-    s = vec2(q.y, 1.0 - q.x);
-  } else if (uTurns > 1.5 && uTurns < 2.5) {
-    s = vec2(1.0 - q.x, 1.0 - q.y);
-  } else if (uTurns > 2.5) {
-    s = vec2(1.0 - q.y, q.x);
-  }
-  vec4 c = texture2D(uTexSampler, vec2(s.x, 1.0 - s.y));
-  if (uUnpremultiply > 0.5 && c.a > 0.0) {
-    c.rgb = c.rgb / c.a;
-  }
-  return c;
-}
-
-vec4 tap(vec2 uv) {
-  if (uFirst > 0.5) {
-    // Each small pixel stands for about 8x8 picture pixels: a 4x4 grid of bilinear reads
-    // (each of 2x2 pixels) covers all of them, so no thin line is skipped and nothing shimmers.
-    vec2 p = vec2(uv.x, 1.0 - uv.y);
-    vec2 q = uBackground.xy + p * uBackground.zw;
-    vec2 d = uBackground.zw * uCellStep;
-    vec4 sum = vec4(0.0);
-    for (int i = 0; i < 4; i++) {
-      for (int j = 0; j < 4; j++) {
-        sum += picture(q + vec2(float(i) - 1.5, float(j) - 1.5) * d);
+void main() {
+  vec2 p = vec2(vUv.x, 1.0 - vUv.y);
+  vec2 centre = uBackground.xy + p * uBackground.zw;
+  vec2 d = uBackground.zw * uCellStep;
+  vec4 sum = vec4(0.0);
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      vec2 q = clamp(centre + vec2(float(i) - 1.5, float(j) - 1.5) * d, 0.0, 1.0);
+      vec2 s = q;
+      if (uTurns > 0.5 && uTurns < 1.5) {
+        s = vec2(q.y, 1.0 - q.x);
+      } else if (uTurns > 1.5 && uTurns < 2.5) {
+        s = vec2(1.0 - q.x, 1.0 - q.y);
+      } else if (uTurns > 2.5) {
+        s = vec2(1.0 - q.y, q.x);
       }
+      vec4 c = texture2D(uTexSampler, vec2(s.x, 1.0 - s.y));
+      if (uUnpremultiply > 0.5 && c.a > 0.0) {
+        c.rgb = c.rgb / c.a;
+      }
+      sum += c;
     }
-    return sum / 16.0;
   }
-  return texture2D(uTexSampler, clamp(uv, 0.0, 1.0));
+  gl_FragColor = vec4(sum.rgb / 16.0, 1.0);
 }
+"""
+
+        // One half of the Gaussian: taps one small pixel apart along uStep.
+        private const val GAUSS = """
+precision highp float;
+uniform sampler2D uTexSampler;
+uniform vec2 uStep;
+varying vec2 vUv;
 
 void main() {
-  vec4 sum = vec4(0.0);
+  vec3 sum = vec3(0.0);
   float total = 0.0;
   for (int i = -$TAPS; i <= $TAPS; i++) {
     float w = exp(-float(i * i) / (2.0 * float($SIGMA * $SIGMA)));
-    sum += tap(vUv + float(i) * uStep) * w;
+    sum += texture2D(uTexSampler, clamp(vUv + float(i) * uStep, 0.0, 1.0)).rgb * w;
     total += w;
   }
-  gl_FragColor = vec4(sum.rgb / total, 1.0);
+  gl_FragColor = vec4(sum / total, 1.0);
 }
 """
     }
