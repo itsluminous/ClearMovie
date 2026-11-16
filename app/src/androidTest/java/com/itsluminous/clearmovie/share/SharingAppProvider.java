@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Kotlin standard library lives in the app's APK.
  *
  * <p>A file's name is {@code <tag>~<asset>}: the asset is one of the test
- * fixtures, and a tag {@code t<seconds>} gives it that capture time.
+ * fixtures, and a tag {@code t<seconds>} gives it a capture time that many seconds after a fixed date in 2023.
  * {@code doc.pdf} and {@code note.txt} are not media. {@link #call} "share"
  * builds the share as the sharing app does (a PendingIntent it owns, so the
  * grant is the sharing app's), and "revoke" takes every grant on the named
@@ -52,6 +52,7 @@ public class SharingAppProvider extends ContentProvider {
     public static final String KEY_PENDING = "pending";
 
     private static final AtomicInteger REQUESTS = new AtomicInteger();
+    private static final long BASE_SECONDS = 1_700_000_000L;
 
     public static Uri uriOf(String name) {
         return Uri.parse("content://" + AUTHORITY + "/f/").buildUpon().appendPath(name).build();
@@ -86,7 +87,8 @@ public class SharingAppProvider extends ContentProvider {
     private static Long takenOf(String name) {
         if (!name.startsWith("t") || !name.contains("~")) return null;
         try {
-            return Long.parseLong(name.substring(1, name.indexOf('~'))) * 1000L;
+            // Seconds after a believable base time (14 Nov 2023), in ms as MediaStore gives DATE_TAKEN.
+            return (BASE_SECONDS + Long.parseLong(name.substring(1, name.indexOf('~')))) * 1000L;
         } catch (NumberFormatException e) {
             return null;
         }
