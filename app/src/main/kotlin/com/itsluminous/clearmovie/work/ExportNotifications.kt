@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -169,8 +170,11 @@ class ExportNotifications(
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             send.clipData = ClipData.newRawUri(null, uri)
+            // ClearMovie's own share target (cm-share) is left out: sharing the finished video back into the app is never meant.
+            val self = ComponentName(context, "com.itsluminous.clearmovie.ShareActivity")
             return Intent
                 .createChooser(send, context.getString(R.string.export_share_title))
+                .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(self))
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     }

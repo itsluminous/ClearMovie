@@ -137,6 +137,15 @@ class ExportNotificationsTest {
         @Suppress("DEPRECATION")
         assertThat(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)).isEqualTo(video)
         assertThat(send.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION).isEqualTo(0)
+        // The share sheet never offers ClearMovie's own share target (cm-share).
+        @Suppress("DEPRECATION")
+        val excluded =
+            share
+                .getParcelableArrayExtra(
+                    Intent.EXTRA_EXCLUDE_COMPONENTS,
+                )!!
+                .map { (it as android.content.ComponentName).className }
+        assertThat(excluded).containsExactly("com.itsluminous.clearmovie.ShareActivity")
     }
 
     @Test
