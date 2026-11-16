@@ -28,6 +28,7 @@ import com.itsluminous.clearmovie.export.ExportHarness
 import com.itsluminous.clearmovie.ui.editor.EDITOR_EXPORT_TAG
 import com.itsluminous.clearmovie.ui.editor.PREVIEW_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_PROGRESS_TAG
+import com.itsluminous.clearmovie.ui.home.HOME_LIST_TAG
 import com.itsluminous.clearmovie.work.ExportWorker
 import org.junit.After
 import org.junit.Before
@@ -42,8 +43,9 @@ import kotlin.math.abs
  * video open) must survive its activity being destroyed and created again:
  * a recreate() and a real rotation of the display, also while that video's
  * export runs, and its preview must show the same picture afterwards.
- * Before the fix the first two crashed the app with "State must be at least
- * 'CREATED' to be moved to 'DESTROYED'" for the editor's back stack entry.
+ * Before the fix the first two crashed under this test harness with "State
+ * must be at least 'CREATED' to be moved to 'DESTROYED'" for the editor's
+ * back stack entry (the launch navigate ran off the main thread).
  */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
@@ -122,6 +124,10 @@ class ReopenRecreateDeviceTest {
             scenario.recreate()
             editorShown()
             previewPlays()
+
+            // Back from the reopened editor goes Home.
+            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            waitFor(hasTestTag(HOME_LIST_TAG))
         }
     }
 
@@ -156,6 +162,15 @@ class ReopenRecreateDeviceTest {
             assertThat(workManager.getWorkInfoById(id).get()?.state).isAnyOf(WorkInfo.State.RUNNING, WorkInfo.State.SUCCEEDED)
             compose.onNodeWithTag(EDITOR_EXPORT_TAG).performClick()
             waitFor(hasTestTag(EXPORT_PROGRESS_TAG).or(hasText(s(R.string.export_done_title))))
+        }
+        // Stop it and wait until it has ended, so a video it finished meanwhile is removed too.
+        workManager.cancelWorkById(id).result.get()
+        compose.waitUntil(TIMEOUT_MS) {
+            workManager
+                .getWorkInfoById(id)
+                .get()
+                ?.state
+                ?.isFinished != false
         }
         workManager
             .getWorkInfoById(id)

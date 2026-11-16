@@ -7,6 +7,7 @@ import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
 import com.itsluminous.clearmovie.domain.model.AppSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -24,5 +25,13 @@ class MainViewModel
             settingsRepository.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
         /** Home, or the editor again when the app stopped with a video open in it (ARCHITECTURE section 10). */
-        suspend fun launchDecision(): LaunchDecision = runCatching { projects.launchDecision() }.getOrDefault(LaunchDecision.Home)
+        suspend fun launchDecision(): LaunchDecision =
+            try {
+                projects.launchDecision()
+            } catch (e: CancellationException) {
+                // The screen went away while reading (a rotation at launch): it asks again.
+                throw e
+            } catch (e: Exception) {
+                LaunchDecision.Home
+            }
     }

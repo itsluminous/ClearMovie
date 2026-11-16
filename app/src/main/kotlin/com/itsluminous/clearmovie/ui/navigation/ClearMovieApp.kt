@@ -49,7 +49,14 @@ fun ClearMovieApp(
     launchDecision: (suspend () -> LaunchDecision)? = null,
     navController: NavHostController = rememberNavController(),
 ) {
-    ReopenAtLaunch(launchDecision) { navController.navigate(Routes.editor(it.id, broughtBack = it.broughtBack)) }
+    ReopenAtLaunch(launchDecision) {
+        navController.navigate(Routes.editor(it.id, broughtBack = it.broughtBack)) {
+            // As openEditor: whatever was tapped while the decision was read is
+            // dropped, so Back from the reopened editor goes Home.
+            popUpTo(Routes.HOME)
+            launchSingleTop = true
+        }
+    }
 
     fun go(step: FlowStep) {
         navController.navigate(Routes.of(step))
@@ -162,11 +169,13 @@ fun ClearMovieApp(
  * [reopen] (storage D2: the app stopped with a video open in the editor).
  *
  * [reopen] navigates, and a NavController may only be used on the main
- * thread. The decision reads the database, and a suspend call can return on
- * the thread that finished it (the Compose test harness resumes there), so
- * the decision is acted on with an explicit switch to the main thread; a
- * navigate on another thread throws half way, leaving the editor's back
- * stack entry INITIALIZED, and destroying the activity then crashes.
+ * thread. The decision reads the database off the main thread, and this
+ * effect resumes on whatever its coroutine context dispatches to: the main
+ * thread in the app, but the Compose test rule's effect dispatcher resumes
+ * on the thread that finished the read. So the decision is acted on with an
+ * explicit switch to the main thread. A navigate on another thread throws
+ * half way, leaving the editor's back stack entry INITIALIZED, and
+ * destroying the activity then crashes.
  *
  * It counts as decided only once acted on, in the same main-thread step, so
  * an activity destroyed while the decision is still being read (a rotation
