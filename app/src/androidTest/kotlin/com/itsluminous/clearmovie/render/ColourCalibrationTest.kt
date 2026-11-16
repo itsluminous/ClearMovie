@@ -62,7 +62,9 @@ class ColourCalibrationTest {
                     ids,
                 ).addToMain(listOf(PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 2000)), ids = ids)
         val plan = RenderPlanBuilder().build(project)
-        val colour = DeviceColour(gpuDecodesBt709AsBt601 = false, encoderWritesBt601 = true)
+        // The tag is asked for only from the encoder the calibration measured.
+        val measured = checkNotNull(ColourCalibration.of(RenderHarness.context).encoderName) { "The calibration named no encoder" }
+        val colour = DeviceColour(gpuDecodesBt709AsBt601 = false, encoderWritesBt601 = true, encoderName = measured)
         val composition = CompositionFactory(RenderHarness.context, RenderHarness.resolver()) { colour }.build(plan)
         val out =
             RenderHarness.exportComposition(
