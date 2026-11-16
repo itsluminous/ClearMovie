@@ -19,6 +19,7 @@ import com.itsluminous.clearmovie.render.media3.ColourCalibration
 import com.itsluminous.clearmovie.render.media3.CompositionFactory
 import com.itsluminous.clearmovie.render.media3.DeviceColour
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
+import com.itsluminous.clearmovie.render.media3.RawYuv
 import com.itsluminous.clearmovie.render.media3.RenderExporter
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import org.junit.Test
@@ -39,6 +40,31 @@ class ColourCalibrationTest {
         val colour = checkNotNull(ColourCalibration.measure(RenderHarness.context)) { "The calibration export failed" }
         report("colour calibration: $colour")
         assertWithMessage("calibration could not tell the matrices apart").that(colour.measured).isTrue()
+    }
+
+    @Test
+    fun calibrationClipIsWhatTheMeasurementAssumes() {
+        val clip = File(RenderHarness.context.cacheDir, "calibration-clip.mp4")
+        RenderHarness.context.assets
+            .open("render/colour-calibration.mp4")
+            .use { input -> clip.outputStream().use { input.copyTo(it) } }
+        try {
+            val e = MediaExtractor()
+            val format =
+                try {
+                    e.setDataSource(clip.path)
+                    (0 until e.trackCount).map { e.getTrackFormat(it) }.first { it.getString(MediaFormat.KEY_MIME)!!.startsWith("video/") }
+                } finally {
+                    e.release()
+                }
+            assertThat(format.getInteger(MediaFormat.KEY_WIDTH)).isEqualTo(ColourCalibration.CLIP_WIDTH)
+            assertThat(format.getInteger(MediaFormat.KEY_HEIGHT)).isEqualTo(ColourCalibration.CLIP_HEIGHT)
+            val yuv = checkNotNull(RawYuv.meanAt(clip, 500_000, ColourCalibration.CLIP_WIDTH / 2, ColourCalibration.CLIP_HEIGHT / 2))
+            report("calibration clip YUV ${yuv.toList()}")
+            yuv.indices.forEach { assertThat(yuv[it]).isWithin(1.0).of(ColourCalibration.CALIBRATION_YUV[it]) }
+        } finally {
+            clip.delete()
+        }
     }
 
     private fun colourStandard(file: File): Int? {

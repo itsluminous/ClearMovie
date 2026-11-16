@@ -54,8 +54,9 @@ import java.util.concurrent.atomic.AtomicReference
  * ambiguous changes nothing ([DeviceColour.TRUSTED]) and is tried again in the
  * next process; one that was interrupted is tried again on the next call.
  * [of] blocks for the calibration (about a second; a stalled
- * one is cancelled after [TIMEOUT_S], and Media3's cancel itself can block a
- * little longer) and must not run on the main thread. Nothing it throws
+ * one is cancelled after [TIMEOUT_S], Media3's cancel is waited for at most
+ * [CANCEL_WAIT_S], and reading the output back at most [RawYuv]'s deadline)
+ * and must not run on the main thread. Nothing it throws
  * reaches the export.
  */
 @UnstableApi
@@ -79,35 +80,49 @@ object ColourCalibration {
             check(!Looper.getMainLooper().isCurrentThread) { "Calibrate colour off the main thread" }
             val app = context.applicationContext
             val file = File(File(app.noBackupFilesDir, "render"), "colour-calibration.txt")
-            val key = "v$VERSION|${Build.FINGERPRINT}"
-            val stored = runCatching { DeviceColour.parse(file.readText(), key) }.getOrNull()
-            val result = stored ?: measureAndStore(app, file, key) ?: DeviceColour.TRUSTED
-            // An interrupted calibration says nothing about the device.
-            if (!Thread.currentThread().isInterrupted) cached = result
+            val (result, keep) = lookUp(file, key()) { measure(app) }
+            if (keep) cached = result
             return result
         }
     }
 
-    private fun measureAndStore(
-        context: Context,
+    /** The cache key: the measurement's version and the system build. */
+    internal fun key(): String = "v$VERSION|${Build.FINGERPRINT}"
+
+    /**
+     * The stored result for [key] in [file], else [measure]'s (stored when the
+     * next process would accept it), else [DeviceColour.TRUSTED]; and whether
+     * it may be kept for the process (not when the measurement was interrupted,
+     * which says nothing about the device).
+     */
+    internal fun lookUp(
         file: File,
         key: String,
-    ): DeviceColour? {
-        val measured = runCatching { measure(context) }.onFailure { Log.w(TAG, "Colour calibration failed", it) }.getOrNull()
-        if (measured?.measured == true) {
-            val line = measured.serialize(key)
-            // Only a line the next process accepts is written, so a result it would
-            // refuse is measured again rather than read back wrong.
-            if (DeviceColour.parse(line, key) == measured) {
-                runCatching {
-                    file.parentFile?.mkdirs()
-                    file.writeText(line)
-                }
-            } else {
-                Log.w(TAG, "Not storing $measured: the encoder name cannot be stored")
-            }
+        measure: () -> DeviceColour?,
+    ): Pair<DeviceColour, Boolean> {
+        runCatching { DeviceColour.parse(file.readText(), key) }.getOrNull()?.let { return it to true }
+        val measured = runCatching { measure() }.onFailure { Log.w(TAG, "Colour calibration failed", it) }.getOrNull()
+        if (measured?.measured == true) store(file, key, measured)
+        return (measured ?: DeviceColour.TRUSTED) to !Thread.currentThread().isInterrupted
+    }
+
+    /** Writes [measured] only as a line the next process reads back as the same answer. */
+    private fun store(
+        file: File,
+        key: String,
+        measured: DeviceColour,
+    ) {
+        val line = measured.serialize(key)
+        // The name only matters for a BT.601 encoder; parse refuses that without one.
+        val readBack = DeviceColour.parse(line, key)?.copy(encoderName = measured.encoderName)
+        if (readBack != measured) {
+            Log.w(TAG, "Not storing $measured: the next process could not read it back")
+            return
         }
-        return measured
+        runCatching {
+            file.parentFile?.mkdirs()
+            file.writeText(line)
+        }
     }
 
     /** Runs the calibration export; null when it failed. */
@@ -168,8 +183,8 @@ object ColourCalibration {
             }
             if (!latch.await(TIMEOUT_S, TimeUnit.SECONDS)) {
                 // Release its codecs before the real export needs them.
-                cancel(handler, running).await(5, TimeUnit.SECONDS)
-                Log.w(TAG, "Colour calibration timed out")
+                val done = cancel(handler, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS)
+                Log.w(TAG, if (done) "Colour calibration timed out" else "Colour calibration timed out; its cancel has not returned")
                 return null
             }
             if (error.get() != null) {
@@ -190,8 +205,10 @@ object ColourCalibration {
             logResult(gl, yuv, result)
             return result
         } catch (e: InterruptedException) {
-            // Release its codecs without waiting; the caller was interrupted.
-            cancel(handler, running)
+            // Release its codecs before the output is deleted: wait briefly with the
+            // interrupt held back, then restore it for the caller.
+            Thread.interrupted()
+            runCatching { cancel(handler, running).await(CANCEL_WAIT_S, TimeUnit.SECONDS) }
             Thread.currentThread().interrupt()
             Log.w(TAG, "Colour calibration interrupted")
             return null
@@ -247,6 +264,7 @@ object ColourCalibration {
     private fun DoubleArray.format() = joinToString(prefix = "(", postfix = ")") { "%.1f".format(Locale.ROOT, it) }
 
     private const val TIMEOUT_S = 20L
+    private const val CANCEL_WAIT_S = 5L
 }
 
 /**
@@ -334,7 +352,7 @@ internal class GlColourProbe(
         }
 }
 
-/** Raw YUV of a video frame, decoded by `MediaCodec` to buffers (no colour conversion). */
+/** Raw YUV of a video frame, decoded by `MediaCodec` to buffers (no colour conversion), within a 5 s deadline. */
 internal object RawYuv {
     /** Mean Y, Cb, Cr of an 8x8 patch at (x, y) of the first frame at or after [timeUs]; null when it can't be read. */
     fun meanAt(
@@ -360,7 +378,9 @@ internal object RawYuv {
             decoder.start()
             val info = MediaCodec.BufferInfo()
             var inputDone = false
+            val deadline = System.nanoTime() + DEADLINE_NS
             repeat(MAX_POLLS) {
+                if (System.nanoTime() > deadline) return null
                 if (!inputDone) {
                     val index = decoder.dequeueInputBuffer(10_000)
                     if (index >= 0) {
@@ -421,4 +441,7 @@ internal object RawYuv {
     }
 
     private const val MAX_POLLS = 2000
+
+    /** At most this long, whatever the decoder does: the export waits for it. */
+    private const val DEADLINE_NS = 5_000_000_000L
 }

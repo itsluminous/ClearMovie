@@ -67,7 +67,7 @@ class RenderExporterEncodersTest {
                 throw ExportException.createForCodec(
                     IllegalArgumentException("BT.601 not supported"),
                     ExportException.ERROR_CODE_ENCODER_INIT_FAILED,
-                    ExportException.CodecInfo("refused", true, true, null),
+                    ExportException.CodecInfo("refused", true, false, "enc.a"),
                 )
             }
             return make(names.removeFirst())
