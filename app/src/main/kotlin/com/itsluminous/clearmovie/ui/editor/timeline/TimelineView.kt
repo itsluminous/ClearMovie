@@ -182,6 +182,9 @@ data class RowMetrics(
 /** The width of a row's icon header: a 24 dp icon in a 48 dp touch target. */
 private const val HEADER_DP = 48.0
 
+/** How much of a text card's words TalkBack reads with it. */
+private const val CARD_TEXT_SPOKEN = 60
+
 /** Padding at each end of the time span, so the first and last "+" can be reached. */
 private const val PAD_DP = 28.0
 
@@ -229,8 +232,13 @@ fun TimelineView(
         // While playing, the view follows the playhead.
         // A finger on the timeline wins: the view follows the playhead only when nobody is touching it.
         var touching by remember { mutableStateOf(false) }
-        LaunchedEffect(playheadMs, playing, touching) {
-            if (playing && !touching) {
+        // Moving the view by hand while playing stops the following until Play is pressed again,
+        // so the user can look ahead without being pulled back.
+        var followPaused by remember { mutableStateOf(false) }
+        LaunchedEffect(playing) { if (playing) followPaused = false }
+        LaunchedEffect(touching) { if (touching && playing) followPaused = true }
+        LaunchedEffect(playheadMs, playing, touching, followPaused) {
+            if (playing && !touching && !followPaused) {
                 val revealed = TimelineZoom.reveal(z, playheadMs.toDouble(), totalMs, spanWidth)
                 if (revealed != z) onZoom(revealed)
             }
@@ -322,7 +330,7 @@ fun TimelineView(
                     },
             ) {
                 Column(Modifier.fillMaxWidth()) {
-                    Ruler(z, totalMs, playheadMs, metrics, spanWidth, latestActions)
+                    Ruler(z, totalMs, playheadMs, playing, metrics, spanWidth, latestActions)
                     Column(Modifier.fillMaxWidth().verticalScroll(rowScroll, enabled = false)) {
                         for (row in shown) {
                             Row(Modifier.fillMaxWidth().height(metrics.heightOf(row.type).dp).testTag(rowTag(row.key))) {
@@ -440,236 +448,247 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
             arbiter.down(first.id.value, dp(first.position.x), dp(first.position.y), first.uptimeMillis, start.kind)
             first.consume()
             touched(true)
-            // Any other finger already down in the same event (two fingers landing together).
-            firstEvent.changes
-                .filter { it.pressed && !it.previousPressed && it.id != first.id }
-                .forEach { arbiter.down(it.id.value, dp(it.position.x), dp(it.position.y), it.uptimeMillis, start.kind) }
-            val downAt = first.uptimeMillis
-            // Only an item can be long-pressed (the row header's menu is cm-tracks'); nothing else waits.
-            var waiting = start is Hit.OnClip && c0.slots.getOrNull(start.index) != null
-            var lastSpread: Double? = null
-            var lastCentroid: Offset? = null
-            var lastScroll = first.position
-            var trimDelta = 0.0
-            var dragDx = 0.0
-            var lastSeek = 0L
-            var now = first.uptimeMillis
-            // Several events can arrive before the next frame recomposes: zoom and scroll build on
-            // this gesture's own latest value, not on the last composed one.
-            var live = c0.zoom
-            while (arbiter.isActive) {
-                val wait = if (waiting && arbiter.mode == GestureMode.PENDING) (downAt + TimelineGestureArbiter.LONG_PRESS_MS + 1) else null
-                val event =
-                    if (wait != null) {
-                        withTimeoutOrNull(maxOf(1L, wait - now)) { awaitPointerEvent(PointerEventPass.Main) }
-                    } else {
-                        awaitPointerEvent(PointerEventPass.Main)
-                    }
-                if (event == null) {
-                    // Timed out once: the long-press fired or never will; no more timed waits.
-                    waiting = false
-                    now = downAt + TimelineGestureArbiter.LONG_PRESS_MS
-                    if (arbiter.tick(now) == GestureMode.LONG_PRESSED) longPressed()
-                    continue
-                }
-                now = event.changes.maxOf { it.uptimeMillis }
-                val before = arbiter.mode
-                for (ch in event.changes) {
-                    when {
-                        ch.pressed && !ch.previousPressed -> {
-                            arbiter.down(ch.id.value, dp(ch.position.x), dp(ch.position.y), ch.uptimeMillis, start.kind)
-                        }
-
-                        !ch.pressed && ch.previousPressed -> {
-                            arbiter.up(ch.id.value, ch.uptimeMillis)
-                        }
-
-                        ch.positionChanged() -> {
-                            arbiter.move(ch.id.value, dp(ch.position.x), dp(ch.position.y), ch.uptimeMillis)
-                        }
-                    }
-                }
-                if (before == GestureMode.PENDING && arbiter.mode == GestureMode.LONG_PRESSED && start is Hit.OnClip) longPressed()
-                val c = current()
-                val pressed = event.changes.filter { it.pressed }
-                when (arbiter.mode) {
-                    GestureMode.PINCH -> {
-                        if (pressed.size >= 2) {
-                            val centroid = pressed.map { it.position }.reduce { a, b -> a + b } / pressed.size.toFloat()
-                            val spread =
-                                pressed
-                                    .map {
-                                        hypot(
-                                            (it.position.x - centroid.x).toDouble(),
-                                            (it.position.y - centroid.y).toDouble(),
-                                        )
-                                    }.average()
-                            val prevSpread = lastSpread
-                            val prevCentroid = lastCentroid
-                            if (prevSpread != null && prevCentroid != null && prevSpread > 0 && spread > 0) {
-                                val focus = dp(centroid.x) - metrics.headerDp - PAD_DP
-                                var next = TimelineZoom.zoomAround(live, spread / prevSpread, focus, c.totalMs, c.spanWidth)
-                                val pan = dp(prevCentroid.x - centroid.x)
-                                if (abs(pan) > 0 && !next.fitAll) next = TimelineZoom.scrollBy(next, pan, c.totalMs, c.spanWidth)
-                                live = next
-                                onZoom(next)
-                            }
-                            lastSpread = spread
-                            lastCentroid = centroid
+            try {
+                // Any other finger already down in the same event (two fingers landing together).
+                firstEvent.changes
+                    .filter { it.pressed && !it.previousPressed && it.id != first.id }
+                    .forEach { arbiter.down(it.id.value, dp(it.position.x), dp(it.position.y), it.uptimeMillis, start.kind) }
+                val downAt = first.uptimeMillis
+                // Only an item can be long-pressed (the row header's menu is cm-tracks'); nothing else waits.
+                var waiting = start is Hit.OnClip && c0.slots.getOrNull(start.index) != null
+                var lastSpread: Double? = null
+                var lastCentroid: Offset? = null
+                var lastScroll = first.position
+                var trimDelta = 0.0
+                var dragDx = 0.0
+                var lastSeek = 0L
+                var now = first.uptimeMillis
+                // Several events can arrive before the next frame recomposes: zoom and scroll build on
+                // this gesture's own latest value, not on the last composed one.
+                var live = c0.zoom
+                while (arbiter.isActive) {
+                    val wait =
+                        if (waiting &&
+                            arbiter.mode == GestureMode.PENDING
+                        ) {
+                            (downAt + TimelineGestureArbiter.LONG_PRESS_MS + 1)
                         } else {
-                            // A finger lifted: the next two-finger event starts the ratio afresh, with no jump.
-                            lastSpread = null
-                            lastCentroid = null
+                            null
                         }
-                        trimChanged(null)
-                        dragChanged(null)
-                        event.changes.forEach(PointerInputChange::consume)
+                    val event =
+                        if (wait != null) {
+                            withTimeoutOrNull(maxOf(1L, wait - now)) { awaitPointerEvent(PointerEventPass.Main) }
+                        } else {
+                            awaitPointerEvent(PointerEventPass.Main)
+                        }
+                    if (event == null) {
+                        // Timed out once: the long-press fired or never will; no more timed waits.
+                        waiting = false
+                        now = downAt + TimelineGestureArbiter.LONG_PRESS_MS
+                        if (arbiter.tick(now) == GestureMode.LONG_PRESSED) longPressed()
+                        continue
                     }
+                    now = event.changes.maxOf { it.uptimeMillis }
+                    val before = arbiter.mode
+                    for (ch in event.changes) {
+                        when {
+                            ch.pressed && !ch.previousPressed -> {
+                                arbiter.down(ch.id.value, dp(ch.position.x), dp(ch.position.y), ch.uptimeMillis, start.kind)
+                            }
 
-                    GestureMode.SCROLL -> {
-                        val ch = event.changes.firstOrNull { it.id == first.id } ?: pressed.firstOrNull()
-                        if (ch != null) {
-                            val dx = dp(lastScroll.x - ch.position.x)
-                            val dy = lastScroll.y - ch.position.y
-                            if (before != GestureMode.SCROLL) {
-                                // The slop was spent getting here: start from the down point, no jump.
-                                val sx = dp(first.position.x - ch.position.x)
-                                live = TimelineZoom.scrollBy(live, sx, c.totalMs, c.spanWidth)
-                                rowScroll.dispatchRawDelta(first.position.y - ch.position.y)
+                            !ch.pressed && ch.previousPressed -> {
+                                arbiter.up(ch.id.value, ch.uptimeMillis)
+                            }
+
+                            ch.positionChanged() -> {
+                                arbiter.move(ch.id.value, dp(ch.position.x), dp(ch.position.y), ch.uptimeMillis)
+                            }
+                        }
+                    }
+                    if (before == GestureMode.PENDING && arbiter.mode == GestureMode.LONG_PRESSED && start is Hit.OnClip) longPressed()
+                    val c = current()
+                    val pressed = event.changes.filter { it.pressed }
+                    when (arbiter.mode) {
+                        GestureMode.PINCH -> {
+                            if (pressed.size >= 2) {
+                                val centroid = pressed.map { it.position }.reduce { a, b -> a + b } / pressed.size.toFloat()
+                                val spread =
+                                    pressed
+                                        .map {
+                                            hypot(
+                                                (it.position.x - centroid.x).toDouble(),
+                                                (it.position.y - centroid.y).toDouble(),
+                                            )
+                                        }.average()
+                                val prevSpread = lastSpread
+                                val prevCentroid = lastCentroid
+                                if (prevSpread != null && prevCentroid != null && prevSpread > 0 && spread > 0) {
+                                    val focus = dp(centroid.x) - metrics.headerDp - PAD_DP
+                                    var next = TimelineZoom.zoomAround(live, spread / prevSpread, focus, c.totalMs, c.spanWidth)
+                                    val pan = dp(prevCentroid.x - centroid.x)
+                                    if (abs(pan) > 0 && !next.fitAll) next = TimelineZoom.scrollBy(next, pan, c.totalMs, c.spanWidth)
+                                    live = next
+                                    onZoom(next)
+                                }
+                                lastSpread = spread
+                                lastCentroid = centroid
                             } else {
-                                live = TimelineZoom.scrollBy(live, dx, c.totalMs, c.spanWidth)
-                                rowScroll.dispatchRawDelta(dy)
+                                // A finger lifted: the next two-finger event starts the ratio afresh, with no jump.
+                                lastSpread = null
+                                lastCentroid = null
                             }
-                            onZoom(live)
-                            lastScroll = ch.position
+                            trimChanged(null)
+                            dragChanged(null)
+                            event.changes.forEach(PointerInputChange::consume)
                         }
-                        event.changes.forEach(PointerInputChange::consume)
-                    }
 
-                    GestureMode.TRIM -> {
-                        val ch = event.changes.firstOrNull { it.id == first.id }
-                        val sel = c.selectedIndex
-                        if (ch != null && sel != null) {
-                            trimDelta = dp(ch.position.x - first.position.x) * c.zoom.msPerDp
-                            val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
-                            trimChanged(TrimPreview(sel, edge, trimDelta))
-                        }
-                        event.changes.forEach(PointerInputChange::consume)
-                    }
-
-                    GestureMode.SCRUB -> {
-                        val ch = event.changes.firstOrNull { it.id == first.id }
-                        if (ch != null) {
-                            val t =
-                                c.zoom
-                                    .timeAt(
-                                        dp(ch.position.x) - metrics.headerDp - PAD_DP,
-                                    ).coerceIn(0.0, c.totalMs.toDouble())
-                                    .toLong()
-                            if (ch.uptimeMillis - lastSeek >= SEEK_EVERY_MS) {
-                                lastSeek = ch.uptimeMillis
-                                actions.seek(t)
-                            }
-                        }
-                        event.changes.forEach(PointerInputChange::consume)
-                    }
-
-                    GestureMode.DRAG -> {
-                        val ch = event.changes.firstOrNull { it.id == first.id }
-                        val i = (start as? Hit.OnClip)?.index
-                        if (ch != null && i != null && c.slots[i].clip.isContent()) {
-                            dragDx = dp(ch.position.x - first.position.x)
-                            val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
-                            val drop = TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom)
-                            dragChanged(DragPreview(i, dragDx, drop))
-                        }
-                        event.changes.forEach(PointerInputChange::consume)
-                    }
-
-                    GestureMode.TAP -> {
-                        when (start) {
-                            is Hit.OnPlus -> {
-                                val s = c.slots.getOrNull(start.point.anchorIndex)
-                                if (s != null) actions.insert(s.clip.id, start.point.side)
-                            }
-
-                            is Hit.OnClip -> {
-                                c.slots.getOrNull(start.index)?.let { actions.select(it.clip.id) }
-                            }
-
-                            Hit.OnRuler -> {
-                                val t = c.zoom.timeAt(dp(first.position.x) - metrics.headerDp - PAD_DP)
-                                actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
-                            }
-
-                            // A tap on a trim handle keeps the item selected (it is about to be dragged).
-                            is Hit.OnTrim -> {
-                                Unit
-                            }
-
-                            else -> {
-                                actions.select(null)
-                            }
-                        }
-                        event.changes.forEach(PointerInputChange::consume)
-                    }
-
-                    GestureMode.MENU -> {
-                        (start as? Hit.OnClip)?.let { s -> c.slots.getOrNull(s.index)?.let { actions.menu(it.clip.id) } }
-                        event.changes.forEach(PointerInputChange::consume)
-                    }
-
-                    GestureMode.ENDED -> {
-                        when (before) {
-                            GestureMode.TRIM -> {
-                                val sel = c.selectedIndex
-                                if (sel != null) {
-                                    val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
-                                    actions.trim(c.slots[sel].clip.id, edge, trimDelta)
+                        GestureMode.SCROLL -> {
+                            val ch = event.changes.firstOrNull { it.id == first.id } ?: pressed.firstOrNull()
+                            if (ch != null) {
+                                val dx = dp(lastScroll.x - ch.position.x)
+                                val dy = lastScroll.y - ch.position.y
+                                if (before != GestureMode.SCROLL) {
+                                    // The slop was spent getting here: start from the down point, no jump.
+                                    val sx = dp(first.position.x - ch.position.x)
+                                    live = TimelineZoom.scrollBy(live, sx, c.totalMs, c.spanWidth)
+                                    rowScroll.dispatchRawDelta(first.position.y - ch.position.y)
+                                } else {
+                                    live = TimelineZoom.scrollBy(live, dx, c.totalMs, c.spanWidth)
+                                    rowScroll.dispatchRawDelta(dy)
                                 }
-                                trimChanged(null)
+                                onZoom(live)
+                                lastScroll = ch.position
                             }
+                            event.changes.forEach(PointerInputChange::consume)
+                        }
 
-                            GestureMode.DRAG -> {
-                                val i = (start as? Hit.OnClip)?.index
-                                if (i != null && c.slots[i].clip.isContent()) {
-                                    val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
-                                    actions.move(c.slots[i].clip.id, TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom))
+                        GestureMode.TRIM -> {
+                            val ch = event.changes.firstOrNull { it.id == first.id }
+                            val sel = c.selectedIndex
+                            if (ch != null && sel != null) {
+                                trimDelta = dp(ch.position.x - first.position.x) * c.zoom.msPerDp
+                                val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
+                                trimChanged(TrimPreview(sel, edge, trimDelta))
+                            }
+                            event.changes.forEach(PointerInputChange::consume)
+                        }
+
+                        GestureMode.SCRUB -> {
+                            val ch = event.changes.firstOrNull { it.id == first.id }
+                            if (ch != null) {
+                                val t =
+                                    c.zoom
+                                        .timeAt(
+                                            dp(ch.position.x) - metrics.headerDp - PAD_DP,
+                                        ).coerceIn(0.0, c.totalMs.toDouble())
+                                        .toLong()
+                                if (ch.uptimeMillis - lastSeek >= SEEK_EVERY_MS) {
+                                    lastSeek = ch.uptimeMillis
+                                    actions.seek(t)
                                 }
-                                dragChanged(null)
                             }
+                            event.changes.forEach(PointerInputChange::consume)
+                        }
 
-                            GestureMode.SCRUB -> {
-                                val ch = event.changes.firstOrNull { it.id == first.id }
-                                if (ch != null) {
-                                    val t = c.zoom.timeAt(dp(ch.position.x) - metrics.headerDp - PAD_DP)
+                        GestureMode.DRAG -> {
+                            val ch = event.changes.firstOrNull { it.id == first.id }
+                            val i = (start as? Hit.OnClip)?.index
+                            if (ch != null && i != null && c.slots[i].clip.isContent()) {
+                                dragDx = dp(ch.position.x - first.position.x)
+                                val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
+                                val drop = TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom)
+                                dragChanged(DragPreview(i, dragDx, drop))
+                            }
+                            event.changes.forEach(PointerInputChange::consume)
+                        }
+
+                        GestureMode.TAP -> {
+                            when (start) {
+                                is Hit.OnPlus -> {
+                                    val s = c.slots.getOrNull(start.point.anchorIndex)
+                                    if (s != null) actions.insert(s.clip.id, start.point.side)
+                                }
+
+                                is Hit.OnClip -> {
+                                    c.slots.getOrNull(start.index)?.let { actions.select(it.clip.id) }
+                                }
+
+                                Hit.OnRuler -> {
+                                    val t = c.zoom.timeAt(dp(first.position.x) - metrics.headerDp - PAD_DP)
                                     actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
                                 }
-                            }
 
-                            else -> {
-                                Unit
+                                // A tap on a trim handle keeps the item selected (it is about to be dragged).
+                                is Hit.OnTrim -> {
+                                    Unit
+                                }
+
+                                else -> {
+                                    actions.select(null)
+                                }
                             }
+                            event.changes.forEach(PointerInputChange::consume)
                         }
-                        event.changes.forEach(PointerInputChange::consume)
-                    }
 
-                    GestureMode.CANCELLED -> {
+                        GestureMode.MENU -> {
+                            (start as? Hit.OnClip)?.let { s -> c.slots.getOrNull(s.index)?.let { actions.menu(it.clip.id) } }
+                            event.changes.forEach(PointerInputChange::consume)
+                        }
+
+                        GestureMode.ENDED -> {
+                            when (before) {
+                                GestureMode.TRIM -> {
+                                    val sel = c.selectedIndex
+                                    if (sel != null) {
+                                        val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
+                                        actions.trim(c.slots[sel].clip.id, edge, trimDelta)
+                                    }
+                                    trimChanged(null)
+                                }
+
+                                GestureMode.DRAG -> {
+                                    val i = (start as? Hit.OnClip)?.index
+                                    if (i != null && c.slots[i].clip.isContent()) {
+                                        val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
+                                        actions.move(c.slots[i].clip.id, TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom))
+                                    }
+                                    dragChanged(null)
+                                }
+
+                                GestureMode.SCRUB -> {
+                                    val ch = event.changes.firstOrNull { it.id == first.id }
+                                    if (ch != null) {
+                                        val t = c.zoom.timeAt(dp(ch.position.x) - metrics.headerDp - PAD_DP)
+                                        actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
+                                    }
+                                }
+
+                                else -> {
+                                    Unit
+                                }
+                            }
+                            event.changes.forEach(PointerInputChange::consume)
+                        }
+
+                        GestureMode.CANCELLED -> {
+                            trimChanged(null)
+                            dragChanged(null)
+                        }
+
+                        else -> {
+                            if (arbiter.mode != GestureMode.PENDING) event.changes.forEach(PointerInputChange::consume)
+                        }
+                    }
+                    if (event.changes.none { it.pressed } && arbiter.isActive) {
+                        arbiter.cancel()
                         trimChanged(null)
                         dragChanged(null)
                     }
-
-                    else -> {
-                        if (arbiter.mode != GestureMode.PENDING) event.changes.forEach(PointerInputChange::consume)
-                    }
                 }
-                if (event.changes.none { it.pressed } && arbiter.isActive) {
-                    arbiter.cancel()
-                    trimChanged(null)
-                    dragChanged(null)
-                }
+            } finally {
+                // Also when the handler is cancelled or a gesture throws: never left "touching".
+                touched(false)
             }
-            touched(false)
         }
     }
 }
@@ -737,15 +756,19 @@ private fun Ruler(
     zoom: ZoomState,
     totalMs: Long,
     playheadMs: Long,
+    playing: Boolean,
     metrics: RowMetrics,
     spanWidth: Double,
     actions: TimelineActions,
 ) {
+    // While playing, TalkBack is not told the time every frame: it hears the time play started from.
+    var spokenMs by remember { mutableStateOf(playheadMs) }
+    if (!playing) spokenMs = playheadMs
     val tick = TimelineZoom.tickMs(zoom.msPerDp, metrics.fontScale)
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     val line = MaterialTheme.colorScheme.outlineVariant
     val label = stringResource(R.string.timeline_ruler)
-    val now = stringResource(R.string.timeline_playhead, durationText(playheadMs * 1000))
+    val now = stringResource(R.string.timeline_playhead, durationText(spokenMs * 1000))
     val total = totalMs.coerceAtLeast(1)
     Row(
         Modifier
@@ -757,7 +780,9 @@ private fun Ruler(
                 contentDescription = label
                 stateDescription = now
                 rulerTick = tick
-                progressBarRangeInfo = ProgressBarRangeInfo(playheadMs.toFloat() / total, 0f..1f)
+                // One step per ruler label, so the volume keys move by a sensible amount.
+                progressBarRangeInfo =
+                    ProgressBarRangeInfo(spokenMs.toFloat() / total, 0f..1f, steps = (total / tick).toInt().coerceIn(0, 200) - 1)
                 setProgress { f ->
                     actions.seek((f.coerceIn(0f, 1f) * total).toLong())
                     true
@@ -981,7 +1006,9 @@ private fun ClipTile(
 ) {
     val media = LocalMediaColors.current
     val clip = slot.clip
-    val name = stringResource(itemName(clip))
+    // A text card is named by what it says, so two cards can be told apart by ear.
+    val cardText = (clip as? CardClip)?.text?.takeIf { it.isNotBlank() }?.take(CARD_TEXT_SPOKEN)
+    val name = if (cardText != null) stringResource(R.string.timeline_text_card_named, cardText) else stringResource(itemName(clip))
     val length = durationText(slot.durationMs * 1000)
     val description =
         when {

@@ -645,13 +645,48 @@ class EditorScreenTest {
     }
 
     @Test
-    fun `Split is not offered on a looped video`() {
+    fun `Split on a looped video says what to change first`() {
         val h = show(ScreenSize.COMPACT)
         selectItem(h, "v4")
         compose.onNodeWithTag(barActionTag(EditAction.LOOP)).performClick()
         compose.onNodeWithContentDescription(s(R.string.loop_more)).performClick()
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
-        compose.onNodeWithTag(barActionTag(EditAction.SPLIT)).assertIsNotEnabled()
+        compose.onNodeWithTag(barActionTag(EditAction.SPLIT)).assertIsEnabled().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(s(R.string.split_loop_first)).assertExists()
+        assertThat(h.state!!.panel).isNull()
+    }
+
+    @Test
+    fun `two deletes in a row, only the last one's Undo is offered, and it undoes that one`() {
+        val h = show(ScreenSize.COMPACT)
+        for (id in listOf("p1", "p3")) {
+            selectItem(h, id, zoomIns = if (id == "p1") 3 else 0)
+            repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
+            compose.onNodeWithTag(barActionTag(EditAction.DELETE)).performClick()
+            compose.waitForIdle()
+        }
+        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).performClick()
+        compose.waitForIdle()
+        assertThat(h.project.contentIds()).contains("p3")
+        assertThat(h.project.contentIds()).doesNotContain("p1")
+    }
+
+    @Test
+    fun `a text card is read out by what it says`() {
+        val card =
+            com.itsluminous.clearmovie.domain.model.CardClip(
+                ClipId("card"),
+                3000,
+                com.itsluminous.clearmovie.domain.model
+                    .ArgbColor(0xFF202020),
+                "Happy birthday",
+            )
+        val h = show(ScreenSize.COMPACT, h = harness(project.addToMain(listOf(card))))
+        val node = compose.onNodeWithTag(clipTag(ClipId("card"))).fetchSemanticsNode()
+        val description = node.config[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription].single()
+        assertThat(description).startsWith(context.getString(R.string.timeline_text_card_named, "Happy birthday"))
+        assertThat(h.project.mainClips.any { it.id == ClipId("card") }).isTrue()
     }
 
     @Test

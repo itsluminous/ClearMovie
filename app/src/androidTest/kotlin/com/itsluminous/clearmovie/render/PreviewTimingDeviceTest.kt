@@ -156,12 +156,18 @@ class PreviewTimingDeviceTest {
                 val slot = project.mainSlot(ClipId(p.clip))!!
                 val atMs = slot.startMs + p.intoMs
                 instrumentation.runOnMainSync { engine.seekTo(atMs * 1000) }
-                Thread.sleep(900)
-                var frame: Bitmap? = null
-                instrumentation.runOnMainSync { frame = view.bitmap }
-                val shown = secondShown(checkNotNull(frame))
                 val wantMs = fileMsAt(p)
                 val want = (wantMs / 1000).toInt()
+                // A paused seek's frame takes a moment to arrive, longer with four players busy:
+                // look again until the new frame is up (a wrong seek never shows the right second).
+                var frame: Bitmap? = null
+                var shown = -1
+                val until = System.currentTimeMillis() + SETTLE_LIMIT_MS
+                do {
+                    Thread.sleep(250)
+                    instrumentation.runOnMainSync { frame = view.bitmap }
+                    shown = secondShown(checkNotNull(frame))
+                } while (shown != want && System.currentTimeMillis() < until)
                 val name = (if (withPreset) "preview-preset-" else "preview-") + "${p.clip}-plus${p.intoMs}ms-at${atMs}ms"
                 savePng(frame!!, name)
                 val line =
@@ -176,5 +182,10 @@ class PreviewTimingDeviceTest {
         }
         scope.cancel()
         assertWithMessage(failures.joinToString("\n")).that(failures).isEmpty()
+    }
+
+    private companion object {
+        /** How long a paused seek may take to put its frame up. */
+        const val SETTLE_LIMIT_MS = 5000L
     }
 }

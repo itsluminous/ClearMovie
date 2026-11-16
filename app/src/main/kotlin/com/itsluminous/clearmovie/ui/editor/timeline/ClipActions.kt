@@ -47,7 +47,6 @@ object ClipActions {
         canMoveLeft: Boolean = true,
         canMoveRight: Boolean = true,
         canJoin: Boolean = false,
-        canSplit: Boolean = true,
     ): List<BarAction> {
         val moves = listOf(BarAction(EditAction.MOVE_LEFT, canMoveLeft), BarAction(EditAction.MOVE_RIGHT, canMoveRight))
         val list =
@@ -77,7 +76,7 @@ object ClipActions {
                         EditAction.FIT,
                         EditAction.REPLACE,
                         EditAction.DUPLICATE,
-                    ).map { BarAction(it, enabled = it != EditAction.SPLIT || canSplit) } + moves +
+                    ).map(::BarAction) + moves +
                         listOfNotNull(BarAction(EditAction.JOIN).takeIf { canJoin }) +
                         BarAction(EditAction.DELETE)
                 }

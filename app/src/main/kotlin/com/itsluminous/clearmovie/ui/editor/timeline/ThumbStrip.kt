@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -184,8 +185,8 @@ private fun CardThumb(
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                // Merged into the item's description, so TalkBack reads what the card says.
-                modifier = Modifier.padding(horizontal = 6.dp),
+                // Read as part of the item's description (TalkBack reads a description, not merged text).
+                modifier = Modifier.padding(horizontal = 6.dp).clearAndSetSemantics { },
             )
         }
     }

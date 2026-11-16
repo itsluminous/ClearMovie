@@ -317,8 +317,8 @@ private fun DurationPanel(
     close: () -> Unit,
 ) {
     var ms by rememberSaveable(clip.id.value) { mutableFloatStateOf(clip.durationMs.toFloat()) }
-    // The slider reaches at least as far as the item already is (a handle can make it longer).
-    val top = maxOf(MAX_DURATION_SLIDER_MS, clip.durationMs.toFloat(), ms)
+    // A fixed range for this item: up to a minute, or further if a handle already made it longer.
+    val top = maxOf(MAX_DURATION_SLIDER_MS, clip.durationMs.toFloat())
     PanelTitle(
         stringResource(R.string.duration_title),
         onDone = {
@@ -339,7 +339,7 @@ private fun DurationPanel(
             modifier = Modifier.weight(1f),
         )
         StepButton(R.drawable.ic_add, R.string.duration_longer) {
-            ms = (ms + STEP_MS).coerceAtMost(TrimMath.MAX_STILL_MS.toFloat())
+            ms = (ms + STEP_MS).coerceAtMost(top)
         }
     }
     val label = stringResource(R.string.duration_title)
@@ -735,5 +735,5 @@ private fun ItemMenuPanel(
 }
 
 private const val STEP_MS = 500f
-private const val MAX_DURATION_SLIDER_MS = 20_000f
+private const val MAX_DURATION_SLIDER_MS = 60_000f
 const val MAX_VOLUME_PERCENT = 200f

@@ -208,6 +208,8 @@ fun EditorScreen(
     }
 
     fun deleted(clip: MainClip) {
+        // One delete's Undo at a time: an earlier one still showing goes, so it can't undo this one.
+        snackbar.currentSnackbarData?.dismiss()
         deletedAt = null
         undoArmed = true
         scope.launch {
@@ -225,8 +227,8 @@ fun EditorScreen(
                     withDismissAction = true,
                     duration = SnackbarDuration.Long,
                 )
-            // Undo here undoes the delete: any later change closes the snackbar first (below).
-            if (result == SnackbarResult.ActionPerformed) actions.undo()
+            // Undo here undoes the delete: any later change closes the snackbar first (above).
+            if (result == SnackbarResult.ActionPerformed && deletedAt != null) actions.undo()
         }
     }
 
@@ -291,24 +293,82 @@ fun EditorScreen(
             else -> {
                 if (id == null || project == null) return
                 when (action) {
-                    EditAction.TRIM -> state.panel = OpenPanel(Panel.TRIM, id)
-                    EditAction.DURATION -> state.panel = OpenPanel(Panel.DURATION, id)
-                    EditAction.SPLIT -> state.panel = OpenPanel(Panel.SPLIT, id)
-                    EditAction.SPEED -> state.panel = OpenPanel(Panel.SPEED, id)
-                    EditAction.LOOP -> state.panel = OpenPanel(Panel.LOOP, id)
-                    EditAction.VOLUME -> state.panel = OpenPanel(Panel.VOLUME, id)
-                    EditAction.FIT -> state.panel = OpenPanel(Panel.FIT, id)
-                    EditAction.EDIT_TEXT -> state.panel = OpenPanel(Panel.CARD_TEXT, id)
-                    EditAction.COLOUR -> state.panel = OpenPanel(Panel.CARD_COLOUR, id)
-                    EditAction.ROTATE -> actions.edit { rotate(id) }
-                    EditAction.REPLACE -> actions.pickForReplace(id)
-                    EditAction.DUPLICATE -> actions.edit { duplicateClip(id) }
-                    EditAction.MOVE_LEFT -> contentIndex(slots, slot).let { i -> if (i > 0) actions.edit { moveMainClip(id, i - 1) } }
-                    EditAction.MOVE_RIGHT -> contentIndex(slots, slot).let { i -> actions.edit { moveMainClip(id, i + 1) } }
-                    EditAction.JOIN -> joinTarget(project, slots, slot)?.let { (a, b) -> actions.edit { joinClips(a, b) } }
-                    EditAction.PLAY -> actions.playPart(id)
-                    EditAction.DELETE, EditAction.SKIP -> if (actions.edit { deleteClip(id) }) deleted(slot.clip)
-                    else -> Unit
+                    EditAction.TRIM -> {
+                        state.panel = OpenPanel(Panel.TRIM, id)
+                    }
+
+                    EditAction.DURATION -> {
+                        state.panel = OpenPanel(Panel.DURATION, id)
+                    }
+
+                    EditAction.SPLIT -> {
+                        if ((slot.clip as? VideoClip)?.loops?.let { it > 1 } == true) {
+                            // Said rather than greyed out: the user learns what to change.
+                            scope.launch { snackbar.showSnackbar(resources.getString(R.string.split_loop_first)) }
+                        } else {
+                            state.panel = OpenPanel(Panel.SPLIT, id)
+                        }
+                    }
+
+                    EditAction.SPEED -> {
+                        state.panel = OpenPanel(Panel.SPEED, id)
+                    }
+
+                    EditAction.LOOP -> {
+                        state.panel = OpenPanel(Panel.LOOP, id)
+                    }
+
+                    EditAction.VOLUME -> {
+                        state.panel = OpenPanel(Panel.VOLUME, id)
+                    }
+
+                    EditAction.FIT -> {
+                        state.panel = OpenPanel(Panel.FIT, id)
+                    }
+
+                    EditAction.EDIT_TEXT -> {
+                        state.panel = OpenPanel(Panel.CARD_TEXT, id)
+                    }
+
+                    EditAction.COLOUR -> {
+                        state.panel = OpenPanel(Panel.CARD_COLOUR, id)
+                    }
+
+                    EditAction.ROTATE -> {
+                        actions.edit { rotate(id) }
+                    }
+
+                    EditAction.REPLACE -> {
+                        actions.pickForReplace(id)
+                    }
+
+                    EditAction.DUPLICATE -> {
+                        actions.edit { duplicateClip(id) }
+                    }
+
+                    EditAction.MOVE_LEFT -> {
+                        contentIndex(slots, slot).let { i -> if (i > 0) actions.edit { moveMainClip(id, i - 1) } }
+                    }
+
+                    EditAction.MOVE_RIGHT -> {
+                        contentIndex(slots, slot).let { i -> actions.edit { moveMainClip(id, i + 1) } }
+                    }
+
+                    EditAction.JOIN -> {
+                        joinTarget(project, slots, slot)?.let { (a, b) -> actions.edit { joinClips(a, b) } }
+                    }
+
+                    EditAction.PLAY -> {
+                        actions.playPart(id)
+                    }
+
+                    EditAction.DELETE, EditAction.SKIP -> {
+                        if (actions.edit { deleteClip(id) }) deleted(slot.clip)
+                    }
+
+                    else -> {
+                        Unit
+                    }
                 }
             }
         }
@@ -597,8 +657,6 @@ private fun barActions(
         canMoveLeft = index > 0,
         canMoveRight = index < count - 1,
         canJoin = joinTarget(project, slots, selected) != null,
-        // A looped video is split only once its loop is off (the model refuses it otherwise).
-        canSplit = (selected.clip as? VideoClip)?.loops?.let { it == 1 } ?: true,
     )
 }
 

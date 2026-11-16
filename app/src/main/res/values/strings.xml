@@ -400,7 +400,6 @@
     <string name="timeline_row_music">Music</string>
     <string name="timeline_row_voice">Voice</string>
     <string name="timeline_row_sound">Sound</string>
-    <string name="timeline_ruler">Time. Tap or drag here to choose a moment.</string>
     <string name="timeline_selected">Selected</string>
     <string name="timeline_show_fewer_rows">Show fewer rows</string>
     <string name="trim_title">Trim</string>
@@ -428,4 +427,7 @@
     <string name="timeline_item_numbered">%1$s %2$d</string>
     <string name="editor_cant_do_that">That can\'t be done to this item.</string>
     <string name="trim_range">From %1$s to %2$s</string>
+    <string name="timeline_text_card_named">Text card: %1$s</string>
+    <string name="split_loop_first">To split this video, set Loop back to 1 time first.</string>
+    <string name="timeline_ruler">Time</string>
 </resources>
