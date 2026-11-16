@@ -184,10 +184,11 @@ to them answers alike at all three sizes. Low drafts (below 854x480) and SD
 BT.709-tagged sources on a decoder that ignores the tag are outside that
 argument; they reuse the answer unmeasured. A source's matrix comes, in the
 decoder's order, from an H.264 stream's own matrix coefficients (SPS VUI; the
-matrix, not the primaries, decides the decode), else from the container's tag
-as the decoder is configured with it (for H.264, Media3 passes the `colr`
-primaries; otherwise the matrix of Android's code, for HEVC from the hvcC
-VUI), else from the same size rule (`RetrieverProbe.classify`). On a GPU that misdecodes, every
+matrix, not the primaries, decides the decode), else from what Media3
+configures the decoder with: the SPS primaries, else the `colr` box's
+primaries (Media3 reads no matrix there, for any codec), else from the same
+size rule (`RetrieverProbe.classify`). HEVC, VP9 and AV1 stream tags are not
+read, and a `colr` box before `avcC` (rare) is used although Media3 drops it. On a GPU that misdecodes, every
 BT.709 video item starts with `Bt709Correction`; on an encoder that writes
 BT.601, the export asks for BT.601 so the file's tag matches its YUV. A
 calibration that fails or cannot tell changes nothing. Colours whose BT.601

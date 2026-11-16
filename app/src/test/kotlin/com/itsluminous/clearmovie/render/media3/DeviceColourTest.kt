@@ -119,13 +119,21 @@ class DeviceColourTest {
         val hlg = "00000001674d400aeca213602d4244825000000300100000030020f1225960"
         val none = "00000001674d400aeca2136022000003000200000300041e244b2c"
         val sdr = android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO
-        assertThat(RetrieverProbe.avcVui(hex(bt709))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(bt709)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
         assertThat(
             RetrieverProbe.avcVui(hex(bt601)),
-        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr))
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr, android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC))
         assertThat(
             RetrieverProbe.avcVui(hex(hlg)),
-        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT2020, android.media.MediaFormat.COLOR_TRANSFER_HLG))
+        ).isEqualTo(
+            Vui(
+                android.media.MediaFormat.COLOR_STANDARD_BT2020,
+                android.media.MediaFormat.COLOR_TRANSFER_HLG,
+                android.media.MediaFormat.COLOR_STANDARD_BT2020,
+            ),
+        )
         assertThat(RetrieverProbe.avcVui(hex(none))).isEqualTo(Vui.NONE)
         // A PPS after the SPS, as in csd-0, changes nothing.
         assertThat(RetrieverProbe.avcVui(hex(bt601 + "0000000168ee3c80"))).isEqualTo(RetrieverProbe.avcVui(hex(bt601)))
@@ -147,58 +155,62 @@ class DeviceColourTest {
         val bt709Primaries601Matrix = "00000001674d400aeca213602d4040419000000300100000030020f1225960"
         assertThat(
             RetrieverProbe.avcVui(hex(bt709Primaries601Matrix)),
-        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr))
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
         // High profile (chroma format and bit depths in the SPS): BT.709, and BT.2020 PQ.
         val high709 = "000000016764000aacd94426c05a808080a000000300200000030041e244b2c0"
         val highPq = "000000016764000aacd94426c05a848804a000000300200000030041e244b2c0"
-        assertThat(RetrieverProbe.avcVui(hex(high709))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(high709)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
         assertThat(
             RetrieverProbe.avcVui(hex(highPq)),
-        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT2020, android.media.MediaFormat.COLOR_TRANSFER_ST2084))
+        ).isEqualTo(
+            Vui(
+                android.media.MediaFormat.COLOR_STANDARD_BT2020,
+                android.media.MediaFormat.COLOR_TRANSFER_ST2084,
+                android.media.MediaFormat.COLOR_STANDARD_BT2020,
+            ),
+        )
     }
 
     @Test
-    fun `a container standard leads to the decoder's matrix`() {
+    fun `a container standard leads to what Media3 configures, its primaries`() {
         val bt709 = android.media.MediaFormat.COLOR_STANDARD_BT709
         val bt601 = android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC
         val bt2020 = android.media.MediaFormat.COLOR_STANDARD_BT2020
 
-        fun of(
-            code: Int,
-            avc: Boolean,
-        ) = RetrieverProbe.standardOf(code, byPrimaries = avc)
-        // Extended: 64 + primaries + 7 * matrix. BT.709 primaries, matrix unstated (65), and with
-        // the BT.601 matrix (86): Media3 configures H.264 by the primaries; other decoders use the matrix.
-        assertThat(of(65, avc = true)).isEqualTo(bt709)
-        assertThat(of(65, avc = false)).isNull()
-        assertThat(of(86, avc = true)).isEqualTo(bt709)
-        assertThat(of(86, avc = false)).isEqualTo(bt601)
-        // Primaries unstated with the BT.709 matrix (71), as the Android 16 emulator reports.
-        assertThat(of(71, avc = true)).isNull()
-        assertThat(of(71, avc = false)).isEqualTo(bt709)
-        // Matrices FCC (78), SMPTE 240M (92), BT.2020 (99) and BT.2020 constant (106); BT.2020 primaries (70).
-        assertThat(of(78, avc = false)).isEqualTo(bt601)
-        assertThat(of(92, avc = false)).isEqualTo(bt709)
-        assertThat(of(99, avc = false)).isEqualTo(bt2020)
-        assertThat(of(106, avc = false)).isEqualTo(bt2020)
-        assertThat(of(70, avc = true)).isEqualTo(bt2020)
-        // Primaries BT.470M, BT.601 625 and 525 (66, 67, 68) and film (69).
-        for (code in 66..68) assertThat(of(code, avc = true)).isEqualTo(bt601)
-        assertThat(of(69, avc = true)).isNull()
-        // Outside the extended range: vendor codes are unknown.
-        assertThat(of(113, avc = false)).isNull()
-        assertThat(of(0x10001, avc = true)).isNull()
-        // Android's non-public plain codes.
-        assertThat(of(3, avc = false)).isEqualTo(bt709)
-        assertThat(of(3, avc = true)).isEqualTo(bt601)
-        assertThat(of(5, avc = false)).isEqualTo(bt709)
-        assertThat(of(7, avc = false)).isEqualTo(bt2020)
-        assertThat(of(8, avc = false)).isEqualTo(bt601)
-        assertThat(of(9, avc = false)).isEqualTo(bt2020)
-        assertThat(of(9, avc = true)).isNull()
+        fun of(code: Int) = RetrieverProbe.standardOf(code)
+        // Extended: 64 + primaries + 7 * matrix, in Android's enum order.
+        // BT.709 primaries with the matrix unstated (65), BT.601 (86), BT.2020 (100): BT.709 all.
+        for (code in listOf(65, 86, 100)) assertThat(of(code)).isEqualTo(bt709)
+        // Primaries unstated with the BT.709 matrix (71, as the Android 16 emulator reports): none.
+        assertThat(of(71)).isNull()
+        assertThat(of(64)).isNull()
+        // Primaries unstated with the BT.2020 matrix (99): none.
+        assertThat(of(99)).isNull()
+        // BT.470M, BT.601 625 and 525 primaries (66, 67, 68), with any matrix (89 = 68 + 7 * 3).
+        for (code in listOf(66, 67, 68, 89)) assertThat(of(code)).isEqualTo(bt601)
+        // Film primaries (69): none. BT.2020 primaries (70, and 105 with the BT.2020 matrix).
+        assertThat(of(69)).isNull()
+        assertThat(of(70)).isEqualTo(bt2020)
+        assertThat(of(105)).isEqualTo(bt2020)
+        // Outside the extended range, and vendor codes (P3 primaries, BT.709 matrix, 0x10108): none.
+        assertThat(of(113)).isNull()
+        assertThat(of(0x10108)).isNull()
+        assertThat(of(-1)).isNull()
+        // Android's non-public plain codes: 3 and 5 (BT.601 primaries, other matrices), 7 (BT.2020
+        // constant), 8 (BT.470M), 9 (film), 10 (Display P3).
+        assertThat(of(3)).isEqualTo(bt601)
+        assertThat(of(5)).isEqualTo(bt601)
+        assertThat(of(7)).isEqualTo(bt2020)
+        assertThat(of(8)).isEqualTo(bt601)
+        assertThat(of(9)).isNull()
+        assertThat(of(10)).isNull()
         // The public ones.
-        assertThat(of(android.media.MediaFormat.COLOR_STANDARD_BT601_PAL, avc = false)).isEqualTo(bt601)
-        assertThat(of(bt709, avc = true)).isEqualTo(bt709)
+        assertThat(of(android.media.MediaFormat.COLOR_STANDARD_BT601_PAL)).isEqualTo(bt601)
+        assertThat(of(bt601)).isEqualTo(bt601)
+        assertThat(of(bt709)).isEqualTo(bt709)
+        assertThat(of(bt2020)).isEqualTo(bt2020)
     }
 
     @Test
@@ -206,20 +218,38 @@ class DeviceColourTest {
         val sdr = android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO
         // libx264 1920x1080 High: frame cropping (1088 coded rows); BT.709 primaries, BT.601 matrix.
         val cropped = "0000000167640028acd940780227e5c05a80808320000003002000000641e30632c0"
-        assertThat(RetrieverProbe.avcVui(hex(cropped))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(cropped)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
         // libx264 interlaced (frame_mbs_only 0), cropped, with an extended SAR (13:11, aspect_ratio_idc 255); BT.709.
         val interlaced = "0000000167640028acd94078044fdffe001a0016d4040405000003000100000300321f162d96"
-        assertThat(RetrieverProbe.avcVui(hex(interlaced))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(interlaced)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
         // Written bit by bit and checked with ffmpeg's trace_headers: High with two scaling lists
         // (4x4 and 8x8), pic_order_cnt_type 1 with a 3-frame cycle, cropping, extended SAR, matrix 5.
         val scaled =
             "0000000167640028ad9999999999999999826666666666666666666666666666666666666666666666666666666666666666a15108c4201e0089f97ff000d000bb5010105020"
-        assertThat(RetrieverProbe.avcVui(hex(scaled))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_PAL, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(scaled)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_PAL, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
         // libx264 64x64 Main with matrix 4 (FCC, close to BT.601) and 7 (SMPTE 240M, close to BT.709).
+        // Primaries BT.470BG (5) and SMPTE 240M (7) with the matrix unstated: no standard, configured as
+        // Media3 does (BT.601 for both).
+        for (primaries in listOf(
+            "00000001674d400aeca213602d4140409000000300100000030020f1225960",
+            "00000001674d400aeca213602d41c0409000000300100000030020f1225960",
+        )) {
+            assertThat(RetrieverProbe.avcVui(hex(primaries))).isEqualTo(Vui(null, sdr, android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC))
+        }
         val fcc = "00000001674d400aeca213602d4040411000000300100000030020f1225960"
         val smpte240 = "00000001674d400aeca213602d404041d000000300100000030020f1225960"
-        assertThat(RetrieverProbe.avcVui(hex(fcc))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr))
-        assertThat(RetrieverProbe.avcVui(hex(smpte240))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr))
+        assertThat(
+            RetrieverProbe.avcVui(hex(fcc)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
+        assertThat(
+            RetrieverProbe.avcVui(hex(smpte240)),
+        ).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr, android.media.MediaFormat.COLOR_STANDARD_BT709))
     }
 
     @Test
@@ -233,14 +263,18 @@ class DeviceColourTest {
         assertThat(RetrieverProbe.classify(bt601, Vui.NONE, 1920, 1080)).isFalse()
         assertThat(RetrieverProbe.classify(bt709, Vui.NONE, 640, 480)).isTrue()
 
+        // A stream that states primaries but no matrix: Media3 configures its primaries, over the container.
+        val streamPrimaries709 = Vui(null, null, configured = android.media.MediaFormat.COLOR_STANDARD_BT709)
+        assertThat(RetrieverProbe.classify(bt601, streamPrimaries709, 640, 480)).isTrue()
+        // A stated matrix wins over the stream's own primaries.
+        val matrix601 = bt601.copy(configured = android.media.MediaFormat.COLOR_STANDARD_BT709)
+        assertThat(RetrieverProbe.classify(Vui.NONE, matrix601, 640, 480)).isFalse()
+
         // Android's extended standard codes, through standardOf as the probe does.
-        fun container(
-            code: Int,
-            avc: Boolean,
-        ) = Vui(RetrieverProbe.standardOf(code, byPrimaries = avc), null)
-        assertThat(RetrieverProbe.classify(container(71, avc = false), Vui.NONE, 640, 480)).isTrue()
-        assertThat(RetrieverProbe.classify(container(85, avc = false), Vui.NONE, 1920, 1080)).isFalse()
-        assertThat(RetrieverProbe.classify(container(64, avc = false), Vui.NONE, 640, 480)).isFalse()
+        fun container(code: Int) = Vui(RetrieverProbe.standardOf(code), null)
+        assertThat(RetrieverProbe.classify(container(86), Vui.NONE, 640, 480)).isTrue()
+        assertThat(RetrieverProbe.classify(container(71), Vui.NONE, 640, 480)).isFalse()
+        assertThat(RetrieverProbe.classify(container(68), Vui.NONE, 1920, 1080)).isFalse()
         assertThat(RetrieverProbe.classify(Vui.NONE, bt709, 640, 480)).isTrue()
         assertThat(RetrieverProbe.classify(Vui.NONE, bt601, 1920, 1080)).isFalse()
         assertThat(RetrieverProbe.classify(Vui.NONE, Vui.NONE, 640, 480)).isFalse()

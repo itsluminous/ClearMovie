@@ -377,9 +377,8 @@ internal class RetrieverProbe(
                 } else {
                     Vui.NONE
                 }
-            val avc = format.getString(MediaFormat.KEY_MIME) == MimeTypes.VIDEO_H264
             classify(
-                Vui(standardOf(int(MediaFormat.KEY_COLOR_STANDARD), byPrimaries = avc), int(MediaFormat.KEY_COLOR_TRANSFER)),
+                Vui(standardOf(int(MediaFormat.KEY_COLOR_STANDARD)), int(MediaFormat.KEY_COLOR_TRANSFER)),
                 vui,
                 int(MediaFormat.KEY_WIDTH),
                 int(MediaFormat.KEY_HEIGHT),
@@ -394,10 +393,17 @@ internal class RetrieverProbe(
     }
 
     companion object {
-        /** A stream's colour standard and transfer as [MediaFormat] constants, null when not stated. */
+        /**
+         * A colour standard and transfer as [MediaFormat] constants, null when
+         * not stated. For a stream, [standard] follows its matrix (what the
+         * decoder applies) and [configured] its primaries (what Media3
+         * configures the decoder with, the decoder's default when the matrix is
+         * unstated).
+         */
         data class Vui(
             val standard: Int?,
             val transfer: Int?,
+            val configured: Int? = null,
         ) {
             companion object {
                 val NONE = Vui(null, null)
@@ -405,60 +411,38 @@ internal class RetrieverProbe(
         }
 
         /**
-         * The public standard (BT.709, BT.601 or BT.2020) a container's
-         * `KEY_COLOR_STANDARD` leads the decoder to, null when it leads to none.
-         * Android reports its own codes there too (ColorUtils): the non-public
-         * 3, 5, 7, 8, 9 and the extended 64 + primaries + 7 * matrix (its enum
-         * order). [byPrimaries] is for H.264, whose decoder Media3 configures
-         * from the container's primaries (it ignores the matrix); otherwise the
-         * code's matrix is what the decoder applies.
+         * The public standard (BT.709, BT.601 or BT.2020) Media3 configures the
+         * decoder with for a container's `KEY_COLOR_STANDARD`, null for none.
+         * Media3 reads a `colr` box's primaries only, for every codec, so the
+         * code's primaries decide. Android reports its own codes there too
+         * (ColorUtils): the non-public 3, 5, 7, 8, 9, 10, the extended
+         * 64 + primaries + 7 * matrix (its enum order), and vendor codes from
+         * 0x10000 (P3 and other primaries, which Media3 does not configure).
          */
-        fun standardOf(
-            standard: Int?,
-            byPrimaries: Boolean,
-        ): Int? {
+        fun standardOf(standard: Int?): Int? {
             val bt709 = MediaFormat.COLOR_STANDARD_BT709
             val bt601 = MediaFormat.COLOR_STANDARD_BT601_NTSC
             val bt2020 = MediaFormat.COLOR_STANDARD_BT2020
             if (standard == null) return null
             if (standard in EXTENDED_STANDARD until EXTENDED_STANDARD + 7 * 7) {
-                val code = standard - EXTENDED_STANDARD
-                return if (byPrimaries) {
-                    // Primaries: BT.709, BT.470M, BT.601 625 and 525, film, BT.2020.
-                    when (code % 7) {
-                        1 -> bt709
-                        2, 3, 4 -> bt601
-                        6 -> bt2020
-                        else -> null
-                    }
-                } else {
-                    // Matrix: BT.709, BT.470M (FCC), BT.601, SMPTE 240M, BT.2020, BT.2020 constant.
-                    when (code / 7) {
-                        1, 4 -> bt709
-                        2, 3 -> bt601
-                        5, 6 -> bt2020
-                        else -> null
-                    }
+                // Primaries: unstated, BT.709, BT.470M, BT.601 625 and 525, film, BT.2020.
+                return when ((standard - EXTENDED_STANDARD) % 7) {
+                    1 -> bt709
+                    2, 3, 4 -> bt601
+                    6 -> bt2020
+                    else -> null
                 }
             }
             return when (standard) {
-                // The public ones carry the same primaries and matrix.
                 bt709, bt2020 -> standard
 
-                MediaFormat.COLOR_STANDARD_BT601_PAL, bt601 -> bt601
+                // BT.601 625 and 525, the latter two with other matrices (Android's 3 and 5), and BT.470M (8).
+                MediaFormat.COLOR_STANDARD_BT601_PAL, bt601, 3, 5, 8 -> bt601
 
-                // Android's own: BT.601 625 primaries with the BT.709 matrix, 525 with SMPTE 240M,
-                // BT.2020 constant luminance, BT.470M, and film primaries with the BT.2020 matrix.
-                3 -> if (byPrimaries) bt601 else bt709
-
-                5 -> if (byPrimaries) bt601 else bt709
-
+                // BT.2020 constant luminance.
                 7 -> bt2020
 
-                8 -> bt601
-
-                9 -> if (byPrimaries) null else bt2020
-
+                // Film (9) and Display P3 (10) primaries, vendor codes and the rest: Media3 configures none.
                 else -> null
             }
         }
@@ -469,7 +453,8 @@ internal class RetrieverProbe(
         private const val MAX_CSD_BYTES = 64 * 1024
 
         /**
-         * The stream's own tag (SPS VUI), else [container]'s (its colour keys,
+         * The stream's own tag (SPS VUI matrix, else its primaries as Media3
+         * configures them), else [container]'s (its colour keys,
          * the standard already through [standardOf]), each of standard and transfer on its
          * own, else by size. This is the decoder's order: Codec2 hands the
          * configured (container) aspects to the decoder as defaults, the
@@ -484,7 +469,7 @@ internal class RetrieverProbe(
             height: Int?,
         ): Boolean =
             videoIsBt709(
-                stream.standard ?: container.standard,
+                stream.standard ?: stream.configured ?: container.standard,
                 width ?: 1280,
                 height ?: 720,
                 stream.transfer ?: container.transfer,
@@ -564,7 +549,14 @@ internal class RetrieverProbe(
             if (!a.readBit()) return Vui.NONE // video_signal_type_present_flag
             a.skipBits(4) // video_format, video_full_range_flag
             if (!a.readBit()) return Vui.NONE // colour_description_present_flag
-            a.skipBits(8) // colour_primaries
+            // Media3's own mapping (isoColorPrimariesToColorSpace).
+            val configured =
+                when (a.readBits(8)) {
+                    1 -> MediaFormat.COLOR_STANDARD_BT709
+                    4, 5, 6, 7 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
+                    9 -> MediaFormat.COLOR_STANDARD_BT2020
+                    else -> null
+                }
             val transfer =
                 when (a.readBits(8)) {
                     16 -> MediaFormat.COLOR_TRANSFER_ST2084
@@ -585,7 +577,7 @@ internal class RetrieverProbe(
 
                     else -> null
                 }
-            return Vui(standard, transfer)
+            return Vui(standard, transfer, configured)
         }
 
         @OptIn(UnstableApi::class)
