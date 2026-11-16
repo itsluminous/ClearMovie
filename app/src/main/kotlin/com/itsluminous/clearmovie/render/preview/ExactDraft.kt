@@ -6,6 +6,7 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
+import com.itsluminous.clearmovie.render.media3.ColourCalibration
 import com.itsluminous.clearmovie.render.media3.CompositionFactory
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
 import com.itsluminous.clearmovie.render.media3.MediaResolver
@@ -67,9 +68,11 @@ class ExactDraft(
         val dir = File(context.cacheDir, DIR).apply { mkdirs() }
         val out = File(dir, FILE)
         out.delete()
+        // The device's measured colour handling, the same for the composition and the encoder.
+        val colour = withContext(Dispatchers.IO) { ColourCalibration.of(context) }
         val composition =
             try {
-                withContext(Dispatchers.IO) { CompositionFactory(context, resolver).build(slice) }
+                withContext(Dispatchers.IO) { CompositionFactory(context, resolver) { colour }.build(slice) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -90,7 +93,7 @@ class ExactDraft(
                 try {
                     suspendCancellableCoroutine { cont ->
                         transformer =
-                            RenderExporter(context, plan.height).start(
+                            RenderExporter(context, plan.height, colour).start(
                                 composition,
                                 out,
                                 EncodeSpec.forHeight(plan.height),
