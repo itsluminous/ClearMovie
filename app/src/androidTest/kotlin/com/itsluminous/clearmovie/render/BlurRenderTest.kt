@@ -29,6 +29,49 @@ import kotlin.math.abs
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class BlurRenderTest {
+    /** The mean colour of a patch of [f] around normalised (nx, ny). */
+    private fun mean(
+        f: android.graphics.Bitmap,
+        nx: Double,
+        ny: Double,
+    ): IntArray = RenderHarness.rgb(f, nx, ny, r = 6)
+
+    /**
+     * The band beside the picture is a blur of the picture's own edge there, turned as the
+     * picture is. The fixture is red, green / blue, white; a quarter turn clockwise brings blue
+     * to the top-left and white to the bottom-left, a quarter turn the other way green and red.
+     * A mirrored or unturned background would put the wrong colours there.
+     */
+    @Test
+    fun fitWithBlurBackgroundShowsThePicturesOwnColoursTurnedAsItIs() {
+        for ((rotation, want) in listOf(
+            Rotation.R90 to (intArrayOf(0, 0, 255) to intArrayOf(255, 255, 255)),
+            Rotation.R270 to (intArrayOf(0, 255, 0) to intArrayOf(255, 0, 0)),
+        )) {
+            val ids = SequentialIds("c")
+            val project =
+                ProjectFactory
+                    .blank(ProjectId("blur-colour"), ids)
+                    .addToMain(
+                        listOf(PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 2000, rotation = rotation, fit = Fit.FIT_BLUR)),
+                        ids = ids,
+                    )
+            val out = RenderHarness.export(RenderPlanBuilder().build(project), "fit-blur-colour-${rotation.degrees}")
+            val f = frameAt(out.file, 1_000_000)
+            savePng(f, "fit-blur-colour-${rotation.degrees}")
+            // The band nearest the picture, a quarter and three quarters of the way down.
+            val x = 0.25
+            val top = mean(f, x, 0.2)
+            val bottom = mean(f, x, 0.8)
+            report("fit-blur colour R${rotation.degrees}: top ${top.toList()} bottom ${bottom.toList()}")
+
+            // Darkened to 80% and blurred: the dominant channel says which colour it is.
+            fun dominant(c: IntArray): Int = if (c.max() - c.min() < 40) -1 else c.indices.maxBy { c[it] }
+            assertThat(dominant(top)).isEqualTo(dominant(want.first))
+            assertThat(dominant(bottom)).isEqualTo(dominant(want.second))
+        }
+    }
+
     @Test
     fun fitWithBlurBackgroundIsSmoothAndFollowsThePicture() {
         val ids = SequentialIds("b")

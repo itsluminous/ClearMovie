@@ -66,12 +66,33 @@ class PreviewTimingDeviceTest {
     }
 
     @Test
-    fun trimSplitSpeedAndLoopShowTheFileTimeTheModelGives() {
+    fun trimSplitSpeedAndLoopShowTheFileTimeTheModelGives() = check(withPreset = false)
+
+    /**
+     * The same with the preset: an intro first, and the frame, its music and the spoken ending
+     * playing in players of their own beside MAIN, as in the editor (the engine's real
+     * ExoPlayer set-up for every role, not only MAIN's).
+     */
+    @Test
+    fun theSameHoldsWithThePresetsFrameMusicAndEndingPlaying() = check(withPreset = true)
+
+    private fun check(withPreset: Boolean) {
         val ids = SequentialIds("t")
         val media = fixture("seconds.mp4")
+        val start =
+            if (withPreset) {
+                ProjectFactory.fromPreset(
+                    ProjectId("timing-preset"),
+                    RenderHarness.preset,
+                    com.itsluminous.clearmovie.domain.model
+                        .PresetMedia(introMs = 2000, frameMs = 12_000, endingMs = 3000),
+                    ids,
+                )
+            } else {
+                ProjectFactory.blank(ProjectId("timing"), ids)
+            }
         var project: Project =
-            ProjectFactory
-                .blank(ProjectId("timing"), ids)
+            start
                 .addToMain(
                     listOf(
                         VideoClip(ClipId("a"), media, sourceDurationMs = 10_000),
@@ -111,7 +132,12 @@ class PreviewTimingDeviceTest {
                 Probe("c", 1500),
             )
 
-        val schedule = PreviewSchedule.of(RenderPlanBuilder().build(project, height = 720))
+        val schedule = PreviewSchedule.of(RenderPlanBuilder(if (withPreset) RenderHarness.preset else null).build(project, height = 720))
+        if (withPreset) {
+            assertWithMessage(
+                "the preset brings a frame lane and sound lanes",
+            ).that(schedule.overlays.size + schedule.sounds.size).isAtLeast(2)
+        }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val results = mutableListOf<String>()
         val failures = mutableListOf<String>()
@@ -136,11 +162,12 @@ class PreviewTimingDeviceTest {
                 val shown = secondShown(checkNotNull(frame))
                 val wantMs = fileMsAt(p)
                 val want = (wantMs / 1000).toInt()
-                val name = "preview-${p.clip}-plus${p.intoMs}ms-at${atMs}ms"
+                val name = (if (withPreset) "preview-preset-" else "preview-") + "${p.clip}-plus${p.intoMs}ms-at${atMs}ms"
                 savePng(frame!!, name)
                 val line =
-                    "preview ${p.clip} +${p.intoMs} ms (video %.2f s): model says file %.2f s (second $want), frame shows second $shown"
-                        .format(atMs / 1000.0, wantMs / 1000.0)
+                    (if (withPreset) "preview (preset) " else "preview ") +
+                        "${p.clip} +${p.intoMs} ms (video %.2f s): model says file %.2f s (second $want), frame shows second $shown"
+                            .format(atMs / 1000.0, wantMs / 1000.0)
                 results += line
                 report(line)
                 if (shown != want) failures += line
