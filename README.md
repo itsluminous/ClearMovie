@@ -98,18 +98,18 @@ What's planned, and what has shipped:
 - [x] Share photos and videos from the gallery straight into a new video
 
 **Editing**
-- [ ] Drag-to-reorder main row, with Move left and Move right buttons as well
+- [x] Drag-to-reorder main row, with Move left and Move right buttons as well
 - [ ] Several rows of each kind (text, music, picture in picture, frame), with type icons, rearranging, and "Show on top" / "Send backward"
-- [ ] "+" before and after each item to insert photos, videos, text cards or music
-- [ ] Pinch to zoom the timeline, plus zoom buttons and Fit all
+- [ ] "+" before and after each item to insert photos, videos, text cards or music (photos, videos and cards on the main row are in; music arrives with more rows)
+- [x] Pinch to zoom the timeline, plus zoom buttons and Fit all
 - [ ] Transitions between items and animations on items
-- [ ] Trim, split, join, speed (0.25x-4x), loop
-- [ ] Photo duration
-- [ ] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
+- [x] Trim, split, join, speed (0.25x-4x), loop
+- [x] Photo duration
+- [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
 - [ ] Audio overlay with volume, fade and automatic ducking
 - [ ] Captions with preset defaults, drag-to-place, fonts, size, colours, outline and background
-- [ ] Undo and redo for every change
-- [ ] Preview that shrinks, or floats as a small window, when all rows need room
+- [x] Undo and redo for every change
+- [x] Preview that shrinks, or floats as a small window, when all rows need room
 
 **Saving and export**
 - [ ] Autosave and crash recovery

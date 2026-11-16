@@ -28,6 +28,7 @@ their imports.
 | `ui.navigation` | `ClearMovieApp` (the navigation graph), `NewVideoFlow` (which screen follows which), `Routes` | |
 | `ui.layout` | `WindowClass`: Material window size classes from the space the screen has | |
 | `ui.home`, `ui.preset`, `ui.pick`, `ui.share`, `ui.editor`, `ui.export`, `ui.settings` | The screens and their view models; `AppLanguage` (the in-app language picker) | |
+| `ui.editor.timeline` | The editor timeline (`TimelineView`) and the pure pieces it runs on: `TimelineZoom`, `TimelineGeometry`, `TimelineGestureArbiter`, `PreviewLayoutReducer`, `ClipActions`, `TrimMath`, `ThumbPlan` | |
 | `ui.media`, `ui.components` | The photo-access explainer, the copy dialogs and `MediaIntake`, the missing-clip tile; progress and play-a-file dialogs | |
 
 `ClearMovieApplication` (`@HiltAndroidApp`), `MainActivity` and the share entry `ShareActivity` sit at the root.
@@ -224,7 +225,10 @@ lays it out for players:
 - **Captions** are drawn as text in their boxes. Picture-in-picture rows come
   with cm-tracks; until then only the exact draft shows them.
 
-`LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. It is owned
+`LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. It takes its
+players from a `PreviewPlayerFactory` (`ExoPreviewPlayers` in the app), so
+`LayeredPreviewEngineTest` checks its playlists, seeks, speeds, drift
+correction, volumes and error handling with fake players. It is owned
 by `EditorViewModel`, so a rotation keeps playing and only the surfaces are
 attached again; the playhead and play state go into the saved state for a
 process death. Two device facts shape it: a player with video effects shows
@@ -290,8 +294,7 @@ repair heading), then preset review (Play, Replace or Skip for this video for
 the intro, frame and ending; the choices rebuild the new draft from the
 track template), then the photo step (the one-time access explainer, Try
 again after a refusal, the system Photo Picker, the intake), then the editor
-shell (Export at the top right, which opens the export sheet; the layered
-preview; the read-only MAIN row).
+(below; Export at the top right opens the export sheet).
 `NewVideoFlow` decides the order: with `EntryMode.MEDIA_CHOSEN` (shares, from
 cm-share) the preset pick goes straight to the editor.
 
@@ -346,6 +349,50 @@ few threads of their own, so a provider that hangs costs only its items.
   record, which Android keeps), and one on its preset pick comes back as it
   was. A share replayed from Recents (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`)
   is ignored.
+
+## The editor
+
+`EditorScreen` has the top bar (Back, Undo, Redo, Export at the top right),
+the preview with Play, the time and the Zoom out / Zoom in / Fit all buttons,
+the timeline, and the contextual bar or, while one is open, the panel of the
+action in use. Its on-screen state (`EditorScreenState`: selection, open panel,
+zoom and scroll, "Show all rows", the floating preview's corner) is saved with
+the screen; the playhead is saved by `EditorViewModel`.
+
+- **Layout.** `PreviewLayoutReducer` places the preview from the window, the
+  bars' measured heights and the rows' heights (which grow with the font
+  size): two panes are Docked; stacked, the preview is Full, Shrunk (down to
+  180 dp, or 28% of the window when that is more and the natural preview is
+  taller), Partial (only the rows that fit, MAIN and the selected row first,
+  with "Show all rows (N more)"), or Floating: when all rows are asked for and
+  don't fit, the preview is a small window over them that drags and snaps to
+  a corner, with Move and Close buttons.
+- **Timeline.** A ruler, the playhead and the rows in screen order, each with
+  its type icon and name. MAIN shows each item with a thumbnail strip
+  (re-planned per zoom step by `ThumbPlan`, the old pictures drawn until the
+  new ones load), its type and length, trim handles on the selected item and
+  the "+" insert points that `TimelineGeometry` places: one per boundary, all
+  of them once items are 64 dp wide, otherwise around the selected item and
+  under the playhead, moved clear of the trim handles and never overlapping.
+  The other rows are drawn read-only until cm-tracks.
+- **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
+  finger before a long-press is a pinch (zoom around the fingers, clamped
+  between Fit all and 1 s per 240 dp, `TimelineZoom`), movement is a scroll,
+  a trim from a handle or a scrub from the ruler, a hold then a drag moves an
+  item, a hold and release opens its menu, and a quick release is a tap. Each
+  gesture has a button: the zoom buttons, the bar's Move left and Move right,
+  the Trim panel, TalkBack actions on the items and the time.
+- **Edits.** The bar's actions and the panels change the model through
+  `EditSession` (one undo step each, 50 kept; a change from elsewhere is a
+  step too). "+" opens a chooser: photos and videos from the gallery, a text
+  card or a colour card, put exactly before or after the item. Gallery picks
+  for "+", Replace and Add are taken in by the view model with `MediaIntake`
+  and `newMainItems`, and the links are kept in the saved state until they are
+  on MAIN.
+- **Fit with blur.** The export blurs the background with a separable
+  Gaussian at an eighth of the window (`BlurPasses`, two passes before
+  `PlacementEffect`'s own); the preview draws the picture shrunk and stretched
+  behind the fitted one.
 
 ## Persistence
 
