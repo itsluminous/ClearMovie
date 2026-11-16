@@ -270,6 +270,8 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.datasource)
+    // EXIF capture dates of shared photos (cm-share); already on the classpath through Media3.
+    implementation(libs.androidx.exifinterface)
 
     // Material Components: provides the XML Theme.Material3.* parent in themes.xml.
     implementation(libs.google.material)

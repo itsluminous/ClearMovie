@@ -46,5 +46,8 @@ class NewVideoFlowTest {
         assertThat(Routes.of(FlowStep.Pick(project))).isEqualTo("pick/p1")
         assertThat(Routes.editor(project, skipped = 2, broughtBack = true)).isEqualTo("editor/p1?skipped=2&broughtBack=true")
         assertThat(Routes.EDITOR).startsWith("editor/{projectId}")
+        // A share's setup carries the draft that Done gives the preset (cm-share).
+        assertThat(Routes.setup(preset, newVideo = true, shareDraft = project)).isEqualTo("setup/event-frame?newVideo=true&shareDraft=p1")
+        assertThat(Routes.SETUP).endsWith("&shareDraft={shareDraft}")
     }
 }

@@ -228,7 +228,7 @@
     </plurals>
     <string name="share_add_title">खुले हुए वीडियो में जोड़ें?</string>
     <plurals name="share_add_body">
-        <item quantity="one">यह फ़ोटो या वीडियो अभी खुले वीडियो में जोड़ें, या इससे नया वीडियो शुरू करें?</item>
+        <item quantity="one">%1$d फ़ोटो या वीडियो अभी खुले वीडियो में जोड़ें, या इससे नया वीडियो शुरू करें?</item>
         <item quantity="other">ये %1$d फ़ोटो और वीडियो अभी खुले वीडियो में जोड़ें, या इनसे नया वीडियो शुरू करें?</item>
     </plurals>
     <string name="share_add_here">इसी वीडियो में जोड़ें</string>

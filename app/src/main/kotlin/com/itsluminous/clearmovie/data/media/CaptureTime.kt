@@ -1,9 +1,9 @@
 package com.itsluminous.clearmovie.data.media
 
 import android.content.Context
-import android.media.ExifInterface
 import android.media.MediaMetadataRetriever
 import androidx.core.net.toUri
+import androidx.exifinterface.media.ExifInterface
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.ProjectId
@@ -66,7 +66,8 @@ class AndroidCaptureTimeReader(
             } ?: return null
         return stream.use {
             val exif = ExifInterface(it)
-            CaptureDates.exif(exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL), exif.getAttribute(TAG_OFFSET_TIME_ORIGINAL))
+            val taken = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+            CaptureDates.exif(taken, exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL))
         }
     }
 
@@ -85,10 +86,6 @@ class AndroidCaptureTimeReader(
         } finally {
             runCatching { r.release() }
         }
-    }
-
-    private companion object {
-        const val TAG_OFFSET_TIME_ORIGINAL = "OffsetTimeOriginal"
     }
 }
 

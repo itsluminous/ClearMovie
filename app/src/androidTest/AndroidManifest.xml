@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The instrumented tests' own manifest (merged into the test APK, never the app). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Another app's files, for the share tests (ShareDeviceTest): it runs in
+             the test package's own process and uid, and only callers holding
+             DUMP (the shell) may read it directly, so ClearMovie can read a file
+             only through the grant a share carries, as with a real gallery. -->
+        <provider
+            android:name="com.itsluminous.clearmovie.share.SharingAppProvider"
+            android:authorities="com.itsluminous.sharetest.files"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:readPermission="android.permission.DUMP" />
+    </application>
+</manifest>

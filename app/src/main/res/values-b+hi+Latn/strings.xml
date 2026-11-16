@@ -236,7 +236,7 @@
     </plurals>
     <string name="share_add_title">Khule hue video me add karein?</string>
     <plurals name="share_add_body">
-        <item quantity="one">Yeh photo ya video abhi khule video me add karein, ya isse naya video shuru karein?</item>
+        <item quantity="one">%1$d photo ya video abhi khule video me add karein, ya isse naya video shuru karein?</item>
         <item quantity="other">Yeh %1$d photos aur videos abhi khule video me add karein, ya inse naya video shuru karein?</item>
     </plurals>
     <string name="share_add_here">Isi video me add karein</string>
