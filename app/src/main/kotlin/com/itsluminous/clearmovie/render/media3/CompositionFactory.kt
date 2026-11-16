@@ -352,9 +352,8 @@ internal class RetrieverProbe(
     }
 
     /**
-     * From the container's colour tag (`colr`), else the H.264 stream's own
-     * (SPS VUI), else by size, as Android decides for untagged video
-     * ([classify]).
+     * From an H.264 stream's own tag (SPS VUI), else the container's colour
+     * keys, else by size, as the decoder decides ([classify]).
      */
     private fun isBt709(uri: Uri): Boolean {
         val e = MediaExtractor()
@@ -378,8 +377,9 @@ internal class RetrieverProbe(
                 } else {
                     Vui.NONE
                 }
+            val avc = format.getString(MediaFormat.KEY_MIME) == MimeTypes.VIDEO_H264
             classify(
-                Vui(int(MediaFormat.KEY_COLOR_STANDARD), int(MediaFormat.KEY_COLOR_TRANSFER)),
+                Vui(standardOf(int(MediaFormat.KEY_COLOR_STANDARD), byPrimaries = avc), int(MediaFormat.KEY_COLOR_TRANSFER)),
                 vui,
                 int(MediaFormat.KEY_WIDTH),
                 int(MediaFormat.KEY_HEIGHT),
@@ -405,16 +405,60 @@ internal class RetrieverProbe(
         }
 
         /**
-         * A [MediaFormat] colour standard, with Android's extended codes
-         * (64 + primaries + 7 * matrix, in its own enum order) reduced to the
-         * matrix they carry; an unknown one is null.
+         * The public standard (BT.709, BT.601 or BT.2020) a container's
+         * `KEY_COLOR_STANDARD` leads the decoder to, null when it leads to none.
+         * Android reports its own codes there too (ColorUtils): the non-public
+         * 3, 5, 7, 8, 9 and the extended 64 + primaries + 7 * matrix (its enum
+         * order). [byPrimaries] is for H.264, whose decoder Media3 configures
+         * from the container's primaries (it ignores the matrix); otherwise the
+         * code's matrix is what the decoder applies.
          */
-        fun standardOf(standard: Int?): Int? {
-            if (standard == null || standard < EXTENDED_STANDARD) return standard
-            return when ((standard - EXTENDED_STANDARD) / 7) {
-                1 -> MediaFormat.COLOR_STANDARD_BT709
-                3 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
-                5, 6 -> MediaFormat.COLOR_STANDARD_BT2020
+        fun standardOf(
+            standard: Int?,
+            byPrimaries: Boolean,
+        ): Int? {
+            val bt709 = MediaFormat.COLOR_STANDARD_BT709
+            val bt601 = MediaFormat.COLOR_STANDARD_BT601_NTSC
+            val bt2020 = MediaFormat.COLOR_STANDARD_BT2020
+            if (standard == null) return null
+            if (standard in EXTENDED_STANDARD until EXTENDED_STANDARD + 7 * 7) {
+                val code = standard - EXTENDED_STANDARD
+                return if (byPrimaries) {
+                    // Primaries: BT.709, BT.470M, BT.601 625 and 525, film, BT.2020.
+                    when (code % 7) {
+                        1 -> bt709
+                        2, 3, 4 -> bt601
+                        6 -> bt2020
+                        else -> null
+                    }
+                } else {
+                    // Matrix: BT.709, BT.470M (FCC), BT.601, SMPTE 240M, BT.2020, BT.2020 constant.
+                    when (code / 7) {
+                        1, 4 -> bt709
+                        2, 3 -> bt601
+                        5, 6 -> bt2020
+                        else -> null
+                    }
+                }
+            }
+            return when (standard) {
+                // The public ones carry the same primaries and matrix.
+                bt709, bt2020 -> standard
+
+                MediaFormat.COLOR_STANDARD_BT601_PAL, bt601 -> bt601
+
+                // Android's own: BT.601 625 primaries with the BT.709 matrix, 525 with SMPTE 240M,
+                // BT.2020 constant luminance, BT.470M, and film primaries with the BT.2020 matrix.
+                3 -> if (byPrimaries) bt601 else bt709
+
+                5 -> if (byPrimaries) bt601 else bt709
+
+                7 -> bt2020
+
+                8 -> bt601
+
+                9 -> if (byPrimaries) null else bt2020
+
                 else -> null
             }
         }
@@ -425,8 +469,8 @@ internal class RetrieverProbe(
         private const val MAX_CSD_BYTES = 64 * 1024
 
         /**
-         * The stream's own tag (SPS VUI), else [container]'s (a `colr` box, as
-         * `MediaExtractor` reports it), each of standard and transfer on its
+         * The stream's own tag (SPS VUI), else [container]'s (its colour keys,
+         * the standard already through [standardOf]), each of standard and transfer on its
          * own, else by size. This is the decoder's order: Codec2 hands the
          * configured (container) aspects to the decoder as defaults, the
          * decoder keeps the coded ones where the stream states them, and the
@@ -440,7 +484,7 @@ internal class RetrieverProbe(
             height: Int?,
         ): Boolean =
             videoIsBt709(
-                stream.standard ?: standardOf(container.standard),
+                stream.standard ?: container.standard,
                 width ?: 1280,
                 height ?: 720,
                 stream.transfer ?: container.transfer,
@@ -573,7 +617,7 @@ internal class RetrieverProbe(
             if (transfer == MediaFormat.COLOR_TRANSFER_ST2084 || transfer == MediaFormat.COLOR_TRANSFER_HLG) {
                 false
             } else {
-                when (standardOf(standard)) {
+                when (standard) {
                     MediaFormat.COLOR_STANDARD_BT709 -> true
                     MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC, MediaFormat.COLOR_STANDARD_BT2020 -> false
                     else -> sizeDefaultIsBt709(width, height)

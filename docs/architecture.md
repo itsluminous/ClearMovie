@@ -185,8 +185,9 @@ BT.709-tagged sources on a decoder that ignores the tag are outside that
 argument; they reuse the answer unmeasured. A source's matrix comes, in the
 decoder's order, from an H.264 stream's own matrix coefficients (SPS VUI; the
 matrix, not the primaries, decides the decode), else from the container's tag
-(`colr`, or for HEVC the hvcC VUI that Android's extractor reports), else from
-the same size rule (`RetrieverProbe.classify`). On a GPU that misdecodes, every
+as the decoder is configured with it (for H.264, Media3 passes the `colr`
+primaries; otherwise the matrix of Android's code, for HEVC from the hvcC
+VUI), else from the same size rule (`RetrieverProbe.classify`). On a GPU that misdecodes, every
 BT.709 video item starts with `Bt709Correction`; on an encoder that writes
 BT.601, the export asks for BT.601 so the file's tag matches its YUV. A
 calibration that fails or cannot tell changes nothing. Colours whose BT.601

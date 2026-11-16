@@ -68,11 +68,13 @@ class ColourCalibrationTest {
     @Test
     fun aCalibrationInterruptedWhileRunningAnswersNothingAndEndsItsThread() {
         val caller = Thread.currentThread()
+        // Threads left by other tests end on their own; this one must be this test's.
+        val earlier = calibrationThreads().toSet()
         // Interrupt once the calibration's own thread is up, so the wait is inside the export.
         val interrupter =
             Thread {
                 val deadline = System.nanoTime() + 10_000_000_000L
-                while (calibrationThreads().isEmpty() && System.nanoTime() < deadline) Thread.sleep(5)
+                while ((calibrationThreads() - earlier).isEmpty() && System.nanoTime() < deadline) Thread.sleep(5)
                 Thread.sleep(50)
                 caller.interrupt()
             }.apply { start() }
@@ -81,9 +83,10 @@ class ColourCalibrationTest {
         interrupter.join()
         assertWithMessage("an interrupted calibration answered").that(result).isNull()
         assertWithMessage("the caller's interrupt was lost").that(stillInterrupted).isTrue()
-        val deadline = System.nanoTime() + 10_000_000_000L
-        while (calibrationThreads().isNotEmpty() && System.nanoTime() < deadline) Thread.sleep(50)
-        assertWithMessage("the calibration thread is still running").that(calibrationThreads()).isEmpty()
+        // Media3's cancel releases the codecs on that thread; allow a slow emulator 30 s.
+        val deadline = System.nanoTime() + 30_000_000_000L
+        while ((calibrationThreads() - earlier).isNotEmpty() && System.nanoTime() < deadline) Thread.sleep(50)
+        assertWithMessage("the calibration thread is still running").that(calibrationThreads() - earlier).isEmpty()
     }
 
     private fun calibrationThreads() = Thread.getAllStackTraces().keys.filter { it.name == "colour-calibration" && it.isAlive }
