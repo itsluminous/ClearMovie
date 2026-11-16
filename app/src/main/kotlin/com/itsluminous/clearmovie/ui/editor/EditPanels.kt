@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -61,6 +63,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
@@ -621,21 +624,19 @@ private fun CardTextPanel(
     val editing = open.side == null
     var text by rememberSaveable(open.clipId.value, editing) { mutableStateOf(if (editing) (clip as? CardClip)?.text.orEmpty() else "") }
     val usable = text.isNotBlank() && TextRules.isValidText(text)
+    val submit = {
+        if (usable) {
+            if (editing) {
+                callbacks.edit { setText(clip.id, text.trim()) }
+            } else {
+                callbacks.insertCard(open.clipId, open.side!!, text.trim(), CARD_COLOURS.first().first)
+            }
+            close()
+        }
+    }
     PanelTitle(
         stringResource(R.string.card_text_title),
-        onDone =
-            if (usable) {
-                {
-                    if (editing) {
-                        callbacks.edit { setText(clip.id, text.trim()) }
-                    } else {
-                        callbacks.insertCard(open.clipId, open.side!!, text.trim(), CARD_COLOURS.first().first)
-                    }
-                    close()
-                }
-            } else {
-                null
-            },
+        onDone = if (usable) submit else null,
         onCancel = close,
         doneLabel = if (editing) R.string.action_done else R.string.card_add,
     )
@@ -644,6 +645,9 @@ private fun CardTextPanel(
         onValueChange = { if (it.length <= Limits.MAX_TEXT_LENGTH) text = it },
         label = { Text(stringResource(R.string.card_text_hint)) },
         minLines = 2,
+        // The keyboard's own Done key adds the card too: held sideways, the keyboard leaves no room for the panel's button.
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { submit() }),
         modifier = Modifier.fillMaxWidth().testTag("card_text_field"),
     )
     Spacer(Modifier.height(8.dp))
