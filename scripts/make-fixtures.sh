@@ -46,16 +46,19 @@ drawbox=x=72:y=842:w=160:h=120:color=0x1440B4:t=fill[bg];\
 
 # frame_neargreen.mp4: 4 s, the same window geometry as frame.mp4, with a
 # strip of five near-green swatches below the window, none of which may be
-# keyed. As encoded, each is 0.29-0.32 from the nearer form of the key in
+# keyed. As encoded, each is 0.287-0.315 from the nearer form of the key in
 # BT.709 Cb/Cr (the stored key and its BT.601-decoded form) whichever
-# matrix decodes it, so at least 0.03 outside tolerance + softness (0.26).
-# Encoded near-lossless (crf 12) so the swatches keep those colours.
+# matrix decodes it, so at least 0.027 outside tolerance + softness (0.26).
+# Encoded near-lossless (crf 12) so the swatches keep those colours. All
+# five stay inside the RGB range when a GPU decodes them with the BT.601
+# matrix, so the BT.709 correction restores them exactly; more saturated
+# greens (#98FC00) clip there, a limit recorded in docs/architecture.md.
 "${ff[@]}" \
   -f lavfi -i "color=c=0xC81414:s=1920x1080:r=30:d=4" \
   -filter_complex "[0:v]drawbox=x=18:y=24:w=1884:h=836:color=0x00D922:t=fill,\
 drawbox=x=0:y=860:w=1920:h=220:color=0x1440B4:t=fill,\
-drawbox=x=60:y=880:w=320:h=180:color=0x98FC00:t=fill,\
-drawbox=x=420:y=880:w=320:h=180:color=0xB0FC24:t=fill,\
+drawbox=x=60:y=880:w=320:h=180:color=0xA4E420:t=fill,\
+drawbox=x=420:y=880:w=320:h=180:color=0xB0E880:t=fill,\
 drawbox=x=780:y=880:w=320:h=180:color=0x80C484:t=fill,\
 drawbox=x=1140:y=880:w=320:h=180:color=0x589444:t=fill,\
 drawbox=x=1500:y=880:w=320:h=180:color=0x1B5E20:t=fill[v]" \

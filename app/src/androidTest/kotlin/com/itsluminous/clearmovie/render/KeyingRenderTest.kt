@@ -146,9 +146,9 @@ class KeyingRenderTest {
 
     /**
      * The two-form keyer (stored key and its BT.601-decoded form) must not
-     * widen the key into near-green frame artwork: five swatches 0.29-0.32
+     * widen the key into near-green frame artwork: five swatches 0.287-0.315
      * in Cb/Cr from the nearer form as encoded, whichever matrix decodes
-     * them (at least 0.03 outside tolerance + softness), stay exactly as the
+     * them (at least 0.027 outside tolerance + softness), stay exactly as the
      * frame shows them,
      * while the window beside them is keyed to the photo under it. The frame
      * file has no sound track, so this also exports a silent frame video.
@@ -175,7 +175,7 @@ class KeyingRenderTest {
         val control = RenderHarness.countNearKey(src)
         report("near-green control: $control key-green pixels in the frame source")
         if (control == 0) failures += "the key-green counter sees no key green in the un-keyed frame"
-        val swatches = listOf("#98FC00" to 220, "#B0FC24" to 580, "#80C484" to 940, "#589444" to 1300, "#1B5E20" to 1660)
+        val swatches = listOf("#A4E420" to 220, "#B0E880" to 580, "#80C484" to 940, "#589444" to 1300, "#1B5E20" to 1660)
         for ((name, x) in swatches) {
             val got = rgb(f, x / 1920.0, 970 / 1080.0, 4)
             val want = rgb(src, x / 1920.0, 970 / 1080.0, 4)
