@@ -2,7 +2,7 @@ package com.itsluminous.clearmovie.data.media
 
 import android.content.Context
 import android.media.MediaMetadataRetriever
-import android.net.Uri
+import androidx.core.net.toUri
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.domain.model.Fit
 import com.itsluminous.clearmovie.domain.model.Limits
@@ -55,7 +55,7 @@ class AndroidMediaFactsProbe(
             val r = MediaMetadataRetriever()
             try {
                 when (ref) {
-                    is MediaRef.Store -> r.setDataSource(context, Uri.parse(ref.uri))
+                    is MediaRef.Store -> r.setDataSource(context, ref.uri.toUri())
                     is MediaRef.Copied -> r.setDataSource(copied(project, ref).path)
                     is MediaRef.Preset -> return@withContext null
                 }
