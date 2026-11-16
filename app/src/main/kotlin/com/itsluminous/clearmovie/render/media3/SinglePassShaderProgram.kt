@@ -16,6 +16,9 @@ import androidx.media3.effect.BaseGlShaderProgram
  *
  * Subclasses set their uniforms in [setUniforms]. [release] deletes the GL
  * program as well as the texture pool, so no GL object outlives the effect.
+ * A subclass that needs passes of its own before the final one (the
+ * fit-with-blur background) draws them in [beforeDraw] and frees what they
+ * use in [releaseResources]; every other subclass leaves both alone.
  */
 @UnstableApi
 internal abstract class SinglePassShaderProgram(
@@ -40,6 +43,18 @@ internal abstract class SinglePassShaderProgram(
 
     abstract fun setUniforms(presentationTimeUs: Long)
 
+    /**
+     * Runs before the final pass, with the output framebuffer bound; anything
+     * it binds it must put back. The final pass then draws into the output.
+     */
+    protected open fun beforeDraw(
+        inputTexId: Int,
+        presentationTimeUs: Long,
+    ) = Unit
+
+    /** Frees GL objects the subclass made, once. */
+    protected open fun releaseResources() = Unit
+
     final override fun configure(
         inputWidth: Int,
         inputHeight: Int,
@@ -50,6 +65,7 @@ internal abstract class SinglePassShaderProgram(
         presentationTimeUs: Long,
     ) {
         try {
+            beforeDraw(inputTexId, presentationTimeUs)
             program.use()
             program.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
             setUniforms(presentationTimeUs)
@@ -68,6 +84,7 @@ internal abstract class SinglePassShaderProgram(
             if (!released) {
                 released = true
                 try {
+                    releaseResources()
                     program.delete()
                 } catch (e: GlUtil.GlException) {
                     throw VideoFrameProcessingException(e)

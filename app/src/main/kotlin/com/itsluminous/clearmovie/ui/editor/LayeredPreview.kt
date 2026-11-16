@@ -21,7 +21,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -126,6 +129,11 @@ private fun MainLayer(
             .size(winW, winH)
             .clipToBounds(),
     ) {
+        if (fit == Fit.FIT_BLUR) {
+            val video = entry.content as? MainContent.Video
+            val source = (entry.content as? MainContent.Still)?.source ?: video?.let { Source.VideoFrame(it.media, it.clipStartUs) }
+            if (source != null) SoftBackdrop(source, rotation, stills, resolver)
+        }
         AndroidView(
             factory = { TextureView(it) },
             // On every update, not only when the view is made: the engine may have new players.
@@ -193,6 +201,37 @@ private fun Still(
         else -> {
             Unit
         }
+    }
+}
+
+/**
+ * The fit-with-blur background in the preview: the picture shrunk to a few
+ * dozen pixels and stretched back over the window, which blurs it on every
+ * Android version, darkened as the export darkens it.
+ */
+@Composable
+private fun SoftBackdrop(
+    source: Source,
+    rotation: Rotation,
+    stills: StillLoader,
+    resolver: MediaResolver?,
+) {
+    val bitmap by produceState<Bitmap?>(null, source, resolver) {
+        value =
+            resolver?.let { stills.load(source, it) }?.let { b ->
+                val small = BACKDROP_PX
+                Bitmap.createScaledBitmap(b, small, (small * b.height / b.width.coerceAtLeast(1)).coerceAtLeast(1), true)
+            }
+    }
+    bitmap?.let {
+        Image(
+            it.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            filterQuality = FilterQuality.High,
+            colorFilter = ColorFilter.tint(Color(0xFFCCCCCC), BlendMode.Multiply),
+            modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = rotation.degrees.toFloat() },
+        )
     }
 }
 
@@ -271,6 +310,9 @@ private fun CaptionText(
 private fun ArgbColor.toColor(): Color = Color(argb.toInt())
 
 private const val CANVAS_LINES = 1080f
+
+/** The width the preview's blurred background is shrunk to before it is stretched back. */
+private const val BACKDROP_PX = 24
 
 /**
  * A hidden player surface is drawn almost transparent rather than not at all: a TextureView

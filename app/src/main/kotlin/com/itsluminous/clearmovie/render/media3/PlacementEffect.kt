@@ -22,6 +22,12 @@ import com.itsluminous.clearmovie.render.plan.Placement
  *
  * Equal effects compare equal, so Media3 keeps its shader programs between
  * consecutive items with the same placement instead of rebuilding them.
+ *
+ * Fit with blur (cm-timeline): the background is the picture's cover crop
+ * blurred by a separable Gaussian at a quarter of the window's size, in two
+ * passes of their own ([BlurPasses]) before the final one, which scales it
+ * up (bilinear, so smoother still). The earlier single pass of 49 spaced
+ * taps showed ghost copies of sharp edges.
  */
 @UnstableApi
 class PlacementEffect(
@@ -49,6 +55,9 @@ class PlacementEffect(
     ): GlShaderProgram = Program()
 
     private inner class Program : SinglePassShaderProgram(FRAGMENT) {
+        private var blur: BlurPasses? = null
+        private var geometry: PlacementGeometry? = null
+
         override fun outputSize(
             inputWidth: Int,
             inputHeight: Int,
@@ -57,17 +66,55 @@ class PlacementEffect(
             program.setFloatsUniform("uContent", g.content.toFloats())
             program.setFloatsUniform("uSource", g.source.toFloats())
             program.setFloatsUniform("uWindow", g.window.toFloats())
-            program.setFloatsUniform("uBackground", g.background.toFloats())
             program.setFloatsUniform("uBorder", floatArrayOf(g.borderX.toFloat(), g.borderY.toFloat()))
             program.setFloatUniform("uMode", g.mode.code.toFloat())
             program.setFloatUniform("uTurns", g.quarterTurns.toFloat())
             program.setFloatUniform("uUnpremultiply", if (fromBitmap) 1f else 0f)
-            val blurStep = 0.035f
-            program.setFloatsUniform("uBlurStep", floatArrayOf(blurStep, blurStep * canvasWidth / canvasHeight))
+            geometry = g
+            if (g.mode == PlacementGeometry.Mode.BLUR) {
+                val w = (g.window.w * canvasWidth).toInt()
+                val h = (g.window.h * canvasHeight).toInt()
+                blur?.release()
+                blur = BlurPasses(BlurPasses.size(w), BlurPasses.size(h))
+            }
             return Size(canvasWidth, canvasHeight)
         }
 
-        override fun setUniforms(presentationTimeUs: Long) = Unit
+        override fun beforeDraw(
+            inputTexId: Int,
+            presentationTimeUs: Long,
+        ) {
+            val g = geometry ?: return
+            val passes = blur ?: return
+            passes.draw(inputTexId, g, fromBitmap)
+        }
+
+        override fun setUniforms(presentationTimeUs: Long) {
+            // The blurred background, on texture unit 1 (a 1x1 stand-in when there is none).
+            blur?.let { program.setSamplerTexIdUniform("uBlurTex", it.resultTexId, 1) }
+                ?: program.setSamplerTexIdUniform("uBlurTex", placeholder(), 1)
+        }
+
+        private var placeholderTex = -1
+
+        private fun placeholder(): Int {
+            if (placeholderTex < 0) {
+                placeholderTex =
+                    androidx.media3.common.util.GlUtil
+                        .createTexture(1, 1, false)
+            }
+            return placeholderTex
+        }
+
+        override fun releaseResources() {
+            blur?.release()
+            blur = null
+            if (placeholderTex >= 0) {
+                androidx.media3.common.util.GlUtil
+                    .deleteTexture(placeholderTex)
+            }
+            placeholderTex = -1
+        }
     }
 
     private companion object {
@@ -81,9 +128,8 @@ uniform sampler2D uTexSampler;
 uniform vec4 uContent;
 uniform vec4 uSource;
 uniform vec4 uWindow;
-uniform vec4 uBackground;
 uniform vec2 uBorder;
-uniform vec2 uBlurStep;
+uniform sampler2D uBlurTex;
 uniform float uMode;
 uniform float uTurns;
 uniform float uUnpremultiply;
@@ -110,19 +156,6 @@ vec4 samplePicture(vec2 q) {
   return c;
 }
 
-vec4 blurred(vec2 q) {
-  vec4 sum = vec4(0.0);
-  float n = 0.0;
-  for (int i = -3; i <= 3; i++) {
-    for (int j = -3; j <= 3; j++) {
-      sum += samplePicture(q + vec2(float(i), float(j)) * uBlurStep / 3.0);
-      n += 1.0;
-    }
-  }
-  vec4 c = sum / n;
-  return vec4(c.rgb * 0.8, 1.0);
-}
-
 void main() {
   vec2 p = vec2(vUv.x, 1.0 - vUv.y);
   if (inside(p, uContent)) {
@@ -137,8 +170,10 @@ void main() {
   }
   if (inside(p, uWindow)) {
     if (uMode > 1.5) {
-      vec2 q = uBackground.xy + (p - uWindow.xy) / uWindow.zw * uBackground.zw;
-      gl_FragColor = blurred(q);
+      // The blurred cover crop, drawn by the passes before this one, laid over the window.
+      vec2 w = (p - uWindow.xy) / uWindow.zw;
+      vec4 c = texture2D(uBlurTex, vec2(w.x, 1.0 - w.y));
+      gl_FragColor = vec4(c.rgb * 0.8, 1.0);
       return;
     }
     if (uMode > 0.5) {
