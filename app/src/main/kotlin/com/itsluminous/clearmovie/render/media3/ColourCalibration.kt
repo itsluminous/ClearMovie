@@ -143,13 +143,13 @@ object ColourCalibration {
         // Waits for the looper itself: HandlerThread.getLooper() swallows an
         // interrupt on Android 10 and 11, so the caller's would be lost there.
         val prepared = CountDownLatch(1)
-        val abandoned = AtomicBoolean(false)
+        val finished = AtomicBoolean(false)
         val thread =
             object : HandlerThread("colour-calibration") {
                 override fun onLooperPrepared() {
                     prepared.countDown()
-                    // Given up on before it started: end at once.
-                    if (abandoned.get()) quit()
+                    // Started after measure() returned: end at once.
+                    if (finished.get()) quit()
                 }
             }.apply { start() }
         val latch = CountDownLatch(1)
@@ -234,7 +234,7 @@ object ColourCalibration {
             // quitSafely() waits for the looper through getLooper(), which on
             // Android 10 and 11 swallows an interrupt: hold it back meanwhile.
             val interrupted = Thread.interrupted()
-            abandoned.set(true)
+            finished.set(true)
             // Only a started looper is waited for; one that never started quits itself.
             if (prepared.count == 0L) thread.quitSafely()
             if (interrupted) Thread.currentThread().interrupt()

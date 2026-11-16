@@ -182,11 +182,11 @@ Android's size defaults for untagged video put 854x480, 1280x720 and
 1920x1080 in the same BT.709 class, so an encoder or decoder that falls back
 to them answers alike at all three sizes. Low drafts (below 854x480) and SD
 BT.709-tagged sources on a decoder that ignores the tag are outside that
-argument; they reuse the answer unmeasured. A source's matrix comes from its
-container tag (`colr`), else for H.264 from the stream's own matrix
-coefficients (SPS VUI; the matrix, not the primaries, decides the decode), else
-from the same size rule (`RetrieverProbe.videoIsBt709`); HEVC sources without
-a container tag fall to the size rule. On a GPU that misdecodes, every
+argument; they reuse the answer unmeasured. A source's matrix comes, in the
+decoder's order, from an H.264 stream's own matrix coefficients (SPS VUI; the
+matrix, not the primaries, decides the decode), else from the container's tag
+(`colr`, or for HEVC the hvcC VUI that Android's extractor reports), else from
+the same size rule (`RetrieverProbe.classify`). On a GPU that misdecodes, every
 BT.709 video item starts with `Bt709Correction`; on an encoder that writes
 BT.601, the export asks for BT.601 so the file's tag matches its YUV. A
 calibration that fails or cannot tell changes nothing. Colours whose BT.601

@@ -404,13 +404,34 @@ internal class RetrieverProbe(
             }
         }
 
+        /**
+         * A [MediaFormat] colour standard, with Android's extended codes
+         * (64 + primaries + 7 * matrix, in its own enum order) reduced to the
+         * matrix they carry; an unknown one is null.
+         */
+        fun standardOf(standard: Int?): Int? {
+            if (standard == null || standard < EXTENDED_STANDARD) return standard
+            return when ((standard - EXTENDED_STANDARD) / 7) {
+                1 -> MediaFormat.COLOR_STANDARD_BT709
+                3 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
+                5, 6 -> MediaFormat.COLOR_STANDARD_BT2020
+                else -> null
+            }
+        }
+
+        private const val EXTENDED_STANDARD = 64
+
         /** Larger than any real SPS and PPS; a bigger `csd-0` is not read. */
         private const val MAX_CSD_BYTES = 64 * 1024
 
         /**
-         * [container]'s tag (a `colr` box, as `MediaExtractor` reports it), else
-         * [stream]'s, each of standard and transfer on its own, else by size.
-         * A format with no size is taken as 1280x720, as Codec2 does.
+         * The stream's own tag (SPS VUI), else [container]'s (a `colr` box, as
+         * `MediaExtractor` reports it), each of standard and transfer on its
+         * own, else by size. This is the decoder's order: Codec2 hands the
+         * configured (container) aspects to the decoder as defaults, the
+         * decoder keeps the coded ones where the stream states them, and the
+         * size default fills what is left. A format with no size is taken as
+         * 1280x720, as Codec2 does.
          */
         fun classify(
             container: Vui,
@@ -419,10 +440,10 @@ internal class RetrieverProbe(
             height: Int?,
         ): Boolean =
             videoIsBt709(
-                container.standard ?: stream.standard,
+                stream.standard ?: standardOf(container.standard),
                 width ?: 1280,
                 height ?: 720,
-                container.transfer ?: stream.transfer,
+                stream.transfer ?: container.transfer,
             )
 
         /**
@@ -509,10 +530,15 @@ internal class RetrieverProbe(
                 }
             val standard =
                 when (a.readBits(8)) {
-                    1 -> MediaFormat.COLOR_STANDARD_BT709
+                    // SMPTE 240M is close to BT.709, FCC to BT.601.
+                    1, 7 -> MediaFormat.COLOR_STANDARD_BT709
+
                     5 -> MediaFormat.COLOR_STANDARD_BT601_PAL
-                    6 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
+
+                    4, 6 -> MediaFormat.COLOR_STANDARD_BT601_NTSC
+
                     9, 10 -> MediaFormat.COLOR_STANDARD_BT2020
+
                     else -> null
                 }
             return Vui(standard, transfer)
@@ -547,7 +573,7 @@ internal class RetrieverProbe(
             if (transfer == MediaFormat.COLOR_TRANSFER_ST2084 || transfer == MediaFormat.COLOR_TRANSFER_HLG) {
                 false
             } else {
-                when (standard) {
+                when (standardOf(standard)) {
                     MediaFormat.COLOR_STANDARD_BT709 -> true
                     MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC, MediaFormat.COLOR_STANDARD_BT2020 -> false
                     else -> sizeDefaultIsBt709(width, height)

@@ -158,12 +158,35 @@ class DeviceColourTest {
     }
 
     @Test
-    fun `the container's tag wins over the stream's, which wins over size`() {
+    fun `every SPS field before the colour is skipped right`() {
+        val sdr = android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+        // libx264 1920x1080 High: frame cropping (1088 coded rows); BT.709 primaries, BT.601 matrix.
+        val cropped = "0000000167640028acd940780227e5c05a80808320000003002000000641e30632c0"
+        assertThat(RetrieverProbe.avcVui(hex(cropped))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, sdr))
+        // libx264 interlaced (frame_mbs_only 0), cropped, with an extended SAR (13:11, aspect_ratio_idc 255); BT.709.
+        val interlaced = "0000000167640028acd94078044fdffe001a0016d4040405000003000100000300321f162d96"
+        assertThat(RetrieverProbe.avcVui(hex(interlaced))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, sdr))
+        // Written bit by bit and checked with ffmpeg's trace_headers: High with two scaling lists
+        // (4x4 and 8x8), pic_order_cnt_type 1 with a 3-frame cycle, cropping, extended SAR, matrix 5.
+        val scaled =
+            "0000000167640028ad9999999999999999826666666666666666666666666666666666666666666666666666666666666666a15108c4201e0089f97ff000d000bb5010105020"
+        assertThat(RetrieverProbe.avcVui(hex(scaled))).isEqualTo(Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_PAL, sdr))
+    }
+
+    @Test
+    fun `the stream's tag wins over the container's, which wins over size`() {
         val bt709 = Vui(android.media.MediaFormat.COLOR_STANDARD_BT709, null)
         val bt601 = Vui(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, null)
         val pq = Vui(null, android.media.MediaFormat.COLOR_TRANSFER_ST2084)
-        assertThat(RetrieverProbe.classify(bt601, bt709, 1920, 1080)).isFalse()
-        assertThat(RetrieverProbe.classify(bt709, bt601, 640, 480)).isTrue()
+        // classify(container, stream, ...): the decoder keeps the coded aspects.
+        assertThat(RetrieverProbe.classify(bt601, bt709, 640, 480)).isTrue()
+        assertThat(RetrieverProbe.classify(bt709, bt601, 1920, 1080)).isFalse()
+        assertThat(RetrieverProbe.classify(bt601, Vui.NONE, 1920, 1080)).isFalse()
+        assertThat(RetrieverProbe.classify(bt709, Vui.NONE, 640, 480)).isTrue()
+        // Android's extended standard codes carry the matrix: 71 is BT.709, 85 BT.601.
+        assertThat(RetrieverProbe.classify(Vui(71, null), Vui.NONE, 640, 480)).isTrue()
+        assertThat(RetrieverProbe.classify(Vui(85, null), Vui.NONE, 1920, 1080)).isFalse()
+        assertThat(RetrieverProbe.classify(Vui(64, null), Vui.NONE, 640, 480)).isFalse()
         assertThat(RetrieverProbe.classify(Vui.NONE, bt709, 640, 480)).isTrue()
         assertThat(RetrieverProbe.classify(Vui.NONE, bt601, 1920, 1080)).isFalse()
         assertThat(RetrieverProbe.classify(Vui.NONE, Vui.NONE, 640, 480)).isFalse()
@@ -204,8 +227,12 @@ class DeviceColourTest {
         assertThat(RetrieverProbe.videoIsBt709(null, 3000, 2091)).isTrue()
         assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT709, 640, 480)).isTrue()
         assertThat(RetrieverProbe.videoIsBt709(android.media.MediaFormat.COLOR_STANDARD_BT601_NTSC, 1920, 1080)).isFalse()
-        // Values outside the public constants (the emulator reports 71) fall back to size.
+        // Android's extended codes (the emulator reports 71: BT.709 matrix, primaries unstated) carry the matrix.
         assertThat(RetrieverProbe.videoIsBt709(71, 1920, 1080)).isTrue()
+        assertThat(RetrieverProbe.videoIsBt709(71, 640, 480)).isTrue()
+        // An extended code with no matrix falls back to size.
+        assertThat(RetrieverProbe.videoIsBt709(65, 640, 480)).isFalse()
+        assertThat(RetrieverProbe.videoIsBt709(65, 1920, 1080)).isTrue()
         // HDR is converted by Media3 itself, never corrected.
         assertThat(RetrieverProbe.videoIsBt709(null, 1920, 1080, android.media.MediaFormat.COLOR_TRANSFER_HLG)).isFalse()
         assertThat(
