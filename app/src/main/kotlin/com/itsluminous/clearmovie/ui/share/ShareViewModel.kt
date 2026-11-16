@@ -198,6 +198,15 @@ class ShareViewModel
         private val stateFlow = MutableStateFlow<ShareState>(ShareState.Idle)
         val state: StateFlow<ShareState> = stateFlow.asStateFlow()
 
+        private val pickFlow = MutableStateFlow<ShareState.Ready?>(null)
+
+        /**
+         * What the share's preset pick shows: the share whose items are
+         * ready, also while a later share asks about it, adds to it or says
+         * something over it. Null while a new video's items are taken in.
+         */
+        val pick: StateFlow<ShareState.Ready?> = pickFlow.asStateFlow()
+
         val intake = MediaIntake(mediaAccess, viewModelScope)
 
         private val navChannel = Channel<ShareNav>(Channel.BUFFERED)
@@ -699,6 +708,7 @@ class ShareViewModel
 
         private fun show(state: ShareState) {
             stateFlow.value = state
+            pickFlow.value = state as? ShareState.Ready ?: waitingShare
             savedState[KEY_PHASE] =
                 when (state) {
                     ShareState.Idle, is ShareState.Added, is ShareState.Nothing, is ShareState.Failed -> null

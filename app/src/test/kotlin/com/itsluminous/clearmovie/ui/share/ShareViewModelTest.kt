@@ -596,6 +596,8 @@ class ShareViewModelTest {
             val first = m.await<ShareState.Ready>()
 
             assertThat(m.share(send(photo("b.jpg", taken = 1)))).isEqualTo(ShareState.Asking(1, first.draft, toWaitingShare = true))
+            // The pick behind the question still shows the first share's items.
+            assertThat(m.vm.pick.value).isEqualTo(first)
             m.on { cancel() }
             assertThat(m.vm.state.value).isEqualTo(first)
 

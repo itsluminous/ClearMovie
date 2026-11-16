@@ -77,7 +77,7 @@ fun ShareRoute(
         )
         return
     }
-    val ready = state as? ShareState.Ready
+    val ready = share.pick.collectAsStateWithLifecycle().value
     val header =
         ShareHeader(
             ready = ready != null,
@@ -90,7 +90,8 @@ fun ShareRoute(
     HomeScreen(
         presets = presets,
         videos = emptyList(),
-        busy = ready?.choosing == true,
+        // The cards wait while a preset is applied, or while a later share asks or adds over this pick.
+        busy = ready != null && (state !is ShareState.Ready || ready.choosing),
         onPreset = { share.choose(it) },
         onStartBlank = { share.choose(null) },
         onVideo = {},
