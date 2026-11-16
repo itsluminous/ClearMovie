@@ -1,6 +1,7 @@
 package com.itsluminous.clearmovie
 
 import android.app.UiAutomation
+import android.content.Intent
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -8,11 +9,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -25,8 +24,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.data.media.ShareHandoff
+import com.itsluminous.clearmovie.data.media.ShareLinks
+import com.itsluminous.clearmovie.data.media.SharedLinks
 import com.itsluminous.clearmovie.domain.export.ExportQuality
+import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.export.ExportHarness
 import com.itsluminous.clearmovie.ui.editor.EDITOR_EXPORT_TAG
 import com.itsluminous.clearmovie.ui.editor.PREVIEW_TAG
@@ -45,7 +49,8 @@ import kotlin.math.abs
  * The editor the app reopens at launch (storage D2: the app stopped with a
  * video open) must survive its activity being destroyed and created again:
  * a recreate() and a real rotation of the display, also while that video's
- * export runs, and its preview must show the same picture afterwards.
+ * export runs and when a share arrives at the same launch, and its preview
+ * must show the same picture afterwards.
  * Before the fix the first two crashed under this test harness with "State
  * must be at least 'CREATED' to be moved to 'DESTROYED'" for the editor's
  * back stack entry (the launch navigate ran off the main thread).
@@ -190,18 +195,52 @@ class ReopenRecreateDeviceTest {
     }
 
     @Test
+    fun aShareArrivingAtLaunchOnAReopenedEditorSurvivesRecreateAndRotationAndAdds() {
+        // A share that starts the app while a video is open (as ShareActivity hands it on).
+        val item = h.insert("fixtures/photo_blue.png", "image/png")
+        val token = ShareHandoff.put(SharedLinks(arrayListOf(item)))
+        val intent =
+            Intent(h.context, MainActivity::class.java).setAction(ShareLinks.ACTION_SHARED).putExtra(ShareHandoff.EXTRA_TOKEN, token)
+        ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+            editorShown()
+            waitFor(hasText(s(R.string.share_add_title)))
+            scenario.recreate()
+            editorShown()
+            waitFor(hasText(s(R.string.share_add_title)))
+            rotate(scenario, UiAutomation.ROTATION_FREEZE_90)
+            editorShown()
+            rotate(scenario, UiAutomation.ROTATION_FREEZE_0)
+            editorShown()
+            waitFor(hasText(s(R.string.share_add_title)))
+            compose.onNodeWithText(s(R.string.share_add_here)).performClick()
+
+            // The shared photo lands on the reopened video, once.
+            val items = {
+                h.app.projectRepository.open.value?.takeIf { it.id == project.id }?.mainClips?.count {
+                    it is PhotoClip ||
+                        it is VideoClip
+                }
+            }
+            compose.waitUntil(TIMEOUT_MS) { items() == 5 }
+            scenario.recreate()
+            editorShown()
+            assertThat(items()).isEqualTo(5)
+            assertThat(compose.onAllNodes(hasText(s(R.string.share_add_title))).fetchSemanticsNodes()).isEmpty()
+        }
+    }
+
+    @Test
     fun aReopenedEditorShowsTheSamePreviewFrameAfterRecreate() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             editorShown()
             // A known time inside the first video on MAIN (0:04 to 0:07), away from its
             // crossfades, so the paused picture is one frame of one clip and not a mix.
-            compose.onAllNodes(hasContentDescription(s(R.string.editor_item_video), substring = true)).onFirst().performClick()
             val fraction = KNOWN_TIME_US.toFloat() / h.plannedUs(project)
             compose
                 .onNodeWithContentDescription(
                     s(R.string.editor_seek),
                 ).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
-            compose.waitUntil(TIMEOUT_MS) { timeLabel().startsWith("0:05") }
+            compose.waitUntil(TIMEOUT_MS) { timeLabel().startsWith("0:06") }
             val at = timeLabel()
             val before = settledFrame()
 
@@ -252,8 +291,12 @@ class ReopenRecreateDeviceTest {
     private companion object {
         const val TIMEOUT_MS = 20_000L
 
-        /** Inside the first video on MAIN, which plays from 0:04 to 0:07. */
-        const val KNOWN_TIME_US = 5_300_000L
+        /**
+         * Inside the first video on MAIN (0:04 to 0:07, crossfades at both ends),
+         * and away from the frame fixture's 4 s loop point (near 5.4 s here), where
+         * one frame of difference moves its white square across the window.
+         */
+        const val KNOWN_TIME_US = 6_000_000L
 
         /** Brightest minus darkest luma: a blank or single-colour surface is near 0. */
         const val MIN_SPREAD = 40
