@@ -543,7 +543,7 @@ private fun SizeTab(
         Text(stringResource(R.string.caption_size_bigger), style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
     Spacer(Modifier.height(8.dp))
-    // The caption as the video will show it, its middle enlarged to a strip, on the checkerboard.
+    // The caption as the video will show it, as wide as the panel (larger than in the preview), on the checkerboard.
     val sampleText = caption.text.ifBlank { stringResource(R.string.caption_font_sample) }
     Box(
         Modifier
@@ -553,7 +553,7 @@ private fun SizeTab(
             .checkerboard()
             .testTag(CAPTION_SAMPLE_TAG),
     ) {
-        CaptionImage(sampleText, style, contentScale = ContentScale.Crop)
+        CaptionImage(sampleText, style, contentScale = ContentScale.FillWidth)
     }
 }
 
