@@ -946,9 +946,12 @@ private fun Controls(
         // Words on Play and As exported only when the whole row fits with them (any language, any text size).
         // The strip's own padding (8 + 8), Play, the time with its padding (8 + 8), As exported.
         val needed = 16.dp + playMinWidth + 16.dp + timeDp + (12.dp + ICON + 8.dp + exactTextDp + 12.dp)
-        val compact = density.fontScale > ICON_ONLY_FONT_SCALE || needed > maxWidth
+        // As exported gives up its word first; Play keeps its own while the row still fits (the main action).
+        val exactIconOnly = density.fontScale > ICON_ONLY_FONT_SCALE || needed > maxWidth
+        val playIconOnly = density.fontScale > ICON_ONLY_FONT_SCALE || 16.dp + playMinWidth + 16.dp + timeDp + TOUCH > maxWidth
         TransportRow(
-            compact,
+            playIconOnly,
+            exactIconOnly,
             enabled,
             actions,
             playLabel,
@@ -966,7 +969,8 @@ private fun Controls(
 
 @Composable
 private fun TransportRow(
-    compact: Boolean,
+    playIconOnly: Boolean,
+    exactIconOnly: Boolean,
     enabled: Boolean,
     actions: EditorActions,
     playLabel: String,
@@ -988,7 +992,7 @@ private fun TransportRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (compact) {
+        if (playIconOnly) {
             FilledTonalIconButton(onClick = actions::togglePlay, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(PLAY_TAG)) {
                 Icon(painterResource(playIcon), contentDescription = playLabel, modifier = Modifier.size(ICON))
             }
@@ -1021,7 +1025,7 @@ private fun TransportRow(
                     }
                 },
         )
-        if (compact) {
+        if (exactIconOnly) {
             IconButton(onClick = actions::exact, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(EXACT_TAG)) {
                 Icon(painterResource(R.drawable.ic_visibility), contentDescription = exactLabel, modifier = Modifier.size(ICON))
             }

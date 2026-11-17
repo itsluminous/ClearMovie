@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -33,6 +35,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.R
@@ -415,6 +419,21 @@ class EditorScreenTest {
     @Test
     @Config(qualifiers = "+hi")
     fun `the playback strip stays one row in Hindi at 1_3 and 1_5`() = assertStripOneRow(listOf(1.3f, 1.5f))
+
+    @Test
+    fun `on a small 320 dp phone Play keeps its word and As exported gives way first`() {
+        val h = harness()
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(320.dp, 640.dp))) {
+                ClearMovieTheme(dynamicColor = false) { h.Content() }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText(s(R.string.action_play)).assertIsDisplayed()
+        compose.onNodeWithContentDescription(s(R.string.editor_exact)).assertIsDisplayed()
+        val strip = compose.onNodeWithTag(TRANSPORT_TAG).bounds()
+        assertThat((strip.bottom - strip.top).v()).isAtMost(64f)
+    }
 
     private fun assertStripOneRow(scales: List<Float> = listOf(1f, 1.3f, 2f)) {
         forEachSize(fontScales = scales) { _, _ ->
