@@ -408,14 +408,23 @@ private fun WordsTab(
     var text by rememberSaveable(caption.id.value, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(caption.text, TextRange(caption.text.length)))
     }
-    // The words this field last sent to the project. An undo or redo while the editor is open puts the
-    // field back in step; the field's own edits never do, because when one comes back the field may
-    // already hold the next keystroke (resetting it then would drop that keystroke).
+    // The words this field has sent to the project and not yet seen come back. The project can show an
+    // older one while typing is fast (it catches up a moment later); only words the field never sent (an
+    // undo or redo while the editor is open) put the field back in step, so no keystroke is ever dropped.
+    val pending = remember(caption.id) { ArrayDeque<String>() }
     var sent by rememberSaveable(caption.id.value) { mutableStateOf(caption.text) }
     LaunchedEffect(caption.text) {
-        if (caption.text != sent) {
-            sent = caption.text
-            text = TextFieldValue(caption.text, TextRange(caption.text.length))
+        val back = pending.indexOf(caption.text)
+        when {
+            back >= 0 -> {
+                repeat(back + 1) { pending.removeFirst() }
+            }
+
+            caption.text != sent -> {
+                pending.clear()
+                sent = caption.text
+                text = TextFieldValue(caption.text, TextRange(caption.text.length))
+            }
         }
     }
     OutlinedTextField(
@@ -428,6 +437,7 @@ private fun WordsTab(
             text = if (cut == 0) typed else TextFieldValue(usable, TextRange(cursor))
             if (usable != sent) {
                 sent = usable
+                pending.addLast(usable)
                 callbacks.editMerged(key) { setText(caption.id, usable) }
             }
         },

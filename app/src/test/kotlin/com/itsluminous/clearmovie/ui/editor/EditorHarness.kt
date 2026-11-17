@@ -42,6 +42,19 @@ class EditorHarness(
     val calls = mutableListOf<String>()
     private var session = EditSession().apply { adopt(initial) }
 
+    /**
+     * When set, edits reach the screen only at [catchUp], one by one, as a busy phone's screen can lag
+     * behind fast typing.
+     */
+    var lagging = false
+    private val behind = ArrayDeque<Project>()
+
+    /** Shows the next edit that is still on its way; false when none is. */
+    fun catchUp(): Boolean {
+        project = behind.removeFirstOrNull() ?: return false
+        return true
+    }
+
     /** Stands in for a process death: the view model's session (and its undo history) starts again. */
     fun newSession() {
         session = EditSession().apply { adopt(project) }
@@ -106,7 +119,11 @@ class EditorHarness(
             ): Boolean {
                 val result = session.edit(mergeKey, change)
                 val ok = result == EditResult.Applied
-                if (ok) project = session.current!!
+                if (ok && lagging) {
+                    behind.addLast(session.current!!)
+                } else if (ok) {
+                    project = session.current!!
+                }
                 if (result is EditResult.Refused) calls += "refused"
                 return ok
             }

@@ -492,4 +492,20 @@ class CaptionEditorTest {
             assertThat(b.right.value).isAtMost(360.5f)
         }
     }
+
+    @Test
+    fun `fast typing is never dropped when the screen shows the words late`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        h.lagging = true
+        for (c in listOf("C", "u", "t")) panel(TEXT_FIELD_TAG).performTextInput(c)
+        // The project shows "C" while the field already holds "Cut"; then another key, then the rest arrives.
+        h.catchUp()
+        compose.waitForIdle()
+        panel(TEXT_FIELD_TAG).performTextInput("s")
+        while (h.catchUp()) compose.waitForIdle()
+        h.lagging = false
+        assertThat(h.caption().text).isEqualTo("Cuts")
+    }
 }
