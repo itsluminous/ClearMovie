@@ -40,6 +40,7 @@ import com.itsluminous.clearmovie.export.ExportHarness
 import com.itsluminous.clearmovie.ui.editor.EDITOR_EXPORT_TAG
 import com.itsluminous.clearmovie.ui.editor.PREVIEW_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_PROGRESS_TAG
+import com.itsluminous.clearmovie.ui.export.EXPORT_SAVE_TAG
 import com.itsluminous.clearmovie.ui.home.HOME_LIST_TAG
 import com.itsluminous.clearmovie.work.ExportFailure
 import com.itsluminous.clearmovie.work.ExportWorker
@@ -257,10 +258,11 @@ class ReopenRecreateDeviceTest {
                 assertThat(info.outputData.getString(ExportWorker.KEY_FAILURE)).isEqualTo(ExportFailure.FAILED.name)
             }
             compose.onNodeWithTag(EDITOR_EXPORT_TAG).performClick()
-            waitFor(
-                hasTestTag(EXPORT_PROGRESS_TAG).or(hasText(s(R.string.export_done_title))).or(hasText(s(R.string.export_failed_title))),
-                LAUNCH_TIMEOUT_MS,
-            )
+            // Running: its progress. Ended before the sheet ever watched it (ExportSteps): the
+            // sizes to choose from, as for any export the sheet did not start; or its result.
+            val shown =
+                hasTestTag(EXPORT_PROGRESS_TAG).or(hasText(s(R.string.export_done_title))).or(hasText(s(R.string.export_failed_title)))
+            waitFor(if (info?.state?.isFinished == true) shown.or(hasTestTag(EXPORT_SAVE_TAG)) else shown, LAUNCH_TIMEOUT_MS)
         }
         // Stop it and wait until it has ended, so a video it finished meanwhile is removed too.
         workManager.cancelWorkById(id).result.get()
@@ -306,7 +308,7 @@ class ReopenRecreateDeviceTest {
                         it is VideoClip
                 }
             }
-            compose.waitUntil(TIMEOUT_MS) { items() == 5 }
+            compose.waitUntil(LAUNCH_TIMEOUT_MS) { items() == 5 }
             scenario.recreate()
             editorShown()
             assertThat(items()).isEqualTo(5)
