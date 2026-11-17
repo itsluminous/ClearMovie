@@ -221,6 +221,8 @@ internal fun PanelTitle(
         Text(
             title,
             style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
         if (onCancel != null) {

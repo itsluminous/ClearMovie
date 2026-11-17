@@ -16,12 +16,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -92,16 +96,19 @@ fun LayeredPreview(
 ) {
     val media = LocalMediaColors.current
     // The players report their time ten times a second; while playing, the motion follows the
-    // MAIN player's own clock on every frame, so slides and zooms are smooth.
-    val live by produceState(state.positionUs, state.playing, state.loads) {
-        value = state.positionUs
-        if (!state.playing) return@produceState
+    // MAIN player's own clock on every frame. The clock is read only in the draw phase (graphics
+    // layers and draw lambdas), so a frame redraws the moving layers without recomposing the
+    // preview: recomposing every frame kept a slow phone's main thread busy enough to stop
+    // answering touches.
+    val clock = remember { mutableLongStateOf(state.positionUs) }
+    LaunchedEffect(state.playing, state.loads, state.positionUs.takeUnless { state.playing }) {
+        clock.longValue = state.positionUs
+        if (!state.playing) return@LaunchedEffect
         while (true) {
-            withInfiniteAnimationFrameNanos { }
-            value = engine.positionUs
+            withInfiniteAnimationFrameNanos { clock.longValue = engine.positionUs }
         }
     }
-    val positionUs = if (state.playing) live else state.positionUs
+    val now: () -> Long = remember(clock) { { clock.longValue } }
     BoxWithConstraints(modifier.clipToBounds().background(media.previewBackground).testTag(PREVIEW_TAG)) {
         val w = maxWidth
         val h = maxHeight
@@ -110,7 +117,7 @@ fun LayeredPreview(
             key(layer) {
                 when (layer) {
                     LayerRef.Main -> {
-                        MainLayer(engine, schedule, state, positionUs, stills, resolver, w, h, aspect)
+                        MainLayer(engine, schedule, state, now, stills, resolver, w, h, aspect)
                     }
 
                     is LayerRef.Overlay -> {
@@ -121,7 +128,7 @@ fun LayeredPreview(
                     }
 
                     is LayerRef.Captions -> {
-                        CaptionLayer(schedule, layer, positionUs, w, h, aspect)
+                        CaptionLayer(schedule, layer, state.positionUs, now, w, h, aspect)
                     }
                 }
             }
@@ -129,12 +136,17 @@ fun LayeredPreview(
     }
 }
 
-/** What one MAIN picture shows: the player's video on a surface, or a still. */
+/**
+ * What one MAIN picture shows: the player's video on a surface, or a still.
+ * [motionAt] gives its motion at a time of the video (read while drawing);
+ * [showsAt] whether it shows then at all.
+ */
 private class Picture(
     val content: MainContent,
     val placement: Placement,
-    val frame: MotionFrame,
     val videoSize: VideoSize?,
+    val motionAt: (Long) -> MotionFrame,
+    val showsAt: (Long) -> Boolean,
 )
 
 @OptIn(UnstableApi::class)
@@ -143,7 +155,7 @@ private fun MainLayer(
     engine: LayeredPreviewEngine,
     schedule: PreviewSchedule,
     state: PreviewState,
-    positionUs: Long,
+    now: () -> Long,
     stills: StillLoader,
     resolver: MediaResolver?,
     w: Dp,
@@ -151,41 +163,50 @@ private fun MainLayer(
     aspect: Double,
 ) {
     val entry = schedule.main.getOrNull(state.mainIndex) ?: schedule.main.firstOrNull() ?: return
-    val frame = entry.motion?.let { MotionMath.frameAt(it, entry.clipUsAt(positionUs), aspect) } ?: MotionFrame.STILL
-    val tail = schedule.tailAt(positionUs)
-    val tailFrame = tail?.let { t -> t.motion?.let { MotionMath.frameAt(it, t.clipUsAt(positionUs), aspect) } } ?: MotionFrame.STILL
+    // The tail playing now, else the next one (composed a little early, so it is ready when its overlap starts).
+    val positionUs = state.positionUs
+    val tail = schedule.tailAt(positionUs) ?: schedule.tail.firstOrNull { it.startUs >= positionUs } ?: schedule.tail.lastOrNull()
     Box(Modifier.fillMaxSize()) {
         // The tail's player surface is always there while the video has one (a surface that is never
-        // drawn stalls its player), shown only while a video tail plays.
-        if (schedule.tailLane != null || tail != null) {
-            val showing = tail ?: schedule.tail.firstOrNull()
-            if (showing != null) {
-                Box(Modifier.fillMaxSize().zIndex(if (tail?.upper == true) 2f else 0f)) {
-                    PlacedPicture(
-                        Picture(showing.content, showing.placement, tailFrame, state.tailVideoSize),
-                        visible = tail != null,
-                        stills = stills,
-                        resolver = resolver,
-                        w = w,
-                        h = h,
-                        surface =
-                            if (schedule.tailLane != null) {
-                                { modifier -> TailSurface(engine, modifier) }
-                            } else {
-                                null
-                            },
-                    )
-                }
+        // drawn stalls its player), shown only while a tail plays.
+        if (tail != null) {
+            Box(Modifier.fillMaxSize().zIndex(if (tail.upper) 2f else 0f)) {
+                PlacedPicture(
+                    Picture(
+                        tail.content,
+                        tail.placement,
+                        state.tailVideoSize,
+                        motionAt = { t -> tail.motion?.let { MotionMath.frameAt(it, tail.clipUsAt(t), aspect) } ?: MotionFrame.STILL },
+                        showsAt = { t -> t >= tail.startUs && t < tail.endUs },
+                    ),
+                    stills = stills,
+                    resolver = resolver,
+                    w = w,
+                    h = h,
+                    now = now,
+                    surface =
+                        if (schedule.tailLane != null) {
+                            { modifier -> TailSurface(engine, modifier) }
+                        } else {
+                            null
+                        },
+                )
             }
         }
         Box(Modifier.fillMaxSize().zIndex(1f)) {
             PlacedPicture(
-                Picture(entry.content, entry.placement, frame, state.mainVideoSize),
-                visible = true,
+                Picture(
+                    entry.content,
+                    entry.placement,
+                    state.mainVideoSize,
+                    motionAt = { t -> entry.motion?.let { MotionMath.frameAt(it, entry.clipUsAt(t), aspect) } ?: MotionFrame.STILL },
+                    showsAt = { true },
+                ),
                 stills = stills,
                 resolver = resolver,
                 w = w,
                 h = h,
+                now = now,
                 surface = { modifier -> MainSurface(engine, modifier) },
             )
         }
@@ -223,22 +244,22 @@ private fun TailSurface(
 
 /**
  * One MAIN picture where its placement puts it, moved, faded, tinted and cut
- * as [Picture.frame] says: the same order as the export's shader (the
- * picture moves inside its window, then the window clips it, then the mask
- * cuts the canvas).
+ * as [Picture.motionAt] says for [now]: the same order as the export's shader
+ * (the picture moves inside its window, then the window clips it, then the
+ * mask cuts the canvas). Everything that changes with time is read in the
+ * draw phase.
  */
 @Composable
 private fun PlacedPicture(
     picture: Picture,
-    visible: Boolean,
     stills: StillLoader,
     resolver: MediaResolver?,
     w: Dp,
     h: Dp,
+    now: () -> Long,
     surface: (@Composable (Modifier) -> Unit)?,
 ) {
     val placement = picture.placement
-    val f = picture.frame
     val rect = (placement as? Placement.Window)?.rect ?: NormRect.FULL
     val fit = (placement as? Placement.Window)?.fit
     val rotation = (placement as? Placement.Window)?.rotation ?: Rotation.R0
@@ -246,11 +267,21 @@ private fun PlacedPicture(
     val winW = w * rect.w.toFloat()
     val winH = h * rect.h.toFloat()
     // The video's own shape decides the crop or the bars; until it is known, it fills the window.
-    val size = picture.videoSize
-    val videoAspect = if (size != null && size.height > 0) size.width * size.pixelWidthHeightRatio / size.height else null
+    val vs = picture.videoSize
+    val videoAspect = if (vs != null && vs.height > 0) vs.width * vs.pixelWidthHeightRatio / vs.height else null
     val (cw, ch) = if (fit == null || videoAspect == null) winW to winH else fitted(videoAspect, rotation, winW, winH, fit)
-    val density = LocalDensity.current
-    Box(Modifier.fillMaxSize().motionMask(f.mask)) {
+    Box(
+        Modifier.fillMaxSize().drawWithContent {
+            val mask = picture.motionAt(now()).mask
+            if (mask ==
+                Mask.None
+            ) {
+                drawContent()
+            } else {
+                clipPath(maskPath(mask, size.width, size.height)) { this@drawWithContent.drawContent() }
+            }
+        },
+    ) {
         Box(
             Modifier
                 .offset(w * rect.x.toFloat(), h * rect.y.toFloat())
@@ -259,11 +290,13 @@ private fun PlacedPicture(
         ) {
             Box(
                 Modifier.fillMaxSize().graphicsLayer {
+                    val t = now()
+                    val f = picture.motionAt(t)
                     scaleX = f.scale
                     scaleY = f.scale
-                    translationX = with(density) { (w * f.dx).toPx() }
-                    translationY = with(density) { (h * f.dy).toPx() }
-                    alpha = if (visible) f.alpha else 0f
+                    translationX = (w * f.dx).toPx()
+                    translationY = (h * f.dy).toPx()
+                    alpha = if (picture.showsAt(t)) f.alpha else 0f
                 },
             ) {
                 if (fit == Fit.FIT_BLUR) {
@@ -278,30 +311,22 @@ private fun PlacedPicture(
                         .requiredSize(cw, ch)
                         .graphicsLayer {
                             // A hidden surface is still drawn, faintly: see HIDDEN_ALPHA.
-                            alpha = if (isVideo && visible) 1f else HIDDEN_ALPHA
+                            alpha = if (isVideo && picture.showsAt(now())) 1f else HIDDEN_ALPHA
                             rotationZ = rotation.degrees.toFloat()
                         },
                 )
                 val still = picture.content as? MainContent.Still
-                if (still != null && visible) Still(still.source, fit ?: Fit.FILL_CROP, rotation, stills, resolver, h)
-                if (f.tintAmount > 0f && visible) {
-                    Box(Modifier.fillMaxSize().background(f.tint.toColor().copy(alpha = f.tintAmount)))
-                }
+                if (still != null) Still(still.source, fit ?: Fit.FILL_CROP, rotation, stills, resolver, h)
+                Box(
+                    Modifier.fillMaxSize().drawBehind {
+                        val f = picture.motionAt(now())
+                        if (f.tintAmount > 0f) drawRect(f.tint.toColor(), alpha = f.tintAmount)
+                    },
+                )
             }
         }
     }
 }
-
-/** Cuts the canvas to [mask] (canvas fractions), as the export's shader does. */
-private fun Modifier.motionMask(mask: Mask): Modifier =
-    if (mask == Mask.None) {
-        this
-    } else {
-        drawWithContent {
-            val path = maskPath(mask, size.width, size.height)
-            clipPath(path) { this@drawWithContent.drawContent() }
-        }
-    }
 
 /** [mask] as a path over a canvas [width] x [height] pixels. */
 internal fun maskPath(
@@ -454,22 +479,22 @@ private fun CaptionLayer(
     schedule: PreviewSchedule,
     layer: LayerRef.Captions,
     positionUs: Long,
+    now: () -> Long,
     w: Dp,
     h: Dp,
     aspect: Double,
 ) {
-    val density = LocalDensity.current
     for (c in schedule.captionsAt(positionUs).filter { it.trackId == layer.trackId }) {
-        val f = c.motion?.let { MotionMath.frameAt(it, c.clipUsAt(positionUs), aspect) } ?: MotionFrame.STILL
         Box(
             Modifier
                 .offset(w * c.rect.x.toFloat(), h * c.rect.y.toFloat())
                 .size(w * c.rect.w.toFloat(), h * c.rect.h.toFloat())
                 .graphicsLayer {
+                    val f = c.motion?.let { MotionMath.frameAt(it, c.clipUsAt(now()), aspect) } ?: MotionFrame.STILL
                     scaleX = f.scale
                     scaleY = f.scale
-                    translationX = with(density) { (w * f.dx).toPx() }
-                    translationY = with(density) { (h * f.dy).toPx() }
+                    translationX = (w * f.dx).toPx()
+                    translationY = (h * f.dy).toPx()
                     alpha = f.alpha
                 },
             contentAlignment = Alignment.Center,

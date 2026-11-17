@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -186,7 +187,8 @@ internal fun TransitionPanel(
         if (callbacks.edit { setTransition(slot.clip.id, t) }) preview(t?.durationMs ?: 0)
     }
 
-    val pictures = junctionPictures(slot, next, thumbnail)
+    val pictures =
+        junctionPictures(slot, next, thumbnail, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.primaryContainer)
     val clock = tileClock()
     val chosen = current?.kind ?: TransitionKind.NONE
     for (g in TransitionGroup.entries) {
@@ -208,7 +210,7 @@ internal fun TransitionPanel(
                 selected = chosen == tile.kind,
                 tag = transitionTileTag(tile.kind),
                 onClick = { choose(tile.kind) },
-            ) { transitionTileFrame(tile.kind, clock, pictures) }
+            ) { transitionTileFrame(tile.kind, clock.longValue, pictures) }
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -283,8 +285,9 @@ private fun GroupHeading(text: String) {
 
 /**
  * [items] in rows of equal cells spread across the width, 8 dp apart: as
- * many columns as fit at [MIN_TILE_DP] each (at most four), the last row
- * padded with empty cells so every tile has the same width.
+ * many columns as fit at [MIN_TILE_DP] each (at most four), fewer when
+ * that makes the rows even, any short last row padded with empty cells so
+ * every tile has the same width.
  */
 @Composable
 private fun <T> EvenGrid(
@@ -292,7 +295,10 @@ private fun <T> EvenGrid(
     content: @Composable (T) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val cols = ((maxWidth + 8.dp) / (MIN_TILE_DP + 8).dp).toInt().coerceIn(1, MAX_COLUMNS)
+        val fit = ((maxWidth + 8.dp) / (MIN_TILE_DP + 8).dp).toInt().coerceIn(1, MAX_COLUMNS)
+        // Rows of equal length where possible: four tiles go 2 + 2 rather than 3 + 1.
+        var cols = fit
+        while (cols > 1 && items.size > cols && items.size % cols != 0) cols--
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (row in items.chunked(cols)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -361,7 +367,7 @@ internal fun AnimationPanel(
         if (callbacks.edit { setAnimation(clip.id, tab, kind?.let(::anim)) }) preview(wanted)
     }
 
-    val picture = itemPicture(clip, thumbnail)
+    val picture = itemPicture(clip, thumbnail, MaterialTheme.colorScheme.primaryContainer)
     val clock = tileClock()
     val choices = clip.animationChoices(tab)
     val plain = listOf<AnimKind?>(null) + choices.filter { animationDirection(it) == null }
@@ -373,7 +379,7 @@ internal fun AnimationPanel(
             selected = current?.kind == kind,
             tag = animationTileTag(tab, kind),
             onClick = { choose(kind) },
-        ) { animationTileFrame(clip, tab, kind, wanted, clock, picture) }
+        ) { animationTileFrame(clip, tab, kind, wanted, clock.longValue, picture) }
     }
     val directed = choices.filter { animationDirection(it) != null }
     if (directed.isNotEmpty()) {
@@ -387,7 +393,7 @@ internal fun AnimationPanel(
                 selected = current?.kind == kind,
                 tag = animationTileTag(tab, kind),
                 onClick = { choose(kind) },
-            ) { animationTileFrame(clip, tab, kind, wanted, clock, picture) }
+            ) { animationTileFrame(clip, tab, kind, wanted, clock.longValue, picture) }
         }
     }
     if (tab != AnimSlot.DURING) {
@@ -490,16 +496,23 @@ private fun EffectTile(
     }
 }
 
-/** Milliseconds since the panel opened, every frame; it does not hold up tests (an infinite animation). */
+/**
+ * Milliseconds since the panel opened, updated every frame. Read it only
+ * while drawing (inside a tile's draw lambda): then a frame redraws the
+ * tiles without recomposing the panel, which on a slow phone kept the main
+ * thread too busy to answer a tap. It is an infinite animation, so it does
+ * not hold up tests.
+ */
 @Composable
-private fun tileClock(): Long {
-    val t by produceState(0L) {
+private fun tileClock(): androidx.compose.runtime.MutableLongState {
+    val clock = remember { mutableLongStateOf(0L) }
+    LaunchedEffect(clock) {
         val start = withInfiniteAnimationFrameNanos { it }
         while (true) {
-            withInfiniteAnimationFrameNanos { value = (it - start) / 1_000_000 }
+            withInfiniteAnimationFrameNanos { clock.longValue = (it - start) / 1_000_000 }
         }
     }
-    return t
+    return clock
 }
 
 /** What a tile draws for one item: its picture, or a plain colour (a card, or while the picture loads). */
@@ -526,6 +539,8 @@ private fun junctionPictures(
     lead: MainSlot,
     next: MainSlot,
     thumbnail: ThumbSource,
+    outColour: Color,
+    inColour: Color,
 ): Pair<TilePicture, TilePicture> {
     val outAt =
         when (val c = lead.clip) {
@@ -534,20 +549,18 @@ private fun junctionPictures(
             else -> 0
         }
     val inAt = (next.clip as? VideoClip)?.trimStartMs ?: 0
-    return picture(lead.clip, outAt, thumbnail, OUT_COLOUR) to picture(next.clip, inAt, thumbnail, IN_COLOUR)
+    return picture(lead.clip, outAt, thumbnail, outColour) to picture(next.clip, inAt, thumbnail, inColour)
 }
 
 @Composable
 private fun itemPicture(
     clip: Clip,
     thumbnail: ThumbSource,
+    colour: Color,
 ): TilePicture {
-    val main = clip as? MainClip ?: return TilePicture(null, IN_COLOUR)
-    return picture(main, (main as? VideoClip)?.trimStartMs ?: 0, thumbnail, IN_COLOUR)
+    val main = clip as? MainClip ?: return TilePicture(null, colour)
+    return picture(main, (main as? VideoClip)?.trimStartMs ?: 0, thumbnail, colour)
 }
-
-private val OUT_COLOUR = Color(0xFF5C6BC0)
-private val IN_COLOUR = Color(0xFFFFB74D)
 
 /** A transition tile at [clockMs]: the outgoing picture under the incoming one, as lanes A and B are drawn. */
 private fun DrawScope.transitionTileFrame(
