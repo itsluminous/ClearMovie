@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.junit4.android.ComposeNotIdleException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -93,7 +94,29 @@ class ReopenRecreateDeviceTest {
         timeoutMs: Long = TIMEOUT_MS,
     ) = compose.waitUntil(timeoutMs) { notYetIfBusy { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() } }
 
-    private fun notYetIfBusy(check: () -> Boolean): Boolean = runCatching(check).getOrDefault(false)
+    /** Only Compose not going idle in time counts as "not yet"; anything else fails the test with its own cause. */
+    private fun notYetIfBusy(check: () -> Boolean): Boolean =
+        try {
+            check()
+        } catch (e: ComposeNotIdleException) {
+            Log.i(ExportHarness.TAG, "Compose busy, trying again: ${e.message?.lineSequence()?.firstOrNull()}")
+            false
+        }
+
+    /** A picture of the preview, trying again while Compose is busy. */
+    private fun capture(): Bitmap {
+        val end = System.currentTimeMillis() + TIMEOUT_MS
+        while (true) {
+            try {
+                return compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
+            } catch (e: ComposeNotIdleException) {
+                if (System.currentTimeMillis() > end) throw e
+            } catch (e: AssertionError) {
+                // "Failed waiting for PixelCopy!": the window copy timed out on a busy GPU; nothing else.
+                if (e.message?.contains("PixelCopy") != true || System.currentTimeMillis() > end) throw e
+            }
+        }
+    }
 
     /**
      * The editor with its preview loaded: the players know the length (the
@@ -101,12 +124,12 @@ class ReopenRecreateDeviceTest {
      * parses the label, so it holds in every app language.
      */
     private fun editorShown() {
-        waitFor(hasTestTag(EDITOR_EXPORT_TAG))
+        // The longer wait: a launch or a recreate while a software export runs can take a while on CI.
+        waitFor(hasTestTag(EDITOR_EXPORT_TAG), LAUNCH_TIMEOUT_MS)
         waitFor(hasTestTag(PREVIEW_TAG))
         val unloaded = h.context.getString(R.string.editor_time, "0:00", "0:00")
-        compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { timeLabel() != unloaded } }
-        waitFor(hasText(s(R.string.action_play)).and(isEnabled()).or(hasText(s(R.string.action_pause)).and(isEnabled())))
-        compose.waitForIdle()
+        compose.waitUntil(LAUNCH_TIMEOUT_MS) { notYetIfBusy { timeLabel() != unloaded } }
+        waitFor(hasText(s(R.string.action_play)).and(isEnabled()).or(hasText(s(R.string.action_pause)).and(isEnabled())), LAUNCH_TIMEOUT_MS)
     }
 
     /** Where the playhead is, 0 to 1 of the length (the label's progress semantics). */
@@ -279,19 +302,22 @@ class ReopenRecreateDeviceTest {
         val fraction = us.toFloat() / h.plannedUs(project)
         val earlier = settledFrame()
         compose.onNodeWithContentDescription(s(R.string.editor_seek)).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
-        compose.waitUntil(TIMEOUT_MS) { abs(progress() - fraction) < 0.01f }
+        compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { abs(progress() - fraction) < 0.01f } }
         val at = timeLabel()
+        val position = progress()
         // The label moves at once, the picture only once the players have landed
         // the seek: on a slow CI emulator the old picture stays steady for over a
         // second. So the picture before the recreate is the first steady one that
         // is no longer the picture from before the seek.
-        val before = settledFrame(unlike = earlier)
+        val before = settledFrame(unlike = earlier, windowShowsVideo = true)
 
         scenario.recreate()
         editorShown()
         // The restored playhead, and then its picture, which the players land after it.
-        compose.waitUntil(TIMEOUT_MS) { timeLabel() == at }
-        val after = settledFrame(like = before)
+        compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { timeLabel() == at } }
+        // The same playhead to the frame, not only to the second the label shows.
+        assertWithMessage("playhead at $us after recreate").that(abs(progress() - position)).isLessThan(POSITION_SLACK)
+        val after = settledFrame(like = before, windowShowsVideo = true)
 
         save(before, "reopen-preview-$us-before-recreate.png")
         save(after, "reopen-preview-$us-after-recreate.png")
@@ -303,6 +329,9 @@ class ReopenRecreateDeviceTest {
         // A coarse picture of each capture in the log, for a run whose PNGs stay on its device (CI).
         Log.i(ExportHarness.TAG, "Preview at $us us before (3x3 mean RGB): ${grid(before)}")
         Log.i(ExportHarness.TAG, "Preview at $us us after (3x3 mean RGB): ${grid(after)}")
+        // The frame's window shows the video itself (not black, not the photo before it), before and after.
+        assertWithMessage("window at $us before recreate: ${grid(before)}").that(windowShowsVideo(before)).isTrue()
+        assertWithMessage("window at $us after recreate: ${grid(after)}").that(windowShowsVideo(after)).isTrue()
         return Triple(at, before, diff)
     }
 
@@ -314,25 +343,28 @@ class ReopenRecreateDeviceTest {
      * earlier frame steady for a while before the restored seek lands. A
      * preview that never shows [like] again still fails the test. With
      * [unlike], it waits for a steady picture that differs from [unlike] (a
-     * seek that has landed).
+     * seek that has landed). With [windowShowsVideo], it also waits for the
+     * frame's window to show the video (every layer has landed).
      */
     private fun settledFrame(
         like: Bitmap? = null,
         unlike: Bitmap? = null,
+        windowShowsVideo: Boolean = false,
     ): Bitmap {
-        var last = compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
+        var last = capture()
         var same = 0
         var settled = 0
         val end = System.currentTimeMillis() + TIMEOUT_MS
         while (System.currentTimeMillis() < end) {
             Thread.sleep(700)
-            val now = compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
+            val now = capture()
             same = if (spread(now) > MIN_SPREAD && meanAbsDiff(last, now) < 1.0) same + 1 else 0
             last = now
             if (same >= 2) {
                 settled++
                 val moved = unlike == null || meanAbsDiff(unlike, now) >= 1.0
-                if (moved && (like == null || meanAbsDiff(like, now) < MAX_DIFF)) {
+                val window = !windowShowsVideo || windowShowsVideo(now)
+                if (moved && window && (like == null || meanAbsDiff(like, now) < MAX_DIFF)) {
                     Log.i(ExportHarness.TAG, "Preview settled after $settled steady picture(s)")
                     return now
                 }
@@ -352,6 +384,16 @@ class ReopenRecreateDeviceTest {
 
     private companion object {
         const val TIMEOUT_MS = 20_000L
+
+        const val LAUNCH_TIMEOUT_MS = 60_000L
+
+        /** 0.5 % of the 14 s video, about 70 ms: two frames at 30 fps. */
+        const val POSITION_SLACK = 0.005f
+
+        val CLIP_GREY = intArrayOf(54, 56, 56)
+
+        /** Per channel, 0-255. */
+        const val WINDOW_SLACK = 12
 
         /** Longer than the whole test video, so its end, when the preview stops, is inside the wait. */
         const val PLAY_TIMEOUT_MS = 40_000L
@@ -395,6 +437,40 @@ class ReopenRecreateDeviceTest {
                 }
                 "${r / n},${g / n},${bl / n}"
             }
+        }
+
+        /**
+         * The centre ninth of the preview is inside the frame's keyed window,
+         * which here shows clip_dark: a flat grey near (54, 56, 56) (ffmpeg,
+         * frame 0; the preview shows (56-57, 58-59, 58-59)). A black surface,
+         * the green key or the photo before it are far from that.
+         */
+        fun windowShowsVideo(b: Bitmap): Boolean {
+            val (r, g, bl) = cellMean(b, 4)
+            return abs(r - CLIP_GREY[0]) <= WINDOW_SLACK && abs(g - CLIP_GREY[1]) <= WINDOW_SLACK && abs(bl - CLIP_GREY[2]) <= WINDOW_SLACK
+        }
+
+        fun cellMean(
+            b: Bitmap,
+            cell: Int,
+        ): Triple<Int, Int, Int> {
+            val p = pixels(b)
+            val x0 = (cell % 3) * b.width / 3
+            val y0 = (cell / 3) * b.height / 3
+            var r = 0L
+            var g = 0L
+            var bl = 0L
+            var n = 0
+            for (y in y0 until y0 + b.height / 3) {
+                for (x in x0 until x0 + b.width / 3) {
+                    val c = p[y * b.width + x]
+                    r += (c shr 16) and 0xFF
+                    g += (c shr 8) and 0xFF
+                    bl += c and 0xFF
+                    n++
+                }
+            }
+            return Triple((r / n).toInt(), (g / n).toInt(), (bl / n).toInt())
         }
 
         fun spread(b: Bitmap): Int = pixels(b).map(::luma).let { it.max() - it.min() }
