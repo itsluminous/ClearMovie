@@ -512,7 +512,7 @@
     <string name="caption_tab_colour">रंग</string>
     <string name="caption_place_usual">सामान्य</string>
     <string name="caption_place_top">ऊपर</string>
-    <string name="caption_place_middle">बीच में</string>
+    <string name="caption_place_middle">बीच</string>
     <string name="caption_place_bottom">नीचे</string>
     <string name="caption_place_hint">या तस्वीर पर बॉक्स को खींचें।</string>
     <string name="caption_size_value">%1$d%%</string>

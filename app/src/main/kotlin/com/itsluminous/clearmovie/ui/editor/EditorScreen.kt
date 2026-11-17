@@ -271,11 +271,32 @@ fun EditorScreen(
     val openCaptionId = state.panel?.takeIf { it.panel == Panel.TEXT }?.clipId
     val latestProject by rememberUpdatedState(project)
     var captionVisit by remember { mutableStateOf(openCaptionId) }
+    val latestPlayheadMs by rememberUpdatedState(playheadMs)
     LaunchedEffect(openCaptionId) {
         val was = captionVisit
         captionVisit = openCaptionId
         if (was != null && was != openCaptionId) finishCaption(was, latestProject, actions)
+        // A visit starting: the preview goes to the caption, so every change shows there at once.
+        val caption = openCaptionId?.let { latestProject?.clip(it) }
+        if (caption != null && was != openCaptionId && latestPlayheadMs !in caption.startMs until caption.endMs) {
+            actions.seek(caption.startMs + caption.durationMs / 2)
+        }
     }
+    // Back from the top bar leaves the editor with the caption editor still open: its visit ends first,
+    // or a new caption left without words would stay behind.
+    val topActions: EditorActions =
+        remember(actions, state) {
+            object : EditorActions by actions {
+                override fun back() {
+                    val open = state.panel?.takeIf { it.panel == Panel.TEXT }?.clipId
+                    if (open != null) {
+                        finishCaption(open, latestProject, actions)
+                        state.panel = null
+                    }
+                    actions.back()
+                }
+            }
+        }
     val previewWithBox: @Composable (Modifier) -> Unit = { m ->
         Box(m.clipToBounds()) {
             preview(Modifier.fillMaxSize())
@@ -708,7 +729,7 @@ fun EditorScreen(
                             .fillMaxHeight()
                             .windowInsetsPadding(WindowInsets.safeDrawing.pane(left = false)),
                     ) {
-                        TopBar(title, ui, actions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
+                        TopBar(title, ui, topActions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
                         timeline(Modifier.weight(1f).fillMaxWidth())
                         bottom(Modifier)
                     }
@@ -716,7 +737,7 @@ fun EditorScreen(
             } else {
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     Column(Modifier.fillMaxSize()) {
-                        TopBar(title, ui, actions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
+                        TopBar(title, ui, topActions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
                         val previewDp =
                             when (layout) {
                                 is PreviewLayout.Full -> layout.previewDp

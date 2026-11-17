@@ -118,6 +118,9 @@ const val PANEL_TAG = "edit_panel"
 const val PANEL_DONE_TAG = "edit_panel_done"
 const val PANEL_CANCEL_TAG = "edit_panel_cancel"
 
+/** A panel at least this tall keeps every caption editor tab the same height. */
+private val ROOMY_PANEL = 360.dp
+
 fun insertOptionTag(option: String) = "insert_option_$option"
 
 fun swatchTag(index: Int) = "card_swatch_$index"
@@ -232,12 +235,15 @@ fun EditPanel(
     if (gone || track == null) return
     val onMain = track.type == TrackType.MAIN
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth().testTag(PANEL_TAG)) {
+        // The caption editor scrolls only its tab's content, so its title, Cancel and Done stay in sight
+        // (after typing, a scrolled panel could hide them).
+        val scrolls = open.panel != Panel.TEXT
         Column(
             Modifier
                 .fillMaxWidth()
                 .heightIn(
                     max = maxHeight,
-                ).verticalScroll(rememberScrollState())
+                ).then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             when (open.panel) {
@@ -304,7 +310,7 @@ fun EditPanel(
 
                 Panel.TEXT -> {
                     if (clip is TextClip) {
-                        CaptionPanel(clip, project, captionWindow, callbacks, onDone = close)
+                        CaptionPanel(clip, project, captionWindow, callbacks, onDone = close, roomy = maxHeight >= ROOMY_PANEL)
                     } else {
                         // Only a caption has this editor (a panel saved by an older version may name another item).
                         LaunchedEffect(open) { close() }

@@ -108,7 +108,21 @@ class CaptionEditorTest {
         compose.waitForIdle()
     }
 
-    private fun panel(tag: String): SemanticsNodeInteraction = compose.onNodeWithTag(tag).performScrollTo()
+    /** A control in the open panel, scrolled into view when it sits in the scrolling part (the title and tabs stay put). */
+    private fun panel(tag: String): SemanticsNodeInteraction {
+        val node = compose.onNodeWithTag(tag)
+        val inScroll =
+            compose
+                .onAllNodes(
+                    hasTestTag(tag) and
+                        hasAnyAncestor(
+                            androidx.compose.ui.test
+                                .hasScrollAction(),
+                        ),
+                ).fetchSemanticsNodes()
+                .isNotEmpty()
+        return if (inScroll) node.performScrollTo() else node
+    }
 
     private fun tab(t: CaptionTab) {
         panel(captionTabTag(t)).performClick()
@@ -173,6 +187,8 @@ class CaptionEditorTest {
         tapBar(EditAction.ADD_CAPTION)
         assertThat(h.caption().attachedTo).isEqualTo(CaptionAttachment(ClipId("q")))
         assertThat(h.caption().startMs to h.caption().endMs).isEqualTo(7000L to 9000L)
+        // The preview goes to the caption, so its changes show there.
+        assertThat(h.calls).contains("seek:8000")
     }
 
     @Test
@@ -335,6 +351,25 @@ class CaptionEditorTest {
         assertThat(h.project.captions()).isEmpty()
         // Nothing was left to undo either.
         assertThat(h.state!!.panel).isNull()
+    }
+
+    @Test
+    fun `leaving the editor with Back while a new caption has no words takes the caption away`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        assertThat(h.project.captions()).hasSize(1)
+        compose
+            .onNode(
+                androidx.compose.ui.test.hasContentDescription(
+                    androidx.test.core.app.ApplicationProvider
+                        .getApplicationContext<android.content.Context>()
+                        .getString(com.itsluminous.clearmovie.R.string.action_back),
+                ),
+            ).performClick()
+        compose.waitForIdle()
+        assertThat(h.calls).contains("back")
+        assertThat(h.project.captions()).isEmpty()
     }
 
     @Test

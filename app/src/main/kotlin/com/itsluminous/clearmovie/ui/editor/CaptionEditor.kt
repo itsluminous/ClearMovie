@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,8 +22,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -128,6 +132,15 @@ val CAPTION_COLOURS: List<Pair<ArgbColor, Int>> =
 const val CAPTION_MIN_SIZE = 32
 const val CAPTION_MAX_SIZE = 128
 const val CAPTION_SIZE_STEP = 4
+
+/** The tallest tab's content (Colour: the swatches and two switch rows), at the base text size. */
+private val TAB_CONTENT_MIN = 176.dp
+
+/** Above this text scale the tabs show their icons only. */
+private const val TAB_LABELS_FONT_SCALE = 1.5f
+
+/** Above this text scale the place choices go two by two. */
+private const val PLACE_ONE_ROW_FONT_SCALE = 1.1f
 
 private val CHECKER_LIGHT = Color(0xFFBDBDBD)
 private val CHECKER_DARK = Color(0xFF8A8A8A)
@@ -210,15 +223,16 @@ fun finishCaption(
 /**
  * The caption editor: tabs for the words, the place, the size, the font and
  * the colour, and Reset to preset style under them. [window] is the frame's
- * window, where the caption may go.
+ * window, where the caption may go; [roomy] is false in a short panel.
  */
 @Composable
-internal fun CaptionPanel(
+internal fun ColumnScope.CaptionPanel(
     caption: TextClip,
     project: Project,
     window: NormRect,
     callbacks: EditorCallbacks,
     onDone: () -> Unit,
+    roomy: Boolean = true,
 ) {
     val key = captionMergeKey(caption.id)
     val defaults = project.captionDefaults
@@ -237,27 +251,54 @@ internal fun CaptionPanel(
     )
     var tabName by rememberSaveable(caption.id.value) { mutableStateOf(CaptionTab.WORDS.name) }
     val tab = CaptionTab.entries.firstOrNull { it.name == tabName } ?: CaptionTab.WORDS
-    PrimaryTabRow(selectedTabIndex = tab.ordinal, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
+    PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
+        // Icon over label in the bar's sizes (24 dp, labelMedium); past 1.5x text only the icon shows, named for
+        // TalkBack, so a label is never cut short.
+        val iconsOnly = LocalDensity.current.fontScale > TAB_LABELS_FONT_SCALE
         for (t in CaptionTab.entries) {
             val label = stringResource(tabLabel(t))
             Tab(
                 selected = t == tab,
                 onClick = { tabName = t.name },
-                text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                icon = { Icon(painterResource(tabIcon(t)), contentDescription = null, modifier = Modifier.size(24.dp)) },
                 modifier = Modifier.heightIn(min = 64.dp).testTag(captionTabTag(t)),
-            )
+            ) {
+                Column(
+                    Modifier.padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(painterResource(tabIcon(t)), contentDescription = if (iconsOnly) label else null, modifier = Modifier.size(24.dp))
+                    if (!iconsOnly) Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                }
+            }
         }
     }
-    Spacer(Modifier.height(8.dp))
-    when (tab) {
-        CaptionTab.WORDS -> WordsTab(caption, callbacks, key)
-        CaptionTab.PLACE -> PlaceTab(style, defaults.box, CaptionPlaces.safeArea(window), ::restyle)
-        CaptionTab.SIZE -> SizeTab(caption, style, defaults, ::restyle)
-        CaptionTab.FONT -> FontTab(style, ::restyle)
-        CaptionTab.COLOUR -> ColourTab(style, ::restyle)
+    // Below the title and the tabs, which stay put, the tab's content and Reset scroll when the room is short.
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+        Spacer(Modifier.height(8.dp))
+        // Every tab takes the same room, so changing tabs never makes the panel, and the rows above it, jump;
+        // in a short panel (a phone held sideways) Reset stays in sight instead.
+        Column(Modifier.fillMaxWidth().heightIn(min = if (roomy) TAB_CONTENT_MIN else 0.dp)) {
+            when (tab) {
+                CaptionTab.WORDS -> WordsTab(caption, callbacks, key)
+                CaptionTab.PLACE -> PlaceTab(style, defaults.box, CaptionPlaces.safeArea(window), ::restyle)
+                CaptionTab.SIZE -> SizeTab(caption, style, defaults, ::restyle)
+                CaptionTab.FONT -> FontTab(style, ::restyle)
+                CaptionTab.COLOUR -> ColourTab(style, ::restyle)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        ResetButton(caption, callbacks, key)
+        Spacer(Modifier.height(8.dp))
     }
-    Spacer(Modifier.height(8.dp))
+}
+
+@Composable
+private fun ResetButton(
+    caption: TextClip,
+    callbacks: EditorCallbacks,
+    key: String,
+) {
     OutlinedButton(
         onClick = { callbacks.editMerged(key) { setCaptionStyle(caption.id, CaptionStyleOverride.NONE) } },
         enabled = !caption.style.isEmpty,
@@ -267,7 +308,6 @@ internal fun CaptionPanel(
         Spacer(Modifier.width(8.dp))
         Text(stringResource(R.string.caption_reset), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
-    Spacer(Modifier.height(8.dp))
 }
 
 private fun tabLabel(tab: CaptionTab): Int =
@@ -304,8 +344,16 @@ private fun WordsTab(
     var text by rememberSaveable(caption.id.value, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(caption.text, TextRange(caption.text.length)))
     }
-    // An undo or redo while the editor is open puts the field back in step.
-    LaunchedEffect(caption.text) { if (caption.text != text.text) text = TextFieldValue(caption.text, TextRange(caption.text.length)) }
+    // The words this field last sent to the project. An undo or redo while the editor is open puts the
+    // field back in step; the field's own edits never do, because when one comes back the field may
+    // already hold the next keystroke (resetting it then would drop that keystroke).
+    var sent by rememberSaveable(caption.id.value) { mutableStateOf(caption.text) }
+    LaunchedEffect(caption.text) {
+        if (caption.text != sent) {
+            sent = caption.text
+            text = TextFieldValue(caption.text, TextRange(caption.text.length))
+        }
+    }
     OutlinedTextField(
         value = text,
         onValueChange = { typed ->
@@ -314,7 +362,10 @@ private fun WordsTab(
             val cut = typed.text.length - usable.length
             val cursor = (typed.selection.end - cut).coerceIn(0, usable.length)
             text = if (cut == 0) typed else TextFieldValue(usable, TextRange(cursor))
-            if (usable != caption.text) callbacks.editMerged(key) { setText(caption.id, usable) }
+            if (usable != sent) {
+                sent = usable
+                callbacks.editMerged(key) { setText(caption.id, usable) }
+            }
         },
         label = { Text(stringResource(R.string.caption_text_hint)) },
         minLines = 2,
@@ -332,15 +383,27 @@ private fun PlaceTab(
     restyle: (CaptionStyle) -> Unit,
 ) {
     val current = CaptionPlaces.placeOf(style.box, usual, safe)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (place in CaptionPlace.entries) {
-            val label = stringResource(placeLabel(place))
-            FilterChip(
-                selected = place == current,
-                onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe))) },
-                label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth()) },
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(captionPlaceTag(place)),
-            )
+    // Four across; two by two with large text, so no name is ever cut short.
+    val columns = if (LocalDensity.current.fontScale > PLACE_ONE_ROW_FONT_SCALE) 2 else CaptionPlace.entries.size
+    for (row in CaptionPlace.entries.chunked(columns)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (place in row) {
+                val label = stringResource(placeLabel(place))
+                FilterChip(
+                    selected = place == current,
+                    onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe))) },
+                    label = {
+                        Text(
+                            label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(captionPlaceTag(place)),
+                )
+            }
         }
     }
     Text(
@@ -378,8 +441,8 @@ private fun SizeTab(
                 val px = (v / CAPTION_SIZE_STEP).roundToInt() * CAPTION_SIZE_STEP
                 if (px != style.sizePx) restyle(style.copy(sizePx = px))
             },
+            // No tick marks (24 of them only clutter the track); the size still moves in steps of 4.
             valueRange = CAPTION_MIN_SIZE.toFloat()..CAPTION_MAX_SIZE.toFloat(),
-            steps = (CAPTION_MAX_SIZE - CAPTION_MIN_SIZE) / CAPTION_SIZE_STEP - 1,
             modifier =
                 Modifier.weight(1f).heightIn(min = 48.dp).testTag(CAPTION_SIZE_TAG).semantics {
                     contentDescription = label

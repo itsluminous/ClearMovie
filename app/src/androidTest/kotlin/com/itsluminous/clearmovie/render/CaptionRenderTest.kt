@@ -128,9 +128,9 @@ class CaptionRenderTest {
         }
         report("caption box white pixels=$white")
         assertThat(white).isGreaterThan(2000)
-        // Over the frame: red where the frame's own strip is (blue without the caption).
-        val strip = rgb(f, 0.945, 0.87)
-        val stripPlain = rgb(plain, 0.945, 0.87)
+        // Over the frame: red where the frame's own strip is (blue without it), sampled clear of the "A".
+        val strip = rgb(f, 0.91, 0.835, 2)
+        val stripPlain = rgb(plain, 0.91, 0.835, 2)
         report("over the frame: with caption=${strip.toList()} without=${stripPlain.toList()}")
         assertWithMessage("caption over the strip").that(RenderHarness.close(strip, red, 40)).isTrue()
         assertWithMessage("strip without a caption").that(RenderHarness.close(stripPlain, red, 40)).isFalse()
