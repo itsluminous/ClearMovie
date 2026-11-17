@@ -10,6 +10,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -23,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -219,9 +222,9 @@ class EditorScreenTest {
     fun `tapping an item selects it and the bar shows that kind's actions in order`() {
         forEachSize { _, h ->
             selectItem(h, "v2")
-            assertBarOrder(listOf(EditAction.TRIM, EditAction.VOLUME, EditAction.SPLIT, EditAction.SPEED))
+            assertBarOrder(listOf(EditAction.TRIM, EditAction.TRANSITION, EditAction.ANIMATION, EditAction.VOLUME))
             selectItem(h, "p1", zoomIns = 0)
-            assertBarOrder(listOf(EditAction.DURATION, EditAction.FIT, EditAction.ROTATE))
+            assertBarOrder(listOf(EditAction.DURATION, EditAction.TRANSITION, EditAction.ANIMATION))
             selectItem(
                 h,
                 project.mainClips
@@ -229,7 +232,7 @@ class EditorScreenTest {
                     .id.value,
                 zoomIns = 0,
             )
-            assertBarOrder(listOf(EditAction.PLAY, EditAction.REPLACE, EditAction.SKIP))
+            assertBarOrder(listOf(EditAction.PLAY, EditAction.TRANSITION, EditAction.REPLACE))
         }
     }
 
@@ -263,6 +266,15 @@ class EditorScreenTest {
     /** A tap on the ruler's left edge: nothing selected. */
     private fun tapEmpty() {
         compose.onNodeWithTag(com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_MAIN_HEADER_TAG, useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+    }
+
+    /** Taps the bar's [action], scrolling the bar to it first (the bar holds more buttons than fit). */
+    private fun tapBar(action: EditAction) {
+        compose
+            .onNode(hasScrollToNodeAction() and hasAnyAncestor(hasTestTag(BAR_TAG)))
+            .performScrollToNode(hasTestTag(barActionTag(action)))
+        compose.onNodeWithTag(barActionTag(action)).performClick()
         compose.waitForIdle()
     }
 
@@ -390,7 +402,7 @@ class EditorScreenTest {
         val tester = StateRestorationTester(compose)
         tester.setContent { AtSize(ScreenSize.COMPACT, 2f) { ClearMovieTheme(dynamicColor = false) { h.Content() } } }
         selectItem(h, "v2")
-        compose.onNodeWithTag(barActionTag(EditAction.SPEED)).performClick()
+        tapBar(EditAction.SPEED)
         h.state!!.layoutEvent(
             com.itsluminous.clearmovie.ui.editor.timeline.LayoutEvent
                 .PopupMoved(PopupCorner.TOP_START),
@@ -560,34 +572,34 @@ class EditorScreenTest {
     fun `speed, loop, duration, fit, volume and split panels change the model`() {
         val h = show(ScreenSize.COMPACT)
         selectItem(h, "v4")
-        compose.onNodeWithTag(barActionTag(EditAction.SPEED)).performClick()
+        tapBar(EditAction.SPEED)
         compose.onNodeWithText(context.getString(R.string.speed_value, "2")).performClick()
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         assertThat((h.project.clip(ClipId("v4")) as VideoClip).durationMs).isEqualTo(3000)
 
-        compose.onNodeWithTag(barActionTag(EditAction.LOOP)).performClick()
+        tapBar(EditAction.LOOP)
         compose.onNodeWithContentDescription(s(R.string.loop_more)).performClick()
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         assertThat((h.project.clip(ClipId("v4")) as VideoClip).loops).isEqualTo(2)
 
-        compose.onNodeWithTag(barActionTag(EditAction.FIT)).performClick()
+        tapBar(EditAction.FIT)
         compose.onNodeWithTag("fit_FIT_BLUR").performClick()
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         assertThat((h.project.clip(ClipId("v4")) as VideoClip).fit).isEqualTo(com.itsluminous.clearmovie.domain.model.Fit.FIT_BLUR)
 
-        compose.onNodeWithTag(barActionTag(EditAction.VOLUME)).performClick()
+        tapBar(EditAction.VOLUME)
         compose.onNodeWithContentDescription(s(R.string.volume_mute)).performClick()
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         assertThat((h.project.clip(ClipId("v4")) as VideoClip).volumeDb).isEqualTo(-60.0)
 
         selectItem(h, "p3", zoomIns = 0)
-        compose.onNodeWithTag(barActionTag(EditAction.DURATION)).performClick()
+        tapBar(EditAction.DURATION)
         compose.onNodeWithContentDescription(s(R.string.duration_longer)).performClick()
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         assertThat(h.project.clip(ClipId("p3"))!!.durationMs).isEqualTo(3500)
 
         selectItem(h, "v2", zoomIns = 0)
-        compose.onNodeWithTag(barActionTag(EditAction.SPLIT)).performClick()
+        tapBar(EditAction.SPLIT)
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         val halves =
             h.project.mainClips
@@ -622,7 +634,7 @@ class EditorScreenTest {
             )
         val h = show(ScreenSize.COMPACT, h = harness(short))
         selectItem(h, "fast", zoomIns = 6)
-        compose.onNodeWithTag(barActionTag(EditAction.TRIM)).performClick()
+        tapBar(EditAction.TRIM)
         val range = compose.onNodeWithContentDescription(s(R.string.trim_title))
         range.onChildAt(0).performSemanticsAction(SemanticsActions.SetProgress) { it(500f) }
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
@@ -634,11 +646,11 @@ class EditorScreenTest {
         val h = show(ScreenSize.COMPACT)
         selectItem(h, "p3")
         repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
-        compose.onNodeWithTag(barActionTag(EditAction.DELETE)).performClick()
+        tapBar(EditAction.DELETE)
         compose.waitForIdle()
         compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).assertExists()
         selectItem(h, "p1")
-        compose.onNodeWithTag(barActionTag(EditAction.ROTATE)).performClick()
+        tapBar(EditAction.ROTATE)
         compose.waitForIdle()
         compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).assertDoesNotExist()
         assertThat(h.project.contentIds()).doesNotContain("p3")
@@ -648,7 +660,7 @@ class EditorScreenTest {
     fun `Split on a looped video says what to change first`() {
         val h = show(ScreenSize.COMPACT)
         selectItem(h, "v4")
-        compose.onNodeWithTag(barActionTag(EditAction.LOOP)).performClick()
+        tapBar(EditAction.LOOP)
         compose.onNodeWithContentDescription(s(R.string.loop_more)).performClick()
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         compose.onNodeWithTag(barActionTag(EditAction.SPLIT)).assertIsEnabled().performClick()
@@ -663,7 +675,7 @@ class EditorScreenTest {
         for (id in listOf("p1", "p3")) {
             selectItem(h, id, zoomIns = if (id == "p1") 3 else 0)
             repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
-            compose.onNodeWithTag(barActionTag(EditAction.DELETE)).performClick()
+            tapBar(EditAction.DELETE)
             compose.waitForIdle()
         }
         compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).performClick()
@@ -730,7 +742,7 @@ class EditorScreenTest {
     fun `the Trim panel trims without the handles, and the time can be set without dragging`() {
         val h = show(ScreenSize.COMPACT)
         selectItem(h, "v4")
-        compose.onNodeWithTag(barActionTag(EditAction.TRIM)).performClick()
+        tapBar(EditAction.TRIM)
         // The range's two thumbs, start then end, each set as TalkBack sets them.
         val range = compose.onNodeWithContentDescription(s(R.string.trim_title))
         range.onChildAt(0).performSemanticsAction(SemanticsActions.SetProgress) { it(1500f) }
@@ -752,7 +764,7 @@ class EditorScreenTest {
         val h = show(ScreenSize.COMPACT)
         selectItem(h, "p3")
         repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
-        compose.onNodeWithTag(barActionTag(EditAction.DELETE)).performClick()
+        tapBar(EditAction.DELETE)
         assertThat(h.project.contentIds()).doesNotContain("p3")
         compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).performClick()
         compose.waitForIdle()
@@ -764,7 +776,7 @@ class EditorScreenTest {
         val h = show(ScreenSize.COMPACT)
         compose.onNodeWithTag(UNDO_TAG).assertIsNotEnabled()
         selectItem(h, "p1")
-        compose.onNodeWithTag(barActionTag(EditAction.ROTATE)).performClick()
+        tapBar(EditAction.ROTATE)
         compose.onNodeWithTag(UNDO_TAG).assertIsEnabled().performClick()
         assertThat((h.project.clip(ClipId("p1")) as com.itsluminous.clearmovie.domain.model.PhotoClip).rotation.degrees).isEqualTo(0)
         compose.onNodeWithTag(REDO_TAG).assertIsEnabled().performClick()
@@ -845,7 +857,7 @@ class EditorScreenTest {
         val empty = EditorHarness(ProjectFactory.blank(Fixtures.PROJECT_ID), null)
         show(ScreenSize.COMPACT, h = empty)
         compose.onNodeWithText(s(R.string.editor_empty)).assertIsDisplayed()
-        compose.onNodeWithTag(barActionTag(EditAction.ADD_MEDIA)).performClick()
+        tapBar(EditAction.ADD_MEDIA)
         compose.onNodeWithTag(EMPTY_ADD_TAG).performClick()
         assertThat(empty.calls).containsExactly("add", "add")
     }
@@ -855,7 +867,7 @@ class EditorScreenTest {
         val h = show(ScreenSize.COMPACT)
         val intro = project.mainClips.first().id
         selectItem(h, intro.value)
-        compose.onNodeWithTag(barActionTag(EditAction.SKIP)).performClick()
+        tapBar(EditAction.SKIP)
         assertThat(h.project.mainClips.first()).isNotInstanceOf(com.itsluminous.clearmovie.domain.model.IntroClip::class.java)
         compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).performClick()
         compose.waitForIdle()
@@ -867,8 +879,8 @@ class EditorScreenTest {
         val h = show(ScreenSize.MEDIUM)
         val intro = project.mainClips.first().id
         selectItem(h, intro.value)
-        compose.onNodeWithTag(barActionTag(EditAction.PLAY)).performClick()
-        compose.onNodeWithTag(barActionTag(EditAction.REPLACE)).performClick()
+        tapBar(EditAction.PLAY)
+        tapBar(EditAction.REPLACE)
         assertThat(h.calls).containsAtLeast("playPart:${intro.value}", "replace:${intro.value}").inOrder()
     }
 }

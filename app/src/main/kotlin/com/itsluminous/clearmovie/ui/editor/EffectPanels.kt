@@ -369,8 +369,10 @@ internal fun AnimationPanel(
             enabled = current != null && maxMs > Anim.MIN_MS,
             onChange = { length = it },
             onDone = {
+                // The length as the finger left it (this lambda outlives the composition that made it).
                 val a = current ?: return@LengthSlider
-                if (callbacks.edit { setAnimation(clip.id, tab, a.copy(durationMs = wanted)) }) preview(wanted)
+                val len = length.coerceIn(Anim.MIN_MS, maxOf(Anim.MIN_MS, maxMs))
+                if (callbacks.edit { setAnimation(clip.id, tab, a.copy(durationMs = len)) }) preview(len)
             },
         )
     }

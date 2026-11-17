@@ -39,7 +39,11 @@ class EffectDefaultsTest {
         val p = withNew(Fixtures.photo("a"), Fixtures.video("b"))
         val main = p.mainClips
         assertThat(main.first()).isInstanceOf(IntroClip::class.java)
-        assertThat(main.dropLast(1).map { it.transitionToNext }).containsExactly(defaults.mainTransition, defaults.mainTransition, defaults.mainTransition)
+        assertThat(
+            main.dropLast(1).map {
+                it.transitionToNext
+            },
+        ).containsExactly(defaults.mainTransition, defaults.mainTransition, defaults.mainTransition)
         assertThat(main.last().transitionToNext).isNull()
         // Three 0.6 s overlaps come off the total.
         assertThat(p.totalDurationMs()).isEqualTo(6500 + 3000 + 4000 + 6000 - 3 * 600)
@@ -129,7 +133,12 @@ class EffectDefaultsTest {
         assertThat(one.transitionOf("b")).isEqualTo(slide)
         assertThat(one.transitionOf("a")).isEqualTo(defaults.mainTransition)
         val all = one.applyTransitionToAll(Transition(TransitionKind.CIRCLE, 700)).assertValid()
-        assertThat(all.mainClips.dropLast(1).map { it.transitionToNext!!.kind }.toSet()).containsExactly(TransitionKind.CIRCLE)
+        assertThat(
+            all.mainClips
+                .dropLast(1)
+                .map { it.transitionToNext!!.kind }
+                .toSet(),
+        ).containsExactly(TransitionKind.CIRCLE)
         assertThat(all.transitionForAll).isEqualTo(Transition(TransitionKind.CIRCLE, 700))
         // Changing one junction ends "for all"; the others keep what they had.
         val changed = all.setTransition(ClipId("a"), null).assertValid()

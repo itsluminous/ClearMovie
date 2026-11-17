@@ -23,6 +23,8 @@ class TimelinePiecesTest {
         assertThat(order(SelectionKind.PHOTO))
             .containsExactly(
                 EditAction.DURATION,
+                EditAction.TRANSITION,
+                EditAction.ANIMATION,
                 EditAction.FIT,
                 EditAction.ROTATE,
                 EditAction.REPLACE,
@@ -34,6 +36,8 @@ class TimelinePiecesTest {
         assertThat(order(SelectionKind.VIDEO))
             .containsExactly(
                 EditAction.TRIM,
+                EditAction.TRANSITION,
+                EditAction.ANIMATION,
                 EditAction.VOLUME,
                 EditAction.SPLIT,
                 EditAction.SPEED,
@@ -47,7 +51,14 @@ class TimelinePiecesTest {
             ).inOrder()
         assertThat(order(SelectionKind.TEXT_CARD).first()).isEqualTo(EditAction.EDIT_TEXT)
         assertThat(order(SelectionKind.COLOUR_CARD).first()).isEqualTo(EditAction.COLOUR)
-        assertThat(order(SelectionKind.INTRO)).containsExactly(EditAction.PLAY, EditAction.REPLACE, EditAction.SKIP).inOrder()
+        assertThat(order(SelectionKind.TEXT_CARD)).contains(EditAction.ANIMATION)
+        assertThat(order(SelectionKind.INTRO))
+            .containsExactly(EditAction.PLAY, EditAction.TRANSITION, EditAction.REPLACE, EditAction.SKIP)
+            .inOrder()
+        // Nothing after it: Transition is shown, greyed out.
+        assertThat(
+            ClipActions.forSelection(SelectionKind.PHOTO, hasNext = false).first { it.action == EditAction.TRANSITION }.enabled,
+        ).isFalse()
         assertThat(order(SelectionKind.ENDING)).containsExactly(EditAction.PLAY, EditAction.REPLACE, EditAction.SKIP).inOrder()
         assertThat(order(SelectionKind.NOTHING)).containsExactly(EditAction.ADD_MEDIA, EditAction.FIT_ALL).inOrder()
     }

@@ -117,6 +117,11 @@ class EditorHarness(
                 }
             }
 
+            override fun previewFrom(ms: Long) {
+                calls += "preview:$ms"
+                playheadUs = ms * 1000
+            }
+
             override fun pickForReplace(clipId: ClipId) {
                 calls += "replace:${clipId.value}"
             }

@@ -63,6 +63,7 @@ object ClipActions {
                 SelectionKind.PHOTO -> {
                     listOf(BarAction(EditAction.DURATION)) + effects +
                         listOf(
+                            EditAction.FIT,
                             EditAction.ROTATE,
                             EditAction.REPLACE,
                             EditAction.DUPLICATE,
@@ -73,6 +74,7 @@ object ClipActions {
                 SelectionKind.VIDEO -> {
                     listOf(BarAction(EditAction.TRIM)) + effects +
                         listOf(
+                            EditAction.VOLUME,
                             EditAction.SPLIT,
                             EditAction.SPEED,
                             EditAction.LOOP,
