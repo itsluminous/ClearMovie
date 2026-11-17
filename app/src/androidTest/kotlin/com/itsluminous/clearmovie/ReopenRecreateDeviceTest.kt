@@ -136,6 +136,12 @@ class ReopenRecreateDeviceTest {
         waitFor(hasText(s(R.string.action_play)).and(isEnabled()).or(hasText(s(R.string.action_pause)).and(isEnabled())), LAUNCH_TIMEOUT_MS)
     }
 
+    /** The editor is back on screen (not that its preview has loaded). */
+    private fun editorUp() {
+        waitFor(hasTestTag(EDITOR_EXPORT_TAG), LAUNCH_TIMEOUT_MS)
+        waitFor(hasTestTag(PREVIEW_TAG), LAUNCH_TIMEOUT_MS)
+    }
+
     /** Where the playhead is, 0 to 1 of the length (the label's progress semantics). */
     private fun progress(): Float =
         compose
@@ -213,27 +219,34 @@ class ReopenRecreateDeviceTest {
     @Test
     fun aReopenedEditorSurvivesRecreateAndRotationWhileItsExportRuns() {
         val workManager = WorkManager.getInstance(h.context)
-        // Small: what is tested is the editor beside a running export, not the encoder. A
-        // 1080p software encode on a loaded emulator, beside the preview's decoders, has
-        // stopped with ERROR_CODE_MUXING_TIMEOUT (no sample in 25 s) on this host.
+        // What is tested is the editor beside a running export, not the export: on a loaded
+        // emulator the preview's players and the export share its few decoders, and either
+        // can fail there (ERROR_CODE_MUXING_TIMEOUT, ERROR_CODE_DECODING_FAILED, a preview
+        // that never loads). So this test needs the editor back after each recreate and the
+        // export carried on or ended on its own, never stopped by the recreate.
         val id = ExportWorker.enqueue(workManager, project.id, ExportQuality.SMALL, "Reopen", replace = true)
         compose.waitUntil(TIMEOUT_MS) { workManager.getWorkInfoById(id).get()?.state == WorkInfo.State.RUNNING }
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            editorShown()
+            editorUp()
             // The recreate below happens while the export runs (Small takes far longer than this on an emulator).
             assertThat(workManager.getWorkInfoById(id).get()?.state).isEqualTo(WorkInfo.State.RUNNING)
             scenario.recreate()
-            editorShown()
+            editorUp()
             rotate(scenario, UiAutomation.ROTATION_FREEZE_90)
-            editorShown()
+            editorUp()
             rotate(scenario, UiAutomation.ROTATION_FREEZE_0)
-            editorShown()
+            editorUp()
 
-            // The export carried on, and the editor still shows it.
-            assertThat(workManager.getWorkInfoById(id).get()?.state).isAnyOf(WorkInfo.State.RUNNING, WorkInfo.State.SUCCEEDED)
+            // The recreates did not stop the export, and the editor still shows its state.
+            val info = workManager.getWorkInfoById(id).get()
+            Log.i(ExportHarness.TAG, "Export beside the recreates: ${info?.state} ${info?.outputData?.getString(ExportWorker.KEY_FAILURE)}")
+            assertThat(info?.state).isAnyOf(WorkInfo.State.RUNNING, WorkInfo.State.SUCCEEDED, WorkInfo.State.FAILED)
             compose.onNodeWithTag(EDITOR_EXPORT_TAG).performClick()
-            waitFor(hasTestTag(EXPORT_PROGRESS_TAG).or(hasText(s(R.string.export_done_title))))
+            waitFor(
+                hasTestTag(EXPORT_PROGRESS_TAG).or(hasText(s(R.string.export_done_title))).or(hasText(s(R.string.export_failed_title))),
+                LAUNCH_TIMEOUT_MS,
+            )
         }
         // Stop it and wait until it has ended, so a video it finished meanwhile is removed too.
         workManager.cancelWorkById(id).result.get()
