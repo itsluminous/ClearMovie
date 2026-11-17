@@ -83,10 +83,17 @@ class ReopenRecreateDeviceTest {
         h.cleanUp()
     }
 
-    private fun waitFor(matcher: SemanticsMatcher) =
-        compose.waitUntil(TIMEOUT_MS) {
-            compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
-        }
+    /**
+     * Waits for [matcher]. A moment when Compose does not go idle in time (the
+     * preview's players posting frames on a loaded software-GPU emulator)
+     * counts as "not yet", as in ShareDeviceTest, instead of failing the test.
+     */
+    private fun waitFor(
+        matcher: SemanticsMatcher,
+        timeoutMs: Long = TIMEOUT_MS,
+    ) = compose.waitUntil(timeoutMs) { notYetIfBusy { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() } }
+
+    private fun notYetIfBusy(check: () -> Boolean): Boolean = runCatching(check).getOrDefault(false)
 
     /**
      * The editor with its preview loaded: the players know the length (the
@@ -97,7 +104,7 @@ class ReopenRecreateDeviceTest {
         waitFor(hasTestTag(EDITOR_EXPORT_TAG))
         waitFor(hasTestTag(PREVIEW_TAG))
         val unloaded = h.context.getString(R.string.editor_time, "0:00", "0:00")
-        compose.waitUntil(TIMEOUT_MS) { runCatching { timeLabel() != unloaded }.getOrDefault(false) }
+        compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { timeLabel() != unloaded } }
         waitFor(hasText(s(R.string.action_play)).and(isEnabled()).or(hasText(s(R.string.action_pause)).and(isEnabled())))
         compose.waitForIdle()
     }
@@ -129,7 +136,8 @@ class ReopenRecreateDeviceTest {
     private fun previewPlays() {
         val atStart = progress()
         compose.onNodeWithText(s(R.string.action_play)).performClick()
-        compose.waitUntil(TIMEOUT_MS) { progress() > atStart + 0.02f }
+        // While it plays Compose may not go idle; the whole 14 s video plays out at most.
+        compose.waitUntil(PLAY_TIMEOUT_MS) { notYetIfBusy { progress() > atStart + 0.02f } }
     }
 
     /** Turns the display and waits until the activity has been created again for it. */
@@ -269,10 +277,15 @@ class ReopenRecreateDeviceTest {
         us: Long,
     ): Triple<String, Bitmap, Double> {
         val fraction = us.toFloat() / h.plannedUs(project)
+        val earlier = settledFrame()
         compose.onNodeWithContentDescription(s(R.string.editor_seek)).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
         compose.waitUntil(TIMEOUT_MS) { abs(progress() - fraction) < 0.01f }
         val at = timeLabel()
-        val before = settledFrame()
+        // The label moves at once, the picture only once the players have landed
+        // the seek: on a slow CI emulator the old picture stays steady for over a
+        // second. So the picture before the recreate is the first steady one that
+        // is no longer the picture from before the seek.
+        val before = settledFrame(unlike = earlier)
 
         scenario.recreate()
         editorShown()
@@ -299,9 +312,14 @@ class ReopenRecreateDeviceTest {
      * With [like], it also waits (up to the timeout) for a settled picture
      * that matches [like]: right after a recreate the new surfaces can hold an
      * earlier frame steady for a while before the restored seek lands. A
-     * preview that never shows [like] again still fails the test.
+     * preview that never shows [like] again still fails the test. With
+     * [unlike], it waits for a steady picture that differs from [unlike] (a
+     * seek that has landed).
      */
-    private fun settledFrame(like: Bitmap? = null): Bitmap {
+    private fun settledFrame(
+        like: Bitmap? = null,
+        unlike: Bitmap? = null,
+    ): Bitmap {
         var last = compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
         var same = 0
         var settled = 0
@@ -313,11 +331,12 @@ class ReopenRecreateDeviceTest {
             last = now
             if (same >= 2) {
                 settled++
-                if (like == null || meanAbsDiff(like, now) < MAX_DIFF) {
+                val moved = unlike == null || meanAbsDiff(unlike, now) >= 1.0
+                if (moved && (like == null || meanAbsDiff(like, now) < MAX_DIFF)) {
                     Log.i(ExportHarness.TAG, "Preview settled after $settled steady picture(s)")
                     return now
                 }
-                Log.i(ExportHarness.TAG, "Preview steady but not yet the frame before (diff ${meanAbsDiff(like, now)}): ${grid(now)}")
+                Log.i(ExportHarness.TAG, "Preview steady but not yet the frame wanted: ${grid(now)}")
             }
         }
         return last
@@ -333,6 +352,9 @@ class ReopenRecreateDeviceTest {
 
     private companion object {
         const val TIMEOUT_MS = 20_000L
+
+        /** Longer than the whole test video, so its end, when the preview stops, is inside the wait. */
+        const val PLAY_TIMEOUT_MS = 40_000L
 
         /**
          * The first video on MAIN plays from about 0:04 to 0:07. 4.2 s is just
