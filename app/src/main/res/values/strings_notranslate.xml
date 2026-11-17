@@ -17,4 +17,6 @@
         <item>hi</item>
         <item>hi-Latn</item>
     </string-array>
+    <!-- A sample of both scripts, shown in each caption font (a sample, not words to translate). -->
+    <string name="caption_font_sample" translatable="false">Aa अक्षर</string>
 </resources>

@@ -23,6 +23,7 @@ class TimelinePiecesTest {
         assertThat(order(SelectionKind.PHOTO))
             .containsExactly(
                 EditAction.DURATION,
+                EditAction.ADD_CAPTION,
                 EditAction.TRANSITION,
                 EditAction.ANIMATION,
                 EditAction.FIT,
@@ -36,6 +37,7 @@ class TimelinePiecesTest {
         assertThat(order(SelectionKind.VIDEO))
             .containsExactly(
                 EditAction.TRIM,
+                EditAction.ADD_CAPTION,
                 EditAction.TRANSITION,
                 EditAction.ANIMATION,
                 EditAction.VOLUME,

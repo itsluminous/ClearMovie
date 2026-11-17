@@ -15,6 +15,8 @@ package com.itsluminous.clearmovie.domain.model
  *   that leaves empty (MAIN and the preset frame row excepted).
  * - A clip an anchored clip grew over is moved to another row, so rows
  *   never overlap.
+ * - Captions attached to a photo or video follow it (see `Attachments`); one
+ *   that lands on another caption moves to another text row.
  * - START and END animations, and a sound's fades, fit inside their clip.
  *
  * It is a pure function of the project (a row it has to create gets an id
@@ -31,6 +33,7 @@ fun Project.normalized(): Project = normalized(relocate = true)
  */
 internal fun Project.normalized(relocate: Boolean): Project =
     normalizeMain()
+        .normalizeAttachments(relocate)
         .normalizeAnchors(relocate)
         .normalizeFits()
 

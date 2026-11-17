@@ -88,7 +88,7 @@ class TracksDemo {
         var playheadUs by mutableStateOf(6_500_000L)
 
         fun edit(change: Project.() -> Project): Boolean {
-            val ok = session.edit(change) == EditResult.Applied
+            val ok = session.edit(change = change) == EditResult.Applied
             if (ok) project = session.current!!
             return ok
         }

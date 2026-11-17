@@ -264,6 +264,8 @@ internal fun onTimedAction(
     val track = project.trackOf(id) ?: return
     when (action) {
         EditAction.EDIT_TEXT -> state.panel = OpenPanel(Panel.TEXT, id)
+        EditAction.ADD_CAPTION -> startCaption(id, actions, state)
+        EditAction.ANIMATION -> state.panel = OpenPanel(Panel.ANIMATION, id)
         EditAction.DURATION -> state.panel = OpenPanel(Panel.DURATION, id)
         EditAction.POSITION -> state.panel = OpenPanel(Panel.PIP_PLACE, id)
         EditAction.ROTATE -> actions.edit { rotate(id) }

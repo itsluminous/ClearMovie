@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -92,8 +93,10 @@ import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
+import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.canJoin
@@ -107,6 +110,7 @@ import com.itsluminous.clearmovie.domain.model.removeRow
 import com.itsluminous.clearmovie.domain.model.rotate
 import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.trimVideo
+import com.itsluminous.clearmovie.render.plan.frameWindow
 import com.itsluminous.clearmovie.ui.components.durationText
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
 import com.itsluminous.clearmovie.ui.editor.timeline.ClipActions
@@ -255,6 +259,29 @@ fun EditorScreen(
 
     // The rows the timeline shows now (measured below): Move row up and down step among these.
     var shownRows by remember { mutableStateOf(emptyList<String>()) }
+
+    // The caption editor (cm-captions): the caption it is open on, its box on the preview, and,
+    // however it closes, the end of its visit (a caption left without words goes).
+    val editingCaption =
+        state.panel
+            ?.takeIf { it.panel == Panel.TEXT }
+            ?.clipId
+            ?.let { project?.clip(it) as? TextClip }
+    val captionWindow = project?.let { frameWindow(it, ui.preset) } ?: NormRect.FULL
+    val openCaptionId = state.panel?.takeIf { it.panel == Panel.TEXT }?.clipId
+    val latestProject by rememberUpdatedState(project)
+    var captionVisit by remember { mutableStateOf(openCaptionId) }
+    LaunchedEffect(openCaptionId) {
+        val was = captionVisit
+        captionVisit = openCaptionId
+        if (was != null && was != openCaptionId) finishCaption(was, latestProject, actions)
+    }
+    val previewWithBox: @Composable (Modifier) -> Unit = { m ->
+        Box(m.clipToBounds()) {
+            preview(Modifier.fillMaxSize())
+            if (editingCaption != null && project != null) CaptionBoxOverlay(editingCaption, project, captionWindow, actions)
+        }
+    }
 
     /** A stacking move, with the one-time note when it puts a row behind the photos and videos (section 6.2). */
     fun restack(
@@ -452,6 +479,10 @@ fun EditorScreen(
                         state.panel = OpenPanel(Panel.CARD_TEXT, id)
                     }
 
+                    EditAction.ADD_CAPTION -> {
+                        startCaption(id, actions, state)
+                    }
+
                     EditAction.COLOUR -> {
                         state.panel = OpenPanel(Panel.CARD_COLOUR, id)
                     }
@@ -593,12 +624,26 @@ fun EditorScreen(
                                     state.selectedRow = id
                                 },
                                 // A panel leaves room for the rows (the one it is about first): it scrolls instead.
+                                // The caption editor may take more: its preview stays in sight above or beside it.
                                 maxHeight =
-                                    if (window.twoPane) {
-                                        (windowHeight * PANEL_SHARE_TWO_PANE).dp.coerceIn(160.dp, 420.dp)
-                                    } else {
-                                        (windowHeight * PANEL_SHARE).dp.coerceIn(200.dp, 420.dp)
+                                    when {
+                                        open.panel == Panel.TEXT && window.twoPane -> {
+                                            (windowHeight * CAPTION_PANEL_SHARE_TWO_PANE).dp.coerceIn(160.dp, 560.dp)
+                                        }
+
+                                        open.panel == Panel.TEXT -> {
+                                            (windowHeight * CAPTION_PANEL_SHARE).dp.coerceIn(200.dp, 480.dp)
+                                        }
+
+                                        window.twoPane -> {
+                                            (windowHeight * PANEL_SHARE_TWO_PANE).dp.coerceIn(160.dp, 420.dp)
+                                        }
+
+                                        else -> {
+                                            (windowHeight * PANEL_SHARE).dp.coerceIn(200.dp, 420.dp)
+                                        }
                                     },
+                                captionWindow = captionWindow,
                             )
                         } else {
                             val timedClip = selectedClip?.takeIf { selectedSlot == null }
@@ -653,7 +698,7 @@ fun EditorScreen(
                             .windowInsetsPadding(WindowInsets.safeDrawing.pane(left = true)),
                     ) {
                         Box(Modifier.weight(1f).fillMaxWidth().testTag(EDITOR_PREVIEW_BOX_TAG), contentAlignment = Alignment.Center) {
-                            preview(Modifier.aspectRatio(16f / 9f))
+                            previewWithBox(Modifier.aspectRatio(16f / 9f))
                         }
                         Surface(Modifier.fillMaxWidth()) { controls(Modifier) }
                     }
@@ -689,7 +734,7 @@ fun EditorScreen(
                                     .testTag(EDITOR_PREVIEW_BOX_TAG),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                preview(Modifier.fillMaxHeight().aspectRatio(16f / 9f, matchHeightConstraintsFirst = true))
+                                previewWithBox(Modifier.fillMaxHeight().aspectRatio(16f / 9f, matchHeightConstraintsFirst = true))
                             }
                         }
                         controls(Modifier)
@@ -1056,6 +1101,10 @@ private const val PANEL_SHARE = 0.3
 
 /** The same in two panes, where the panel shares the right pane with the rows only. */
 private const val PANEL_SHARE_TWO_PANE = 0.38
+
+/** The caption editor's share of an upright window, and of the right pane in two panes. */
+private const val CAPTION_PANEL_SHARE = 0.42
+private const val CAPTION_PANEL_SHARE_TWO_PANE = 0.72
 
 /** Above this text size Undo and Redo drop their words. */
 private const val TOP_BAR_LABELS_FONT_SCALE = 1.3f

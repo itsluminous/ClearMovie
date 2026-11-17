@@ -350,9 +350,16 @@ class EditorViewModel
             }
         }
 
-        /** Applies [change] to the project as one undo step. False when it was refused (nothing changes). */
-        fun edit(change: Project.() -> Project): Boolean {
-            val result = session.edit(change)
+        /**
+         * Applies [change] to the project as one undo step, or, with a
+         * [mergeKey], as part of the step the last edit with that key made.
+         * False when it was refused (nothing changes).
+         */
+        fun edit(
+            mergeKey: String? = null,
+            change: Project.() -> Project,
+        ): Boolean {
+            val result = session.edit(mergeKey, change)
             val applied = result == EditResult.Applied
             if (applied) session.current?.let(::write)
             // The bar only offers edits that apply; one that is refused all the same is said, never silent.
@@ -363,6 +370,15 @@ class EditorViewModel
 
         fun undo() {
             session.undo()?.let(::write)
+            publishHistory()
+        }
+
+        /** Ends a run of merged edits (the caption editor closed with Done). */
+        fun endMerge() = session.endMerge()
+
+        /** Takes back the run of edits made with [mergeKey] (the caption editor's Cancel). */
+        fun revertMerge(mergeKey: String) {
+            session.revertMerge(mergeKey)?.let(::write)
             publishHistory()
         }
 
@@ -660,6 +676,8 @@ class EditorViewModel
             // A repaired preset file is a change even though the plan is the same.
             val files = set.presetStatus?.slots?.mapValues { (_, s) -> (s as? SlotStatus.Ready)?.binding?.file }
             if (!firstLoad && schedule == engine.schedule && files == loadedFiles) return
+            // Only captions changed (typing, styling, placing one): the players carry on as they are.
+            if (!firstLoad && files == loadedFiles && engine.updateCaptions(schedule)) return
             loadedFiles = files
             val start: Long
             val play: Boolean

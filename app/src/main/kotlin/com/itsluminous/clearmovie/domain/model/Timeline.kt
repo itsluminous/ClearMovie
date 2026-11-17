@@ -109,9 +109,3 @@ fun Project.anchorSpan(anchor: SpanAnchor): Pair<Long, Long>? =
             endingSlot()?.let { it.startMs to it.endMs }
         }
     }
-
-/**
- * The span of a MAIN clip, for "Add text" on a photo or video: a caption
- * that covers exactly that item (section 6.1).
- */
-fun Project.captionSpanFor(mainClipId: ClipId): Pair<Long, Long>? = mainSlot(mainClipId)?.let { it.startMs to it.endMs }

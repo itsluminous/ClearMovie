@@ -36,7 +36,10 @@ data class Violation(
         /** Names, captions and styles are within limits. */
         TEXT,
 
-        /** Clips anchored to the frame or the ending have exactly the span they follow. */
+        /**
+         * Clips anchored to the frame or the ending have exactly the span they
+         * follow; a caption attached to a photo or video is where its item puts it.
+         */
         ANCHOR,
 
         /** The project's frozen preset settings (ducking, effect defaults) are in range. */
@@ -87,7 +90,26 @@ fun Project.validate(): List<Violation> =
         }
         checkSettings(::fail)
         if (mains == 1) checkAnchors(::fail)
+        if (mains == 1) checkAttachments(::fail)
     }
+
+/** An attached caption follows a photo or video that is there, and sits where that item puts it. */
+private fun Project.checkAttachments(fail: (Violation.Rule, String) -> Unit) {
+    val spans = AttachSpans(this)
+    for (track in tracks) {
+        for (clip in track.clips) {
+            val a = (clip as? TextClip)?.attachedTo ?: continue
+            val span = spans[a.clip]
+            when {
+                span == null -> fail(Violation.Rule.ANCHOR, "${clip.id.value} is attached to an item that is not a photo or video here")
+
+                a.offsetMs < 0 || clip.following(
+                    span,
+                ) != clip -> fail(Violation.Rule.ANCHOR, "${clip.id.value} is not where its item puts it")
+            }
+        }
+    }
+}
 
 private fun Project.checkSettings(fail: (Violation.Rule, String) -> Unit) {
     val levels = Limits.MIN_VOLUME_DB..0.0

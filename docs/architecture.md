@@ -113,6 +113,18 @@ Android types, so all of it is tested on the JVM.
   their own. A row emptied by a delete or move is removed in the same step,
   except MAIN and the preset frame row; deleting the preset frame switches
   its row off and keeps the frame.
+- **Captions** (`Attachments.kt`). "Add caption" on a photo or video makes
+  a caption attached to it (`TextClip.attachedTo`): normalising places it
+  where its item plays, between the middles of the transitions into and out
+  of it, so it moves when MAIN is reordered or a picture-in-picture item is
+  moved, stays inside the item when it is trimmed or sped up, and a caption
+  that lands on another goes to a free text row. Deleting the item (or its
+  row) deletes its captions in the same step; split copies a whole-item
+  caption onto both parts, join merges them, duplicate copies them. Placed
+  by hand inside its item, a caption keeps an offset; placed outside, it is
+  free. Captions made on a text row ("+", "Add here") are free and keep
+  their times. A style stores only what differs from the preset's
+  (`CaptionStyleOverride.between`), so Reset to preset clears it.
 - **Undo.** `ProjectEditor` applies one edit per undo step (50 kept), and
   accepts a result only if `validate()` finds no broken invariant.
 - **Presets.** `PresetParser` reads `preset.json` (schema 1) field by field,
@@ -127,8 +139,8 @@ Android types, so all of it is tested on the JVM.
   derived values again (spans and fits, flagged as `repaired`), never moving,
   adding or dropping an item, and refuses files that are too large, too
   deeply nested, from a newer app or otherwise invalid. `ProjectMigrations` upgrades older
-  versions one step at a time (schema 1 is the first, so there are no steps
-  yet). Golden files under `app/src/test/resources/fixtures/project/` must
+  versions one step at a time (schema 2 added `attachedTo`; the 1 to 2
+  step rewrites nothing, so a schema 1 caption reads as a free one). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.
 
 ## Rendering
@@ -172,7 +184,14 @@ Rendering has two layers, both under `render`:
   SwiftShader as on a phone);
   `GainEnvelopeAudioProcessor` applies the sound envelope. Captions and cards
   are drawn as bitmaps by `CaptionBitmapRenderer` and kept in
-  `noBackupFilesDir/render/` by a hash of their content, trimmed to 64 MB.
+  `noBackupFilesDir/render/` by a hash of their content (and the renderer's
+  `VERSION`), trimmed to 64 MB. It lays text out with `StaticLayout` in the
+  bundled Noto fonts (`CaptionTypefaces`: Noto Sans or Serif for Latin with
+  Noto Sans or Serif Devanagari as the first fallback, then the system
+  fonts), so the platform's HarfBuzz shaping forms Devanagari conjuncts and
+  matras, and shrinks text that does not fit its box. Font ids map to the
+  app's own `res/font` files through a fixed table; an unknown id draws in
+  the default font.
   `FileMediaResolver` and `UriGuard` let the renderer read only other apps'
   `content://` media and files inside the app's own folders. Building a
   composition reads files and draws bitmaps, so it runs off the main thread.
@@ -232,8 +251,14 @@ lays it out for players:
 - **Sound rows** (the frame's music, the closing message) each play in an
   audio-only player. Every player's volume follows the plan's gain envelopes,
   so the music ducks under clip sound as it will in the export.
-- **Captions** are drawn as text in their boxes. Picture-in-picture rows come
-  with cm-tracks; until then only the exact draft shows them.
+- **Captions** are the export's own images: `CaptionBitmapRenderer` draws
+  each at its box's size on the 1080-line canvas and the preview scales it
+  to its box, so wrapping, size, outline and band match the export. A
+  schedule that differs only in its captions is taken without reloading any
+  player (`LayeredPreviewEngine.updateCaptions`), so typing and styling show
+  at once. While the caption editor is open, its box is outlined on the
+  preview and can be dragged inside the frame window's safe area
+  (`CaptionPlaces`), snapping to the preset's place.
 
 `LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. It takes its
 players from a `PreviewPlayerFactory` (`ExoPreviewPlayers` in the app), so

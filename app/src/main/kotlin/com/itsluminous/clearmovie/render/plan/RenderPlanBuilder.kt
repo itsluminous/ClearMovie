@@ -124,11 +124,7 @@ class RenderPlanBuilder(
             }
     }
 
-    private fun windowRect(project: Project): NormRect {
-        val frame = preset?.frame ?: return NormRect.FULL
-        val frameRowOn = project.tracks.any { it.presetRole == PresetRole.FRAME && it.enabled && it.clips.isNotEmpty() }
-        return if (frameRowOn) frame.contentRect else NormRect.FULL
-    }
+    private fun windowRect(project: Project): NormRect = frameWindow(project, preset)
 
     // ---- MAIN ----------------------------------------------------------------
 
@@ -860,3 +856,16 @@ internal class SoundLane(
 }
 
 internal fun Speed.sourceUs(timelineUs: Long): Long = timelineUs * numerator / denominator
+
+/**
+ * Where photos and videos are drawn: the preset frame's window while the
+ * frame row is on, else the whole canvas. Captions are placed inside it too.
+ */
+fun frameWindow(
+    project: Project,
+    preset: Preset?,
+): NormRect {
+    val frame = preset?.frame ?: return NormRect.FULL
+    val frameRowOn = project.tracks.any { it.presetRole == PresetRole.FRAME && it.enabled && it.clips.isNotEmpty() }
+    return if (frameRowOn) frame.contentRect else NormRect.FULL
+}

@@ -81,9 +81,11 @@ import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MediaClip
+import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Speed
+import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.TextRules
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
@@ -114,6 +116,7 @@ import kotlin.math.roundToLong
 /** Test tags. */
 const val PANEL_TAG = "edit_panel"
 const val PANEL_DONE_TAG = "edit_panel_done"
+const val PANEL_CANCEL_TAG = "edit_panel_cancel"
 
 fun insertOptionTag(option: String) = "insert_option_$option"
 
@@ -136,6 +139,21 @@ val CARD_COLOURS: List<Pair<ArgbColor, Int>> =
 interface EditorCallbacks {
     /** Applies a model edit as one undo step; false when it was refused. */
     fun edit(change: Project.() -> Project): Boolean
+
+    /**
+     * Applies a model edit as part of the undo step that edits with the same
+     * [mergeKey] make one after another (one visit to the caption editor).
+     */
+    fun editMerged(
+        mergeKey: String,
+        change: Project.() -> Project,
+    ): Boolean = edit(change)
+
+    /** Ends a run of merged edits: the next edit is a step of its own. */
+    fun endMerge() = Unit
+
+    /** Takes back the run of edits made with [mergeKey], leaving nothing to redo (the caption editor's Cancel). */
+    fun revertMerge(mergeKey: String) = Unit
 
     fun undo()
 
@@ -203,6 +221,7 @@ fun EditPanel(
     onRemoveRow: (TrackId) -> Unit = {},
     onSelectRow: (TrackId) -> Unit = {},
     maxHeight: Dp = 420.dp,
+    captionWindow: NormRect = NormRect.FULL,
 ) {
     val close = { onPanel(null) }
     val clip = open.clipId?.let { project.clip(it) }
@@ -254,7 +273,7 @@ fun EditPanel(
                     if (onMain && clip is MainClip) {
                         InsertPanel(open, clip, callbacks, onPanel)
                     } else {
-                        TimedInsertPanel(open, track, clip, rows, playheadMs, callbacks, onPanel)
+                        TimedInsertPanel(open, track, clip, rows, playheadMs, callbacks, onPanel, onSelect)
                     }
                 }
 
@@ -284,7 +303,12 @@ fun EditPanel(
                 }
 
                 Panel.TEXT -> {
-                    TextPanel(open, track, clip, playheadMs, callbacks, onSelect, close)
+                    if (clip is TextClip) {
+                        CaptionPanel(clip, project, captionWindow, callbacks, onDone = close)
+                    } else {
+                        // Only a caption has this editor (a panel saved by an older version may name another item).
+                        LaunchedEffect(open) { close() }
+                    }
                 }
 
                 Panel.SOUND_TRIM -> {
@@ -343,7 +367,9 @@ internal fun PanelTitle(
             modifier = Modifier.weight(1f).semantics { heading() },
         )
         if (onCancel != null) {
-            TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.action_cancel)) }
+            TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_CANCEL_TAG)) {
+                Text(stringResource(R.string.action_cancel))
+            }
         }
         if (onDone != null) {
             Button(onClick = onDone, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_DONE_TAG)) {

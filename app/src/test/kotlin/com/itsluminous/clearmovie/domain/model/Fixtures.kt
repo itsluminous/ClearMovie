@@ -84,7 +84,7 @@ object Fixtures {
     /**
      * A project that uses every clip kind, media reference, anchor and
      * optional field at least once: the source of the golden fixture
-     * `fixtures/project/rich-v1.json`.
+     * `fixtures/project/rich-v2.json`.
      */
     fun richProject(): Project {
         val ids = SequentialIds("g")
@@ -132,5 +132,30 @@ object Fixtures {
             .sendBackward(pipRow)
             .moveRow(voiceRow, 0)
             .assertValid()
+    }
+
+    /**
+     * [richProject] as schema 1 stored it (`rich-v1.json`): before captions
+     * could be attached, "Welcome" was a free caption over photo1's whole slot.
+     */
+    fun richProjectV1(): Project {
+        val p = richProject()
+        return p.copy(
+            tracks =
+                p.tracks.map { t ->
+                    t.copy(
+                        clips =
+                            t.clips.map {
+                                if (it is TextClip &&
+                                    it.text == "Welcome"
+                                ) {
+                                    it.copy(startMs = 6500, durationMs = 4000, attachedTo = null)
+                                } else {
+                                    it
+                                }
+                            },
+                    )
+                },
+        )
     }
 }

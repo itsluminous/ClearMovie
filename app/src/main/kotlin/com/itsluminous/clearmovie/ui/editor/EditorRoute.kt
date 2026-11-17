@@ -224,7 +224,16 @@ fun EditorRoute(
                         ?.let(onFixPreset)
                 }
 
-                override fun edit(change: Project.() -> Project): Boolean = viewModel.edit(change)
+                override fun edit(change: Project.() -> Project): Boolean = viewModel.edit(change = change)
+
+                override fun editMerged(
+                    mergeKey: String,
+                    change: Project.() -> Project,
+                ): Boolean = viewModel.edit(mergeKey, change)
+
+                override fun endMerge() = viewModel.endMerge()
+
+                override fun revertMerge(mergeKey: String) = viewModel.revertMerge(mergeKey)
 
                 override fun undo() = viewModel.undo()
 

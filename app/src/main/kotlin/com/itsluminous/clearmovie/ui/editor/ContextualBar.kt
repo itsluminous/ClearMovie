@@ -239,6 +239,7 @@ fun barLabel(action: EditAction): Int =
         EditAction.MOVE_TO_ROW -> R.string.action_move_to_row
         EditAction.FADE -> R.string.action_fade
         EditAction.POSITION -> R.string.action_position
+        EditAction.ADD_CAPTION -> R.string.action_add_caption
     }
 
 fun barIcon(action: EditAction): Int =
@@ -284,6 +285,7 @@ fun barIcon(action: EditAction): Int =
         EditAction.MOVE_TO_ROW -> R.drawable.ic_swap_vert
         EditAction.FADE -> R.drawable.ic_fade
         EditAction.POSITION -> R.drawable.ic_open_with
+        EditAction.ADD_CAPTION -> R.drawable.ic_closed_caption
     }
 
 private val MIN_BUTTON = 72.dp

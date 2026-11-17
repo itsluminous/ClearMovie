@@ -227,9 +227,9 @@ class EditorScreenTest {
     fun `tapping an item selects it and the bar shows that kind's actions in order`() {
         forEachSize { _, h ->
             selectItem(h, "v2")
-            assertBarOrder(listOf(EditAction.TRIM, EditAction.TRANSITION, EditAction.ANIMATION, EditAction.VOLUME))
+            assertBarOrder(listOf(EditAction.TRIM, EditAction.ADD_CAPTION, EditAction.TRANSITION, EditAction.ANIMATION))
             selectItem(h, "p1", zoomIns = 0)
-            assertBarOrder(listOf(EditAction.DURATION, EditAction.TRANSITION, EditAction.ANIMATION))
+            assertBarOrder(listOf(EditAction.DURATION, EditAction.ADD_CAPTION, EditAction.TRANSITION, EditAction.ANIMATION))
             selectItem(
                 h,
                 project.mainClips
@@ -782,7 +782,7 @@ class EditorScreenTest {
                 assertThat((b.right - b.left).v()).isAtLeast(47.5f)
             }
             selectItem(h, "v2")
-            for (a in listOf(EditAction.TRIM, EditAction.VOLUME)) {
+            for (a in listOf(EditAction.TRIM, EditAction.ADD_CAPTION)) {
                 val b = compose.onNodeWithTag(barActionTag(a)).bounds()
                 assertThat((b.right - b.left).v()).isAtLeast(67.5f)
                 assertThat((b.bottom - b.top).v()).isAtLeast(67.5f)

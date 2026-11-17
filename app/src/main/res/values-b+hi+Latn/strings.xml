@@ -476,7 +476,6 @@
     <string name="insert_sound_body">Aapki files se</string>
     <string name="insert_overlay">Frame video</string>
     <string name="insert_overlay_body">Aapki files se. Iske green hisson me neeche ka video dikhega.</string>
-    <string name="text_title">Video par text</string>
     <string name="fade_title">Fade</string>
     <string name="fade_in">Shuru me fade: %1$s</string>
     <string name="fade_out">Aakhir me fade: %1$s</string>
@@ -510,4 +509,30 @@
     </plurals>
     <!-- Short label in the bar: adds photos and videos at the end. -->
     <string name="bar_add_media">Photos add karein</string>
+    <!-- cm-captions: the caption editor. -->
+    <string name="action_add_caption">Caption jodein</string>
+    <string name="caption_title">Caption</string>
+    <string name="caption_text_hint">Dikhane wale shabd</string>
+    <string name="caption_tab_words">Shabd</string>
+    <string name="caption_tab_place">Jagah</string>
+    <string name="caption_tab_size">Size</string>
+    <string name="caption_tab_font">Font</string>
+    <string name="caption_tab_colour">Rang</string>
+    <string name="caption_place_usual">Usual</string>
+    <string name="caption_place_top">Upar</string>
+    <string name="caption_place_middle">Beech mein</string>
+    <string name="caption_place_bottom">Neeche</string>
+    <string name="caption_place_hint">Ya picture par box ko kheenchein.</string>
+    <string name="caption_size_value">%1$d%%</string>
+    <string name="caption_size_smaller">Chhota</string>
+    <string name="caption_size_bigger">Bada</string>
+    <string name="caption_font_sans">Saada</string>
+    <string name="caption_font_sans_bold">Mota</string>
+    <string name="caption_font_serif">Classic</string>
+    <string name="caption_font_serif_bold">Classic mota</string>
+    <string name="caption_outline">Kinara</string>
+    <string name="caption_background">Shabdon ke peeche patti</string>
+    <string name="caption_reset">Preset jaisa karein</string>
+    <string name="caption_box_description">Caption ka box. Caption khiskane ke liye ise kheenchein, ya Jagah chunein.</string>
+    <string name="caption_colour_choice">%1$s akshar</string>
 </resources>

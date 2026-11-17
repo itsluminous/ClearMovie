@@ -71,6 +71,15 @@ data class PreviewSchedule(
 
     fun captionsAt(us: Long): List<CaptionEntry> = captions.filter { us >= it.startUs && us < it.endUs }
 
+    /**
+     * True when this schedule and [other] play the same pictures and sounds and
+     * differ at most in their captions (and so in where caption layers sit in
+     * [layerOrder]): the players need no reload.
+     */
+    fun differsOnlyInCaptions(other: PreviewSchedule): Boolean =
+        copy(captions = other.captions, layerOrder = other.layerOrder) == other &&
+            layerOrder.filterNot { it is LayerRef.Captions } == other.layerOrder.filterNot { it is LayerRef.Captions }
+
     /** One drawn layer: the MAIN row, an overlay lane by index, or the captions of one text row. */
     sealed interface LayerRef {
         data object Main : LayerRef

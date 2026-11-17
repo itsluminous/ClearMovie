@@ -177,6 +177,27 @@ data class CaptionStyleOverride(
 
     companion object {
         val NONE = CaptionStyleOverride()
+
+        /**
+         * The smallest override that turns [defaults] into [wanted]: only what
+         * differs is kept, so choosing the preset's own value again stores
+         * nothing and **Reset to preset** is offered only when something differs.
+         */
+        fun between(
+            defaults: CaptionStyle,
+            wanted: CaptionStyle,
+        ): CaptionStyleOverride =
+            CaptionStyleOverride(
+                box = wanted.box.takeIf { it != defaults.box },
+                align = wanted.align.takeIf { it != defaults.align },
+                font = wanted.font.takeIf { it != defaults.font },
+                sizePx = wanted.sizePx.takeIf { it != defaults.sizePx },
+                color = wanted.color.takeIf { it != defaults.color },
+                outline = wanted.outline.takeIf { it != defaults.outline },
+                clearOutline = wanted.outline == null && defaults.outline != null,
+                background = wanted.background.takeIf { it != defaults.background },
+                clearBackground = wanted.background == null && defaults.background != null,
+            )
     }
 }
 
@@ -189,3 +210,30 @@ internal fun CaptionStyle.problems(): List<String> =
         outline?.let { if (it.widthPx !in 0..CaptionStyle.MAX_OUTLINE_PX) add("caption outline width is out of range") }
         background?.let { if (it.cornerPx !in 0..CaptionStyle.MAX_CORNER_PX) add("caption corner radius is out of range") }
     }
+
+/**
+ * The bundled caption fonts (cm-captions). Each draws Latin with Noto Sans
+ * or Noto Serif and Devanagari with Noto Sans or Noto Serif Devanagari, in
+ * the same weight, so English, Hindi and Hinglish captions look of a piece.
+ * A style's `font` is one of these ids; an id the app does not know (a hand
+ * written `preset.json`, a newer app's project) draws as [DEFAULT], so no
+ * caption ever fails to show, and nothing from a style is ever used as a file
+ * name or path.
+ */
+enum class CaptionFont(
+    val id: String,
+    val bold: Boolean,
+) {
+    SANS("noto_sans_devanagari_regular", bold = false),
+    SANS_BOLD("noto_sans_devanagari_bold", bold = true),
+    SERIF("noto_serif_devanagari_regular", bold = false),
+    SERIF_BOLD("noto_serif_devanagari_bold", bold = true),
+    ;
+
+    companion object {
+        val DEFAULT = SANS_BOLD
+
+        /** The font for [id], or [DEFAULT]. */
+        fun of(id: String): CaptionFont = entries.firstOrNull { it.id == id } ?: DEFAULT
+    }
+}

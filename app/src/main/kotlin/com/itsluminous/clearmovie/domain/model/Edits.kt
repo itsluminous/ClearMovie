@@ -151,14 +151,22 @@ fun Project.addText(
     ids: IdSource = RandomIds,
 ): Project = addTimedClip(TextClip(ids.clipId(), startMs, durationMs, text), ids = ids)
 
-/** "Caption" on a MAIN photo or video: a caption over exactly that item. */
+/**
+ * "Add caption" on a photo or video, on MAIN or a picture-in-picture row: a
+ * caption attached to that item, covering it whole (see [CaptionAttachment]),
+ * on the highest free text row or a new one. [style] is the user's changes
+ * to the preset style, if any.
+ */
 fun Project.addCaptionFor(
-    mainClipId: ClipId,
+    itemId: ClipId,
     text: String,
     ids: IdSource = RandomIds,
+    captionId: ClipId = ids.clipId(),
+    style: CaptionStyleOverride = CaptionStyleOverride.NONE,
 ): Project {
-    val (start, end) = requireNotNull(captionSpanFor(mainClipId)) { "No such clip on the MAIN row" }
-    return addText(text, start, end - start, ids)
+    val (start, end) = requireNotNull(attachSpan(itemId)) { "Only a photo or video takes a caption" }
+    val caption = TextClip(captionId, start, end - start, text, style, attachedTo = CaptionAttachment(itemId))
+    return addTimedClip(caption, ids = ids)
 }
 
 /**
@@ -195,7 +203,10 @@ fun Project.deleteClip(clipId: ClipId): Project {
         // The frame row holds only the frame (see Track.takes).
         return setTrackEnabled(track.id, false)
     }
-    var project = withTrackClips(track.id, track.clips.filterNot { it.id == clipId }).afterRemovingFrom(track.id)
+    // A photo's or video's captions go with it, in the same step (undo brings both back).
+    val captioned = if (clip is MediaClip) withoutCaptionsOf(setOf(clipId)) else this
+    val home = captioned.requireTrack(track.id)
+    var project = captioned.withTrackClips(home.id, home.clips.filterNot { it.id == clipId }).afterRemovingFrom(home.id)
     if (clip is EndingClip) {
         for (t in project.tracks) {
             val spoken = t.clips.filter { it is AudioClip && it.anchor == SpanAnchor.Ending }
@@ -255,7 +266,7 @@ fun Project.moveClip(
     val target = requireTrack(targetTrackId ?: source.id)
     require(target.type == source.type) { "A clip moves only to a row of the same kind" }
     require(source.type != TrackType.AUDIO || target.audioRole == source.audioRole) { "Sound moves only to a row of the same kind" }
-    val clip = requireClip(clipId).detached().withStartMs(startMs)
+    val clip = placedByHand(requireClip(clipId).detached(), startMs)
     if (source.presetRole != null) {
         require(target.id == source.id) { "This item stays on its own row" }
         require(startMs >= 0) { "A clip can't start before the video" }
@@ -299,7 +310,7 @@ fun Project.nudgeClip(
     require(track.type.isTimed) { "Use moveMainClip on the MAIN row" }
     require(deltaMs != 0L) { "No move" }
     val target = requireNotNull(nudgedStart(clipId, deltaMs)) { "No room to move that way" }
-    val clip = requireClip(clipId).detached().withStartMs(target)
+    val clip = placedByHand(requireClip(clipId).detached(), target)
     return withTrackClips(track.id, track.clips.map { if (it.id == clipId) clip else it }).normalized()
 }
 
@@ -326,6 +337,12 @@ fun Project.nudgedStart(
     return target.takeIf { it >= 0 && if (forward) it > clip.startMs else it < clip.startMs }
 }
 
+/** [clip] moved to [startMs] by hand; an attached caption stays on its item while it starts inside it. */
+private fun Project.placedByHand(
+    clip: Clip,
+    startMs: Long,
+): Clip = if (clip is TextClip) reattached(clip, startMs, clip.durationMs) else clip.withStartMs(startMs)
+
 /** The clip with its span anchor removed: the user has taken control of its timing. */
 private fun Clip.detached(): Clip =
     when (this) {
@@ -351,7 +368,15 @@ fun Project.addRow(
 fun Project.removeRow(trackId: TrackId): Project {
     val track = requireTrack(trackId)
     require(track.isRemovable) { "This row can't be removed" }
-    return dropTrack(trackId).normalized()
+    // The captions of its photos and videos go with them.
+    val captioned =
+        withoutCaptionsOf(
+            track.clips
+                .filterIsInstance<MediaClip>()
+                .map { it.id }
+                .toSet(),
+        )
+    return captioned.dropTrack(trackId).normalized()
 }
 
 /** Moves a row on screen to [toIndex]. The stacking order, and so the video, is unchanged. */
@@ -589,7 +614,7 @@ fun Project.setTextTiming(
     durationMs: Long,
 ): Project {
     require(durationMs >= Limits.MIN_CLIP_MS) { "Too short" }
-    return updateTyped<TextClip>(clipId, "captions") { it.copy(startMs = startMs, durationMs = durationMs) }
+    return updateTyped<TextClip>(clipId, "captions") { reattached(it, startMs, durationMs) }
 }
 
 /** Overrides parts of a caption's or card's preset style; [CaptionStyleOverride.NONE] is **Reset to preset**. */
@@ -664,7 +689,7 @@ fun Project.splitClip(
             .toMutableList()
             .apply { set(index, first) }
             .apply { add(index + 1, second) }
-    return withTrackClips(track.id, clips).normalized()
+    return withTrackClips(track.id, clips).captionsAfterSplit(clipId, newId).normalized()
 }
 
 /**
@@ -688,7 +713,7 @@ fun Project.joinClips(
             animations = first.animations.copy(end = second.animations.end),
         )
     val clips = track.clips.filterNot { it.id == secondId }.map { if (it.id == firstId) joined else it }
-    return withTrackClips(track.id, clips).normalized()
+    return captionsBeforeJoin(firstId, secondId).withTrackClips(track.id, clips).normalized()
 }
 
 /** Whether "Join" is offered for these two clips (section 11.2). */
@@ -786,7 +811,7 @@ fun Project.duplicateClip(
             set(i, original.withTransition(null))
             add(i + 1, copy)
         }
-    return withTrackClips(main.id, placed).normalized()
+    return withTrackClips(main.id, placed).captionsForDuplicate(clipId, newId).normalized()
 }
 
 /**

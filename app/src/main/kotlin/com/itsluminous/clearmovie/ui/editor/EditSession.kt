@@ -26,11 +26,18 @@ class EditSession(
     val canUndo: Boolean get() = history.canUndo
     val canRedo: Boolean get() = history.canRedo
 
+    /**
+     * The key of the step the last edit made, while later edits with the same
+     * key keep joining it (see [edit]); null once anything else happens.
+     */
+    private var mergeKey: String? = null
+
     /** The open project as the repository has it now. */
     fun adopt(project: Project) {
         val previous = current
         current = project
         if (previous == null || previous == project) return
+        mergeKey = null
         if (previous.id != project.id) {
             history.clear()
             return
@@ -38,8 +45,17 @@ class EditSession(
         history.push(previous)
     }
 
-    /** Applies [change]; on [EditResult.Applied], [current] is the new project, to be written. */
-    fun edit(change: Project.() -> Project): EditResult {
+    /**
+     * Applies [change]; on [EditResult.Applied], [current] is the new project,
+     * to be written. Edits that pass the same [mergeKey] one after another
+     * make one step between them (a caption typed, styled and placed in one
+     * visit to the caption editor is one Undo); an edit without one, an undo
+     * or a redo ends the run.
+     */
+    fun edit(
+        mergeKey: String? = null,
+        change: Project.() -> Project,
+    ): EditResult {
         val now = current ?: return EditResult.Refused("nothing open")
         val next =
             try {
@@ -50,18 +66,42 @@ class EditSession(
         if (next == now) return EditResult.Unchanged
         val problems = next.validate()
         if (problems.isNotEmpty()) return EditResult.Refused("the result breaks an invariant", problems)
-        history.push(now)
+        val joins = mergeKey != null && mergeKey == this.mergeKey && history.canUndo
+        if (!joins) history.push(now)
+        this.mergeKey = mergeKey
         current = next
         return EditResult.Applied
     }
 
+    /** Ends a run of merged edits, so the next edit is a step of its own. */
+    fun endMerge() {
+        mergeKey = null
+    }
+
+    /**
+     * Takes back the run of edits made with [mergeKey] ("Cancel" in the
+     * caption editor): the project before the run, now [current], or null when
+     * the last step is not that run. Unlike [undo] it leaves nothing to redo.
+     */
+    fun revertMerge(mergeKey: String): Project? {
+        if (this.mergeKey != mergeKey) return null
+        this.mergeKey = null
+        val now = current ?: return null
+        val before = history.undo(now) ?: return null
+        history.dropLastRedo()
+        current = before
+        return before
+    }
+
     /** The project to go back to, now [current], or null. */
     fun undo(): Project? {
+        mergeKey = null
         val now = current ?: return null
         return history.undo(now)?.also { current = it }
     }
 
     fun redo(): Project? {
+        mergeKey = null
         val now = current ?: return null
         return history.redo(now)?.also { current = it }
     }

@@ -17,10 +17,12 @@ import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.intent.Intents
@@ -36,11 +38,13 @@ import com.itsluminous.clearmovie.data.preset.SlotStatus
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Speed
+import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.ui.editor.BAR_TAG
 import com.itsluminous.clearmovie.ui.editor.EDITOR_TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.PANEL_DONE_TAG
 import com.itsluminous.clearmovie.ui.editor.PANEL_TAG
+import com.itsluminous.clearmovie.ui.editor.TEXT_FIELD_TAG
 import com.itsluminous.clearmovie.ui.editor.ZOOM_IN_TAG
 import com.itsluminous.clearmovie.ui.editor.barActionTag
 import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
@@ -247,6 +251,50 @@ class FlowDeviceTest {
             intended(not(isInternal()), Intents.times(1))
         }
     }
+
+    /**
+     * cm-captions: Add caption on a photo, Hindi typed into the editor, a
+     * recreation in the middle of typing, more words; the editor and the
+     * words survive, and the caption is attached to the photo.
+     */
+    @Test
+    fun aCaptionBeingTypedSurvivesARecreation() {
+        pickerAnswers(listOf(insert("fixtures/photo_blue.png", "image/png"), insert("fixtures/photo_quadrants.png", "image/png")))
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitFor(hasTestTag(HOME_LIST_TAG))
+            compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(s(R.string.home_start_blank)))
+            compose.onNodeWithText(s(R.string.home_start_blank)).performClick()
+            itemsShown(photos = 2, videos = 0)
+            compose.onAllNodes(hasContentDescription(s(R.string.editor_item_photo) + ",", substring = true)).onFirst().performClick()
+            waitFor(hasTestTag(barActionTag(EditAction.ADD_CAPTION)))
+            compose.onNodeWithTag(barActionTag(EditAction.ADD_CAPTION)).performClick()
+            waitFor(hasTestTag(TEXT_FIELD_TAG))
+            compose.onNodeWithTag(TEXT_FIELD_TAG).performTextInput("नमस्ते")
+            compose.waitUntil(TIMEOUT_MS) { captionText() == "नमस्ते" }
+
+            scenario.recreate()
+            waitFor(hasTestTag(TEXT_FIELD_TAG))
+            compose.onNodeWithTag(TEXT_FIELD_TAG).performTextInput(" जी")
+            compose.waitUntil(TIMEOUT_MS) { captionText() == "नमस्ते जी" }
+            compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
+            waitFor(hasTestTag(barActionTag(EditAction.EDIT_TEXT)))
+            val project = runBlocking { app.projectRepository.open.value!! }
+            val caption =
+                project.tracks
+                    .flatMap { it.clips }
+                    .filterIsInstance<TextClip>()
+                    .single()
+            assertThat(caption.attachedTo?.clip).isEqualTo(project.mainClips.first().id)
+        }
+    }
+
+    private fun captionText(): String? =
+        app.projectRepository.open.value
+            ?.tracks
+            ?.flatMap { it.clips }
+            ?.filterIsInstance<TextClip>()
+            ?.singleOrNull()
+            ?.text
 
     /** The ruler's label spacing: it changes with the zoom. */
     private fun tick(): Long =

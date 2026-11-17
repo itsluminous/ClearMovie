@@ -29,7 +29,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.JsonPrimitive
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -530,7 +529,9 @@ class ProjectRepositoryTest {
     fun `a project written by a newer app is reported and never overwritten`() =
         runBlocking<Unit> {
             val db = db()
-            val newer = ProjectCodec().encode(draft()).replaceFirst("\"schemaVersion\": 1", "\"schemaVersion\": 99")
+            val current = "\"schemaVersion\": ${ProjectMigrations.CURRENT_VERSION}"
+            val newer = ProjectCodec().encode(draft()).replaceFirst(current, "\"schemaVersion\": 99")
+            assertThat(newer).contains("\"schemaVersion\": 99")
             val row = ProjectEntity("p1", null, null, 99, newer, null, 1, 1)
             db.projects().upsert(row)
             val repo = repository(db)
@@ -543,17 +544,13 @@ class ProjectRepositoryTest {
     @Test
     fun `a project from an older model schema is upgraded and saved back when opened`() =
         runBlocking<Unit> {
-            // A future schema 2 that adds a field (as cm-captions will with attachedTo).
-            val v2 =
-                ProjectMigrations(
-                    currentVersion = 2,
-                    steps = mapOf(1 to { json -> kotlinx.serialization.json.JsonObject(json + ("futureField" to JsonPrimitive(true))) }),
-                )
+            // Saved by an app at schema 1; opened by this one, at schema 2 (cm-captions' attachedTo).
+            val v1 = ProjectMigrations(currentVersion = 1, steps = emptyMap())
             val db = db()
-            repository(db).createDraft(draft())
+            repository(db, migrations = v1).createDraft(draft())
             assertThat(db.projects().get("p1")!!.schemaVersion).isEqualTo(1)
 
-            val upgraded = repository(db, migrations = v2)
+            val upgraded = repository(db)
             val opened = upgraded.open(ProjectId("p1")) as OpenResult.Opened
             assertThat(opened.migratedFrom).isEqualTo(1)
             val row = db.projects().get("p1")!!

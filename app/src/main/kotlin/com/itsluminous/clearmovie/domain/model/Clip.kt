@@ -346,7 +346,31 @@ data class EndingClip(
     override fun withTransition(transition: Transition?) = copy(transitionToNext = transition)
 }
 
-/** A caption on a TEXT row. [style] holds only the user's changes to the preset style. */
+/**
+ * Ties a caption to a photo or video ("Add caption" on that item): the
+ * caption moves with the item when MAIN is reordered or the item is moved
+ * in time, stays inside the item's span when the item is trimmed or its
+ * speed changes, and is deleted with it. With [whole] it covers the item's
+ * whole span and follows its length; otherwise it starts [offsetMs] into
+ * the span, and its own length is cut to the span's end (for good, like a
+ * transition, cm-model D7). The span of a MAIN item runs between the
+ * middles of the transitions into and out of it (see `attachSpan`), so the
+ * captions of two items joined by a crossfade meet, without overlapping,
+ * halfway through it.
+ */
+@Serializable
+data class CaptionAttachment(
+    val clip: ClipId,
+    val offsetMs: Long = 0,
+    val whole: Boolean = true,
+)
+
+/**
+ * A caption on a TEXT row. [style] holds only the user's changes to the
+ * preset style. [attachedTo] is set for a caption made with "Add caption"
+ * on a photo or video; a caption made on a text row ("+", "Add here")
+ * is free and keeps its own times.
+ */
 @Serializable
 @SerialName("text")
 data class TextClip(
@@ -356,6 +380,7 @@ data class TextClip(
     val text: String,
     val style: CaptionStyleOverride = CaptionStyleOverride.NONE,
     override val animations: Animations = Animations.NONE,
+    val attachedTo: CaptionAttachment? = null,
 ) : Clip {
     override fun withStartMs(ms: Long) = copy(startMs = ms)
 

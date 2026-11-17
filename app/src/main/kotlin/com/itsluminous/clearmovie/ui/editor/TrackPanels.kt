@@ -7,12 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -30,7 +27,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.AudioClip
@@ -46,7 +42,6 @@ import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.RandomIds
 import com.itsluminous.clearmovie.domain.model.Side
 import com.itsluminous.clearmovie.domain.model.TextClip
-import com.itsluminous.clearmovie.domain.model.TextRules
 import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
@@ -60,10 +55,10 @@ import com.itsluminous.clearmovie.domain.model.removeRow
 import com.itsluminous.clearmovie.domain.model.setAudioFades
 import com.itsluminous.clearmovie.domain.model.setLowerWhenTalking
 import com.itsluminous.clearmovie.domain.model.setPip
-import com.itsluminous.clearmovie.domain.model.setText
 import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTrackMuted
 import com.itsluminous.clearmovie.domain.model.trimAudio
+import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.ui.components.preciseDurationText
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.RowType
@@ -111,6 +106,7 @@ internal fun TimedInsertPanel(
     playheadMs: Long,
     callbacks: EditorCallbacks,
     onPanel: (OpenPanel?) -> Unit,
+    onSelect: (ClipId) -> Unit,
 ) {
     val side = open.side ?: InsertSide.AFTER
     val title =
@@ -135,7 +131,23 @@ internal fun TimedInsertPanel(
                 R.drawable.ic_text_fields,
                 insertOptionTag("text"),
             ) {
-                onPanel(OpenPanel(Panel.TEXT, anchor?.id, if (anchor != null) side else null, track.id))
+                // The caption is made now, empty, and the editor opens on it (it goes again if left empty).
+                val id = RandomIds.clipId()
+                val made = TextClip(id, 0, Limits.DEFAULT_TEXT_MS, "")
+                val ok =
+                    callbacks.editMerged(captionMergeKey(id)) {
+                        val placed =
+                            if (anchor != null) {
+                                insertAt(trackOf(anchor.id)!!.id, anchor.id, side.model(), made)
+                            } else {
+                                addToTrack(track.id, made, playheadMs)
+                            }
+                        placed.withEffectDefaultsFor(listOf(id))
+                    }
+                if (ok) {
+                    onSelect(id)
+                    onPanel(OpenPanel(Panel.TEXT, id))
+                }
             }
         }
 
@@ -179,64 +191,6 @@ internal fun TimedInsertPanel(
             Unit
         }
     }
-}
-
-/**
- * The words of a caption: a new one at a "+" ([OpenPanel.side] set), a new
- * one at the playhead ("Add here": a row and no item), or the selected one.
- * A new caption lasts 3 s; where it would cover another, it goes on a new
- * text row (section 6.1).
- */
-@Composable
-internal fun TextPanel(
-    open: OpenPanel,
-    track: Track,
-    clip: Clip?,
-    playheadMs: Long,
-    callbacks: EditorCallbacks,
-    onSelect: (ClipId) -> Unit,
-    close: () -> Unit,
-) {
-    val editing = clip is TextClip && open.side == null
-    var text by rememberSaveable(open.clipId?.value, open.trackId?.value, editing) {
-        mutableStateOf(if (editing) (clip as TextClip).text else "")
-    }
-    val usable = text.isNotBlank() && TextRules.isValidText(text)
-    val submit = {
-        if (usable) {
-            val words = text.trim()
-            if (editing) {
-                callbacks.edit { setText(clip!!.id, words) }
-            } else {
-                val made = TextClip(RandomIds.clipId(), 0, Limits.DEFAULT_TEXT_MS, words)
-                val side = open.side
-                val ok =
-                    if (clip != null && side != null) {
-                        callbacks.edit { insertAt(trackOf(clip.id)!!.id, clip.id, side.model(), made) }
-                    } else {
-                        callbacks.edit { addToTrack(track.id, made, playheadMs) }
-                    }
-                if (ok) onSelect(made.id)
-            }
-            close()
-        }
-    }
-    PanelTitle(
-        stringResource(R.string.text_title),
-        onDone = if (usable) submit else null,
-        onCancel = close,
-        doneLabel = if (editing) R.string.action_done else R.string.card_add,
-    )
-    OutlinedTextField(
-        value = text,
-        onValueChange = { if (it.length <= Limits.MAX_TEXT_LENGTH) text = it },
-        label = { Text(stringResource(R.string.card_text_hint)) },
-        minLines = 2,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { submit() }),
-        modifier = Modifier.fillMaxWidth().testTag(TEXT_FIELD_TAG),
-    )
-    Spacer(Modifier.height(8.dp))
 }
 
 /** Trim for a sound: which part of the file plays. */

@@ -87,12 +87,28 @@ class EditorHarness(
                 calls += "fix"
             }
 
-            override fun edit(change: Project.() -> Project): Boolean {
-                val result = session.edit(change)
+            override fun edit(change: Project.() -> Project): Boolean = apply(null, change)
+
+            override fun editMerged(
+                mergeKey: String,
+                change: Project.() -> Project,
+            ): Boolean = apply(mergeKey, change)
+
+            private fun apply(
+                mergeKey: String?,
+                change: Project.() -> Project,
+            ): Boolean {
+                val result = session.edit(mergeKey, change)
                 val ok = result == EditResult.Applied
                 if (ok) project = session.current!!
                 if (result is EditResult.Refused) calls += "refused"
                 return ok
+            }
+
+            override fun endMerge() = session.endMerge()
+
+            override fun revertMerge(mergeKey: String) {
+                session.revertMerge(mergeKey)?.let { project = it }
             }
 
             override fun undo() {

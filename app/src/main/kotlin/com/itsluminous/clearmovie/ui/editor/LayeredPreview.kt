@@ -12,11 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,9 +38,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -52,7 +47,6 @@ import androidx.core.graphics.scale
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.domain.model.ArgbColor
-import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.Fit
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Rotation
@@ -69,10 +63,12 @@ import com.itsluminous.clearmovie.render.preview.LayeredPreviewEngine
 import com.itsluminous.clearmovie.render.preview.PreviewState
 import com.itsluminous.clearmovie.render.preview.StillLoader
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
-import com.itsluminous.clearmovie.domain.model.TextAlign as CaptionAlign
 
 /** Test tag of the preview's 16:9 canvas. */
 const val PREVIEW_TAG = "editor_preview"
+
+/** Test tag of a caption's box in the preview. */
+const val PREVIEW_CAPTION_TAG = "editor_preview_caption"
 
 /** Test tag of a picture-in-picture item's box in the preview. */
 const val PREVIEW_PIP_TAG = "editor_preview_pip"
@@ -325,7 +321,7 @@ private fun PlacedPicture(
                         },
                 )
                 val still = picture.content as? MainContent.Still
-                if (still != null) Still(still.source, fit ?: Fit.FILL_CROP, rotation, stills, resolver, h)
+                if (still != null) Still(still.source, fit ?: Fit.FILL_CROP, rotation, stills, resolver, rect)
                 Box(
                     Modifier.fillMaxSize().drawBehind {
                         val f = picture.motionAt(now())
@@ -399,13 +395,11 @@ private fun Still(
     rotation: Rotation,
     stills: StillLoader,
     resolver: MediaResolver?,
-    canvasHeight: Dp,
+    window: NormRect,
 ) {
     when (source) {
         is Source.Card -> {
-            Box(Modifier.fillMaxSize().background(source.color.toColor()), contentAlignment = Alignment.Center) {
-                source.text?.let { CaptionText(it, source.style, canvasHeight, Modifier.padding(8.dp)) }
-            }
+            CardImage(source.color, source.text, source.style, window)
         }
 
         is Source.Photo, is Source.VideoFrame -> {
@@ -520,7 +514,7 @@ private fun OverlayLayer(
     if (still != null && !visible) {
         val pip = still.placement as? Placement.Pip
         PlacedBox(pip, w, h, framed = pip != null) { _, _ ->
-            Still(still.source, Fit.FILL_CROP, pip?.rotation ?: Rotation.R0, stills, resolver, h)
+            Still(still.source, Fit.FILL_CROP, pip?.rotation ?: Rotation.R0, stills, resolver, pip?.rect ?: NormRect.FULL)
         }
     }
 }
@@ -575,46 +569,12 @@ private fun CaptionLayer(
                     translationX = (w * f.dx).toPx()
                     translationY = (h * f.dy).toPx()
                     alpha = f.alpha
-                },
-            contentAlignment = Alignment.Center,
+                }.testTag(PREVIEW_CAPTION_TAG),
         ) {
-            CaptionText(c.caption.text, c.caption.style, h)
+            // The export's own image of the caption (see CaptionImages), drawn for its box.
+            CaptionImage(c.caption.text, c.caption.style.copy(box = c.rect))
         }
     }
-}
-
-/** A caption as the export draws it, scaled from the 1080-line canvas to this preview. */
-@Composable
-private fun CaptionText(
-    text: String,
-    style: CaptionStyle,
-    canvasHeight: Dp,
-    modifier: Modifier = Modifier,
-) {
-    val scale = canvasHeight.value / CANVAS_LINES
-    val sizeSp = with(LocalDensity.current) { (style.sizePx * scale).dp.toSp() }
-    val bg = style.background
-    Text(
-        text = text,
-        color = style.color.toColor(),
-        fontSize = sizeSp,
-        lineHeight = sizeSp * 1.2f,
-        textAlign =
-            when (style.align) {
-                CaptionAlign.START -> TextAlign.Start
-                CaptionAlign.END -> TextAlign.End
-                else -> TextAlign.Center
-            },
-        modifier =
-            modifier
-                .then(
-                    if (bg != null) {
-                        Modifier.background(bg.color.toColor(), RoundedCornerShape((bg.cornerPx * scale).dp))
-                    } else {
-                        Modifier
-                    },
-                ).padding(horizontal = 4.dp),
-    )
 }
 
 private fun ArgbColor.toColor(): Color = Color(argb.toInt())

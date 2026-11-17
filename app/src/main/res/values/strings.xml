@@ -518,7 +518,6 @@
     <string name="insert_sound_body">From your files</string>
     <string name="insert_overlay">Frame video</string>
     <string name="insert_overlay_body">From your files. Its green parts show the video under it.</string>
-    <string name="text_title">Text on the video</string>
     <string name="fade_title">Fade</string>
     <string name="fade_in">Fade in: %1$s</string>
     <string name="fade_out">Fade out: %1$s</string>
@@ -552,4 +551,30 @@
     </plurals>
     <!-- Short label in the bar: adds photos and videos at the end. -->
     <string name="bar_add_media">Add photos</string>
+    <!-- cm-captions: the caption editor. -->
+    <string name="action_add_caption">Add caption</string>
+    <string name="caption_title">Caption</string>
+    <string name="caption_text_hint">Words to show</string>
+    <string name="caption_tab_words">Words</string>
+    <string name="caption_tab_place">Place</string>
+    <string name="caption_tab_size">Size</string>
+    <string name="caption_tab_font">Font</string>
+    <string name="caption_tab_colour">Colour</string>
+    <string name="caption_place_usual">Usual</string>
+    <string name="caption_place_top">Top</string>
+    <string name="caption_place_middle">Middle</string>
+    <string name="caption_place_bottom">Bottom</string>
+    <string name="caption_place_hint">Or drag the box on the picture.</string>
+    <string name="caption_size_value">%1$d%%</string>
+    <string name="caption_size_smaller">Smaller</string>
+    <string name="caption_size_bigger">Bigger</string>
+    <string name="caption_font_sans">Plain</string>
+    <string name="caption_font_sans_bold">Bold</string>
+    <string name="caption_font_serif">Classic</string>
+    <string name="caption_font_serif_bold">Classic bold</string>
+    <string name="caption_outline">Outline</string>
+    <string name="caption_background">Band behind the words</string>
+    <string name="caption_reset">Reset to preset style</string>
+    <string name="caption_box_description">Caption box. Drag it to move the caption, or use Place.</string>
+    <string name="caption_colour_choice">%1$s text</string>
 </resources>

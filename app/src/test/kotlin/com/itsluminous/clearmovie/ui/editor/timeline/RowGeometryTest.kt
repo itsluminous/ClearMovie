@@ -127,6 +127,7 @@ class RowGeometryTest {
         assertThat(ClipActions.forTimed(SelectionKind.TEXT, facts).map { it.action })
             .containsExactly(
                 EditAction.EDIT_TEXT,
+                EditAction.ANIMATION,
                 EditAction.MOVE_EARLIER,
                 EditAction.MOVE_LATER,
                 EditAction.MOVE_TO_ROW,
@@ -134,7 +135,7 @@ class RowGeometryTest {
             ).inOrder()
         assertThat(ClipActions.forTimed(SelectionKind.TEXT, facts).first { it.action == EditAction.MOVE_EARLIER }.enabled).isFalse()
         assertThat(ClipActions.forTimed(SelectionKind.PIP_VIDEO, facts).map { it.action }.take(3))
-            .containsExactly(EditAction.TRIM, EditAction.VOLUME, EditAction.POSITION)
+            .containsExactly(EditAction.TRIM, EditAction.ADD_CAPTION, EditAction.VOLUME)
             .inOrder()
         assertThat(ClipActions.forTimed(SelectionKind.SOUND, facts.copy(fixed = true, isMusic = true)).map { it.action })
             .containsExactly(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE, EditAction.LOWER_MUSIC, EditAction.DELETE)

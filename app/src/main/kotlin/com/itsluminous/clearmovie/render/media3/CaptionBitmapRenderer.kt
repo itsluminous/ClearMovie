@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.text.LineBreaker
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -19,17 +20,23 @@ import kotlin.math.roundToInt
 
 /**
  * Draws captions and cards as bitmaps (ARCHITECTURE section 7, TEXT rows).
- * A caption is drawn at its box's pixel size: the rounded background, then
- * the text outline, then the text, wrapped to the box and centred
- * vertically. Sizes in [CaptionStyle] are pixels on a 1080-line canvas and
- * scale with the output height. Text that does not fit is cut at the box.
+ * The export and the editor's preview both draw with this, so a caption
+ * looks the same in both. A caption is drawn at its box's pixel size: the
+ * rounded background, then the text outline, then the text, wrapped to the
+ * box and centred vertically. Sizes in [CaptionStyle] are pixels on a
+ * 1080-line canvas and scale with [canvasHeight]; text is laid out with
+ * linear, sub-pixel metrics so it wraps the same way at every size.
  *
- * Only Latin text is checked here; the bundled Noto fonts and Devanagari
- * shaping arrive with cm-captions, so every font id falls back to the
- * system's bold sans-serif for now.
+ * Text is shaped by the platform with the bundled Noto fonts
+ * ([CaptionTypefaces]): Devanagari conjuncts and matras form as in any
+ * Android text, and the line height makes room for the Devanagari font's
+ * marks above and below the line. Text that does not fit the box at its
+ * size is drawn smaller until it fits (down to [MIN_FIT] of its size), and
+ * only then cut at the box.
  */
 class CaptionBitmapRenderer(
     private val canvasHeight: Int,
+    private val typefaces: CaptionTypefaces?,
 ) {
     private val scale = canvasHeight / 1080f
 
@@ -64,6 +71,9 @@ class CaptionBitmapRenderer(
         return bitmap
     }
 
+    /** The typeface a style's font id draws with. */
+    fun typeface(fontId: String): Typeface = typefaces?.of(fontId) ?: Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
     private fun drawText(
         canvas: Canvas,
         text: String,
@@ -73,10 +83,13 @@ class CaptionBitmapRenderer(
     ) {
         val pad = (PADDING_PX * scale).roundToInt()
         val layoutWidth = max(1, width - 2 * pad)
+        val outline = style.outline?.takeIf { it.widthPx > 0 }
+        // The outline is stroked around the glyphs, so it needs its width of room at the box's edges too.
+        val room = (height - 2 * pad - 2 * (outline?.widthPx ?: 0) * scale).coerceAtLeast(1f)
         val paint =
-            TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                textSize = style.sizePx * scale
-                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.LINEAR_TEXT_FLAG).apply {
+                typeface = typeface(style.font)
+                color = style.color.toAndroid()
             }
         val align =
             when (style.align) {
@@ -90,39 +103,50 @@ class CaptionBitmapRenderer(
                 .obtain(text, 0, text.length, p, layoutWidth)
                 .setAlignment(align)
                 .setIncludePad(false)
+                .setUseLineSpacingFromFallbacks(true)
+                .setBreakStrategy(LineBreaker.BREAK_STRATEGY_BALANCED)
+                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .build()
-        val fill = layout(paint.apply { color = style.color.toAndroid() })
+        val wanted = style.sizePx * scale
+        var size = wanted
+        paint.textSize = size
+        var fill = layout(paint)
+        while (fill.height > room && size > wanted * MIN_FIT) {
+            size = max(wanted * MIN_FIT, size * FIT_STEP)
+            paint.textSize = size
+            fill = layout(paint)
+        }
         val top = ((height - fill.height) / 2f).coerceAtLeast(0f)
         canvas.withClip(0, 0, width, height) {
             translate(pad.toFloat(), top)
-            drawLayers(this, paint, style, fill, ::layout)
+            outline?.let { o ->
+                val stroke =
+                    TextPaint(paint).apply {
+                        this.style = Paint.Style.STROKE
+                        strokeWidth = o.widthPx * scale * 2 * (size / wanted)
+                        strokeJoin = Paint.Join.ROUND
+                        color = o.color.toAndroid()
+                    }
+                layout(stroke).draw(this)
+            }
+            fill.draw(this)
         }
     }
 
-    private fun drawLayers(
-        canvas: Canvas,
-        paint: TextPaint,
-        style: CaptionStyle,
-        fill: StaticLayout,
-        layout: (TextPaint) -> StaticLayout,
-    ) {
-        style.outline?.takeIf { it.widthPx > 0 }?.let { o ->
-            val stroke =
-                TextPaint(paint).apply {
-                    this.style = Paint.Style.STROKE
-                    strokeWidth = o.widthPx * scale * 2
-                    strokeJoin = Paint.Join.ROUND
-                    color = o.color.toAndroid()
-                }
-            layout(stroke).draw(canvas)
-        }
-        fill.draw(canvas)
-    }
+    companion object {
+        private const val PADDING_PX = 16
+        private const val OPAQUE = Color.BLACK
 
-    private companion object {
-        const val PADDING_PX = 16
-        const val OPAQUE = Color.BLACK
+        /** Text is drawn no smaller than this share of its size to fit its box. */
+        const val MIN_FIT = 0.5f
+        private const val FIT_STEP = 0.92f
 
-        fun ArgbColor.toAndroid(): Int = argb.toInt()
+        /**
+         * Part of every cached caption and card image's name: bump it when the
+         * drawing changes, so an export never reuses an image drawn the old way.
+         */
+        const val VERSION = 2
+
+        private fun ArgbColor.toAndroid(): Int = argb.toInt()
     }
 }

@@ -51,6 +51,9 @@ enum class EditAction {
     MOVE_TO_ROW,
     FADE,
     POSITION,
+
+    /** cm-captions: a caption attached to the selected photo or video. */
+    ADD_CAPTION,
 }
 
 /** What is selected, as far as the bar is concerned. */
@@ -120,9 +123,8 @@ data class TimedFacts(
 
 /**
  * The bar's actions per selection, most-used first (ARCHITECTURE section
- * 11.2). Add text and Style arrive with cm-captions; the plan does not ask
- * for them to be shown before then, so they are left out rather than shown
- * disabled. Transition (into the next item) is greyed out on an item with
+ * 11.2). A photo or video offers Add caption second, after its length
+ * (section 11.2's "Add text"). Transition (into the next item) is greyed out on an item with
  * nothing after it ([hasNext]). A MAIN item's "Move to another row" is left
  * out: the model moves items only between rows of one kind, and MAIN is the
  * only row of its kind.
@@ -154,7 +156,7 @@ object ClipActions {
                 }
 
                 SelectionKind.PHOTO -> {
-                    listOf(BarAction(EditAction.DURATION)) + effects +
+                    listOf(BarAction(EditAction.DURATION), BarAction(EditAction.ADD_CAPTION)) + effects +
                         listOf(
                             EditAction.FIT,
                             EditAction.ROTATE,
@@ -165,7 +167,7 @@ object ClipActions {
                 }
 
                 SelectionKind.VIDEO -> {
-                    listOf(BarAction(EditAction.TRIM)) + effects +
+                    listOf(BarAction(EditAction.TRIM), BarAction(EditAction.ADD_CAPTION)) + effects +
                         listOf(
                             EditAction.VOLUME,
                             EditAction.SPLIT,
@@ -229,15 +231,23 @@ object ClipActions {
         val delete = listOf(BarAction(EditAction.DELETE))
         return when (kind) {
             SelectionKind.TEXT -> {
-                listOf(BarAction(EditAction.EDIT_TEXT)) + moves + delete
+                listOf(EditAction.EDIT_TEXT, EditAction.ANIMATION).map(::BarAction) + moves + delete
             }
 
             SelectionKind.PIP_PHOTO -> {
-                listOf(EditAction.DURATION, EditAction.POSITION, EditAction.ROTATE).map(::BarAction) + moves + delete
+                listOf(EditAction.DURATION, EditAction.ADD_CAPTION, EditAction.POSITION, EditAction.ROTATE).map(::BarAction) + moves +
+                    delete
             }
 
             SelectionKind.PIP_VIDEO -> {
-                listOf(EditAction.TRIM, EditAction.VOLUME, EditAction.POSITION, EditAction.ROTATE).map(::BarAction) + moves + delete
+                listOf(
+                    EditAction.TRIM,
+                    EditAction.ADD_CAPTION,
+                    EditAction.VOLUME,
+                    EditAction.POSITION,
+                    EditAction.ROTATE,
+                ).map(::BarAction) +
+                    moves + delete
             }
 
             SelectionKind.SOUND -> {

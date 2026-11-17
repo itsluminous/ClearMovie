@@ -47,6 +47,11 @@ class UndoStack<T>(
         redo.clear()
     }
 
+    /** Forgets the newest redo state: an undo that should not be redone (a cancelled change). */
+    fun dropLastRedo() {
+        redo.removeLastOrNull()
+    }
+
     companion object {
         const val DEFAULT_CAPACITY = 50
     }

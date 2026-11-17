@@ -168,6 +168,6 @@ class PresetChoicesTest {
         val decoded = ProjectCodec().decode(text) as ProjectDecodeResult.Ok
         assertThat((decoded.project.mainClips.first() as IntroClip).media).isEqualTo(MediaRef.Preset(PresetSlot.INTRO))
         assertThat((decoded.project.mainClips.last() as EndingClip).media).isEqualTo(MediaRef.Preset(PresetSlot.ENDING))
-        assertThat(decoded.project).isEqualTo(Fixtures.richProject())
+        assertThat(decoded.project).isEqualTo(Fixtures.richProjectV1())
     }
 }

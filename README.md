@@ -107,7 +107,7 @@ What's planned, and what has shipped:
 - [x] Photo duration
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
 - [ ] Audio overlay with volume, fade and automatic ducking
-- [ ] Captions with preset defaults, drag-to-place, fonts, size, colours, outline and background
+- [x] Captions with preset defaults, drag-to-place, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
 - [x] Preview that shrinks, or floats as a small window, when all rows need room
 
@@ -138,6 +138,28 @@ Requirements, build and test commands, and how to run tests on an emulator are i
 [docs/building.md](docs/building.md). How the code is laid out is in
 [docs/architecture.md](docs/architecture.md), and release signing in
 [docs/release-signing.md](docs/release-signing.md).
+
+## Fonts
+
+Captions use four bundled font pairs, so English, Hindi and Hinglish look of a
+piece and Hindi conjuncts and matras are drawn properly in the preview and in
+the video. All are from the [Noto project](https://notofonts.github.io/) and
+licensed under the [SIL Open Font License 1.1](https://openfontlicense.org/);
+the licence texts ship in the app (`app/src/main/assets/licenses/`).
+
+| In the app | Latin | Devanagari |
+| --- | --- | --- |
+| Plain | Noto Sans Regular | Noto Sans Devanagari Regular |
+| Bold | Noto Sans Bold | Noto Sans Devanagari Bold |
+| Classic | Noto Serif Regular | Noto Serif Devanagari Regular |
+| Classic bold | Noto Serif Bold | Noto Serif Devanagari Bold |
+
+The files are the unhinted static TTFs from the notofonts releases
+[NotoSans-v2.015 and NotoSerif-v2.015](https://github.com/notofonts/latin-greek-cyrillic/releases),
+[NotoSansDevanagari-v2.007](https://github.com/notofonts/devanagari/releases/tag/NotoSansDevanagari-v2.007) and
+[NotoSerifDevanagari-v2.006](https://github.com/notofonts/devanagari/releases/tag/NotoSerifDevanagari-v2.006),
+renamed to Android resource names in `app/src/main/res/font/`.
+Copyright 2022 The Noto Project Authors.
 
 ## Translations
 

@@ -10,13 +10,12 @@ import kotlinx.serialization.json.jsonObject
 
 /**
  * Upgrades stored project JSON from older schema versions, one version at a
- * time: `steps[n]` turns version n into version n + 1. Schema 1 is the first
- * shipped version, so the app has no steps yet; the chain exists from the
- * start so a later version only has to add one (ARCHITECTURE section 6.3).
+ * time: `steps[n]` turns version n into version n + 1 (ARCHITECTURE section
+ * 6.3). The app's own steps are [APP_STEPS].
  */
 class ProjectMigrations(
     val currentVersion: Int = CURRENT_VERSION,
-    private val steps: Map<Int, (JsonObject) -> JsonObject> = emptyMap(),
+    private val steps: Map<Int, (JsonObject) -> JsonObject> = APP_STEPS,
     val oldestVersion: Int = (steps.keys.minOrNull() ?: currentVersion).coerceAtMost(currentVersion),
 ) {
     init {
@@ -35,7 +34,18 @@ class ProjectMigrations(
     }
 
     companion object {
-        const val CURRENT_VERSION = 1
+        /**
+         * 2 (cm-captions): a caption may be attached to a photo or video
+         * (`TextClip.attachedTo`).
+         */
+        const val CURRENT_VERSION = 2
+
+        /**
+         * 1 to 2: nothing to rewrite. A version 1 caption has no `attachedTo`,
+         * so it reads as a free caption and keeps its own times, exactly as
+         * version 1 played it.
+         */
+        val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> = mapOf(1 to { old -> old })
     }
 }
 

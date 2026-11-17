@@ -94,6 +94,21 @@ class LayeredPreviewEngine(
     private var mainSurface: TextureView? = null
     private val overlaySurfaces = mutableMapOf<Int, TextureView>()
 
+    /**
+     * Takes [next] in place of the loaded schedule when the two differ only in
+     * their captions (a caption typed, styled, moved or added), without
+     * reloading any player, so the change shows at once and the picture never
+     * blinks. False, and nothing changes, when anything else differs: then
+     * [load] it.
+     */
+    fun updateCaptions(next: PreviewSchedule): Boolean {
+        checkMainThread()
+        val now = schedule ?: return false
+        if (!next.differsOnlyInCaptions(now)) return false
+        schedule = next
+        return true
+    }
+
     /** Plays [next] from [startUs], replacing whatever was loaded. */
     fun load(
         next: PreviewSchedule,

@@ -33,7 +33,7 @@ class ProjectCodecTest {
 
     @Test
     fun `golden fixtures round-trip byte for byte`() {
-        for (name in listOf("rich-v1.json", "blank-v1.json")) {
+        for (name in listOf("rich-v2.json", "blank-v2.json")) {
             val text = fixture(name)
             assertThat(codec.encode(ok(text).project)).isEqualTo(text)
         }
@@ -43,8 +43,32 @@ class ProjectCodecTest {
     fun `the rich fixture is the project the test builds`() {
         // If the model changes shape, this fails before the byte comparison
         // hides why; regenerate the fixture only for an intended change.
-        assertThat(ok(fixture("rich-v1.json")).project).isEqualTo(Fixtures.richProject())
-        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v1.json"))
+        assertThat(ok(fixture("rich-v2.json")).project).isEqualTo(Fixtures.richProject())
+        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v2.json"))
+    }
+
+    @Test
+    fun `a schema 1 project reads as before, its captions free, and saves as schema 2`() {
+        // cm-captions: schema 2 adds TextClip.attachedTo. A schema 1 caption has none, so it keeps its own times.
+        for (name in listOf("rich-v1.json", "blank-v1.json")) {
+            val result = ok(fixture(name))
+            assertThat(result.fromVersion).isEqualTo(1)
+            assertThat(result.repaired).isFalse()
+            assertThat(codec.encode(result.project)).startsWith("{\n    \"schemaVersion\": 2,")
+        }
+        val rich = ok(fixture("rich-v1.json")).project
+        assertThat(rich).isEqualTo(Fixtures.richProjectV1())
+        assertThat(
+            rich.tracks
+                .flatMap { it.clips }
+                .filterIsInstance<TextClip>()
+                .map { it.attachedTo },
+        ).containsExactly(null, null)
+        // Schema 2 written back, then read: the same project.
+        assertThat(ok(codec.encode(rich)).project).isEqualTo(rich)
+        // The app's chain starts at schema 1.
+        assertThat(ProjectMigrations().oldestVersion).isEqualTo(1)
+        assertThat(ProjectMigrations.CURRENT_VERSION).isEqualTo(2)
     }
 
     @Test
@@ -122,7 +146,7 @@ class ProjectCodecTest {
         assertThat(calls).containsExactly(0, 1, 2).inOrder()
         assertThrows(IllegalArgumentException::class.java) { m.upgrade(JsonObject(emptyMap()), 4) }
         assertThrows(IllegalArgumentException::class.java) { ProjectMigrations(currentVersion = 3, steps = mapOf(0 to { it })) }
-        assertThat(ProjectMigrations().oldestVersion).isEqualTo(ProjectMigrations.CURRENT_VERSION)
+        assertThat(ProjectMigrations().oldestVersion).isEqualTo(1)
     }
 
     @Test
@@ -135,7 +159,7 @@ class ProjectCodecTest {
         assertThat(stale).isNotEqualTo(rich)
         val result = ok(stale)
         assertThat(result.repaired).isTrue()
-        assertThat(result.project).isEqualTo(Fixtures.richProject())
+        assertThat(result.project).isEqualTo(Fixtures.richProjectV1())
         assertThat(ok(rich).repaired).isFalse()
     }
 
@@ -201,7 +225,7 @@ class ProjectCodecTest {
 
     @Test
     fun `a project from a newer app is refused`() {
-        val newer = fixture("blank-v1.json").replace("\"schemaVersion\": 1", "\"schemaVersion\": 2")
+        val newer = fixture("blank-v2.json").replace("\"schemaVersion\": 2", "\"schemaVersion\": 3")
         assertThat(failed(newer)).isEqualTo(ProjectDecodeResult.Reason.NEWER_VERSION)
     }
 

@@ -332,8 +332,9 @@ internal fun AnimationPanel(
     close: () -> Unit,
 ) {
     PanelTitle(stringResource(R.string.animation_title), onDone = close, onCancel = null)
-    val slot = open.clipId?.let { project.mainSlot(it) } ?: return
-    val clip = slot.clip
+    // A MAIN item plays where MAIN puts it; a caption (or any timed item) where it starts.
+    val clip = open.clipId?.let { project.clip(it) } ?: return
+    val (spanStart, spanEnd) = project.mainSlot(clip.id)?.let { it.startMs to it.endMs } ?: (clip.startMs to clip.endMs)
     val tabs = AnimSlot.entries.filter { clip.animationChoices(it).isNotEmpty() }
     if (tabs.isEmpty()) {
         Text(stringResource(R.string.animation_nothing), style = MaterialTheme.typography.bodyLarge)
@@ -359,8 +360,8 @@ internal fun AnimationPanel(
     val wanted = length.coerceIn(Anim.MIN_MS, maxOf(Anim.MIN_MS, maxMs))
 
     fun preview(len: Long) {
-        val at = if (tab == AnimSlot.END) slot.endMs - len - PREVIEW_LEAD_MS else slot.startMs
-        callbacks.previewFrom(at.coerceIn(slot.startMs, slot.endMs))
+        val at = if (tab == AnimSlot.END) spanEnd - len - PREVIEW_LEAD_MS else spanStart
+        callbacks.previewFrom(at.coerceIn(spanStart, spanEnd))
     }
 
     fun anim(kind: AnimKind) = Anim(kind, wanted, seed = if (AnimSlot.DURING in kind.slots) kenBurnsSeed(clip.id) else 0)
