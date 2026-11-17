@@ -110,6 +110,8 @@ var SemanticsPropertyReceiver.rulerTick by RulerTickKey
 
 fun plusTag(boundary: Int) = "timeline_plus_$boundary"
 
+fun markerTag(boundary: Int) = "timeline_transition_$boundary"
+
 fun thumbTag(id: ClipId) = "timeline_thumbs_${id.value}"
 
 fun rowTag(key: String) = "timeline_row_$key"
@@ -157,6 +159,9 @@ interface TimelineActions {
     )
 
     fun menu(id: ClipId)
+
+    /** Opens the transition from MAIN item [lead] into the next one (its marker was tapped). */
+    fun transition(lead: ClipId)
 
     fun showAllRows()
 
@@ -302,6 +307,8 @@ fun TimelineView(
 
                     override fun menu(id: ClipId) = latestActionsState.value.menu(id)
 
+                    override fun transition(lead: ClipId) = latestActionsState.value.transition(lead)
+
                     override fun showAllRows() = latestActionsState.value.showAllRows()
 
                     override fun showFewerRows() = latestActionsState.value.showFewerRows()
@@ -359,7 +366,9 @@ fun TimelineView(
                 Playhead(z, playheadMs, metrics)
                 // The "+" points over everything, the playhead line included, on the MAIN row.
                 if (drag == null && shown.any { it.type == RowType.MAIN }) {
-                    val top = metrics.rulerDp + mainTopInRows
+                    // Reaches LIFT above the row, for the "+" points lifted over a transition marker.
+                    val lift = TimelineGeometry.LIFT_DP
+                    val top = metrics.rulerDp + mainTopInRows - lift
                     Box(
                         Modifier
                             // The scroll is read when placing, not composing: it changes every frame of a scroll.
@@ -369,12 +378,15 @@ fun TimelineView(
                                     ((top * density.density) - rowScroll.value).roundToInt(),
                                 )
                             }.width((fullWidth.value - metrics.headerDp.toFloat()).dp)
-                            .height(metrics.mainDp.dp)
+                            .height((metrics.mainDp + lift).dp)
                             .clipToBounds(),
                     ) {
+                        val centre = lift + metrics.mainDp / 2
+                        val markers = geometry.markers()
+                        for (m in markers) TransitionMarker(m, centre, shownSlots, actions)
                         val plus = geometry.plusPoints()
                         for (b in 0..shownSlots.size) {
-                            PlusButton(plus.firstOrNull { it.boundary == b }, b, shownSlots, actions)
+                            PlusButton(plus.firstOrNull { it.boundary == b }, b, shownSlots, actions, centre)
                         }
                     }
                 }
@@ -609,6 +621,10 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                     if (s != null) actions.insert(s.clip.id, start.point.side)
                                 }
 
+                                is Hit.OnMarker -> {
+                                    c.slots.getOrNull(start.point.leadIndex)?.let { actions.transition(it.clip.id) }
+                                }
+
                                 is Hit.OnClip -> {
                                     c.slots.getOrNull(start.index)?.let { actions.select(it.clip.id) }
                                 }
@@ -705,6 +721,13 @@ private sealed interface Hit {
         override val kind get() = GestureStart.PLUS
     }
 
+    data class OnMarker(
+        val point: MarkerPoint,
+    ) : Hit {
+        // A tap target like a "+": no drag, no long-press.
+        override val kind get() = GestureStart.PLUS
+    }
+
     data class OnClip(
         val index: Int,
     ) : Hit {
@@ -735,6 +758,16 @@ private fun hit(
     yDp: Double,
     rowScrollDp: Float,
 ): Hit {
+    if (xDp >= metrics.headerDp) {
+        // A "+" lifted over a transition marker reaches above the MAIN row (over the ruler or the row
+        // above it), and wins there, as every "+" and marker does over what is under it.
+        val gy = metrics.rulerDp + (yDp - metrics.rulerDp + rowScrollDp - c.mainTopInRows)
+        when (val t = c.geometry.hitTest(xDp - metrics.headerDp - PAD_DP, gy)) {
+            is HitTarget.Plus -> return Hit.OnPlus(t.point)
+            is HitTarget.Marker -> return Hit.OnMarker(t.point)
+            else -> Unit
+        }
+    }
     if (yDp < metrics.rulerDp) return if (xDp < metrics.headerDp) Hit.Elsewhere else Hit.OnRuler
     if (xDp < metrics.headerDp) return Hit.OnHeader
     val inRows = yDp - metrics.rulerDp + rowScrollDp
@@ -743,6 +776,7 @@ private fun hit(
     val sx = xDp - metrics.headerDp - PAD_DP
     return when (val t = c.geometry.hitTest(sx, metrics.rulerDp + mainY)) {
         is HitTarget.Plus -> Hit.OnPlus(t.point)
+        is HitTarget.Marker -> Hit.OnMarker(t.point)
         is HitTarget.TrimStart -> Hit.OnTrim(GestureStart.TRIM_START)
         is HitTarget.TrimEnd -> Hit.OnTrim(GestureStart.TRIM_END)
         is HitTarget.Clip -> Hit.OnClip(t.index)
@@ -1158,12 +1192,55 @@ private fun TrimHandles(
     }
 }
 
+/** A transition's marker: a bow tie on the row's centre line ([centreDp] in the overlay) that opens it. */
+@Composable
+private fun TransitionMarker(
+    point: MarkerPoint,
+    centreDp: Double,
+    slots: List<MainSlot>,
+    actions: TimelineActions,
+) {
+    val lead = slots.getOrNull(point.leadIndex) ?: return
+    val kind = lead.clip.transitionToNext?.kind ?: return
+    val kindName = stringResource(transitionName(kind))
+    val leadName = stringResource(itemName(lead.clip))
+    val description = stringResource(R.string.timeline_transition_marker, leadName, kindName)
+    Box(
+        Modifier
+            .offset(
+                x = (PAD_DP + point.xDp - TimelineGeometry.MARKER_HIT_DP / 2).dp,
+                y = (centreDp - TimelineGeometry.MARKER_HIT_DP / 2).dp,
+            ).size(TimelineGeometry.MARKER_HIT_DP.dp)
+            .testTag(markerTag(point.boundary))
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+                onClick {
+                    actions.transition(lead.clip.id)
+                    true
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface),
+            modifier = Modifier.size(TimelineGeometry.MARKER_DP.dp),
+        ) {
+            Icon(painterResource(R.drawable.ic_transition), contentDescription = null, modifier = Modifier.padding(3.dp))
+        }
+    }
+}
+
 @Composable
 private fun PlusButton(
     point: PlusPoint?,
     boundary: Int,
     slots: List<MainSlot>,
     actions: TimelineActions,
+    centreDp: Double,
 ) {
     AnimatedVisibility(point != null, enter = fadeIn(), exit = fadeOut()) {
         val p = point ?: return@AnimatedVisibility
@@ -1174,12 +1251,12 @@ private fun PlusButton(
         val name = if (anchor.clip.isContent()) stringResource(R.string.timeline_item_numbered, kind, position) else kind
         val description =
             stringResource(if (p.side == InsertSide.BEFORE) R.string.timeline_add_before else R.string.timeline_add_after, name)
+        val y = centreDp - (if (p.top) TimelineGeometry.LIFT_DP else 0.0) - TimelineGeometry.PLUS_HIT_DP / 2
         Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
-                    .offset(x = (PAD_DP + p.xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp)
+                    .offset(x = (PAD_DP + p.xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp, y = y.dp)
                     .size(TimelineGeometry.PLUS_HIT_DP.dp)
-                    .align(Alignment.CenterStart)
                     .testTag(plusTag(boundary))
                     .semantics {
                         contentDescription = description

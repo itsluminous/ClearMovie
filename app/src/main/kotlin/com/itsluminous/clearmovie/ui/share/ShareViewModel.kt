@@ -31,6 +31,7 @@ import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.ui.media.IntakeState
 import com.itsluminous.clearmovie.ui.media.MediaIntake
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -717,7 +718,8 @@ class ShareViewModel
                 return
             }
             val made = newMainItems(project, ordered, open.photoDurationMs, open.defaultFit, probe)
-            val added = made.clips.isEmpty() || repository.update { it.addToMain(made.clips) }
+            val added =
+                made.clips.isEmpty() || repository.update { it.addToMain(made.clips).withEffectDefaultsFor(made.clips.map { c -> c.id }) }
             val written = repository.flush()
             notes = notes.copy(unreadable = notes.unreadable + made.skipped)
             if (!added || !written) {

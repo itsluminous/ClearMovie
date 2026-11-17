@@ -10,6 +10,7 @@ import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.RandomIds
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import javax.inject.Inject
 
 /** The outcome of [ShareDrafts.choose]. */
@@ -83,7 +84,9 @@ class ShareDrafts
                         return ShareChoice.NeedsSetup
                     }
                 }
-            val next = base.copy(name = current.name).addToMain(userItems(current, base))
+            // The shared items are new to the chosen preset, so they take its effect defaults.
+            val items = userItems(current, base)
+            val next = base.copy(name = current.name).addToMain(items).withEffectDefaultsFor(items.map { it.id })
             if (!projects.update { next }) return ShareChoice.NotSaved
             return if (projects.flush()) ShareChoice.Ready(draft) else ShareChoice.NotSaved
         }

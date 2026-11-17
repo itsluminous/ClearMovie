@@ -136,6 +136,12 @@ interface EditorCallbacks {
 
     fun seek(ms: Long)
 
+    /**
+     * Shows a change just made in the preview: plays from [ms] once the
+     * preview has the edited video (a transition or animation just chosen).
+     */
+    fun previewFrom(ms: Long) = seek(ms)
+
     /** Opens the gallery to put photos and videos at a "+". */
     fun pickForInsert(
         anchor: ClipId,
@@ -197,13 +203,15 @@ fun EditPanel(
                 Panel.CARD_TEXT -> CardTextPanel(open, clip, callbacks, close)
                 Panel.CARD_COLOUR -> CardColourPanel(open, clip, callbacks, close)
                 Panel.ITEM_MENU -> ItemMenuPanel(clip, callbacks, onPanel, onDeleted)
+                Panel.TRANSITION -> TransitionPanel(open, project, thumbnail, callbacks, close, onPanel)
+                Panel.ANIMATION -> AnimationPanel(open, project, thumbnail, callbacks, close)
             }
         }
     }
 }
 
 @Composable
-private fun PanelTitle(
+internal fun PanelTitle(
     title: String,
     onDone: (() -> Unit)?,
     onCancel: (() -> Unit)?,

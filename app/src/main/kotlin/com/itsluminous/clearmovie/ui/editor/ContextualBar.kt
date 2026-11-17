@@ -198,6 +198,8 @@ fun barLabel(action: EditAction): Int =
         EditAction.DELETE -> R.string.action_delete
         EditAction.EDIT_TEXT -> R.string.action_edit_text
         EditAction.COLOUR -> R.string.action_colour
+        EditAction.TRANSITION -> R.string.action_transition
+        EditAction.ANIMATION -> R.string.action_animation
         EditAction.PLAY -> R.string.action_play
         EditAction.SKIP -> R.string.review_skip
         EditAction.ADD_MEDIA -> R.string.editor_add_media
@@ -222,6 +224,8 @@ fun barIcon(action: EditAction): Int =
         EditAction.DELETE -> R.drawable.ic_delete
         EditAction.EDIT_TEXT -> R.drawable.ic_text_fields
         EditAction.COLOUR -> R.drawable.ic_palette
+        EditAction.TRANSITION -> R.drawable.ic_transition
+        EditAction.ANIMATION -> R.drawable.ic_animation
         EditAction.PLAY -> R.drawable.ic_play
         EditAction.SKIP -> R.drawable.ic_skip_next
         EditAction.ADD_MEDIA -> R.drawable.ic_add

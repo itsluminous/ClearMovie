@@ -210,7 +210,7 @@ class CompositionFactory(
             if (video != null && video.second.bt709 && colour.gpuDecodesBt709AsBt601) effects += Bt709Correction
             segment.key?.let { effects += ChromaKeyEffect(it) }
             effects += PlacementEffect(segment.placement, plan.width, plan.height, fromBitmap = source !is Source.Video)
-            if (segment.alpha.isNotEmpty()) effects += TransitionEffect(segment.alpha, segment.startUs, segment.clipOffsetUs)
+            segment.motion?.let { effects += MotionEffect(it, segment.startUs, segment.clipOffsetUs, plan.width, plan.height) }
             return when (source) {
                 is Source.Video -> {
                     val item =

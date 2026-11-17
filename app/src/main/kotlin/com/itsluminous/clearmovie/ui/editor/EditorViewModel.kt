@@ -43,6 +43,7 @@ import com.itsluminous.clearmovie.domain.model.insertAt
 import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.domain.model.replaceMainItem
 import com.itsluminous.clearmovie.domain.model.replacePresetPart
+import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.render.media3.MediaResolver
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
@@ -373,7 +374,7 @@ class EditorViewModel
             color: ArgbColor,
         ) {
             val card = CardClip(RandomIds.clipId(), Limits.DEFAULT_CARD_MS, color, text)
-            if (edit { insertAt(main.id, anchor, side, card) }) {
+            if (edit { insertAt(main.id, anchor, side, card).withEffectDefaultsFor(listOf(card.id)) }) {
                 viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(card.id)) }
             }
         }
@@ -415,7 +416,7 @@ class EditorViewModel
                     val applied =
                         when (purpose) {
                             IntakePurpose.Add -> {
-                                edit { addToMain(clips) }
+                                edit { addToMain(clips).withEffectDefaultsFor(clips.map { it.id }) }
                             }
 
                             is IntakePurpose.Insert -> {
@@ -428,7 +429,7 @@ class EditorViewModel
                                         anchor = c.id
                                         side = Side.AFTER
                                     }
-                                    p
+                                    p.withEffectDefaultsFor(clips.map { it.id })
                                 }
                             }
 
@@ -521,7 +522,13 @@ class EditorViewModel
             loadedFiles = files
             val start: Long
             val play: Boolean
-            if (firstLoad) {
+            val asked = pendingPreviewUs
+            if (asked != null && !firstLoad) {
+                pendingPreviewUs = null
+                previewFallback?.cancel()
+                start = asked
+                play = true
+            } else if (firstLoad) {
                 firstLoad = false
                 start = savedState.get<Long>(KEY_POSITION) ?: 0L
                 play = savedState.get<Boolean>(KEY_PLAYING) ?: false
@@ -533,6 +540,30 @@ class EditorViewModel
         }
 
         fun togglePlay() = engine.togglePlay()
+
+        /** Where the preview plays from once it has the video just edited ([previewFrom]), or null. */
+        private var pendingPreviewUs: Long? = null
+        private var previewFallback: Job? = null
+
+        /**
+         * Plays the preview from [us] as soon as it has the edit just made (a
+         * transition or animation chosen in a picker), so the change shows
+         * straight away. If the edit changed nothing the preview reloads, it
+         * plays from there a moment later all the same.
+         */
+        fun previewFrom(us: Long) {
+            pendingPreviewUs = us
+            previewFallback?.cancel()
+            previewFallback =
+                viewModelScope.launch {
+                    delay(PREVIEW_FALLBACK_MS)
+                    pendingPreviewUs?.let { at ->
+                        pendingPreviewUs = null
+                        engine.seekTo(at)
+                        engine.play()
+                    }
+                }
+        }
 
         fun pause() = engine.pause()
 
@@ -599,6 +630,9 @@ class EditorViewModel
         companion object {
             /** The preview's plan height; only bitmaps depend on it, the players play the files as they are. */
             const val PREVIEW_HEIGHT = 720
+
+            /** How long [previewFrom] waits for the edited video before it plays what it has. */
+            const val PREVIEW_FALLBACK_MS = 1_500L
             const val STRIP_SIDE = 160
             const val STRIP_CACHE = 96
             const val KEY_INTAKE_PURPOSE = "editor_intake_purpose"

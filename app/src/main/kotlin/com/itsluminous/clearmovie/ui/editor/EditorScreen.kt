@@ -272,6 +272,11 @@ fun EditorScreen(
                     state.panel = OpenPanel(Panel.ITEM_MENU, id)
                 }
 
+                override fun transition(lead: ClipId) {
+                    state.selected = lead
+                    state.panel = OpenPanel(Panel.TRANSITION, lead)
+                }
+
                 override fun showAllRows() = state.layoutEvent(LayoutEvent.ShowAllRows)
 
                 override fun showFewerRows() = state.layoutEvent(LayoutEvent.ShowFewerRows)
@@ -332,6 +337,14 @@ fun EditorScreen(
 
                     EditAction.COLOUR -> {
                         state.panel = OpenPanel(Panel.CARD_COLOUR, id)
+                    }
+
+                    EditAction.TRANSITION -> {
+                        state.panel = OpenPanel(Panel.TRANSITION, id)
+                    }
+
+                    EditAction.ANIMATION -> {
+                        state.panel = OpenPanel(Panel.ANIMATION, id)
                     }
 
                     EditAction.ROTATE -> {
@@ -657,6 +670,7 @@ private fun barActions(
         canMoveLeft = index > 0,
         canMoveRight = index < count - 1,
         canJoin = joinTarget(project, slots, selected) != null,
+        hasNext = selected.index < slots.lastIndex,
     )
 }
 

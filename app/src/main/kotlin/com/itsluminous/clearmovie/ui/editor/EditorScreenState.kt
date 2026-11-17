@@ -36,6 +36,12 @@ enum class Panel {
 
     /** A long-press on an item without moving. */
     ITEM_MENU,
+
+    /** The transition from the item into the next one (cm-effects). */
+    TRANSITION,
+
+    /** The item's start, end and during animations (cm-effects). */
+    ANIMATION,
 }
 
 /** An open panel: what it is about ([clipId]) and, for an insert, where the new item goes. */

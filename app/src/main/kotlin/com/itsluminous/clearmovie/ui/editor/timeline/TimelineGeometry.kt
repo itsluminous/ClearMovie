@@ -25,12 +25,32 @@ data class PlusPoint(
     val xDp: Double,
     /** True when the point was moved off the selected item's trim handle. */
     val displaced: Boolean,
+    /**
+     * True when it sits on the row's top edge, above a transition marker
+     * (ARCHITECTURE section 11.6), rather than on the row's centre line.
+     */
+    val top: Boolean = false,
+)
+
+/**
+ * A transition marker (ARCHITECTURE section 11.10): a bow tie on the row's
+ * centre line, in the middle of the overlap between item [leadIndex] and the
+ * next one. Tapping it opens that transition.
+ */
+data class MarkerPoint(
+    val boundary: Int,
+    val leadIndex: Int,
+    val xDp: Double,
 )
 
 /** What a touch landed on, in priority order (ARCHITECTURE section 11.5). */
 sealed interface HitTarget {
     data class Plus(
         val point: PlusPoint,
+    ) : HitTarget
+
+    data class Marker(
+        val point: MarkerPoint,
     ) : HitTarget
 
     data class TrimStart(
@@ -67,6 +87,12 @@ sealed interface HitTarget {
  *   points move outside it, [HANDLE_GAP_DP] clear of the handles' hit area.
  * - No two "+" hit areas overlap: the one around the selected item wins,
  *   then the one under the playhead, then the earlier one.
+ * - A junction with a transition has a marker on the centre line, in the
+ *   middle of the overlap; its "+" moves up to the row's top edge, its hit
+ *   area just above the marker's, so the two never share a spot. A "+" that
+ *   would come within a marker's hit area moves up the same way. A marker
+ *   gives way to the selected item's trim handles (the bar's Transition
+ *   opens it then) and to an earlier marker closer than its hit area.
  */
 class TimelineGeometry(
     val spans: List<SlotSpan>,
@@ -114,8 +140,34 @@ class TimelineGeometry(
 
     private fun wideEnough(i: Int?): Boolean = i == null || i !in spans.indices || width(i) >= PLUS_ROOM_DP
 
+    /** Whether items b - 1 and b overlap (a transition joins them). */
+    private fun overlaps(b: Int): Boolean = b in 1 until spans.size && spans[b - 1].endMs > spans[b].startMs
+
+    /** The transition markers to draw. */
+    fun markers(): List<MarkerPoint> {
+        val handles = handleHitAreas()?.toList().orEmpty()
+        val kept = mutableListOf<MarkerPoint>()
+        for (b in 1 until spans.size) {
+            if (!overlaps(b)) continue
+            val x = (left(b) + right(b - 1)) / 2
+            val clear =
+                handles.all { h ->
+                    x + MARKER_HIT_DP / 2 + HANDLE_GAP_DP <= h.start ||
+                        x - MARKER_HIT_DP / 2 - HANDLE_GAP_DP >= h.endInclusive
+                }
+            if (!clear) continue
+            if (kept.any { abs(it.xDp - x) < MARKER_HIT_DP }) continue
+            kept += MarkerPoint(b, b - 1, x)
+        }
+        return kept
+    }
+
+    /** The centre of [p]'s hit area, in the geometry's y. */
+    fun plusCentreY(p: PlusPoint): Double = if (p.top) mainCentre - LIFT_DP else mainCentre
+
     /** The "+" points to draw. */
     fun plusPoints(): List<PlusPoint> {
+        val markers = markers()
         if (spans.isEmpty()) return emptyList()
         val sel = selected?.takeIf { it in spans.indices }
         val candidates = mutableListOf<Pair<PlusPoint, Int>>() // point to priority (lower wins)
@@ -128,6 +180,13 @@ class TimelineGeometry(
             val underPlayhead = abs(playheadX - x) <= PLUS_HIT_DP / 2
             val roomy = wideEnough(b - 1) && wideEnough(b)
             if (!aroundSelected && !underPlayhead && !roomy) continue
+            val marker = markers.firstOrNull { it.boundary == b }
+            if (marker != null) {
+                // Over the marker, at its x: never on it, and clear of the trim handles as it is.
+                val (a, sd) = if (aroundSelected) sel!! to (if (b == sel) InsertSide.BEFORE else InsertSide.AFTER) else anchor to side
+                candidates += PlusPoint(b, a, sd, marker.xDp, displaced = false, top = true) to if (aroundSelected) 0 else 1
+                continue
+            }
             if (aroundSelected) {
                 // Around the selected item the "+" always inserts next to it; with trim
                 // handles it moves outside the item, on the neighbour's side.
@@ -149,9 +208,16 @@ class TimelineGeometry(
                     p.xDp - PLUS_HIT_DP / 2 - HANDLE_GAP_DP >= h.endInclusive
             }
         val kept = mutableListOf<PlusPoint>()
-        for ((point, priority) in candidates.sortedWith(compareBy({ it.second }, { it.first.boundary }))) {
-            if (priority > 0 && !clearOfHandles(point)) continue
-            if (kept.none { abs(it.xDp - point.xDp) < PLUS_HIT_DP }) kept += point
+        for ((candidate, priority) in candidates.sortedWith(compareBy({ it.second }, { it.first.boundary }))) {
+            // A "+" on the centre line that would touch a marker's hit area goes up to the top edge.
+            val point =
+                if (!candidate.top && markers.any { abs(it.xDp - candidate.xDp) < (PLUS_HIT_DP + MARKER_HIT_DP) / 2 }) {
+                    candidate.copy(top = true)
+                } else {
+                    candidate
+                }
+            if ((priority > 0 || point.top) && !clearOfHandles(point)) continue
+            if (kept.none { it.top == point.top && abs(it.xDp - point.xDp) < PLUS_HIT_DP }) kept += point
         }
         return kept.sortedBy { it.boundary }
     }
@@ -170,14 +236,20 @@ class TimelineGeometry(
         x: Double,
         y: Double,
     ): HitTarget {
+        // The "+" points and markers come first, over whatever is under them (a lifted "+" reaches above the row).
+        val plus =
+            plusPoints()
+                .filter { abs(it.xDp - x) <= PLUS_HIT_DP / 2 && abs(y - plusCentreY(it)) <= PLUS_HIT_DP / 2 }
+                .minByOrNull { abs(it.xDp - x) }
+        if (plus != null) return HitTarget.Plus(plus)
+        val marker =
+            markers()
+                .filter { abs(it.xDp - x) <= MARKER_HIT_DP / 2 && abs(y - mainCentre) <= MARKER_HIT_DP / 2 }
+                .minByOrNull { abs(it.xDp - x) }
+        if (marker != null) return HitTarget.Marker(marker)
         if (y < mainTop) return HitTarget.Ruler
         val onMain = y in mainTop..mainBottom
         if (onMain) {
-            val plus =
-                plusPoints()
-                    .filter { abs(it.xDp - x) <= PLUS_HIT_DP / 2 && abs(y - mainCentre) <= PLUS_HIT_DP / 2 }
-                    .minByOrNull { abs(it.xDp - x) }
-            if (plus != null) return HitTarget.Plus(plus)
             handleHitAreas()?.let { (start, end) ->
                 val inStart = x in start
                 val inEnd = x in end
@@ -200,6 +272,11 @@ class TimelineGeometry(
         const val PLUS_DP = 24.0
         const val PLUS_HIT_DP = 48.0
         const val HANDLE_DP = 24.0
+        const val MARKER_DP = 24.0
+        const val MARKER_HIT_DP = 48.0
+
+        /** How far above the row's centre line a lifted "+" sits. */
+        const val LIFT_DP = (PLUS_HIT_DP + MARKER_HIT_DP) / 2
         const val HANDLE_HIT_DP = 48.0
 
         /** The clear space between a moved "+" hit area and a trim handle's. */

@@ -430,4 +430,50 @@
     <string name="timeline_text_card_named">Text card: %1$s</string>
     <string name="split_loop_first">To split this video, set Loop back to 1 time first.</string>
     <string name="timeline_ruler">Time</string>
+
+    <!-- Transitions and animations (cm-effects). -->
+    <string name="action_transition">Transition</string>
+    <string name="action_animation">Animation</string>
+    <string name="effect_none">None</string>
+    <string name="transition_title">Change to the next item</string>
+    <string name="transition_crossfade">Crossfade</string>
+    <string name="transition_fade_black">Fade through black</string>
+    <string name="transition_fade_white">Fade through white</string>
+    <string name="transition_wipe">Wipe</string>
+    <string name="transition_slide">Slide</string>
+    <string name="transition_circle">Circle</string>
+    <string name="transition_zoom">Zoom in</string>
+    <string name="transition_apply_all">Use for all items</string>
+    <string name="transition_applied_all">Used for all items</string>
+    <string name="transition_remove">Remove</string>
+    <string name="transition_insert_here">Add something here</string>
+    <string name="transition_too_short">These two items are too short for a transition.</string>
+    <string name="transition_last">This is the last item: nothing comes after it.</string>
+    <string name="effect_length">Length</string>
+    <string name="animation_title">How it comes and goes</string>
+    <string name="animation_tab_start">Start</string>
+    <string name="animation_tab_end">End</string>
+    <string name="animation_tab_during">All through</string>
+    <string name="animation_nothing">Nothing to choose here for this item.</string>
+    <string name="anim_fade_in">Fade in</string>
+    <string name="anim_fade_out">Fade out</string>
+    <string name="anim_slide_in">Slide in</string>
+    <string name="anim_slide_out">Slide out</string>
+    <string name="anim_zoom_in">Zoom in</string>
+    <string name="anim_zoom_out">Zoom out</string>
+    <string name="anim_pop">Pop</string>
+    <string name="anim_bounce">Bounce</string>
+    <string name="anim_ken_burns_in">Gentle zoom in</string>
+    <string name="anim_ken_burns_out">Gentle zoom out</string>
+    <string name="anim_pulse">Pulse</string>
+    <string name="direction_left">Left</string>
+    <string name="direction_right">Right</string>
+    <string name="direction_up">Up</string>
+    <string name="direction_down">Down</string>
+    <!-- A length in seconds and tenths, such as 0.6 s. %1$d is seconds, %2$d tenths. -->
+    <string name="effect_seconds">%1$d.%2$d s</string>
+    <!-- An effect and its direction, read by TalkBack: "Wipe, Left". %1$s is the effect, %2$s the direction. -->
+    <string name="effect_tile_with_direction">%1$s, %2$s</string>
+    <!-- The marker between two items. %1$s is the item before it (Photo, Video...), %2$s the transition's name. -->
+    <string name="timeline_transition_marker">Transition after this %1$s: %2$s</string>
 </resources>

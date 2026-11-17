@@ -16,8 +16,12 @@ import com.itsluminous.clearmovie.domain.model.TrackId
  * - [main]: the MAIN row as one plain player's playlist. A video plays in
  *   the player; anything else (a photo, a held frame, a card) is a still the
  *   preview draws over the player while the player runs silence for it.
- *   Where a transition overlaps two items, the preview cuts to the incoming
- *   item when it starts (the exact draft shows the real blend).
+ *   Where a transition overlaps two items, the player moves on to the
+ *   incoming item when it starts, and the rest of the outgoing item is a
+ *   [tail]: a second player plays it (or the preview draws it, for a still)
+ *   for the length of the overlap, so both items show and sound at once
+ *   and the preview draws the transition from the same [PictureMotion] the
+ *   export does.
  * - [overlays]: each OVERLAY row with video (the frame) as a muted player of
  *   its own, drawn over MAIN in stacking order and keyed.
  * - [sounds]: every sound row (music, voice, the closing message) as an
@@ -35,7 +39,9 @@ data class PreviewSchedule(
     val sounds: List<SoundLane>,
     val captions: List<CaptionEntry>,
     val layerOrder: List<LayerRef>,
-    private val mainSound: List<AudioSegment>,
+    val tail: List<TailEntry> = emptyList(),
+    /** The tails as a follower player's playlist: the videos play, everything else is a gap. */
+    val tailLane: Lane? = null,
 ) {
     /** The MAIN entry playing at [us] (the last one at or after the end). */
     fun mainIndexAt(us: Long): Int {
@@ -45,10 +51,19 @@ data class PreviewSchedule(
         return i.coerceAtLeast(0)
     }
 
-    /** The MAIN row's own sound level at [us], in dB, or null where it is silent. */
+    /** The MAIN player's sound level at [us], in dB, or null where it plays no sound. */
     fun mainGainDbAt(us: Long): Double? {
-        val s = mainSound.firstOrNull { us >= it.startUs && us < it.endUs } as? AudioSegment.Sound ?: return null
-        return s.gain.dbAt(us - s.startUs)
+        val e = main.getOrNull(mainIndexAt(us)) ?: return null
+        return e.gain?.dbAt(us - e.startUs)
+    }
+
+    /** The tail showing at [us], if a transition is under way. */
+    fun tailAt(us: Long): TailEntry? = tail.firstOrNull { us >= it.startUs && us < it.endUs }
+
+    /** The tail player's sound level at [us], in dB, or null where it plays no sound. */
+    fun tailGainDbAt(us: Long): Double? {
+        val e = tailAt(us) ?: return null
+        return e.gain?.dbAt(us - e.startUs)
     }
 
     fun captionsAt(us: Long): List<CaptionEntry> = captions.filter { us >= it.startUs && us < it.endUs }
@@ -66,14 +81,42 @@ data class PreviewSchedule(
         ) : LayerRef
     }
 
-    /** One MAIN playlist item, from [startUs] for [durationUs] of the video's time. */
+    /**
+     * One MAIN playlist item, from [startUs] for [durationUs] of the video's
+     * time. [clipOffsetUs] is where it starts in its clip, for [motion];
+     * [upper] is true for an item of the B lane (drawn over a [tail] of lane
+     * A); [gain] is its sound's level in its own time.
+     */
     data class MainEntry(
         val startUs: Long,
         val durationUs: Long,
         val content: MainContent,
         val placement: Placement,
+        val motion: PictureMotion? = null,
+        val clipOffsetUs: Long = 0,
+        val upper: Boolean = false,
+        val gain: GainEnvelope? = null,
     ) {
         val endUs: Long get() = startUs + durationUs
+
+        /** Its clip's time at [us] of the video. */
+        fun clipUsAt(us: Long): Long = us - startUs + clipOffsetUs
+    }
+
+    /** The end of an outgoing MAIN item during a transition, shown with the incoming one. */
+    data class TailEntry(
+        val startUs: Long,
+        val durationUs: Long,
+        val content: MainContent,
+        val placement: Placement,
+        val motion: PictureMotion?,
+        val clipOffsetUs: Long,
+        val upper: Boolean,
+        val gain: GainEnvelope? = null,
+    ) {
+        val endUs: Long get() = startUs + durationUs
+
+        fun clipUsAt(us: Long): Long = us - startUs + clipOffsetUs
     }
 
     sealed interface MainContent {
@@ -146,8 +189,12 @@ data class PreviewSchedule(
         val durationUs: Long,
         val caption: Source.Caption,
         val rect: NormRect,
+        val motion: PictureMotion? = null,
+        val clipOffsetUs: Long = 0,
     ) {
         val endUs: Long get() = startUs + durationUs
+
+        fun clipUsAt(us: Long): Long = us - startUs + clipOffsetUs
     }
 
     companion object {
@@ -194,7 +241,7 @@ data class PreviewSchedule(
                             layer.segments.filterIsInstance<VisualSegment.Picture>().mapNotNull { p ->
                                 val caption = p.source as? Source.Caption ?: return@mapNotNull null
                                 val rect = (p.placement as? Placement.Box)?.rect ?: return@mapNotNull null
-                                CaptionEntry(layer.trackId, p.startUs, p.durationUs, caption, rect)
+                                CaptionEntry(layer.trackId, p.startUs, p.durationUs, caption, rect, p.motion, p.clipOffsetUs)
                             }
                         if (mine.isNotEmpty()) {
                             order += LayerRef.Captions(layer.trackId)
@@ -208,40 +255,92 @@ data class PreviewSchedule(
                     }
                 }
             }
-            val mainSound =
+            val mainSounds =
                 plan.audio
-                    .firstOrNull { it.role == AudioLayerRole.CLIP && it.trackId == mainTrack }
-                    ?.segments
-                    .orEmpty()
+                    .filter { it.role == AudioLayerRole.CLIP && it.trackId == mainTrack }
+                    .flatMap { it.segments.filterIsInstance<AudioSegment.Sound>() }
             val sounds =
                 plan.audio
                     .filter { it.role != AudioLayerRole.CLIP }
                     .map { SoundLane(it.trackId, it.role, soundEntries(it, total)) }
                     .filter { lane -> lane.entries.any { it is LaneEntry.Play } }
+            val (main, tail) = mainEntries(mainLayers, total, mainSounds)
+            val tailLane =
+                mainTrack
+                    ?.let { id ->
+                        Lane(
+                            id,
+                            covered(
+                                tail.mapNotNull { t ->
+                                    val video = t.content as? MainContent.Video ?: return@mapNotNull null
+                                    LaneEntry.Play(
+                                        t.startUs,
+                                        t.durationUs,
+                                        video.media,
+                                        video.clipStartUs,
+                                        video.speed,
+                                        placement = t.placement,
+                                    )
+                                },
+                                total,
+                            ),
+                        )
+                    }?.takeIf { lane -> lane.entries.any { it is LaneEntry.Play } }
             return PreviewSchedule(
                 durationUs = total,
-                main = mainEntries(mainLayers, total),
+                main = main,
                 overlays = overlays,
                 sounds = sounds,
                 captions = captions.sortedBy { it.startUs },
                 layerOrder = order,
-                mainSound = mainSound,
+                tail = tail,
+                tailLane = tailLane,
             )
         }
 
-        /** MAIN's two lanes merged into one cut-only list that covers [0, total). */
+        /**
+         * MAIN's two lanes merged into one cut-only list that covers [0, total),
+         * and the tails: the part of each item after the next one has started.
+         */
         private fun mainEntries(
             layers: List<VisualLayer>,
             total: Long,
-        ): List<MainEntry> {
-            if (total <= 0) return emptyList()
-            val pictures = layers.flatMap { it.segments.filterIsInstance<VisualSegment.Picture>() }.sortedBy { it.startUs }
+            sounds: List<AudioSegment.Sound>,
+        ): Pair<List<MainEntry>, List<TailEntry>> {
+            if (total <= 0) return emptyList<MainEntry>() to emptyList()
+            val pictures =
+                layers
+                    .flatMap { layer ->
+                        layer.segments.filterIsInstance<VisualSegment.Picture>().map {
+                            it to
+                                (layer.role == LayerRole.MAIN_B)
+                        }
+                    }.sortedBy { it.first.startUs }
             val out = mutableListOf<MainEntry>()
+            val tails = mutableListOf<TailEntry>()
             var at = 0L
-            for ((i, p) in pictures.withIndex()) {
-                val nextStart = pictures.getOrNull(i + 1)?.startUs ?: total
+            for ((i, pair) in pictures.withIndex()) {
+                val (p, upper) = pair
+                val nextStart = pictures.getOrNull(i + 1)?.first?.startUs ?: total
                 val start = maxOf(p.startUs, at)
                 val end = minOf(p.endUs, nextStart, total)
+                val sound = soundOf(p, sounds)
+                // The rest of an item whose successor starts before it ends: a transition's overlap.
+                val tailEnd = minOf(p.endUs, total)
+                if (nextStart < tailEnd && tailEnd - nextStart >= MIN_ENTRY_US) {
+                    val t = p.trimmedFront(nextStart - p.startUs)
+                    tails +=
+                        TailEntry(
+                            nextStart,
+                            tailEnd - nextStart,
+                            content(t),
+                            t.placement,
+                            t.motion,
+                            t.clipOffsetUs,
+                            upper,
+                            sound?.let { it.gain.slice(nextStart - it.startUs, tailEnd - it.startUs) },
+                        )
+                }
                 if (start > at) {
                     out += blank(at, start - at)
                     at = start
@@ -250,11 +349,30 @@ data class PreviewSchedule(
                 if (end - start < MIN_ENTRY_US) continue
                 // A picture that starts late into its own segment (cut by the one before) starts later in its file.
                 val trimmed = p.trimmedFront(start - p.startUs)
-                out += MainEntry(start, end - start, content(trimmed), trimmed.placement)
+                out +=
+                    MainEntry(
+                        start,
+                        end - start,
+                        content(trimmed),
+                        trimmed.placement,
+                        trimmed.motion,
+                        trimmed.clipOffsetUs,
+                        upper,
+                        sound?.let { it.gain.slice(start - it.startUs, end - it.startUs) },
+                    )
                 at = end
             }
             if (at < total) out += blank(at, total - at)
-            return mergeSlivers(out)
+            return mergeSlivers(out) to tails
+        }
+
+        /** The sound planned with a MAIN picture: the clip sound of the same file, starting with it. */
+        private fun soundOf(
+            p: VisualSegment.Picture,
+            sounds: List<AudioSegment.Sound>,
+        ): AudioSegment.Sound? {
+            val media = (p.source as? Source.Video)?.media ?: return null
+            return sounds.firstOrNull { it.media == media && it.startUs == p.startUs }
         }
 
         private fun content(p: VisualSegment.Picture): MainContent =

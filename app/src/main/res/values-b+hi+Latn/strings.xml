@@ -391,4 +391,47 @@
     <string name="timeline_text_card_named">Text card: %1$s</string>
     <string name="split_loop_first">Is video ko split karne ke liye pehle Loop ko 1 baar par karein.</string>
     <string name="timeline_ruler">Time</string>
+
+    <!-- Transitions and animations (cm-effects). -->
+    <string name="action_transition">Transition</string>
+    <string name="action_animation">Animation</string>
+    <string name="effect_none">Kuch nahi</string>
+    <string name="transition_title">Agle item par kaise jaaye</string>
+    <string name="transition_crossfade">Crossfade</string>
+    <string name="transition_fade_black">Black se hokar</string>
+    <string name="transition_fade_white">White se hokar</string>
+    <string name="transition_wipe">Wipe</string>
+    <string name="transition_slide">Slide</string>
+    <string name="transition_circle">Circle</string>
+    <string name="transition_zoom">Zoom in</string>
+    <string name="transition_apply_all">Sab par lagayein</string>
+    <string name="transition_applied_all">Sab par laga hai</string>
+    <string name="transition_remove">Hatayein</string>
+    <string name="transition_insert_here">Yahan kuch add karein</string>
+    <string name="transition_too_short">Ye dono items transition ke liye bahut chhote hain.</string>
+    <string name="transition_last">Ye aakhri item hai: iske baad kuch nahi hai.</string>
+    <string name="effect_length">Kitni der</string>
+    <string name="animation_title">Kaise aaye aur jaaye</string>
+    <string name="animation_tab_start">Shuru me</string>
+    <string name="animation_tab_end">Aakhir me</string>
+    <string name="animation_tab_during">Poore samay</string>
+    <string name="animation_nothing">Is item ke liye yahan chunne ko kuch nahi hai.</string>
+    <string name="anim_fade_in">Fade in</string>
+    <string name="anim_fade_out">Fade out</string>
+    <string name="anim_slide_in">Slide in</string>
+    <string name="anim_slide_out">Slide out</string>
+    <string name="anim_zoom_in">Zoom in</string>
+    <string name="anim_zoom_out">Zoom out</string>
+    <string name="anim_pop">Pop</string>
+    <string name="anim_bounce">Bounce</string>
+    <string name="anim_ken_burns_in">Halka zoom in</string>
+    <string name="anim_ken_burns_out">Halka zoom out</string>
+    <string name="anim_pulse">Pulse</string>
+    <string name="direction_left">Left</string>
+    <string name="direction_right">Right</string>
+    <string name="direction_up">Upar</string>
+    <string name="direction_down">Neeche</string>
+    <string name="effect_seconds">%1$d.%2$d second</string>
+    <string name="effect_tile_with_direction">%1$s, %2$s</string>
+    <string name="timeline_transition_marker">Is %1$s ke baad transition: %2$s</string>
 </resources>

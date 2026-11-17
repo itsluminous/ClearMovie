@@ -35,6 +35,8 @@ data class PreviewState(
     val mainIndex: Int = -1,
     /** The MAIN player's picture size for the current video, or null before it is known. */
     val mainVideoSize: VideoSize? = null,
+    /** The tail player's picture size (the outgoing video in a transition), or null before it is known. */
+    val tailVideoSize: VideoSize? = null,
     /** Per overlay lane: whether its picture shows now. */
     val overlayVisible: List<Boolean> = emptyList(),
     /** Media that could not be opened; those parts are left out of the preview. */
@@ -49,8 +51,10 @@ data class PreviewState(
 
 /**
  * The layered editor preview (render decision D1): MAIN plays in one plain
- * ExoPlayer and is the clock; each frame row plays muted in a player of its
- * own, keyed with the export's [ChromaKeyEffect] and drawn over MAIN; each
+ * ExoPlayer and is the clock; during a transition a second player plays the
+ * end of the outgoing item (the schedule's tail), picture and sound, so the
+ * two items blend as in the export; each frame row plays muted in a player of
+ * its own, keyed with the export's [ChromaKeyEffect] and drawn over MAIN; each
  * sound row plays in an audio-only player. Followers are kept within
  * [MAX_DRIFT_US] of MAIN, and every player's volume follows the plan's gain
  * envelopes, so the music ducks as it will in the export.
@@ -74,6 +78,9 @@ class LayeredPreviewEngine(
         private set
 
     private var main: PreviewPlayer? = null
+    private var tail: PreviewPlayer? = null
+    private var tailSurface: TextureView? = null
+    private var tailAttached = false
     private val overlays = mutableListOf<PreviewPlayer?>()
     private val sounds = mutableListOf<PreviewPlayer?>()
     private var ticker: Job? = null
@@ -121,6 +128,23 @@ class LayeredPreviewEngine(
                     mainAttached = true
                 }
             }
+        next.tailLane?.let { lane ->
+            val sources =
+                lane.entries.map { e ->
+                    (e as? LaneEntry.Play)?.let { p -> uri(p.media)?.let { clipped(it, p.clipStartUs, p.clipEndUs()) } }
+                }
+            if (sources.any { it != null }) {
+                tail =
+                    players.create(PlayerRole.TAIL, null).apply {
+                        setSegments(lane.entries.mapIndexed { j, e -> sources[j] ?: silence(e.durationUs) })
+                        addListener(TailListener(this))
+                        tailSurface?.let {
+                            setVideoTextureView(it)
+                            tailAttached = true
+                        }
+                    }
+            }
+        }
         next.overlays.forEachIndexed { i, lane ->
             val sources =
                 lane.entries.map { e ->
@@ -236,6 +260,21 @@ class LayeredPreviewEngine(
         }
     }
 
+    /** Shows the transition tail on [view]; like [setMainSurface], safe to call on every update. */
+    fun setTailSurface(view: TextureView?) {
+        checkMainThread()
+        if (view === tailSurface && view != null && tailAttached) return
+        tailSurface?.let { old -> if (old !== view) tail?.clearVideoTextureView(old) }
+        tailSurface = view
+        tailAttached = view != null && tail != null
+        view?.let { tail?.setVideoTextureView(it) }
+    }
+
+    fun releaseTailSurface(view: TextureView) {
+        checkMainThread()
+        if (tailSurface === view) setTailSurface(null)
+    }
+
     /** [view] is going away; it is detached only if it is still the one in use (a newer one may have replaced it). */
     fun releaseMainSurface(view: TextureView) {
         checkMainThread()
@@ -255,6 +294,7 @@ class LayeredPreviewEngine(
         checkMainThread()
         releasePlayers()
         mainSurface = null
+        tailSurface = null
         overlaySurfaces.clear()
         schedule = null
     }
@@ -264,16 +304,18 @@ class LayeredPreviewEngine(
     private fun releasePlayers() {
         stillPending.clear()
         mainAttached = false
+        tailAttached = false
         overlaysAttached.clear()
         ticker?.cancel()
         ticker = null
         allPlayers().forEach { it.release() }
         main = null
+        tail = null
         overlays.clear()
         sounds.clear()
     }
 
-    private fun allPlayers(): List<PreviewPlayer> = listOfNotNull(main) + overlays.filterNotNull() + sounds.filterNotNull()
+    private fun allPlayers(): List<PreviewPlayer> = listOfNotNull(main, tail) + overlays.filterNotNull() + sounds.filterNotNull()
 
     private fun startTicker() {
         if (ticker?.isActive == true) return
@@ -303,6 +345,7 @@ class LayeredPreviewEngine(
         val t = mainTimeUs()
         if (force) followTo(t) else keepInStep(t)
         main?.volume = gainOf(s.mainGainDbAt(t))
+        tail?.volume = gainOf(s.tailGainDbAt(t))
         s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.volume = gainOf(lane.gainDbAt(t)) }
     }
 
@@ -318,6 +361,8 @@ class LayeredPreviewEngine(
             if (paused && lane.entries.getOrNull(lane.indexAt(t)) is LaneEntry.Play) showStill(player)
         }
         s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.let { seekLane(it, lane.entries, t) } }
+        s.tailLane?.let { lane -> tail?.let { seekLane(it, lane.entries, t) } }
+        applyTailSpeed()
     }
 
     /** Followers playing only to show their first frame after a seek, with the request each is for. */
@@ -353,6 +398,7 @@ class LayeredPreviewEngine(
         }
         s.overlays.forEachIndexed { i, lane -> overlays.getOrNull(i)?.let { check(it, lane.entries) } }
         s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.let { check(it, lane.entries) } }
+        s.tailLane?.let { lane -> tail?.let { check(it, lane.entries) } }
     }
 
     private fun laneTimeUs(
@@ -376,6 +422,15 @@ class LayeredPreviewEngine(
         val within = (t - e.startUs).coerceIn(0, e.durationUs)
         val mediaUs = if (e is LaneEntry.Play) within * e.speed.numerator / e.speed.denominator else within
         player.seekTo(i, mediaUs / 1000)
+    }
+
+    /** The tail plays its entry at the entry's speed (a sped-up outgoing video stays sped up). */
+    private fun applyTailSpeed() {
+        val p = tail ?: return
+        val e = schedule?.tailLane?.entries?.getOrNull(p.currentMediaItemIndex) as? LaneEntry.Play
+        val speed = e?.speed ?: Speed.X1
+        val wanted = speed.numerator.toFloat() / speed.denominator
+        if (p.speed != wanted) p.speed = wanted
     }
 
     private fun applySpeed(index: Int) {
@@ -419,7 +474,7 @@ class LayeredPreviewEngine(
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
-                (overlays + sounds).filterNotNull().forEach { it.playWhenReady = false }
+                (overlays + sounds + tail).filterNotNull().forEach { it.playWhenReady = false }
             }
             publish()
         }
@@ -435,6 +490,27 @@ class LayeredPreviewEngine(
             p.prepare()
             seekTo(s.main[next].startUs)
             publish()
+        }
+    }
+
+    private inner class TailListener(
+        private val player: PreviewPlayer,
+    ) : Player.Listener {
+        override fun onMediaItemTransition(
+            mediaItem: MediaItem?,
+            reason: Int,
+        ) {
+            applyTailSpeed()
+            publish()
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            if (videoSize.width > 0 && videoSize.height > 0) stateFlow.value = stateFlow.value.copy(tailVideoSize = videoSize)
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // An outgoing item that can't play is left out of the blend; MAIN keeps playing.
+            if (player === tail) stateFlow.value = stateFlow.value.copy(unavailable = stateFlow.value.unavailable + 1)
         }
     }
 

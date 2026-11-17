@@ -42,12 +42,4 @@ class GainEnvelopeTest {
     fun `points out of order are refused`() {
         GainEnvelope(listOf(GainPoint(5, 0.0), GainPoint(1, 0.0)))
     }
-
-    @Test
-    fun `alpha ramps are linear in clip time`() {
-        val r = AlphaRamp(100, 300, 0f, 1f)
-        assertThat(r.alphaAt(0)).isEqualTo(0f)
-        assertThat(r.alphaAt(200)).isWithin(1e-6f).of(0.5f)
-        assertThat(r.alphaAt(400)).isEqualTo(1f)
-    }
 }

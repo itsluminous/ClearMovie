@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.render.plan
 
+import com.itsluminous.clearmovie.domain.model.Animations
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.AudioRole
@@ -23,6 +24,7 @@ import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.isValid
 import com.itsluminous.clearmovie.domain.model.mainLayout
@@ -137,21 +139,21 @@ class RenderPlanBuilder(
         val b = SegmentLane(ctx.totalUs)
         ctx.slots.forEachIndexed { i, slot ->
             val lane = if (ctx.lanes[i] == 0) a else b
+            // B is drawn over A: the clip in B carries the transition's mask or fade, as the
+            // incoming clip or the outgoing one; both move (MotionMath).
             val upper = ctx.lanes[i] == 1
-            val ramps = mutableListOf<AlphaRamp>()
             val durUs = slot.durationMs * US
-            // B is drawn over A, so the clip in B fades: in when it is the incoming
-            // clip, out when it is the outgoing one. The result is the same blend.
-            if (upper) {
-                ctx.slots.getOrNull(i - 1)?.let { prev ->
-                    if (prev.overlapToNextMs > 0) ramps += AlphaRamp(0, prev.overlapToNextMs * US, 0f, 1f)
+            val into =
+                ctx.slots.getOrNull(i - 1)?.takeIf { it.overlapToNextMs > 0 }?.let { prev ->
+                    TransitionPart(prev.clip.transitionToNext!!.kind, 0, prev.overlapToNextMs * US, TransitionRole.IN, upper)
                 }
-                if (i < ctx.slots.lastIndex && slot.overlapToNextMs > 0) {
-                    ramps += AlphaRamp(durUs - slot.overlapToNextMs * US, durUs, 1f, 0f)
+            val out =
+                slot.takeIf { i < ctx.slots.lastIndex && it.overlapToNextMs > 0 }?.let {
+                    TransitionPart(it.clip.transitionToNext!!.kind, durUs - it.overlapToNextMs * US, durUs, TransitionRole.OUT, upper)
                 }
-            }
             for (part in mainParts(ctx, slot)) {
-                lane.add(part.copy(alpha = ramps.toList(), startUs = slot.startMs * US + part.clipOffsetUs))
+                val motion = motionFor(slot.clip.animations, durUs, part.placement, into, out)
+                lane.add(part.copy(motion = motion, startUs = slot.startMs * US + part.clipOffsetUs))
             }
         }
         val layers = mutableListOf(VisualLayer(track.id, LayerRole.MAIN, a.finish()))
@@ -244,6 +246,24 @@ class RenderPlanBuilder(
         clipOffsetUs = clipOffsetUs,
     )
 
+    /** The motion of a picture drawn at [placement] for a clip [durUs] long, or null when it does not move. */
+    private fun motionFor(
+        animations: Animations,
+        durUs: Long,
+        placement: Placement,
+        into: TransitionPart? = null,
+        out: TransitionPart? = null,
+    ): PictureMotion? {
+        val (rect, clip) =
+            when (placement) {
+                is Placement.Window -> placement.rect to true
+                is Placement.Pip -> placement.rect to false
+                is Placement.Box -> placement.rect to false
+                Placement.FullFrame -> NormRect.FULL to false
+            }
+        return PictureMotion(durUs, rect, clip, animations.start, animations.end, animations.during, into, out).takeUnless { it.isStill }
+    }
+
     private fun videoSource(clip: VideoClip) =
         Source.Video(clip.media, clip.sourceDurationMs * US, clip.trimStartMs * US, clip.trimEndMs * US, clip.speed)
 
@@ -268,7 +288,16 @@ class RenderPlanBuilder(
                 is TextClip -> {
                     if (clip.text.isBlank()) continue
                     val style = clip.style.resolve(ctx.project.captionDefaults)
-                    lane.add(VisualSegment.Picture(startUs, durUs, Source.Caption(clip.text, style), Placement.Box(style.box)))
+                    val box = Placement.Box(style.box)
+                    lane.add(
+                        VisualSegment.Picture(
+                            startUs,
+                            durUs,
+                            Source.Caption(clip.text, style),
+                            box,
+                            motion = motionFor(clip.animations, durUs, box),
+                        ),
+                    )
                 }
 
                 is OverlayClip -> {
@@ -280,6 +309,7 @@ class RenderPlanBuilder(
                                 source = Source.Video(clip.media, clip.sourceDurationMs * US, 0, srcEnd),
                                 placement = Placement.FullFrame,
                                 key = clip.key,
+                                motion = motionFor(clip.animations, durUs, Placement.FullFrame),
                                 clipOffsetUs = offset,
                             ),
                         )
@@ -289,15 +319,23 @@ class RenderPlanBuilder(
                 is MediaClip -> {
                     val rect = pipRect(clip.pip ?: PipPlacement.DEFAULT, ctx.window, ctx.aspect)
                     val placement = Placement.Pip(rect, clip.rotation)
+                    val motion = motionFor(clip.animations, durUs, placement)
                     when (clip) {
                         is PhotoClip -> {
-                            lane.add(VisualSegment.Picture(startUs, durUs, Source.Photo(clip.media), placement))
+                            lane.add(VisualSegment.Picture(startUs, durUs, Source.Photo(clip.media), placement, motion = motion))
                         }
 
                         is VideoClip -> {
                             videoCopies(clip, durUs).forEach { (offset, length) ->
                                 lane.add(
-                                    VisualSegment.Picture(startUs + offset, length, videoSource(clip), placement, clipOffsetUs = offset),
+                                    VisualSegment.Picture(
+                                        startUs + offset,
+                                        length,
+                                        videoSource(clip),
+                                        placement,
+                                        motion = motion,
+                                        clipOffsetUs = offset,
+                                    ),
                                 )
                             }
                         }
@@ -371,9 +409,11 @@ class RenderPlanBuilder(
                 val durUs = slot.durationMs * US
                 var clipEnv = GainEnvelope.constant(slotVolumeDb(slot) ?: 0.0)
                 ctx.slots.getOrNull(i - 1)?.let { prev ->
-                    if (prev.overlapToNextMs > 0) clipEnv += equalPowerIn(prev.overlapToNextMs * US)
+                    if (prev.overlapToNextMs > 0) clipEnv += soundIn(prev.clip.transitionToNext!!.kind, prev.overlapToNextMs * US)
                 }
-                if (i < ctx.slots.lastIndex && slot.overlapToNextMs > 0) clipEnv += equalPowerOut(durUs, slot.overlapToNextMs * US)
+                if (i < ctx.slots.lastIndex && slot.overlapToNextMs > 0) {
+                    clipEnv += soundOut(slot.clip.transitionToNext!!.kind, durUs, slot.overlapToNextMs * US)
+                }
                 val startUs = slot.startMs * US
                 val env = clipEnv + speechDuck.shifted(-startUs)
                 sound.copies(durUs).forEach { (offset, length) ->
@@ -676,6 +716,39 @@ class RenderPlanBuilder(
                     GainPoint(fromUs + lengthUs * k / CURVE_STEPS, ampToDb(amp(k.toDouble() / CURVE_STEPS)))
                 },
             )
+
+        /**
+         * The incoming clip's sound over a transition [lengthUs] long: an
+         * equal-power rise, so the two clips together stay at a constant
+         * loudness; for a fade through black or white, silent for the first
+         * half and rising over the second, as the picture comes out of the colour.
+         */
+        internal fun soundIn(
+            kind: TransitionKind,
+            lengthUs: Long,
+        ): GainEnvelope =
+            if (kind.throughColour) {
+                val half = lengthUs / 2
+                GainEnvelope(listOf(GainPoint(0, GainEnvelope.SILENT_DB)) + curve(half, lengthUs - half) { sin(it * PI / 2) }.points)
+            } else {
+                equalPowerIn(lengthUs)
+            }
+
+        /** The outgoing clip's sound over its last [lengthUs] of [durUs]: the mirror of [soundIn]. */
+        internal fun soundOut(
+            kind: TransitionKind,
+            durUs: Long,
+            lengthUs: Long,
+        ): GainEnvelope =
+            if (kind.throughColour) {
+                val half = lengthUs / 2
+                GainEnvelope(curve(durUs - lengthUs, half) { cos(it * PI / 2) }.points + GainPoint(durUs, GainEnvelope.SILENT_DB))
+            } else {
+                equalPowerOut(durUs, lengthUs)
+            }
+
+        private val TransitionKind.throughColour: Boolean
+            get() = this == TransitionKind.FADE_BLACK || this == TransitionKind.FADE_WHITE
 
         /** Equal-power rise over the first [lengthUs] (the incoming clip of a crossfade). */
         internal fun equalPowerIn(lengthUs: Long) = curve(0, lengthUs) { sin(it * PI / 2) }

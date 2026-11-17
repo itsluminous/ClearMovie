@@ -18,6 +18,8 @@ enum class EditAction {
     DELETE,
     EDIT_TEXT,
     COLOUR,
+    TRANSITION,
+    ANIMATION,
     PLAY,
     SKIP,
     ADD_MEDIA,
@@ -35,10 +37,11 @@ data class BarAction(
 
 /**
  * The bar's actions per selection, most-used first (ARCHITECTURE section
- * 11.2). Add text, Transition, Animation and Move to another row arrive with
- * the milestones that build them (cm-tracks, cm-captions, cm-effects); the
- * plan does not ask for them to be shown before then, so they are left out
- * rather than shown disabled.
+ * 11.2). Add text and Move to another row arrive with the milestones that
+ * build them (cm-tracks, cm-captions); the plan does not ask for them to be
+ * shown before then, so they are left out rather than shown disabled.
+ * Transition (into the next item) is greyed out on an item with nothing
+ * after it ([hasNext]).
  */
 object ClipActions {
     fun forSelection(
@@ -47,8 +50,10 @@ object ClipActions {
         canMoveLeft: Boolean = true,
         canMoveRight: Boolean = true,
         canJoin: Boolean = false,
+        hasNext: Boolean = true,
     ): List<BarAction> {
         val moves = listOf(BarAction(EditAction.MOVE_LEFT, canMoveLeft), BarAction(EditAction.MOVE_RIGHT, canMoveRight))
+        val effects = listOf(BarAction(EditAction.TRANSITION, hasNext), BarAction(EditAction.ANIMATION))
         val list =
             when (kind) {
                 SelectionKind.NOTHING -> {
@@ -56,42 +61,48 @@ object ClipActions {
                 }
 
                 SelectionKind.PHOTO -> {
-                    listOf(
-                        EditAction.DURATION,
-                        EditAction.FIT,
-                        EditAction.ROTATE,
-                        EditAction.REPLACE,
-                        EditAction.DUPLICATE,
-                    ).map(::BarAction) +
+                    listOf(BarAction(EditAction.DURATION)) + effects +
+                        listOf(
+                            EditAction.ROTATE,
+                            EditAction.REPLACE,
+                            EditAction.DUPLICATE,
+                        ).map(::BarAction) +
                         moves + BarAction(EditAction.DELETE)
                 }
 
                 SelectionKind.VIDEO -> {
-                    listOf(
-                        EditAction.TRIM,
-                        EditAction.VOLUME,
-                        EditAction.SPLIT,
-                        EditAction.SPEED,
-                        EditAction.LOOP,
-                        EditAction.FIT,
-                        EditAction.REPLACE,
-                        EditAction.DUPLICATE,
-                    ).map(::BarAction) + moves +
+                    listOf(BarAction(EditAction.TRIM)) + effects +
+                        listOf(
+                            EditAction.SPLIT,
+                            EditAction.SPEED,
+                            EditAction.LOOP,
+                            EditAction.FIT,
+                            EditAction.REPLACE,
+                            EditAction.DUPLICATE,
+                        ).map(::BarAction) + moves +
                         listOfNotNull(BarAction(EditAction.JOIN).takeIf { canJoin }) +
                         BarAction(EditAction.DELETE)
                 }
 
                 SelectionKind.TEXT_CARD -> {
-                    listOf(EditAction.EDIT_TEXT, EditAction.DURATION, EditAction.COLOUR, EditAction.DUPLICATE).map(::BarAction) +
+                    listOf(EditAction.EDIT_TEXT, EditAction.DURATION).map(::BarAction) + effects +
+                        listOf(EditAction.COLOUR, EditAction.DUPLICATE).map(::BarAction) +
                         moves + BarAction(EditAction.DELETE)
                 }
 
                 SelectionKind.COLOUR_CARD -> {
-                    listOf(EditAction.COLOUR, EditAction.DURATION, EditAction.EDIT_TEXT, EditAction.DUPLICATE).map(::BarAction) +
+                    listOf(EditAction.COLOUR, EditAction.DURATION).map(::BarAction) + effects +
+                        listOf(EditAction.EDIT_TEXT, EditAction.DUPLICATE).map(::BarAction) +
                         moves + BarAction(EditAction.DELETE)
                 }
 
-                SelectionKind.INTRO, SelectionKind.ENDING -> {
+                // The intro leads into the first item, so it has a Transition; nothing follows the ending.
+                SelectionKind.INTRO -> {
+                    listOf(BarAction(EditAction.PLAY), BarAction(EditAction.TRANSITION, hasNext)) +
+                        listOf(EditAction.REPLACE, EditAction.SKIP).map(::BarAction)
+                }
+
+                SelectionKind.ENDING -> {
                     listOf(EditAction.PLAY, EditAction.REPLACE, EditAction.SKIP).map(::BarAction)
                 }
             }

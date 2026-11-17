@@ -41,6 +41,9 @@ enum class PlayerRole {
 
     /** A sound row: no picture. */
     SOUND,
+
+    /** The end of the outgoing MAIN item during a transition: picture and sound, without taking audio focus from MAIN. */
+    TAIL,
 }
 
 /**
@@ -107,6 +110,11 @@ class ExoPreviewPlayers(
                         .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
                         .build()
                 if (key != null) player.setVideoEffects(listOf(ChromaKeyEffect(key), PremultiplyEffect()))
+            }
+
+            PlayerRole.TAIL -> {
+                // Never asks for audio focus: MAIN holds it, and a second request would pause MAIN.
+                player.setAudioAttributes(MOVIE_AUDIO, false)
             }
 
             PlayerRole.SOUND -> {

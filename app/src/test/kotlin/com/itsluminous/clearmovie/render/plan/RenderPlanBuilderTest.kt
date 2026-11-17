@@ -111,8 +111,11 @@ class RenderPlanBuilderTest {
         assertThat(incoming.alphaAt(0)).isEqualTo(0f)
         assertThat(incoming.alphaAt(500_000)).isWithin(1e-6f).of(0.5f)
         assertThat(incoming.alphaAt(1_000_000)).isEqualTo(1f)
-        assertThat((b[2] as VisualSegment.Picture).alpha).isEmpty()
-        assertThat((a[0] as VisualSegment.Picture).alpha).isEmpty()
+        assertThat((b[2] as VisualSegment.Picture).motion).isNull()
+        // The outgoing clip is under B: a crossfade leaves it as it is.
+        val outgoing = a[0] as VisualSegment.Picture
+        assertThat(outgoing.motion!!.transitionOut!!.upper).isFalse()
+        assertThat(outgoing.alphaAt(2_500_000)).isEqualTo(1f)
     }
 
     @Test

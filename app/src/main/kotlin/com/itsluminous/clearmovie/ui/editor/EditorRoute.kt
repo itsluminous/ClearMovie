@@ -212,6 +212,8 @@ fun EditorRoute(
 
                 override fun seek(ms: Long) = viewModel.seekTo(ms * 1000)
 
+                override fun previewFrom(ms: Long) = viewModel.previewFrom(ms * 1000)
+
                 override fun pickForInsert(
                     anchor: ClipId,
                     side: InsertSide,

@@ -66,7 +66,11 @@ data class Transition(
     }
 }
 
-/** Animation kinds; which slot each may go in is [AnimKind.slots]. */
+/**
+ * Animation kinds; which slot each may go in is [AnimKind.slots]. A
+ * [textOnly] kind goes on captions and on text and colour cards, a
+ * [photoOnly] one on photos ([allowedOn]).
+ */
 @Serializable
 enum class AnimKind(
     val slots: Set<AnimSlot>,
@@ -117,6 +121,13 @@ enum class AnimKind(
 
     @SerialName("pulse")
     PULSE(setOf(AnimSlot.DURING), textOnly = true),
+    ;
+
+    /** Whether this kind may go on [clip]: never on a sound. */
+    fun allowedOn(clip: Clip): Boolean =
+        clip !is AudioClip &&
+            (!textOnly || clip is TextClip || clip is CardClip) &&
+            (!photoOnly || clip is PhotoClip)
 }
 
 /** A clip can have one animation of each slot. */

@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.ui.editor
 import android.graphics.Bitmap
 import android.view.TextureView
 import androidx.annotation.OptIn
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -21,11 +22,17 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -34,7 +41,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.graphics.scale
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
@@ -42,6 +51,9 @@ import com.itsluminous.clearmovie.domain.model.Fit
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Rotation
 import com.itsluminous.clearmovie.render.media3.MediaResolver
+import com.itsluminous.clearmovie.render.plan.Mask
+import com.itsluminous.clearmovie.render.plan.MotionFrame
+import com.itsluminous.clearmovie.render.plan.MotionMath
 import com.itsluminous.clearmovie.render.plan.Placement
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule.LayerRef
@@ -61,8 +73,12 @@ const val PREVIEW_TAG = "editor_preview"
  * are drawn in stacking order, bottom first, as the export draws them. MAIN
  * is the plain player's picture placed where the plan puts it (full frame
  * for the intro, into the frame's window for the user's items, cropped or
- * fitted by the item's fit), or a still the preview draws itself; each frame
- * row is its keyed player over it; captions are text in their boxes.
+ * fitted by the item's fit), or a still the preview draws itself; during a
+ * transition the outgoing item's tail is drawn with it, under or over it as
+ * the export's lanes are; each frame row is its keyed player over it;
+ * captions are text in their boxes. Transitions and animations are drawn
+ * from the plan's [com.itsluminous.clearmovie.render.plan.PictureMotion] with
+ * the export's own curves ([MotionMath]), every frame while playing.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -75,14 +91,26 @@ fun LayeredPreview(
     modifier: Modifier = Modifier,
 ) {
     val media = LocalMediaColors.current
+    // The players report their time ten times a second; while playing, the motion follows the
+    // MAIN player's own clock on every frame, so slides and zooms are smooth.
+    val live by produceState(state.positionUs, state.playing, state.loads) {
+        value = state.positionUs
+        if (!state.playing) return@produceState
+        while (true) {
+            withInfiniteAnimationFrameNanos { }
+            value = engine.positionUs
+        }
+    }
+    val positionUs = if (state.playing) live else state.positionUs
     BoxWithConstraints(modifier.clipToBounds().background(media.previewBackground).testTag(PREVIEW_TAG)) {
         val w = maxWidth
         val h = maxHeight
+        val aspect = if (h.value > 0f) (w / h).toDouble() else CANVAS_ASPECT
         for (layer in schedule.layerOrder) {
             key(layer) {
                 when (layer) {
                     LayerRef.Main -> {
-                        MainLayer(engine, schedule, state, stills, resolver, w, h)
+                        MainLayer(engine, schedule, state, positionUs, stills, resolver, w, h, aspect)
                     }
 
                     is LayerRef.Overlay -> {
@@ -93,7 +121,7 @@ fun LayeredPreview(
                     }
 
                     is LayerRef.Captions -> {
-                        CaptionLayer(schedule, layer, state.positionUs, w, h)
+                        CaptionLayer(schedule, layer, positionUs, w, h, aspect)
                     }
                 }
             }
@@ -101,58 +129,217 @@ fun LayeredPreview(
     }
 }
 
+/** What one MAIN picture shows: the player's video on a surface, or a still. */
+private class Picture(
+    val content: MainContent,
+    val placement: Placement,
+    val frame: MotionFrame,
+    val videoSize: VideoSize?,
+)
+
 @OptIn(UnstableApi::class)
 @Composable
 private fun MainLayer(
     engine: LayeredPreviewEngine,
     schedule: PreviewSchedule,
     state: PreviewState,
+    positionUs: Long,
     stills: StillLoader,
     resolver: MediaResolver?,
     w: Dp,
     h: Dp,
+    aspect: Double,
 ) {
     val entry = schedule.main.getOrNull(state.mainIndex) ?: schedule.main.firstOrNull() ?: return
-    val placement = entry.placement
+    val frame = entry.motion?.let { MotionMath.frameAt(it, entry.clipUsAt(positionUs), aspect) } ?: MotionFrame.STILL
+    val tail = schedule.tailAt(positionUs)
+    val tailFrame = tail?.let { t -> t.motion?.let { MotionMath.frameAt(it, t.clipUsAt(positionUs), aspect) } } ?: MotionFrame.STILL
+    Box(Modifier.fillMaxSize()) {
+        // The tail's player surface is always there while the video has one (a surface that is never
+        // drawn stalls its player), shown only while a video tail plays.
+        if (schedule.tailLane != null || tail != null) {
+            val showing = tail ?: schedule.tail.firstOrNull()
+            if (showing != null) {
+                Box(Modifier.fillMaxSize().zIndex(if (tail?.upper == true) 2f else 0f)) {
+                    PlacedPicture(
+                        Picture(showing.content, showing.placement, tailFrame, state.tailVideoSize),
+                        visible = tail != null,
+                        stills = stills,
+                        resolver = resolver,
+                        w = w,
+                        h = h,
+                        surface =
+                            if (schedule.tailLane != null) {
+                                { modifier -> TailSurface(engine, modifier) }
+                            } else {
+                                null
+                            },
+                    )
+                }
+            }
+        }
+        Box(Modifier.fillMaxSize().zIndex(1f)) {
+            PlacedPicture(
+                Picture(entry.content, entry.placement, frame, state.mainVideoSize),
+                visible = true,
+                stills = stills,
+                resolver = resolver,
+                w = w,
+                h = h,
+                surface = { modifier -> MainSurface(engine, modifier) },
+            )
+        }
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun MainSurface(
+    engine: LayeredPreviewEngine,
+    modifier: Modifier,
+) {
+    AndroidView(
+        factory = { TextureView(it) },
+        // On every update, not only when the view is made: the engine may have new players.
+        update = engine::setMainSurface,
+        onRelease = { if (engine.schedule != null) engine.releaseMainSurface(it) },
+        modifier = modifier,
+    )
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun TailSurface(
+    engine: LayeredPreviewEngine,
+    modifier: Modifier,
+) {
+    AndroidView(
+        factory = { TextureView(it) },
+        update = engine::setTailSurface,
+        onRelease = { if (engine.schedule != null) engine.releaseTailSurface(it) },
+        modifier = modifier,
+    )
+}
+
+/**
+ * One MAIN picture where its placement puts it, moved, faded, tinted and cut
+ * as [Picture.frame] says: the same order as the export's shader (the
+ * picture moves inside its window, then the window clips it, then the mask
+ * cuts the canvas).
+ */
+@Composable
+private fun PlacedPicture(
+    picture: Picture,
+    visible: Boolean,
+    stills: StillLoader,
+    resolver: MediaResolver?,
+    w: Dp,
+    h: Dp,
+    surface: (@Composable (Modifier) -> Unit)?,
+) {
+    val placement = picture.placement
+    val f = picture.frame
     val rect = (placement as? Placement.Window)?.rect ?: NormRect.FULL
     val fit = (placement as? Placement.Window)?.fit
     val rotation = (placement as? Placement.Window)?.rotation ?: Rotation.R0
-    val isVideo = entry.content is MainContent.Video
+    val isVideo = picture.content is MainContent.Video
     val winW = w * rect.w.toFloat()
     val winH = h * rect.h.toFloat()
     // The video's own shape decides the crop or the bars; until it is known, it fills the window.
-    val size = state.mainVideoSize
-    val aspect = if (size != null && size.height > 0) size.width * size.pixelWidthHeightRatio / size.height else null
-    val (cw, ch) = if (fit == null || aspect == null) winW to winH else fitted(aspect, rotation, winW, winH, fit)
-    Box(
-        Modifier
-            .offset(w * rect.x.toFloat(), h * rect.y.toFloat())
-            .size(winW, winH)
-            .clipToBounds(),
-    ) {
-        if (fit == Fit.FIT_BLUR) {
-            val video = entry.content as? MainContent.Video
-            val source = (entry.content as? MainContent.Still)?.source ?: video?.let { Source.VideoFrame(it.media, it.clipStartUs) }
-            if (source != null) SoftBackdrop(source, rotation, stills, resolver)
+    val size = picture.videoSize
+    val videoAspect = if (size != null && size.height > 0) size.width * size.pixelWidthHeightRatio / size.height else null
+    val (cw, ch) = if (fit == null || videoAspect == null) winW to winH else fitted(videoAspect, rotation, winW, winH, fit)
+    val density = LocalDensity.current
+    Box(Modifier.fillMaxSize().motionMask(f.mask)) {
+        Box(
+            Modifier
+                .offset(w * rect.x.toFloat(), h * rect.y.toFloat())
+                .size(winW, winH)
+                .clipToBounds(),
+        ) {
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    scaleX = f.scale
+                    scaleY = f.scale
+                    translationX = with(density) { (w * f.dx).toPx() }
+                    translationY = with(density) { (h * f.dy).toPx() }
+                    alpha = if (visible) f.alpha else 0f
+                },
+            ) {
+                if (fit == Fit.FIT_BLUR) {
+                    val video = picture.content as? MainContent.Video
+                    val source =
+                        (picture.content as? MainContent.Still)?.source ?: video?.let { Source.VideoFrame(it.media, it.clipStartUs) }
+                    if (source != null) SoftBackdrop(source, rotation, stills, resolver)
+                }
+                surface?.invoke(
+                    Modifier
+                        .align(Alignment.Center)
+                        .requiredSize(cw, ch)
+                        .graphicsLayer {
+                            // A hidden surface is still drawn, faintly: see HIDDEN_ALPHA.
+                            alpha = if (isVideo && visible) 1f else HIDDEN_ALPHA
+                            rotationZ = rotation.degrees.toFloat()
+                        },
+                )
+                val still = picture.content as? MainContent.Still
+                if (still != null && visible) Still(still.source, fit ?: Fit.FILL_CROP, rotation, stills, resolver, h)
+                if (f.tintAmount > 0f && visible) {
+                    Box(Modifier.fillMaxSize().background(f.tint.toColor().copy(alpha = f.tintAmount)))
+                }
+            }
         }
-        AndroidView(
-            factory = { TextureView(it) },
-            // On every update, not only when the view is made: the engine may have new players.
-            update = engine::setMainSurface,
-            onRelease = { if (engine.schedule != null) engine.releaseMainSurface(it) },
-            modifier =
-                Modifier
-                    .align(Alignment.Center)
-                    .requiredSize(cw, ch)
-                    .graphicsLayer {
-                        alpha = if (isVideo) 1f else HIDDEN_ALPHA
-                        rotationZ = rotation.degrees.toFloat()
-                    },
-        )
-        val still = entry.content as? MainContent.Still
-        if (still != null) Still(still.source, fit ?: Fit.FILL_CROP, rotation, stills, resolver, h)
     }
 }
+
+/** Cuts the canvas to [mask] (canvas fractions), as the export's shader does. */
+private fun Modifier.motionMask(mask: Mask): Modifier =
+    if (mask == Mask.None) {
+        this
+    } else {
+        drawWithContent {
+            val path = maskPath(mask, size.width, size.height)
+            clipPath(path) { this@drawWithContent.drawContent() }
+        }
+    }
+
+/** [mask] as a path over a canvas [width] x [height] pixels. */
+internal fun maskPath(
+    mask: Mask,
+    width: Float,
+    height: Float,
+): Path =
+    Path().apply {
+        when (mask) {
+            Mask.None -> {
+                addRect(Rect(0f, 0f, width, height))
+            }
+
+            is Mask.Wipe -> {
+                val edge = if (mask.vertical) mask.edge * height else mask.edge * width
+                val r =
+                    when {
+                        !mask.vertical && mask.keepAfter -> Rect(edge, 0f, width, height)
+                        !mask.vertical -> Rect(0f, 0f, edge, height)
+                        mask.keepAfter -> Rect(0f, edge, width, height)
+                        else -> Rect(0f, 0f, width, edge)
+                    }
+                addRect(r)
+            }
+
+            is Mask.Circle -> {
+                val radius = mask.radius * height
+                val circle = Rect(Offset(mask.cx * width, mask.cy * height), radius)
+                if (mask.inside) {
+                    addOval(circle)
+                } else {
+                    fillType = PathFillType.EvenOdd
+                    addRect(Rect(0f, 0f, width, height))
+                    addOval(circle)
+                }
+            }
+        }
+    }
 
 /** The picture size for a video of [aspect] (width over height) in a [winW] x [winH] window. */
 private fun fitted(
@@ -269,12 +456,22 @@ private fun CaptionLayer(
     positionUs: Long,
     w: Dp,
     h: Dp,
+    aspect: Double,
 ) {
+    val density = LocalDensity.current
     for (c in schedule.captionsAt(positionUs).filter { it.trackId == layer.trackId }) {
+        val f = c.motion?.let { MotionMath.frameAt(it, c.clipUsAt(positionUs), aspect) } ?: MotionFrame.STILL
         Box(
             Modifier
                 .offset(w * c.rect.x.toFloat(), h * c.rect.y.toFloat())
-                .size(w * c.rect.w.toFloat(), h * c.rect.h.toFloat()),
+                .size(w * c.rect.w.toFloat(), h * c.rect.h.toFloat())
+                .graphicsLayer {
+                    scaleX = f.scale
+                    scaleY = f.scale
+                    translationX = with(density) { (w * f.dx).toPx() }
+                    translationY = with(density) { (h * f.dy).toPx() }
+                    alpha = f.alpha
+                },
             contentAlignment = Alignment.Center,
         ) {
             CaptionText(c.caption.text, c.caption.style, h)
@@ -319,6 +516,7 @@ private fun CaptionText(
 private fun ArgbColor.toColor(): Color = Color(argb.toInt())
 
 private const val CANVAS_LINES = 1080f
+private const val CANVAS_ASPECT = 16.0 / 9.0
 
 /** The width the preview's blurred background is shrunk to before it is stretched back. */
 private const val BACKDROP_PX = 24

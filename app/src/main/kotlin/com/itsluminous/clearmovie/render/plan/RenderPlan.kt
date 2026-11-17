@@ -104,8 +104,7 @@ sealed interface VisualSegment {
      * A picture on the canvas. One timeline clip can become several
      * segments (a looped video, a repeated frame); [clipOffsetUs] is where
      * this segment starts inside its clip, so a transition or animation
-     * written in clip time ([alpha]) spans the copies correctly. The opacity
-     * is the product of the [alpha] ramps.
+     * written in clip time ([motion]) spans the copies correctly.
      */
     data class Picture(
         override val startUs: Long,
@@ -113,11 +112,17 @@ sealed interface VisualSegment {
         val source: Source,
         val placement: Placement,
         val key: KeySpec? = null,
-        val alpha: List<AlphaRamp> = emptyList(),
+        val motion: PictureMotion? = null,
         val clipOffsetUs: Long = 0,
     ) : VisualSegment {
+        /** How the picture is drawn at [clipUs] of clip time, on a canvas [aspect] wide per unit of height. */
+        fun motionAt(
+            clipUs: Long,
+            aspect: Double = 16.0 / 9.0,
+        ): MotionFrame = motion?.let { MotionMath.frameAt(it, clipUs, aspect) } ?: MotionFrame.STILL
+
         /** Opacity at [clipUs] of clip time. */
-        fun alphaAt(clipUs: Long): Float = alpha.fold(1f) { acc, ramp -> acc * ramp.alphaAt(clipUs) }
+        fun alphaAt(clipUs: Long): Float = motionAt(clipUs).alpha
 
         /** The same picture with its first [frontUs] cut off: later in its clip and, for a video, in its file. */
         fun trimmedFront(frontUs: Long): Picture {
@@ -190,25 +195,6 @@ sealed interface Placement {
     data class Box(
         val rect: NormRect,
     ) : Placement
-}
-
-/**
- * Opacity going linearly from [from] to [to] between [startUs] and [endUs]
- * of CLIP time; constant outside. The basic crossfade on MAIN uses it; the
- * other transitions arrive with cm-effects.
- */
-data class AlphaRamp(
-    val startUs: Long,
-    val endUs: Long,
-    val from: Float,
-    val to: Float,
-) {
-    fun alphaAt(clipUs: Long): Float =
-        when {
-            clipUs <= startUs -> from
-            clipUs >= endUs -> to
-            else -> from + (to - from) * ((clipUs - startUs).toFloat() / (endUs - startUs))
-        }
 }
 
 /** Why an audio layer exists, for the ducking rules (section 7). */

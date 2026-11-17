@@ -682,8 +682,8 @@ fun Project.applyTransitionToAll(transition: Transition?): Project {
 
 /**
  * Sets or clears ([anim] null) one of a clip's animations. Sounds have none;
- * Ken Burns is for photos, Pop, Bounce and Pulse for captions, and each kind
- * goes only in its own slot.
+ * Ken Burns is for photos, Pop, Bounce and Pulse for captions and cards, and
+ * each kind goes only in its own slot.
  */
 fun Project.setAnimation(
     clipId: ClipId,
@@ -694,8 +694,7 @@ fun Project.setAnimation(
         require(clip !is AudioClip) { "Sounds have fades, not animations" }
         if (anim != null) {
             require(slot in anim.kind.slots) { "That animation goes in another slot" }
-            require(!anim.kind.textOnly || clip is TextClip) { "That animation is for captions" }
-            require(!anim.kind.photoOnly || clip is PhotoClip) { "That animation is for photos" }
+            require(anim.kind.allowedOn(clip)) { "That animation is for another kind of item" }
             require(anim.durationMs in Anim.MIN_MS..Anim.MAX_MS) { "Length out of range" }
         }
         clip.withAnimations(clip.animations.with(slot, anim))

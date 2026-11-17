@@ -316,8 +316,7 @@ private fun checkAnimations(
     for (slot in AnimSlot.entries) {
         val anim = a[slot] ?: continue
         if (slot !in anim.kind.slots) fail(Violation.Rule.ANIMATION, "$id: ${anim.kind} is not a $slot animation")
-        if (anim.kind.textOnly && clip !is TextClip) fail(Violation.Rule.ANIMATION, "$id: ${anim.kind} is for captions")
-        if (anim.kind.photoOnly && clip !is PhotoClip) fail(Violation.Rule.ANIMATION, "$id: ${anim.kind} is for photos")
+        if (!anim.kind.allowedOn(clip)) fail(Violation.Rule.ANIMATION, "$id: ${anim.kind} is for another kind of item")
         if (slot != AnimSlot.DURING && anim.durationMs !in Anim.MIN_MS..Anim.MAX_MS) fail(Violation.Rule.ANIMATION, "$id: $slot length")
     }
     val ends = (a.start?.durationMs ?: 0) + (a.end?.durationMs ?: 0)

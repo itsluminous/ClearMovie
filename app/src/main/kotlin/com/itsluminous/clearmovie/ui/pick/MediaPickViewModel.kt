@@ -15,6 +15,7 @@ import com.itsluminous.clearmovie.data.settings.SettingsRepository
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.ui.media.IntakeState
 import com.itsluminous.clearmovie.ui.media.MediaIntake
 import com.itsluminous.clearmovie.ui.navigation.Routes
@@ -205,7 +206,9 @@ class MediaPickViewModel
                 return
             }
             val items = newMainItems(projectId, done.items, project.photoDurationMs, project.defaultFit, probe)
-            val added = items.clips.isEmpty() || repository.update { it.addToMain(items.clips) }
+            val added =
+                items.clips.isEmpty() ||
+                    repository.update { it.addToMain(items.clips).withEffectDefaultsFor(items.clips.map { c -> c.id }) }
             val written = repository.flush()
             savedState.remove<ArrayList<String>>(KEY_PENDING)
             addingState.value = false
