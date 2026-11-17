@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
@@ -113,6 +114,11 @@ class ReopenRecreateDeviceTest {
             try {
                 return compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
             } catch (e: ComposeNotIdleException) {
+                if (System.currentTimeMillis() > end) throw e
+                Thread.sleep(200)
+            } catch (e: ComposeTimeoutException) {
+                // captureToImage forces a redraw and waits 2 s for the frame to commit; a busy
+                // emulator can miss that. The capture is tried again, not the picture accepted.
                 if (System.currentTimeMillis() > end) throw e
                 Thread.sleep(200)
             } catch (e: AssertionError) {
