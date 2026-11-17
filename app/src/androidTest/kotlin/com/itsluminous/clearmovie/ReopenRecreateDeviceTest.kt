@@ -99,12 +99,21 @@ class ReopenRecreateDeviceTest {
         timeoutMs: Long = TIMEOUT_MS,
     ) = compose.waitUntil(timeoutMs) { notYetIfBusy { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() } }
 
-    /** Only Compose not going idle in time counts as "not yet"; anything else fails the test with its own cause. */
+    /**
+     * Only two passing states count as "not yet": Compose not going idle in
+     * time, and no Compose content yet (the new activity still behind its
+     * splash screen, which waits for the settings). Anything else fails the
+     * test with its own cause.
+     */
     private fun notYetIfBusy(check: () -> Boolean): Boolean =
         try {
             check()
         } catch (e: ComposeNotIdleException) {
             Log.i(ExportHarness.TAG, "Compose busy, trying again: ${e.message?.lineSequence()?.firstOrNull()}")
+            false
+        } catch (e: IllegalStateException) {
+            if (e.message?.startsWith("No compose hierarchies found") != true) throw e
+            Log.i(ExportHarness.TAG, "No Compose content yet, trying again")
             false
         }
 
