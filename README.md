@@ -102,7 +102,7 @@ What's planned, and what has shipped:
 - [ ] Several rows of each kind (text, music, picture in picture, frame), with type icons, rearranging, and "Show on top" / "Send backward"
 - [ ] "+" before and after each item to insert photos, videos, text cards or music (photos, videos and cards on the main row are in; music arrives with more rows)
 - [x] Pinch to zoom the timeline, plus zoom buttons and Fit all
-- [ ] Transitions between items and animations on items
+- [x] Transitions between items and animations on items
 - [x] Trim, split, join, speed (0.25x-4x), loop
 - [x] Photo duration
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars

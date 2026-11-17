@@ -105,6 +105,13 @@ drawbox=x=320:y=0:w=320:h=180:color=0x00FF00:t=fill,\
 drawbox=x=0:y=180:w=320:h=180:color=0x0000FF:t=fill" \
   -frames:v 1 "$out/photo_quadrants.png"
 
+# photo_target.png: 640x360 black with a white box in the middle, half
+# its width and height, so a render test can measure an effect's scale and
+# offset from the box's edges (cm-effects).
+"${ff[@]}" -f lavfi -i "color=c=0x000000:s=640x360:d=1" \
+  -vf "drawbox=x=160:y=90:w=320:h=180:color=0xFFFFFF:t=fill" \
+  -frames:v 1 "$out/photo_target.png"
+
 # tag_sd709.mp4 / tag_hd601.mp4: one grey frame each whose colour tag is
 # only in the stream (SPS VUI), with no colr box, and disagrees with what
 # Android's size rule would assume: 640x480 tagged BT.709, 1280x720 tagged

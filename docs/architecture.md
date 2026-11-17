@@ -141,13 +141,19 @@ Rendering has two layers, both under `render`:
   whole video, with transparent `Fill`s (or `Silence`) in its gaps, so an
   empty stretch of a row never hides the rows below it. MAIN becomes two
   lanes, A and B (B just above A), when it has a transition: the lane switches
-  at each transition so the two clips overlap, and the clip in lane B carries
-  an opacity ramp (a crossfade; other shapes come with the effects
-  milestone). Photos and videos go into the frame's window while the preset
+  at each transition so the two clips overlap. Each picture carries a
+  `PictureMotion`: its start, end and during animations and its part in the
+  transitions into and out of it (lane B, drawn over A, carries the fade or the
+  mask; both lanes move). `MotionMath` holds the curves (crossfade, fade
+  through black or white, wipes, slides, circle, zoom; fade, slide and zoom
+  in and out, gentle zoom (Ken Burns) on photos, pop, bounce and pulse on
+  text) and is the one source the export shader, the preview and the
+  picker's moving tiles draw. Photos and videos go into the frame's window while the preset
   frame row is on; picture in picture goes in its corner of the window. The
   frame repeats and its last copy is cut. A spoken ending shows the last item's
   last frame. Sound is planned per row with a `GainEnvelope` in each item's own
-  time: volume, loudness normalisation, fades, an equal-power crossfade, and
+  time: volume, loudness normalisation, fades, an equal-power crossfade (a
+  dip to silence for a fade through black or white), and
   ducking computed from the timeline (music lowered under clip sound and under
   voice, everything under the closing message, clip sound and voice never
   lowered by music). `RenderPlan.slice` cuts a plan for a short exact draft.
@@ -161,7 +167,9 @@ Rendering has two layers, both under `render`:
   transparent canvas-sized frame (cover crop, fit with bars, fit over a
   blurred copy, picture in picture with a border, or a caption box) and undoes
   Android's premultiplied alpha for bitmaps; `ChromaKeyEffect` keys the
-  frame's green; `TransitionEffect` applies the opacity ramp;
+  frame's green; `MotionEffect` draws each frame's `MotionMath` result
+  (scale, move, fade, tint, wipe or circle mask; GLSL ES 1.0, so it runs on
+  SwiftShader as on a phone);
   `GainEnvelopeAudioProcessor` applies the sound envelope. Captions and cards
   are drawn as bitmaps by `CaptionBitmapRenderer` and kept in
   `noBackupFilesDir/render/` by a hash of their content, trimmed to 64 MB.
@@ -214,8 +222,10 @@ lays it out for players:
 - **MAIN** becomes one ExoPlayer playlist and is the clock. A video is a
   clipped item; anything else (a photo, the held last frame of a spoken
   ending, a card) is a silent gap in the player, drawn by the UI over it.
-  Where a transition overlaps two items the preview cuts to the incoming one;
-  the exact draft shows the real blend.
+  Where a transition overlaps two items, the end of the outgoing one (the
+  schedule's tail) plays in a second player, picture and sound, under or
+  over the incoming one as the export's lanes are, and the UI draws both
+  with the same `MotionMath` curves every frame.
 - **Frame rows** each play in a muted ExoPlayer with the export's
   `ChromaKeyEffect` (plus `PremultiplyEffect`, since a TextureView blends
   premultiplied colour) on a non-opaque TextureView over MAIN, in stacking order.
