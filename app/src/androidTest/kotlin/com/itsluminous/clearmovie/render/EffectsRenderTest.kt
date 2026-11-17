@@ -250,6 +250,42 @@ class EffectsRenderTest {
         assertThat(scale).isWithin(0.012).of(1.2)
     }
 
+    /**
+     * A 2x-speed clip leading into a crossfade: the effect's clock must be the
+     * timeline's (after the speed change), or the blend lands at the wrong
+     * moment. The dark clip plays 1.5 s; a 0.6 s crossfade overlaps 0.9-1.5 s.
+     */
+    @Test
+    fun aSpedUpClipCrossfadesOnTheTimelinesClock() {
+        val first =
+            VideoClip(
+                ClipId("a"),
+                fixture("clip_dark.mp4"),
+                sourceDurationMs = 3000,
+                speed = com.itsluminous.clearmovie.domain.model.Speed.X2,
+            )
+        val ids = SequentialIds("sp")
+        val project =
+            ProjectFactory
+                .blank(ProjectId("speed"), ids)
+                .addToMain(listOf(first, VideoClip(ClipId("b"), fixture("clip_light.mp4"), sourceDurationMs = 3000)), ids = ids)
+                .setTransition(first.id, Transition(TransitionKind.CROSSFADE, 600))
+        assertThat(project.totalDurationMs()).isEqualTo(1500 + 3000 - 600)
+        val out = RenderHarness.export(RenderPlanBuilder().build(project, height = height), "fx-speed-crossfade")
+        val shares =
+            listOf(0.8, 1.2, 1.6).map { t ->
+                val f = frameAt(out.file, (t * 1_000_000).toLong()).also { savePng(it, "fx-speed-t%03.1f".format(Locale.ROOT, t)) }
+                share(luma(rgb(f, 0.5, 0.6)))
+            }
+        report("speed 2x crossfade 0.9-1.5 s: light share at 0.8/1.2/1.6 s = %s (want <0.1, 0.4-0.6, >0.9)".format(Locale.ROOT, shares))
+        assertThat(shares[0]).isLessThan(0.1)
+        assertThat(shares[1]).isIn(
+            com.google.common.collect.Range
+                .closed(0.4, 0.6),
+        )
+        assertThat(shares[2]).isGreaterThan(0.9)
+    }
+
     /** The first and last positions along a line where the luma is over [threshold]. */
     private fun edges(
         f: Bitmap,
