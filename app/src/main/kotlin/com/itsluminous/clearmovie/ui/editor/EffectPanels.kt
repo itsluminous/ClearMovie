@@ -290,14 +290,15 @@ private fun GroupHeading(text: String) {
 @Composable
 private fun <T> EvenGrid(
     items: List<T>,
+    maxColumns: Int = MAX_COLUMNS,
     content: @Composable (T) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val fit = ((maxWidth + 8.dp) / (MIN_TILE_DP + 8).dp).toInt().coerceIn(1, MAX_COLUMNS)
+        val fit = ((maxWidth + 8.dp) / (MIN_TILE_DP + 8).dp).toInt().coerceIn(1, maxColumns)
         // Rows of equal length where possible: four tiles go 2 + 2 rather than 3 + 1. Every grid
         // of the panel gets the same column count, so every tile is the same width.
         var cols = fit
-        while (cols > 1 && MAX_COLUMNS % cols != 0) cols--
+        while (cols > 1 && maxColumns % cols != 0) cols--
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (row in items.chunked(cols)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -311,6 +312,9 @@ private fun <T> EvenGrid(
 
 private const val MIN_TILE_DP = 72
 private const val MAX_COLUMNS = 4
+
+/** Animation names are longer ("Gentle zoom in"): three wider tiles a row, so none is cut short. */
+private const val ANIMATION_COLUMNS = 3
 
 /**
  * The animations of the item [open] is about, in three tabs (ARCHITECTURE
@@ -369,7 +373,7 @@ internal fun AnimationPanel(
     val clock = tileClock()
     val choices = clip.animationChoices(tab)
     val plain = listOf<AnimKind?>(null) + choices.filter { animationDirection(it) == null }
-    EvenGrid(plain) { kind ->
+    EvenGrid(plain, ANIMATION_COLUMNS) { kind ->
         val label = stringResource(kind?.let(::animationName) ?: R.string.effect_none)
         EffectTile(
             label = label,
@@ -383,7 +387,7 @@ internal fun AnimationPanel(
     if (directed.isNotEmpty()) {
         val heading = stringResource(animationName(directed.first()))
         GroupHeading(heading)
-        EvenGrid(directed) { kind ->
+        EvenGrid(directed, ANIMATION_COLUMNS) { kind ->
             val label = stringResource(directionName(animationDirection(kind)!!))
             EffectTile(
                 label = label,
