@@ -428,41 +428,57 @@ class EffectsRenderTest {
     fun soundCrossfadesAtConstantPowerAndStaysInStep() {
         // Dark 440 Hz into light 550 Hz over 2-3 s.
         val pcm = RenderHarness.decodeAudio(exported(TransitionKind.CROSSFADE).file)
+        // Where the first clip's sound starts in the decoded file. The clip starts at 0, but Android 10's
+        // decode keeps the AAC encoder's priming samples (CI measured the whole curve about 56 ms late
+        // there, about 10 ms on Android 16), so every window below is measured from the sound's own start.
+        val lag = onsetS(pcm)
+        report("audio crossfade: sound starts at %.4f s in the decoded file".format(Locale.ROOT, lag))
         val failures = mutableListOf<String>()
         val trace = StringBuilder("time_s,a440_dbfs,b550_dbfs,total_dbfs\n")
-        val base = toneDb(pcm, 440.0, 0.5, 1.5)
+        val base = toneDb(pcm, 440.0, 0.5 + lag, 1.5 + lag)
         report("audio crossfade: clip a alone %.2f dBFS".format(Locale.ROOT, base))
         var t = 1.5
         while (t < 3.95) {
-            val a = toneDb(pcm, 440.0, t, t + 0.1)
-            val b = toneDb(pcm, 550.0, t, t + 0.1)
+            val a = toneDb(pcm, 440.0, t + lag, t + 0.1 + lag)
+            val b = toneDb(pcm, 550.0, t + lag, t + 0.1 + lag)
             val total = 10 * log10(10.0.pow(a / 10) + 10.0.pow(b / 10))
             trace.append("%.2f,%.2f,%.2f,%.2f\n".format(Locale.ROOT, t + 0.05, a, b, total))
             if (abs(total - base) > 1.5) failures += "t=$t total $total vs $base"
             t += 0.1
         }
         // In step with the pictures: a quarter in, the outgoing tone is cos(pi/8) = -0.69 dB and the incoming sin(pi/8) = -8.3 dB.
-        val aQ = toneDb(pcm, 440.0, 2.2, 2.3) - base
-        val bQ = toneDb(pcm, 550.0, 2.2, 2.3) - base
+        val aQ = toneDb(pcm, 440.0, 2.2 + lag, 2.3 + lag) - base
+        val bQ = toneDb(pcm, 550.0, 2.2 + lag, 2.3 + lag) - base
         report("audio crossfade at 2.25 s: a %.2f dB, b %.2f dB relative (want -0.7, -8.3 +-1.5)".format(Locale.ROOT, aQ, bQ))
         if (abs(aQ + 0.69) > 1.5) failures += "a at quarter $aQ"
         if (abs(bQ + 8.34) > 1.5) failures += "b at quarter $bQ"
         // Fade through black: silent at its midpoint, 2.5 s.
         val pb = RenderHarness.decodeAudio(exported(TransitionKind.FADE_BLACK).file)
+        val lagB = onsetS(pb)
         val blackTrace = StringBuilder("time_s,a440_dbfs,b550_dbfs,total_dbfs\n")
         var t2 = 1.5
         while (t2 < 3.95) {
-            val a = toneDb(pb, 440.0, t2, t2 + 0.1)
-            val b = toneDb(pb, 550.0, t2, t2 + 0.1)
+            val a = toneDb(pb, 440.0, t2 + lagB, t2 + 0.1 + lagB)
+            val b = toneDb(pb, 550.0, t2 + lagB, t2 + 0.1 + lagB)
             blackTrace.append("%.2f,%.2f,%.2f,%.2f\n".format(Locale.ROOT, t2 + 0.05, a, b, 10 * log10(10.0.pow(a / 10) + 10.0.pow(b / 10))))
             t2 += 0.1
         }
         File(RenderHarness.outDir, "audio-fadeblack-trace.csv").writeText(blackTrace.toString())
-        val dip = 10 * log10(10.0.pow(toneDb(pb, 440.0, 2.45, 2.55) / 10) + 10.0.pow(toneDb(pb, 550.0, 2.45, 2.55) / 10))
+        val dip =
+            10 *
+                log10(
+                    10.0.pow(toneDb(pb, 440.0, 2.45 + lagB, 2.55 + lagB) / 10) + 10.0.pow(toneDb(pb, 550.0, 2.45 + lagB, 2.55 + lagB) / 10),
+                )
         report("audio fade through black: level at the midpoint %.2f dBFS (want 15 dB or more below %.2f)".format(Locale.ROOT, dip, base))
         if (dip > base - 15) failures += "fade through black midpoint $dip"
         File(RenderHarness.outDir, "audio-crossfade-trace.csv").writeText(trace.toString())
         report("audio trace:\n$trace")
         assertWithMessage(failures.joinToString("; ")).that(failures).isEmpty()
+    }
+
+    /** The first moment the decoded sound is clearly there (above -40 dBFS), in seconds. */
+    private fun onsetS(pcm: RenderHarness.Pcm): Double {
+        val i = pcm.mono.indexOfFirst { kotlin.math.abs(it) > 0.01f }
+        return if (i < 0) 0.0 else i.toDouble() / pcm.sampleRate
     }
 }
