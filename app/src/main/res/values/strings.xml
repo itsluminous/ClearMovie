@@ -443,10 +443,10 @@
     <string name="transition_slide">Slide</string>
     <string name="transition_circle">Circle</string>
     <string name="transition_zoom">Zoom in</string>
-    <string name="transition_apply_all">Use for all items</string>
-    <string name="transition_applied_all">Used for all items</string>
+    <string name="transition_apply_all">Use for all</string>
+    <string name="transition_applied_all">Used for all</string>
     <string name="transition_remove">Remove</string>
-    <string name="transition_insert_here">Add something here</string>
+    <string name="transition_insert_here">Add here</string>
     <string name="transition_too_short">These two items are too short for a transition.</string>
     <string name="transition_last">This is the last item: nothing comes after it.</string>
     <string name="effect_length">Length</string>
@@ -476,4 +476,9 @@
     <string name="effect_tile_with_direction">%1$s, %2$s</string>
     <!-- The marker between two items. %1$s is the item before it (Photo, Video...), %2$s the transition's name. -->
     <string name="timeline_transition_marker">Transition after this %1$s: %2$s</string>
+    <string name="transition_group_fade">Fade</string>
+    <string name="transition_group_shape">Shape</string>
+    <string name="transition_tile_black">Black</string>
+    <string name="transition_tile_white">White</string>
+    <string name="transition_tile_zoom">Zoom</string>
 </resources>

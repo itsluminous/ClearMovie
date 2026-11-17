@@ -86,38 +86,31 @@ class EffectsRenderTest {
     /** The kinds checked in one long export: every one but Zoom in, which needs a picture with edges. */
     private val kinds = TransitionKind.entries - TransitionKind.NONE - TransitionKind.ZOOM_IN
 
-    /**
-     * One video with every transition: 3 s clips, alternately dark and light
-     * (a 440 Hz and a 550 Hz tone), joined by 1 s transitions, so junction j
-     * overlaps from 2j + 2 s to 2j + 3 s. One export keeps the run short on
-     * a software-encoding emulator.
-     */
-    private fun allJunctions(): Project {
-        val ids = SequentialIds("j")
-        val clips =
-            (0..kinds.size).map { i ->
-                VideoClip(ClipId("c$i"), fixture(if (i % 2 == 0) "clip_dark.mp4" else "clip_light.mp4"), sourceDurationMs = 3000)
-            }
-        var p = ProjectFactory.blank(ProjectId("fx"), ids).addToMain(clips, ids = ids)
-        kinds.forEachIndexed { j, kind -> p = p.setTransition(clips[j].id, Transition(kind, 1000)) }
-        return p
-    }
+    /** Each kind's two-clip export (dark into light, overlap 2-3 s), made once per run and shared by the tests. */
+    private fun exported(kind: TransitionKind): RenderHarness.Exported =
+        shared.getOrPut(kind) {
+            val project = junction(kind)
+            assertThat(project.totalDurationMs()).isEqualTo(5000)
+            val out = RenderHarness.export(RenderPlanBuilder().build(project, height = height), "fx-${kind.name}")
+            assertThat(RenderHarness.durationUs(out.file)).isIn(
+                com.google.common.collect.Range
+                    .closed(4_950_000L, 5_050_000L),
+            )
+            out
+        }
 
-    private val junctions by lazy {
-        val project = allJunctions()
-        assertThat(project.totalDurationMs()).isEqualTo(3000L * (kinds.size + 1) - 1000L * kinds.size)
-        RenderHarness.export(RenderPlanBuilder().build(project, height = height), "fx-all-transitions")
+    private companion object {
+        val shared = mutableMapOf<TransitionKind, RenderHarness.Exported>()
     }
 
     @Test
     fun everyTransitionBlendsOrMovesBothClipsAsSpecified() {
-        val out = junctions
         val failures = mutableListOf<String>()
         val aspect = 16.0 / 9.0
         kinds.forEachIndexed { j, kind ->
-            val overlapUs = (2L * j + 2) * 1_000_000
-            // Even junctions go dark into light, odd ones light into dark.
-            val inLight = j % 2 == 0
+            val out = exported(kind)
+            val overlapUs = 2_000_000L
+            val inLight = true
 
             fun incoming(y: Double) = if (inLight) share(y) else 1 - share(y)
 
@@ -134,13 +127,11 @@ class EffectsRenderTest {
             val sEnd = incomingAt(end, 0.5, 0.6)
             val line =
                 StringBuilder(
-                    "transition %s (junction %d, %.1f-%.1f s, %s): incoming share start %.3f end %.3f".format(
+                    "transition %s (%d of %d, overlap 2.0-3.0 s, dark into light): incoming share start %.3f end %.3f".format(
                         Locale.ROOT,
                         name,
-                        j,
-                        overlapUs / 1e6,
-                        overlapUs / 1e6 + 1,
-                        if (inLight) "dark into light" else "light into dark",
+                        j + 1,
+                        kinds.size,
                         sStart,
                         sEnd,
                     ),
@@ -247,11 +238,13 @@ class EffectsRenderTest {
     @Test
     fun zoomInScalesTheOutgoingPictureTo1_2AtTheMidpoint() {
         val project = junction(TransitionKind.ZOOM_IN, PhotoClip(ClipId("a"), fixture("photo_target.png"), 3000))
+        assertThat(project.totalDurationMs()).isEqualTo(5000)
         val out = RenderHarness.export(RenderPlanBuilder().build(project, height = height), "fx-ZOOM_IN")
         frameAt(out.file, 2_000_000 + frameUs).also { savePng(it, "fx-zoom_in-start") }
         val mid = frameAt(out.file, 2_500_000).also { savePng(it, "fx-zoom_in-mid") }
         frameAt(out.file, 3_000_000 - frameUs).also { savePng(it, "fx-zoom_in-end") }
-        val (l, r) = edges(mid, vertical = false, at = 0.5, threshold = 94.0)
+        // The incoming light clip (200) at half opacity over the box: white 227, black 100.
+        val (l, r) = edges(mid, vertical = false, at = 0.5, threshold = 164.0)
         val scale = (r - l) / 0.5
         report("transition zoom_in: box %.4f..%.4f, outgoing scale %.4f (want 1.20 +-1%%)".format(Locale.ROOT, l, r, scale))
         assertThat(scale).isWithin(0.012).of(1.2)
@@ -397,9 +390,8 @@ class EffectsRenderTest {
      */
     @Test
     fun soundCrossfadesAtConstantPowerAndStaysInStep() {
-        // Junction 0 is the crossfade (dark 440 Hz into light 550 Hz, 2-3 s); junction 1 fades through black (4-5 s).
-        assertThat(kinds.take(2)).containsExactly(TransitionKind.CROSSFADE, TransitionKind.FADE_BLACK).inOrder()
-        val pcm = RenderHarness.decodeAudio(junctions.file)
+        // Dark 440 Hz into light 550 Hz over 2-3 s.
+        val pcm = RenderHarness.decodeAudio(exported(TransitionKind.CROSSFADE).file)
         val failures = mutableListOf<String>()
         val trace = StringBuilder("time_s,a440_dbfs,b550_dbfs,total_dbfs\n")
         val base = toneDb(pcm, 440.0, 0.5, 1.5)
@@ -419,15 +411,18 @@ class EffectsRenderTest {
         report("audio crossfade at 2.25 s: a %.2f dB, b %.2f dB relative (want -0.7, -8.3 +-1.5)".format(Locale.ROOT, aQ, bQ))
         if (abs(aQ + 0.69) > 1.5) failures += "a at quarter $aQ"
         if (abs(bQ + 8.34) > 1.5) failures += "b at quarter $bQ"
-        // Fade through black: silent at its midpoint, 4.5 s.
-        var t2 = 3.5
-        while (t2 < 5.95) {
-            val a = toneDb(pcm, 440.0, t2, t2 + 0.1)
-            val b = toneDb(pcm, 550.0, t2, t2 + 0.1)
-            trace.append("%.2f,%.2f,%.2f,%.2f\n".format(Locale.ROOT, t2 + 0.05, a, b, 10 * log10(10.0.pow(a / 10) + 10.0.pow(b / 10))))
+        // Fade through black: silent at its midpoint, 2.5 s.
+        val pb = RenderHarness.decodeAudio(exported(TransitionKind.FADE_BLACK).file)
+        val blackTrace = StringBuilder("time_s,a440_dbfs,b550_dbfs,total_dbfs\n")
+        var t2 = 1.5
+        while (t2 < 3.95) {
+            val a = toneDb(pb, 440.0, t2, t2 + 0.1)
+            val b = toneDb(pb, 550.0, t2, t2 + 0.1)
+            blackTrace.append("%.2f,%.2f,%.2f,%.2f\n".format(Locale.ROOT, t2 + 0.05, a, b, 10 * log10(10.0.pow(a / 10) + 10.0.pow(b / 10))))
             t2 += 0.1
         }
-        val dip = 10 * log10(10.0.pow(toneDb(pcm, 440.0, 4.45, 4.55) / 10) + 10.0.pow(toneDb(pcm, 550.0, 4.45, 4.55) / 10))
+        File(RenderHarness.outDir, "audio-fadeblack-trace.csv").writeText(blackTrace.toString())
+        val dip = 10 * log10(10.0.pow(toneDb(pb, 440.0, 2.45, 2.55) / 10) + 10.0.pow(toneDb(pb, 550.0, 2.45, 2.55) / 10))
         report("audio fade through black: level at the midpoint %.2f dBFS (want 15 dB or more below %.2f)".format(Locale.ROOT, dip, base))
         if (dip > base - 15) failures += "fade through black midpoint $dip"
         File(RenderHarness.outDir, "audio-crossfade-trace.csv").writeText(trace.toString())

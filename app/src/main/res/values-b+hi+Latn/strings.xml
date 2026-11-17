@@ -404,10 +404,10 @@
     <string name="transition_slide">Slide</string>
     <string name="transition_circle">Circle</string>
     <string name="transition_zoom">Zoom in</string>
-    <string name="transition_apply_all">Sab par lagayein</string>
-    <string name="transition_applied_all">Sab par laga hai</string>
+    <string name="transition_apply_all">Sab par</string>
+    <string name="transition_applied_all">Sab par laga</string>
     <string name="transition_remove">Hatayein</string>
-    <string name="transition_insert_here">Yahan kuch add karein</string>
+    <string name="transition_insert_here">Yahan add karein</string>
     <string name="transition_too_short">Ye dono items transition ke liye bahut chhote hain.</string>
     <string name="transition_last">Ye aakhri item hai: iske baad kuch nahi hai.</string>
     <string name="effect_length">Kitni der</string>
@@ -434,4 +434,9 @@
     <string name="effect_seconds">%1$d.%2$d second</string>
     <string name="effect_tile_with_direction">%1$s, %2$s</string>
     <string name="timeline_transition_marker">Is %1$s ke baad transition: %2$s</string>
+    <string name="transition_group_fade">Fade</string>
+    <string name="transition_group_shape">Shape</string>
+    <string name="transition_tile_black">Black</string>
+    <string name="transition_tile_white">White</string>
+    <string name="transition_tile_zoom">Zoom</string>
 </resources>

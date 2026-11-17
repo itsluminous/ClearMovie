@@ -7,11 +7,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
@@ -59,6 +63,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -184,40 +189,26 @@ internal fun TransitionPanel(
     val pictures = junctionPictures(slot, next, thumbnail)
     val clock = tileClock()
     val chosen = current?.kind ?: TransitionKind.NONE
-    val singles = TransitionGroup.entries.filter { it.kinds.size == 1 }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (g in singles) {
-            val kind = g.kinds.single()
+    for (g in TransitionGroup.entries) {
+        val heading = stringResource(g.label)
+        GroupHeading(heading)
+        EvenGrid(g.tiles) { tile ->
+            val label = stringResource(tile.label)
             EffectTile(
-                label = stringResource(g.label),
-                description = stringResource(g.label),
-                selected = chosen == kind,
-                tag = transitionTileTag(kind),
-                onClick = { choose(kind) },
-            ) { transitionTileFrame(kind, clock, pictures) }
-        }
-    }
-    for (g in TransitionGroup.entries.filter { it.kinds.size > 1 }) {
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(g.label), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
-        Spacer(Modifier.height(4.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (kind in g.kinds) {
-                val direction = transitionDirection(kind)!!
-                EffectTile(
-                    label = stringResource(directionName(direction)),
-                    description =
-                        stringResource(
-                            R.string.effect_tile_with_direction,
-                            stringResource(g.label),
-                            stringResource(directionName(direction)),
-                        ),
-                    selected = chosen == kind,
-                    tag = transitionTileTag(kind),
-                    direction = direction,
-                    onClick = { choose(kind) },
-                ) { transitionTileFrame(kind, clock, pictures) }
-            }
+                label = label,
+                // TalkBack reads the whole name: "Wipe, Left"; the fade row's tiles are names already.
+                description =
+                    if (g == TransitionGroup.FADE ||
+                        g == TransitionGroup.SHAPE
+                    ) {
+                        label
+                    } else {
+                        stringResource(R.string.effect_tile_with_direction, heading, label)
+                    },
+                selected = chosen == tile.kind,
+                tag = transitionTileTag(tile.kind),
+                onClick = { choose(tile.kind) },
+            ) { transitionTileFrame(tile.kind, clock, pictures) }
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -237,38 +228,84 @@ internal fun TransitionPanel(
         },
     )
     Spacer(Modifier.height(8.dp))
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Three equal actions across the width.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         val forAll = current != null && project.transitionForAll == current
-        FilledTonalButton(
+        OutlinedButton(
             onClick = { current?.let { t -> callbacks.edit { applyTransitionToAll(t.copy(durationMs = wanted)) } } },
             enabled = current != null && !forAll,
-            modifier = Modifier.heightIn(min = 48.dp).testTag(TRANSITION_APPLY_ALL_TAG),
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_APPLY_ALL_TAG),
         ) {
-            if (forAll) {
-                Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-            }
-            Text(stringResource(if (forAll) R.string.transition_applied_all else R.string.transition_apply_all))
+            OneLine(stringResource(if (forAll) R.string.transition_applied_all else R.string.transition_apply_all))
         }
-        OutlinedButton(
+        TextButton(
             onClick = { callbacks.edit { setTransition(slot.clip.id, null) } },
             enabled = current != null,
-            modifier = Modifier.heightIn(min = 48.dp).testTag(TRANSITION_REMOVE_TAG),
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_REMOVE_TAG),
         ) {
-            Text(stringResource(R.string.transition_remove))
+            OneLine(stringResource(R.string.transition_remove))
         }
-        InsertHereButton(insertHere)
+        InsertHereButton(insertHere, Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun InsertHereButton(onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).testTag(TRANSITION_INSERT_TAG)) {
-        Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(stringResource(R.string.transition_insert_here))
+private fun InsertHereButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TextButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp).testTag(TRANSITION_INSERT_TAG)) {
+        OneLine(stringResource(R.string.transition_insert_here))
     }
 }
+
+/** A button or tile label: one line, never wrapped (the full text is in its semantics). */
+@Composable
+private fun OneLine(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle = LocalTextStyle.current,
+    color: Color = Color.Unspecified,
+) {
+    Text(text, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+}
+
+@Composable
+private fun GroupHeading(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp).semantics { heading() },
+    )
+}
+
+/**
+ * [items] in rows of equal cells spread across the width, 8 dp apart: as
+ * many columns as fit at [MIN_TILE_DP] each (at most four), the last row
+ * padded with empty cells so every tile has the same width.
+ */
+@Composable
+private fun <T> EvenGrid(
+    items: List<T>,
+    content: @Composable (T) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val cols = ((maxWidth + 8.dp) / (MIN_TILE_DP + 8).dp).toInt().coerceIn(1, MAX_COLUMNS)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (row in items.chunked(cols)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (item in row) Box(Modifier.weight(1f)) { content(item) }
+                    repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+private const val MIN_TILE_DP = 80
+private const val MAX_COLUMNS = 4
 
 /**
  * The animations of the item [open] is about, in three tabs (ARCHITECTURE
@@ -328,36 +365,29 @@ internal fun AnimationPanel(
     val clock = tileClock()
     val choices = clip.animationChoices(tab)
     val plain = listOf<AnimKind?>(null) + choices.filter { animationDirection(it) == null }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (kind in plain) {
-            val label = stringResource(kind?.let(::animationName) ?: R.string.effect_none)
-            EffectTile(
-                label = label,
-                description = label,
-                selected = current?.kind == kind,
-                tag = animationTileTag(tab, kind),
-                onClick = { choose(kind) },
-            ) { animationTileFrame(clip, tab, kind, wanted, clock, picture) }
-        }
+    EvenGrid(plain) { kind ->
+        val label = stringResource(kind?.let(::animationName) ?: R.string.effect_none)
+        EffectTile(
+            label = label,
+            description = label,
+            selected = current?.kind == kind,
+            tag = animationTileTag(tab, kind),
+            onClick = { choose(kind) },
+        ) { animationTileFrame(clip, tab, kind, wanted, clock, picture) }
     }
     val directed = choices.filter { animationDirection(it) != null }
     if (directed.isNotEmpty()) {
         val heading = stringResource(animationName(directed.first()))
-        Spacer(Modifier.height(8.dp))
-        Text(heading, style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
-        Spacer(Modifier.height(4.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (kind in directed) {
-                val direction = animationDirection(kind)!!
-                EffectTile(
-                    label = stringResource(directionName(direction)),
-                    description = stringResource(R.string.effect_tile_with_direction, heading, stringResource(directionName(direction))),
-                    selected = current?.kind == kind,
-                    tag = animationTileTag(tab, kind),
-                    direction = direction,
-                    onClick = { choose(kind) },
-                ) { animationTileFrame(clip, tab, kind, wanted, clock, picture) }
-            }
+        GroupHeading(heading)
+        EvenGrid(directed) { kind ->
+            val label = stringResource(directionName(animationDirection(kind)!!))
+            EffectTile(
+                label = label,
+                description = stringResource(R.string.effect_tile_with_direction, heading, label),
+                selected = current?.kind == kind,
+                tag = animationTileTag(tab, kind),
+                onClick = { choose(kind) },
+            ) { animationTileFrame(clip, tab, kind, wanted, clock, picture) }
         }
     }
     if (tab != AnimSlot.DURING) {
@@ -396,28 +426,31 @@ private fun LengthSlider(
     onDone: () -> Unit,
 ) {
     val value = secondsText(valueMs)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.effect_length), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.titleSmall)
-    }
     val steps = ((maxMs - minMs) / 100 - 1).toInt().coerceAtLeast(0)
     val label = stringResource(R.string.effect_length)
-    Slider(
-        value = valueMs.toFloat(),
-        onValueChange = { onChange((it / 100).roundToLong() * 100) },
-        onValueChangeFinished = onDone,
-        valueRange = minMs.toFloat()..maxOf(maxMs, minMs + 1).toFloat(),
-        steps = steps,
-        enabled = enabled,
-        modifier =
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(EFFECT_LENGTH_TAG).semantics {
-                contentDescription = label
-                stateDescription = value
-            },
-    )
+    // One row: the name, the slider taking the room between, the value.
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        OneLine(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(16.dp))
+        Slider(
+            value = valueMs.toFloat(),
+            onValueChange = { onChange((it / 100).roundToLong() * 100) },
+            onValueChangeFinished = onDone,
+            valueRange = minMs.toFloat()..maxOf(maxMs, minMs + 1).toFloat(),
+            steps = steps,
+            enabled = enabled,
+            modifier =
+                Modifier.weight(1f).heightIn(min = 48.dp).testTag(EFFECT_LENGTH_TAG).semantics {
+                    contentDescription = label
+                    stateDescription = value
+                },
+        )
+        Spacer(Modifier.width(16.dp))
+        OneLine(value, style = MaterialTheme.typography.labelMedium)
+    }
 }
 
-/** One choice: a small moving preview, its name under it, a border when it is the one in use. */
+/** One choice: a small moving preview, its name under it; the one in use is outlined and named in the accent colour. */
 @Composable
 private fun EffectTile(
     label: String,
@@ -425,54 +458,37 @@ private fun EffectTile(
     selected: Boolean,
     tag: String,
     onClick: () -> Unit,
-    direction: EffectDirection? = null,
     frame: DrawScope.() -> Unit,
 ) {
-    val primary = MaterialTheme.colorScheme.primary
-    val shape = RoundedCornerShape(10.dp)
-    val backdrop = MaterialTheme.colorScheme.surfaceVariant
+    val colours = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(8.dp)
+    val backdrop = colours.surfaceVariant
     Column(
         Modifier
-            .width(TILE_W.dp)
+            .fillMaxWidth()
             .clip(shape)
-            .then(if (selected) Modifier.border(BorderStroke(3.dp, primary), shape) else Modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = description
                 this.selected = selected
-            }.padding(4.dp)
-            .testTag(tag),
+            }.testTag(tag),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Canvas(Modifier.width((TILE_W - 8).dp).height(((TILE_W - 8) * 9 / 16).dp).clip(RoundedCornerShape(6.dp))) {
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(shape)
+                .border(BorderStroke(if (selected) 2.dp else 1.dp, if (selected) colours.primary else colours.outlineVariant), shape),
+        ) {
             drawRect(backdrop)
             frame()
         }
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-            if (direction != null) {
-                Icon(
-                    painterResource(R.drawable.ic_arrow_right),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp).rotate(direction.degrees),
-                )
-                Spacer(Modifier.width(2.dp))
-            }
-            Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+        Box(Modifier.heightIn(min = 32.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+            OneLine(label, style = MaterialTheme.typography.labelMedium, color = if (selected) colours.primary else colours.onSurface)
         }
     }
 }
-
-private const val TILE_W = 104
-
-private val EffectDirection.degrees: Float
-    get() =
-        when (this) {
-            EffectDirection.RIGHT -> 0f
-            EffectDirection.DOWN -> 90f
-            EffectDirection.LEFT -> 180f
-            EffectDirection.UP -> 270f
-        }
 
 /** Milliseconds since the panel opened, every frame; it does not hold up tests (an infinite animation). */
 @Composable

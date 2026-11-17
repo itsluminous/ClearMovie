@@ -1222,14 +1222,16 @@ private fun TransitionMarker(
             },
         contentAlignment = Alignment.Center,
     ) {
+        // The same size and shape as the "+", in a quiet surface colour, so the row reads calmly.
         Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            shadowElevation = 2.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             modifier = Modifier.size(TimelineGeometry.MARKER_DP.dp),
         ) {
-            Icon(painterResource(R.drawable.ic_transition), contentDescription = null, modifier = Modifier.padding(3.dp))
+            Icon(painterResource(R.drawable.ic_transition), contentDescription = null, modifier = Modifier.padding(4.dp))
         }
     }
 }

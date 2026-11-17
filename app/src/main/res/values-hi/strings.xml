@@ -389,17 +389,17 @@
     <string name="action_animation">एनिमेशन</string>
     <string name="effect_none">कुछ नहीं</string>
     <string name="transition_title">अगले पर कैसे जाए</string>
-    <string name="transition_crossfade">धीरे-धीरे बदले</string>
+    <string name="transition_crossfade">क्रॉसफ़ेड</string>
     <string name="transition_fade_black">काले से होकर</string>
     <string name="transition_fade_white">सफ़ेद से होकर</string>
     <string name="transition_wipe">पोंछ कर</string>
     <string name="transition_slide">सरक कर</string>
     <string name="transition_circle">गोले में</string>
     <string name="transition_zoom">पास आकर</string>
-    <string name="transition_apply_all">सब पर लगाएँ</string>
-    <string name="transition_applied_all">सब पर लगा है</string>
+    <string name="transition_apply_all">सब पर</string>
+    <string name="transition_applied_all">सब पर लगा</string>
     <string name="transition_remove">हटाएँ</string>
-    <string name="transition_insert_here">यहाँ कुछ जोड़ें</string>
+    <string name="transition_insert_here">यहाँ जोड़ें</string>
     <string name="transition_too_short">ये दोनों हिस्से ट्रांज़िशन के लिए बहुत छोटे हैं।</string>
     <string name="transition_last">यह आख़िरी हिस्सा है: इसके बाद कुछ नहीं है।</string>
     <string name="effect_length">कितनी देर</string>
@@ -426,4 +426,9 @@
     <string name="effect_seconds">%1$d.%2$d सेकंड</string>
     <string name="effect_tile_with_direction">%1$s, %2$s</string>
     <string name="timeline_transition_marker">इस %1$s के बाद ट्रांज़िशन: %2$s</string>
+    <string name="transition_group_fade">धीरे से बदले</string>
+    <string name="transition_group_shape">आकार</string>
+    <string name="transition_tile_black">काला</string>
+    <string name="transition_tile_white">सफ़ेद</string>
+    <string name="transition_tile_zoom">ज़ूम</string>
 </resources>
