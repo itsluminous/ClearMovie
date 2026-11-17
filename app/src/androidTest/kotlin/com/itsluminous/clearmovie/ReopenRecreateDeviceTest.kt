@@ -40,6 +40,7 @@ import com.itsluminous.clearmovie.ui.editor.EDITOR_EXPORT_TAG
 import com.itsluminous.clearmovie.ui.editor.PREVIEW_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_PROGRESS_TAG
 import com.itsluminous.clearmovie.ui.home.HOME_LIST_TAG
+import com.itsluminous.clearmovie.work.ExportFailure
 import com.itsluminous.clearmovie.work.ExportWorker
 import org.junit.After
 import org.junit.Before
@@ -223,7 +224,9 @@ class ReopenRecreateDeviceTest {
         // emulator the preview's players and the export share its few decoders, and either
         // can fail there (ERROR_CODE_MUXING_TIMEOUT, ERROR_CODE_DECODING_FAILED, a preview
         // that never loads). So this test needs the editor back after each recreate and the
-        // export carried on or ended on its own, never stopped by the recreate.
+        // export not cancelled by them; a codec failure (ExportFailure.FAILED) is allowed,
+        // anything else is not. Whether the preview loads while an export runs is not covered
+        // here (the other tests cover the preview with no export).
         val id = ExportWorker.enqueue(workManager, project.id, ExportQuality.SMALL, "Reopen", replace = true)
         compose.waitUntil(TIMEOUT_MS) { workManager.getWorkInfoById(id).get()?.state == WorkInfo.State.RUNNING }
 
@@ -242,6 +245,11 @@ class ReopenRecreateDeviceTest {
             val info = workManager.getWorkInfoById(id).get()
             Log.i(ExportHarness.TAG, "Export beside the recreates: ${info?.state} ${info?.outputData?.getString(ExportWorker.KEY_FAILURE)}")
             assertThat(info?.state).isAnyOf(WorkInfo.State.RUNNING, WorkInfo.State.SUCCEEDED, WorkInfo.State.FAILED)
+            if (info?.state == WorkInfo.State.FAILED) {
+                // Only the codec failure the shared decoders cause; a worker that threw (no reason) or
+                // lost its media would point at the recreate.
+                assertThat(info.outputData.getString(ExportWorker.KEY_FAILURE)).isEqualTo(ExportFailure.FAILED.name)
+            }
             compose.onNodeWithTag(EDITOR_EXPORT_TAG).performClick()
             waitFor(
                 hasTestTag(EXPORT_PROGRESS_TAG).or(hasText(s(R.string.export_done_title))).or(hasText(s(R.string.export_failed_title))),
