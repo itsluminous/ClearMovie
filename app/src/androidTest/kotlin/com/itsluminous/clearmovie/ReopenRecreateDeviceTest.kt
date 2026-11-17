@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.IdlingPolicies
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkInfo
@@ -50,6 +51,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 /**
@@ -186,8 +188,20 @@ class ReopenRecreateDeviceTest {
     private fun previewPlays() {
         val atStart = progress()
         compose.onNodeWithText(s(R.string.action_play)).performClick()
-        // While it plays Compose may not go idle; the whole 14 s video plays out at most.
-        compose.waitUntil(PLAY_TIMEOUT_MS) { notYetIfBusy { progress() > atStart + 0.02f } }
+        // While it plays Compose redraws the playhead every frame and may not go idle, and a
+        // Compose read then waits out Espresso's idle timeout (seen: about 35 s per read), so
+        // two reads could outlast the wait. With a 2 s timeout a busy read fails fast and is
+        // tried again; at the latest when the 14 s video ends and the preview stops.
+        val master = IdlingPolicies.getMasterIdlingPolicy()
+        val resource = IdlingPolicies.getDynamicIdlingResourceErrorPolicy()
+        IdlingPolicies.setMasterPolicyTimeout(BUSY_READ_S, TimeUnit.SECONDS)
+        IdlingPolicies.setIdlingResourceTimeout(BUSY_READ_S, TimeUnit.SECONDS)
+        try {
+            compose.waitUntil(PLAY_TIMEOUT_MS) { notYetIfBusy { progress() > atStart + 0.02f } }
+        } finally {
+            IdlingPolicies.setMasterPolicyTimeout(master.idleTimeout, master.idleTimeoutUnit)
+            IdlingPolicies.setIdlingResourceTimeout(resource.idleTimeout, resource.idleTimeoutUnit)
+        }
     }
 
     /** Turns the display and waits until the activity has been created again for it. */
@@ -461,6 +475,9 @@ class ReopenRecreateDeviceTest {
 
         /** Longer than the whole test video, so its end, when the preview stops, is inside the wait. */
         const val PLAY_TIMEOUT_MS = 40_000L
+
+        /** How long one Compose read may wait for idle while the preview plays. */
+        const val BUSY_READ_S = 2L
 
         /**
          * MAIN here: intro 0-2 s, a captioned photo, then clip_dark from about
