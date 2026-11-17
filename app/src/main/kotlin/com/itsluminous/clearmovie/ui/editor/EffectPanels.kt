@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -22,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +41,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -55,7 +51,6 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -96,14 +91,13 @@ import com.itsluminous.clearmovie.render.plan.MotionMath
 import com.itsluminous.clearmovie.render.plan.PictureMotion
 import com.itsluminous.clearmovie.render.plan.TransitionPart
 import com.itsluminous.clearmovie.render.plan.TransitionRole
-import com.itsluminous.clearmovie.ui.editor.timeline.EffectDirection
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
 import com.itsluminous.clearmovie.ui.editor.timeline.TransitionGroup
 import com.itsluminous.clearmovie.ui.editor.timeline.animationDirection
 import com.itsluminous.clearmovie.ui.editor.timeline.animationName
 import com.itsluminous.clearmovie.ui.editor.timeline.directionName
-import com.itsluminous.clearmovie.ui.editor.timeline.transitionDirection
+import com.itsluminous.clearmovie.ui.editor.timeline.transitionName
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -146,7 +140,6 @@ private fun secondsText(ms: Long): String {
  * here, for when the timeline is too zoomed out to show the "+". Each choice
  * is one undo step, and the preview plays from a second before the junction.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TransitionPanel(
     open: OpenPanel,
@@ -187,6 +180,48 @@ internal fun TransitionPanel(
         if (callbacks.edit { setTransition(slot.clip.id, t) }) preview(t?.durationMs ?: 0)
     }
 
+    // "Use for all" is on when this junction has the all-items kind; its stored length may be shorter
+    // (fitted to these two items), so the kind is what tells.
+    val forAllOn = project.transitionForAll
+    val forAll = current != null && forAllOn != null && forAllOn.kind == current.kind
+    // The controls first, so they are in reach without scrolling past the tiles.
+    LengthSlider(
+        valueMs = wanted,
+        minMs = Transition.MIN_MS,
+        maxMs = maxMs,
+        enabled = current != null && maxMs > Transition.MIN_MS,
+        onChange = { length = it },
+        onDone = {
+            val t = current ?: return@LengthSlider
+            val len = length.coerceIn(Transition.MIN_MS, maxMs)
+            // With "Use for all" on, the length is for every junction (each still fitted to its items).
+            val applied =
+                if (forAll) {
+                    callbacks.edit { applyTransitionToAll(forAllOn!!.copy(durationMs = len)) }
+                } else {
+                    callbacks.edit { setTransition(slot.clip.id, t.copy(durationMs = len)) }
+                }
+            if (applied) preview(len)
+        },
+    )
+    // Three equal actions across the width.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = { current?.let { t -> callbacks.edit { applyTransitionToAll(t.copy(durationMs = wanted)) } } },
+            enabled = current != null && !forAll,
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_APPLY_ALL_TAG),
+        ) {
+            OneLine(stringResource(if (forAll) R.string.transition_applied_all else R.string.transition_apply_all))
+        }
+        OutlinedButton(
+            onClick = { callbacks.edit { setTransition(slot.clip.id, null) } },
+            enabled = current != null,
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_REMOVE_TAG),
+        ) {
+            OneLine(stringResource(R.string.transition_remove))
+        }
+        InsertHereButton(insertHere, Modifier.weight(1f))
+    }
     val pictures =
         junctionPictures(slot, next, thumbnail, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.primaryContainer)
     val clock = tileClock()
@@ -196,58 +231,21 @@ internal fun TransitionPanel(
         GroupHeading(heading)
         EvenGrid(g.tiles) { tile ->
             val label = stringResource(tile.label)
+            val direction = g == TransitionGroup.WIPE || g == TransitionGroup.SLIDE
             EffectTile(
                 label = label,
-                // TalkBack reads the whole name: "Wipe, Left"; the fade row's tiles are names already.
+                // TalkBack reads the full name: "Fade through black", "Wipe, Left".
                 description =
-                    if (g == TransitionGroup.FADE ||
-                        g == TransitionGroup.SHAPE
-                    ) {
-                        label
-                    } else {
+                    if (direction) {
                         stringResource(R.string.effect_tile_with_direction, heading, label)
+                    } else {
+                        stringResource(transitionName(tile.kind))
                     },
                 selected = chosen == tile.kind,
                 tag = transitionTileTag(tile.kind),
                 onClick = { choose(tile.kind) },
             ) { transitionTileFrame(tile.kind, clock.longValue, pictures) }
         }
-    }
-    Spacer(Modifier.height(12.dp))
-    LengthSlider(
-        valueMs = wanted,
-        minMs = Transition.MIN_MS,
-        maxMs = maxMs,
-        enabled = current != null && maxMs > Transition.MIN_MS,
-        onChange = { length = it },
-        onDone = {
-            val t = current ?: return@LengthSlider
-            val changed = t.copy(durationMs = length.coerceIn(Transition.MIN_MS, maxMs))
-            val forAll = project.transitionForAll == t
-            if (callbacks.edit { if (forAll) applyTransitionToAll(changed) else setTransition(slot.clip.id, changed) }) {
-                preview(changed.durationMs)
-            }
-        },
-    )
-    Spacer(Modifier.height(8.dp))
-    // Three equal actions across the width.
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        val forAll = current != null && project.transitionForAll == current
-        OutlinedButton(
-            onClick = { current?.let { t -> callbacks.edit { applyTransitionToAll(t.copy(durationMs = wanted)) } } },
-            enabled = current != null && !forAll,
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_APPLY_ALL_TAG),
-        ) {
-            OneLine(stringResource(if (forAll) R.string.transition_applied_all else R.string.transition_apply_all))
-        }
-        TextButton(
-            onClick = { callbacks.edit { setTransition(slot.clip.id, null) } },
-            enabled = current != null,
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_REMOVE_TAG),
-        ) {
-            OneLine(stringResource(R.string.transition_remove))
-        }
-        InsertHereButton(insertHere, Modifier.weight(1f))
     }
 }
 
@@ -256,7 +254,7 @@ private fun InsertHereButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    TextButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp).testTag(TRANSITION_INSERT_TAG)) {
+    OutlinedButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp).testTag(TRANSITION_INSERT_TAG)) {
         OneLine(stringResource(R.string.transition_insert_here))
     }
 }
@@ -296,9 +294,10 @@ private fun <T> EvenGrid(
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val fit = ((maxWidth + 8.dp) / (MIN_TILE_DP + 8).dp).toInt().coerceIn(1, MAX_COLUMNS)
-        // Rows of equal length where possible: four tiles go 2 + 2 rather than 3 + 1.
+        // Rows of equal length where possible: four tiles go 2 + 2 rather than 3 + 1. Every grid
+        // of the panel gets the same column count, so every tile is the same width.
         var cols = fit
-        while (cols > 1 && items.size > cols && items.size % cols != 0) cols--
+        while (cols > 1 && MAX_COLUMNS % cols != 0) cols--
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (row in items.chunked(cols)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -310,7 +309,7 @@ private fun <T> EvenGrid(
     }
 }
 
-private const val MIN_TILE_DP = 80
+private const val MIN_TILE_DP = 72
 private const val MAX_COLUMNS = 4
 
 /**
@@ -320,7 +319,6 @@ private const val MAX_COLUMNS = 4
  * text), with a Length slider for Start and End. The preview plays the part
  * that changed.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AnimationPanel(
     open: OpenPanel,
@@ -432,7 +430,9 @@ private fun LengthSlider(
     onDone: () -> Unit,
 ) {
     val value = secondsText(valueMs)
-    val steps = ((maxMs - minMs) / 100 - 1).toInt().coerceAtLeast(0)
+    // Whole tenths only: the top of the range rounds down to one, so the thumb and the value agree.
+    val top = maxOf(minMs, maxMs / 100 * 100)
+    val steps = ((top - minMs) / 100 - 1).toInt().coerceAtLeast(0)
     val label = stringResource(R.string.effect_length)
     // One row: the name, the slider taking the room between, the value.
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -442,7 +442,7 @@ private fun LengthSlider(
             value = valueMs.toFloat(),
             onValueChange = { onChange((it / 100).roundToLong() * 100) },
             onValueChangeFinished = onDone,
-            valueRange = minMs.toFloat()..maxOf(maxMs, minMs + 1).toFloat(),
+            valueRange = minMs.toFloat()..maxOf(top, minMs + 1).toFloat(),
             steps = steps,
             enabled = enabled,
             modifier =
@@ -528,7 +528,11 @@ private fun picture(
     thumbnail: ThumbSource,
     fallback: Color,
 ): TilePicture {
-    val bitmap by produceState<Bitmap?>(null, clip, sourceMs / 500) { value = runCatching { thumbnail(clip, sourceMs) }.getOrNull() }
+    val latest by androidx.compose.runtime.rememberUpdatedState(clip)
+    val media = (clip as? com.itsluminous.clearmovie.domain.model.MediaClip)?.media
+    val bitmap by produceState<Bitmap?>(null, clip.id, media, sourceMs / 500) {
+        value = runCatching { thumbnail(latest, sourceMs) }.getOrNull()
+    }
     val color = (clip as? CardClip)?.color?.let { Color(it.argb.toInt()) } ?: fallback
     return TilePicture(bitmap?.asImageBitmap(), color)
 }

@@ -157,7 +157,11 @@ class EffectsPlanTest {
         assertThat(s.tailGainDbAt(1_000_000)).isNull()
         // The tail player's playlist covers the whole video, playing only in the overlap.
         val lane = s.tailLane!!
-        assertThat(lane.entries.filterIsInstance<PreviewSchedule.LaneEntry.Play>().map { it.startUs }).containsExactly(2_000_000L)
+        // It starts half a second early, hidden and silent, so its decoder is running when the overlap begins.
+        val play = lane.entries.filterIsInstance<PreviewSchedule.LaneEntry.Play>().single()
+        assertThat(play.startUs).isEqualTo(2_000_000L - PreviewSchedule.TAIL_PREROLL_US)
+        assertThat(play.clipStartUs).isEqualTo(2_000_000L - PreviewSchedule.TAIL_PREROLL_US)
+        assertThat(s.tailGainDbAt(1_700_000)).isNull()
         assertThat(lane.entries.last().endUs).isEqualTo(s.durationUs)
     }
 
@@ -170,6 +174,31 @@ class EffectsPlanTest {
         assertThat(s.tail).isEmpty()
         assertThat(s.tailLane).isNull()
         assertThat(s.mainGainDbAt(1_000_000)).isWithin(1e-6).of(0.0)
+    }
+
+    @Test
+    fun `a spoken ending holds the last photo's final gentle-zoom pose`() {
+        val photo = PhotoClip(ClipId("ph"), Fixtures.media("ph"), 3000)
+        val project =
+            ProjectFactory
+                .fromPreset(Fixtures.PROJECT_ID, Fixtures.preset, Fixtures.presetMedia, SequentialIds("x"))
+                .addToMain(listOf(photo), ids = ids)
+                .withEffectDefaultsFor(listOf(photo.id))
+        val plan = RenderPlanBuilder(Fixtures.preset).build(project, height = 720)
+        val photos =
+            plan.visual
+                .flatMap { it.segments }
+                .filterIsInstance<VisualSegment.Picture>()
+                .filter { it.source is Source.Photo }
+                .sortedBy { it.startUs }
+        val (item, held) = photos
+        val endPose = item.motionAt(item.durationUs)
+        val heldStart = held.motionAt(held.clipOffsetUs)
+        val heldLater = held.motionAt(held.clipOffsetUs + 2_000_000)
+        assertThat(heldStart.scale).isWithin(1e-5f).of(endPose.scale)
+        assertThat(heldStart.dx).isWithin(1e-6f).of(endPose.dx)
+        assertThat(heldLater.scale).isWithin(1e-5f).of(endPose.scale)
+        assertThat(heldLater.dy).isWithin(1e-6f).of(endPose.dy)
     }
 
     /** dB to the linear gain the preview players get. */

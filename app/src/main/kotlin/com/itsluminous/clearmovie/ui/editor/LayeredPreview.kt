@@ -296,7 +296,8 @@ private fun PlacedPicture(
                     scaleY = f.scale
                     translationX = (w * f.dx).toPx()
                     translationY = (h * f.dy).toPx()
-                    alpha = if (picture.showsAt(t)) f.alpha else 0f
+                    // Hidden, the layer is still drawn, faintly (see HIDDEN_ALPHA), so its surface keeps taking frames.
+                    alpha = if (picture.showsAt(t)) f.alpha else HIDDEN_ALPHA
                 },
             ) {
                 if (fit == Fit.FIT_BLUR) {
@@ -311,7 +312,7 @@ private fun PlacedPicture(
                         .requiredSize(cw, ch)
                         .graphicsLayer {
                             // A hidden surface is still drawn, faintly: see HIDDEN_ALPHA.
-                            alpha = if (isVideo && picture.showsAt(now())) 1f else HIDDEN_ALPHA
+                            alpha = if (isVideo) 1f else HIDDEN_ALPHA
                             rotationZ = rotation.degrees.toFloat()
                         },
                 )

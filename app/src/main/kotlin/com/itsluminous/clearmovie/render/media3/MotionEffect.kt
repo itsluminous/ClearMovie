@@ -18,8 +18,9 @@ import com.itsluminous.clearmovie.render.plan.PictureMotion
  * It runs after [PlacementEffect], so its input is already on the canvas.
  *
  * The shader takes only numbers worked out here from the plan (each one
- * finite and clamped), never text, so a project file cannot change what the
- * shader does. It uses nothing beyond GLSL ES 1.0, so SwiftShader (the CI
+ * made finite and clamped to a sane range here, the rect and circle centre
+ * included), never text, so a project file cannot change what the shader
+ * does. It uses nothing beyond GLSL ES 1.0, so SwiftShader (the CI
  * emulators' GPU) draws it like a phone.
  *
  * Frame timestamps reach the effect in the item's sequence time;
@@ -57,7 +58,10 @@ class MotionEffect(
         override fun setUniforms(presentationTimeUs: Long) {
             val f = frameAt(presentationTimeUs)
             val r = motion.rect
-            program.setFloatsUniform("uRect", floatArrayOf(r.x.toFloat(), r.y.toFloat(), r.w.toFloat(), r.h.toFloat()))
+            program.setFloatsUniform(
+                "uRect",
+                floatArrayOf(r.x.unit(0f), r.y.unit(0f), r.w.unit(1f).coerceAtLeast(MIN_SCALE), r.h.unit(1f).coerceAtLeast(MIN_SCALE)),
+            )
             program.setFloatUniform("uScale", f.scale.safe(1f).coerceIn(MIN_SCALE, MAX_SCALE))
             program.setFloatsUniform("uOffset", floatArrayOf(f.dx.safe(0f).coerceIn(-2f, 2f), f.dy.safe(0f).coerceIn(-2f, 2f)))
             program.setFloatUniform("uAlpha", f.alpha.safe(1f).coerceIn(0f, 1f))
@@ -88,7 +92,12 @@ class MotionEffect(
                     program.setFloatUniform("uMaskType", 2f)
                     program.setFloatsUniform(
                         "uMask",
-                        floatArrayOf(m.cx.safe(0.5f), m.cy.safe(0.5f), m.radius.safe(0f).coerceIn(0f, 4f), if (m.inside) 1f else 0f),
+                        floatArrayOf(
+                            m.cx.safe(0.5f).coerceIn(-1f, 2f),
+                            m.cy.safe(0.5f).coerceIn(-1f, 2f),
+                            m.radius.safe(0f).coerceIn(0f, 4f),
+                            if (m.inside) 1f else 0f,
+                        ),
                     )
                 }
             }
@@ -101,9 +110,16 @@ class MotionEffect(
 
         fun Float.safe(fallback: Float) = if (isFinite()) this else fallback
 
+        /** A canvas fraction, finite and within 0..1. */
+        fun Double.unit(fallback: Float) = toFloat().safe(fallback).coerceIn(0f, 1f)
+
         // p is the output point in canvas space, y down; q the input point it shows.
         const val FRAGMENT = """
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+#else
+precision mediump float;
+#endif
 uniform sampler2D uTexSampler;
 uniform vec4 uRect;
 uniform float uScale;

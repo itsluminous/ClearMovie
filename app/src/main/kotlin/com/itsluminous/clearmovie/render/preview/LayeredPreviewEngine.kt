@@ -509,8 +509,13 @@ class LayeredPreviewEngine(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // An outgoing item that can't play is left out of the blend; MAIN keeps playing.
-            if (player === tail) stateFlow.value = stateFlow.value.copy(unavailable = stateFlow.value.unavailable + 1)
+            // An outgoing item that can't play is left out of that blend; MAIN keeps playing, and the
+            // tail player is made ready again at the video's time, so the next transitions still blend.
+            if (player !== tail) return
+            stateFlow.value = stateFlow.value.copy(unavailable = stateFlow.value.unavailable + 1)
+            val lane = schedule?.tailLane ?: return
+            player.prepare()
+            seekLane(player, lane.entries, mainTimeUs())
         }
     }
 

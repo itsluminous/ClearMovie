@@ -117,6 +117,8 @@ fun Project.withPresetChoices(
     val frame = preset.frame
     val keyed = if (green != null && frame != null) preset.copy(frame = frame.copy(key = frame.key.copy(color = green))) else preset
     val fresh = ProjectFactory.fromPreset(id, keyed, choices.applyTo(bound), ids).copy(name = name)
-    // The fresh intro and ending lead into and out of the items as the preset's defaults say.
+    // The review screen runs before any editing, so every item here is new to this preset: they
+    // all take its effect defaults (the photos' gentle zoom, the transitions between them and into
+    // the intro and ending), exactly as when they were first added.
     return if (content.isEmpty()) fresh else fresh.addToMain(content, ids = ids).withEffectDefaultsFor(content.map { it.id })
 }

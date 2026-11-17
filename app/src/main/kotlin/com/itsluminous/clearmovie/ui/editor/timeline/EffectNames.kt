@@ -55,14 +55,37 @@ enum class TransitionGroup(
 /** The full name of a transition kind, without its direction (TalkBack, the junction marker). */
 fun transitionName(kind: TransitionKind): Int =
     when (kind) {
-        TransitionKind.NONE -> R.string.effect_none
-        TransitionKind.CROSSFADE -> R.string.transition_crossfade
-        TransitionKind.FADE_BLACK -> R.string.transition_fade_black
-        TransitionKind.FADE_WHITE -> R.string.transition_fade_white
-        TransitionKind.WIPE_LEFT, TransitionKind.WIPE_RIGHT, TransitionKind.WIPE_UP, TransitionKind.WIPE_DOWN -> R.string.transition_wipe
-        TransitionKind.SLIDE_LEFT, TransitionKind.SLIDE_RIGHT, TransitionKind.SLIDE_UP, TransitionKind.SLIDE_DOWN -> R.string.transition_slide
-        TransitionKind.CIRCLE -> R.string.transition_circle
-        TransitionKind.ZOOM_IN -> R.string.transition_zoom
+        TransitionKind.NONE -> {
+            R.string.effect_none
+        }
+
+        TransitionKind.CROSSFADE -> {
+            R.string.transition_crossfade
+        }
+
+        TransitionKind.FADE_BLACK -> {
+            R.string.transition_fade_black
+        }
+
+        TransitionKind.FADE_WHITE -> {
+            R.string.transition_fade_white
+        }
+
+        TransitionKind.WIPE_LEFT, TransitionKind.WIPE_RIGHT, TransitionKind.WIPE_UP, TransitionKind.WIPE_DOWN -> {
+            R.string.transition_wipe
+        }
+
+        TransitionKind.SLIDE_LEFT, TransitionKind.SLIDE_RIGHT, TransitionKind.SLIDE_UP, TransitionKind.SLIDE_DOWN -> {
+            R.string.transition_slide
+        }
+
+        TransitionKind.CIRCLE -> {
+            R.string.transition_circle
+        }
+
+        TransitionKind.ZOOM_IN -> {
+            R.string.transition_zoom
+        }
     }
 
 fun transitionDirection(kind: TransitionKind): EffectDirection? =
@@ -90,7 +113,7 @@ fun animationName(kind: AnimKind): Int =
         AnimKind.PULSE -> R.string.anim_pulse
     }
 
-/** The way a slide-in comes from, or a slide-out goes to; null for the other kinds. */
+/** The way a slide-in or slide-out moves (the direction of travel, as for transitions); null for the other kinds. */
 fun animationDirection(kind: AnimKind): EffectDirection? =
     when (kind) {
         AnimKind.SLIDE_IN_L -> EffectDirection.RIGHT

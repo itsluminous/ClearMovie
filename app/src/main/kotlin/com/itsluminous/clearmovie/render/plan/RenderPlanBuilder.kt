@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.render.plan
 
+import com.itsluminous.clearmovie.domain.model.Anim
 import com.itsluminous.clearmovie.domain.model.Animations
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
@@ -151,8 +152,15 @@ class RenderPlanBuilder(
                 slot.takeIf { i < ctx.slots.lastIndex && it.overlapToNextMs > 0 }?.let {
                     TransitionPart(it.clip.transitionToNext!!.kind, durUs - it.overlapToNextMs * US, durUs, TransitionRole.OUT, upper)
                 }
+            val held = heldPose(ctx, slot)
             for (part in mainParts(ctx, slot)) {
-                val motion = motionFor(slot.clip.animations, durUs, part.placement, into, out)
+                val motion =
+                    if (held != null) {
+                        // A clip length of 0 puts the "during" curve at its end for the whole hold.
+                        motionFor(Animations(during = held), 0, part.placement, into, out)
+                    } else {
+                        motionFor(slot.clip.animations, durUs, part.placement, into, out)
+                    }
                 lane.add(part.copy(motion = motion, startUs = slot.startMs * US + part.clipOffsetUs))
             }
         }
@@ -245,6 +253,25 @@ class RenderPlanBuilder(
         placement = placement,
         clipOffsetUs = clipOffsetUs,
     )
+
+    /**
+     * A spoken ending holds the last picture of the item before it, so it
+     * holds that picture's last "during" pose too (a photo's gentle zoom ends
+     * zoomed in and panned; the held frame stays there instead of jumping
+     * back). Null for any other slot, or when that item has no such pose.
+     */
+    private fun heldPose(
+        ctx: Context,
+        slot: MainSlot,
+    ): Anim? {
+        val ending = slot.clip as? EndingClip ?: return null
+        if (ending.kind != EndingKind.AUDIO) return null
+        return ctx.slots
+            .getOrNull(slot.index - 1)
+            ?.clip
+            ?.animations
+            ?.during
+    }
 
     /** The motion of a picture drawn at [placement] for a clip [durUs] long, or null when it does not move. */
     private fun motionFor(

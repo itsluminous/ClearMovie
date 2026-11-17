@@ -366,8 +366,8 @@ fun TimelineView(
                 Playhead(z, playheadMs, metrics)
                 // The "+" points over everything, the playhead line included, on the MAIN row.
                 if (drag == null && shown.any { it.type == RowType.MAIN }) {
-                    // Reaches LIFT above the row, for the "+" points lifted over a transition marker.
-                    val lift = TimelineGeometry.LIFT_DP
+                    // Reaches above the row, for the "+" points lifted to its top edge over a transition marker.
+                    val lift = TimelineGeometry.ABOVE_ROW_DP
                     val top = metrics.rulerDp + mainTopInRows - lift
                     Box(
                         Modifier
@@ -381,12 +381,12 @@ fun TimelineView(
                             .height((metrics.mainDp + lift).dp)
                             .clipToBounds(),
                     ) {
-                        val centre = lift + metrics.mainDp / 2
-                        val markers = geometry.markers()
-                        for (m in markers) TransitionMarker(m, centre, shownSlots, actions)
+                        // In this box the row's top edge is at y = lift.
+                        val markerY = lift + (geometry.markerCentre - geometry.mainTop)
+                        for (m in geometry.markers()) TransitionMarker(m, markerY, shownSlots, actions)
                         val plus = geometry.plusPoints()
                         for (b in 0..shownSlots.size) {
-                            PlusButton(plus.firstOrNull { it.boundary == b }, b, shownSlots, actions, centre)
+                            PlusButton(plus.firstOrNull { it.boundary == b }, b, shownSlots, actions, lift, lift + metrics.mainDp / 2)
                         }
                     }
                 }
@@ -758,9 +758,10 @@ private fun hit(
     yDp: Double,
     rowScrollDp: Float,
 ): Hit {
-    if (xDp >= metrics.headerDp) {
-        // A "+" lifted over a transition marker reaches above the MAIN row (over the ruler or the row
-        // above it), and wins there, as every "+" and marker does over what is under it.
+    if (xDp >= metrics.headerDp && yDp >= metrics.rulerDp) {
+        // A "+" lifted over a transition marker reaches above the MAIN row, and wins there over the
+        // rows (as every "+" and marker does over what is under it), but never over the ruler: a
+        // touch on the ruler always scrubs, so the playhead can't be lost under a "+".
         val gy = metrics.rulerDp + (yDp - metrics.rulerDp + rowScrollDp - c.mainTopInRows)
         when (val t = c.geometry.hitTest(xDp - metrics.headerDp - PAD_DP, gy)) {
             is HitTarget.Plus -> return Hit.OnPlus(t.point)
@@ -1231,7 +1232,7 @@ private fun TransitionMarker(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             modifier = Modifier.size(TimelineGeometry.MARKER_DP.dp),
         ) {
-            Icon(painterResource(R.drawable.ic_transition), contentDescription = null, modifier = Modifier.padding(4.dp))
+            Icon(painterResource(R.drawable.ic_transition), contentDescription = null, modifier = Modifier.padding(2.dp))
         }
     }
 }
@@ -1242,6 +1243,7 @@ private fun PlusButton(
     boundary: Int,
     slots: List<MainSlot>,
     actions: TimelineActions,
+    topDp: Double,
     centreDp: Double,
 ) {
     AnimatedVisibility(point != null, enter = fadeIn(), exit = fadeOut()) {
@@ -1253,7 +1255,7 @@ private fun PlusButton(
         val name = if (anchor.clip.isContent()) stringResource(R.string.timeline_item_numbered, kind, position) else kind
         val description =
             stringResource(if (p.side == InsertSide.BEFORE) R.string.timeline_add_before else R.string.timeline_add_after, name)
-        val y = centreDp - (if (p.top) TimelineGeometry.LIFT_DP else 0.0) - TimelineGeometry.PLUS_HIT_DP / 2
+        val y = (if (p.top) topDp else centreDp) - TimelineGeometry.PLUS_HIT_DP / 2
         Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier

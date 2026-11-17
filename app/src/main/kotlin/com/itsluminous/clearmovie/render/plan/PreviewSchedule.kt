@@ -271,17 +271,7 @@ data class PreviewSchedule(
                         Lane(
                             id,
                             covered(
-                                tail.mapNotNull { t ->
-                                    val video = t.content as? MainContent.Video ?: return@mapNotNull null
-                                    LaneEntry.Play(
-                                        t.startUs,
-                                        t.durationUs,
-                                        video.media,
-                                        video.clipStartUs,
-                                        video.speed,
-                                        placement = t.placement,
-                                    )
-                                },
+                                tailPlays(tail),
                                 total,
                             ),
                         )
@@ -365,6 +355,33 @@ data class PreviewSchedule(
             if (at < total) out += blank(at, total - at)
             return mergeSlivers(out) to tails
         }
+
+        /**
+         * The tail player's videos. Each starts up to [TAIL_PREROLL_US] early
+         * (earlier in its file too, never before the file's start or the
+         * previous tail's end), so the decoder is running and its picture
+         * ready when the overlap begins; until then it plays hidden.
+         */
+        private fun tailPlays(tails: List<TailEntry>): List<LaneEntry.Play> {
+            var free = 0L
+            return tails.mapNotNull { t ->
+                val video = t.content as? MainContent.Video ?: return@mapNotNull null
+                val roomInFile = video.clipStartUs * video.speed.denominator / video.speed.numerator
+                val pre = minOf(TAIL_PREROLL_US, roomInFile, (t.startUs - free).coerceAtLeast(0))
+                free = t.endUs
+                LaneEntry.Play(
+                    t.startUs - pre,
+                    t.durationUs + pre,
+                    video.media,
+                    video.clipStartUs - video.speed.sourceUs(pre),
+                    video.speed,
+                    placement = t.placement,
+                )
+            }
+        }
+
+        /** How early the tail player starts each outgoing video, hidden, so it is decoding when its overlap starts. */
+        const val TAIL_PREROLL_US = 500_000L
 
         /** The sound planned with a MAIN picture: the clip sound of the same file, starting with it. */
         private fun soundOf(

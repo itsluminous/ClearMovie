@@ -87,9 +87,10 @@ sealed interface HitTarget {
  *   points move outside it, [HANDLE_GAP_DP] clear of the handles' hit area.
  * - No two "+" hit areas overlap: the one around the selected item wins,
  *   then the one under the playhead, then the earlier one.
- * - A junction with a transition has a marker on the centre line, in the
- *   middle of the overlap; its "+" moves up to the row's top edge, its hit
- *   area just above the marker's, so the two never share a spot. A "+" that
+ * - A junction with a transition has a marker in the middle of the overlap,
+ *   in the lower part of the row; its "+" moves up to the row's top edge
+ *   (ARCHITECTURE section 11.6), its hit area just above the marker's, so
+ *   the two never share a spot and both keep a 48 dp hit area. A "+" that
  *   would come within a marker's hit area moves up the same way. A marker
  *   gives way to the selected item's trim handles (the bar's Transition
  *   opens it then) and to an earlier marker closer than its hit area.
@@ -143,8 +144,12 @@ class TimelineGeometry(
     /** Whether items b - 1 and b overlap (a transition joins them). */
     private fun overlaps(b: Int): Boolean = b in 1 until spans.size && spans[b - 1].endMs > spans[b].startMs
 
-    /** The transition markers to draw. */
-    fun markers(): List<MarkerPoint> {
+    /** The transition markers to draw (worked out once: the geometry never changes). */
+    fun markers(): List<MarkerPoint> = markerCache
+
+    private val markerCache: List<MarkerPoint> by lazy { computeMarkers() }
+
+    private fun computeMarkers(): List<MarkerPoint> {
         val handles = handleHitAreas()?.toList().orEmpty()
         val kept = mutableListOf<MarkerPoint>()
         for (b in 1 until spans.size) {
@@ -163,7 +168,10 @@ class TimelineGeometry(
     }
 
     /** The centre of [p]'s hit area, in the geometry's y. */
-    fun plusCentreY(p: PlusPoint): Double = if (p.top) mainCentre - LIFT_DP else mainCentre
+    fun plusCentreY(p: PlusPoint): Double = if (p.top) mainTop else mainCentre
+
+    /** The centre of a marker's hit area: right under a lifted "+", so the two hit areas touch and never overlap. */
+    val markerCentre: Double get() = mainTop + PLUS_HIT_DP / 2 + MARKER_HIT_DP / 2
 
     /** The "+" points to draw. */
     fun plusPoints(): List<PlusPoint> {
@@ -244,7 +252,7 @@ class TimelineGeometry(
         if (plus != null) return HitTarget.Plus(plus)
         val marker =
             markers()
-                .filter { abs(it.xDp - x) <= MARKER_HIT_DP / 2 && abs(y - mainCentre) <= MARKER_HIT_DP / 2 }
+                .filter { abs(it.xDp - x) <= MARKER_HIT_DP / 2 && abs(y - markerCentre) <= MARKER_HIT_DP / 2 }
                 .minByOrNull { abs(it.xDp - x) }
         if (marker != null) return HitTarget.Marker(marker)
         if (y < mainTop) return HitTarget.Ruler
@@ -275,8 +283,8 @@ class TimelineGeometry(
         const val MARKER_DP = 24.0
         const val MARKER_HIT_DP = 48.0
 
-        /** How far above the row's centre line a lifted "+" sits. */
-        const val LIFT_DP = (PLUS_HIT_DP + MARKER_HIT_DP) / 2
+        /** How far a lifted "+" hit area reaches above the row (half of it: it is centred on the top edge). */
+        const val ABOVE_ROW_DP = PLUS_HIT_DP / 2
         const val HANDLE_HIT_DP = 48.0
 
         /** The clear space between a moved "+" hit area and a trim handle's. */

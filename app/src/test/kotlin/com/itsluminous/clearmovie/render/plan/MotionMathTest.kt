@@ -256,4 +256,28 @@ class MotionMathTest {
                 ).dx,
         ).isEqualTo(0f)
     }
+
+    /** A clip that leads out of lane B (the third item of A, B, A) is the upper one as it leaves. */
+    private fun outgoingUpper(
+        kind: TransitionKind,
+        t: Long,
+    ) = MotionMath.frameAt(PictureMotion(len, window, true, transitionOut = part(kind, TransitionRole.OUT, true)), t, aspect)
+
+    @Test
+    fun `an outgoing picture in lane B carries the fade or the mask itself`() {
+        assertThat(outgoingUpper(TransitionKind.CROSSFADE, 0).alpha).isEqualTo(1f)
+        assertThat(outgoingUpper(TransitionKind.CROSSFADE, len / 2).alpha).isWithin(1e-6f).of(0.5f)
+        assertThat(outgoingUpper(TransitionKind.CROSSFADE, len).alpha).isEqualTo(0f)
+        // Fade through a colour: shown for the first half (turning to the colour), gone for the second.
+        assertThat(outgoingUpper(TransitionKind.FADE_BLACK, len / 4).alpha).isEqualTo(1f)
+        assertThat(outgoingUpper(TransitionKind.FADE_BLACK, 3 * len / 4).alpha).isEqualTo(0f)
+        // Wipe left as the upper outgoing picture keeps the side the incoming one is not yet on.
+        val w = outgoingUpper(TransitionKind.WIPE_LEFT, len / 2).mask as Mask.Wipe
+        assertThat(w.keepAfter).isFalse()
+        assertThat(w.edge).isWithin(1e-5f).of((window.x + window.w / 2).toFloat())
+        val c = outgoingUpper(TransitionKind.CIRCLE, len / 2).mask as Mask.Circle
+        assertThat(c.inside).isFalse()
+        assertThat(outgoingUpper(TransitionKind.ZOOM_IN, len / 2).alpha).isWithin(1e-6f).of(0.5f)
+        assertThat(outgoingUpper(TransitionKind.ZOOM_IN, len / 2).scale).isWithin(0.012f).of(1.2f)
+    }
 }

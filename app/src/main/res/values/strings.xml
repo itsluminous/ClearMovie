@@ -435,7 +435,7 @@
     <string name="action_transition">Transition</string>
     <string name="action_animation">Animation</string>
     <string name="effect_none">None</string>
-    <string name="transition_title">Change to the next item</string>
+    <string name="transition_title">Transition to the next item</string>
     <string name="transition_crossfade">Crossfade</string>
     <string name="transition_fade_black">Fade through black</string>
     <string name="transition_fade_white">Fade through white</string>

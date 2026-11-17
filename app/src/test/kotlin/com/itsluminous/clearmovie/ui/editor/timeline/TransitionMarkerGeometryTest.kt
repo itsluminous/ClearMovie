@@ -55,6 +55,9 @@ class TransitionMarkerGeometryTest {
         assertThat(plus.getValue(2).top).isTrue()
         assertThat(plus.getValue(2).xDp).isWithin(1e-9).of(markers[0].xDp)
         assertThat(plus.getValue(1).top).isFalse()
+        // On the row's top edge, and the marker inside the row under it.
+        assertThat(g.plusCentreY(plus.getValue(2))).isEqualTo(g.mainTop)
+        assertThat(g.markerCentre + TimelineGeometry.MARKER_HIT_DP / 2).isAtMost(g.mainBottom)
     }
 
     @Test
@@ -63,7 +66,7 @@ class TransitionMarkerGeometryTest {
             for (selected in listOf(null, 1, 2)) {
                 val g = geometry(msPerDp, selected)
                 val boxes =
-                    g.markers().map { Box(it.xDp, g.mainCentre, TimelineGeometry.MARKER_HIT_DP) } +
+                    g.markers().map { Box(it.xDp, g.markerCentre, TimelineGeometry.MARKER_HIT_DP) } +
                         g.plusPoints().map { Box(it.xDp, g.plusCentreY(it), TimelineGeometry.PLUS_HIT_DP) }
                 for (i in boxes.indices) {
                     for (j in i + 1 until boxes.size) {
@@ -72,7 +75,7 @@ class TransitionMarkerGeometryTest {
                 }
                 // What a tap on each hits is that one thing.
                 for (m in g.markers()) {
-                    assertThat(g.hitTest(m.xDp, g.mainCentre)).isEqualTo(HitTarget.Marker(m))
+                    assertThat(g.hitTest(m.xDp, g.markerCentre)).isEqualTo(HitTarget.Marker(m))
                 }
                 for (p in g.plusPoints()) {
                     assertThat(g.hitTest(p.xDp, g.plusCentreY(p))).isEqualTo(HitTarget.Plus(p))
