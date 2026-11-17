@@ -111,9 +111,11 @@ class ReopenRecreateDeviceTest {
                 return compose.onNodeWithTag(PREVIEW_TAG).captureToImage().asAndroidBitmap()
             } catch (e: ComposeNotIdleException) {
                 if (System.currentTimeMillis() > end) throw e
+                Thread.sleep(200)
             } catch (e: AssertionError) {
                 // "Failed waiting for PixelCopy!": the window copy timed out on a busy GPU; nothing else.
                 if (e.message?.contains("PixelCopy") != true || System.currentTimeMillis() > end) throw e
+                Thread.sleep(200)
             }
         }
     }
@@ -209,7 +211,10 @@ class ReopenRecreateDeviceTest {
     @Test
     fun aReopenedEditorSurvivesRecreateAndRotationWhileItsExportRuns() {
         val workManager = WorkManager.getInstance(h.context)
-        val id = ExportWorker.enqueue(workManager, project.id, ExportQuality.BEST, "Reopen", replace = true)
+        // Small: what is tested is the editor beside a running export, not the encoder. A
+        // 1080p software encode on a loaded emulator, beside the preview's decoders, has
+        // stopped with ERROR_CODE_MUXING_TIMEOUT (no sample in 25 s) on this host.
+        val id = ExportWorker.enqueue(workManager, project.id, ExportQuality.SMALL, "Reopen", replace = true)
         compose.waitUntil(TIMEOUT_MS) { workManager.getWorkInfoById(id).get()?.state == WorkInfo.State.RUNNING }
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -294,15 +299,24 @@ class ReopenRecreateDeviceTest {
         }
     }
 
+    /** Seeks the paused preview to [fraction] of the length and waits for the playhead to get there. */
+    private fun seekTo(fraction: Float) {
+        compose.onNodeWithContentDescription(s(R.string.editor_seek)).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
+        compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { abs(progress() - fraction) < 0.01f } }
+    }
+
     /** Seeks to [us] paused, then compares the preview before and after a recreate. */
     private fun probe(
         scenario: ActivityScenario<MainActivity>,
         us: Long,
     ): Triple<String, Bitmap, Double> {
         val fraction = us.toFloat() / h.plannedUs(project)
+        // From the intro first, whose orange fills the window: the video's grey there
+        // afterwards proves the MAIN player itself landed the seek, not only the overlay.
+        seekTo(0f)
         val earlier = settledFrame()
-        compose.onNodeWithContentDescription(s(R.string.editor_seek)).performSemanticsAction(SemanticsActions.SetProgress) { it(fraction) }
-        compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { abs(progress() - fraction) < 0.01f } }
+        assertWithMessage("window at the intro: ${grid(earlier)}").that(windowShowsVideo(earlier)).isFalse()
+        seekTo(fraction)
         val at = timeLabel()
         val position = progress()
         // The label moves at once, the picture only once the players have landed
@@ -399,11 +413,14 @@ class ReopenRecreateDeviceTest {
         const val PLAY_TIMEOUT_MS = 40_000L
 
         /**
-         * The first video on MAIN plays from about 0:04 to 0:07. 4.2 s is just
-         * after its cut-in from the photo (where the old CI failure was seen, the
-         * spot a tap on its tile lands near); 6.0 s is inside it, away from the
-         * crossfades and from the frame fixture's 4 s loop point (near 5.4 s
-         * here), where one frame of difference moves its white square across.
+         * MAIN here: intro 0-2 s, a captioned photo, then clip_dark from about
+         * 3.8 s to 6.8 s (each junction a 0.6 s crossfade; the preview cuts to
+         * the incoming item at its start and draws no blend). Measured on the
+         * emulator: the photo at 3.6 s, the video's grey in the window from
+         * 4.0 s. 4.2 s is just after that cut-in, where the old CI failure was
+         * seen (a tap on the video's tile seeks near it); 6.0 s is inside the
+         * video, away from the frame fixture's 4 s loop point (near 5.4 s here),
+         * where one frame of difference moves its white square across.
          */
         val KNOWN_TIMES_US = listOf(4_200_000L, 6_000_000L)
 
