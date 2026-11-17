@@ -11,7 +11,9 @@ import android.os.Build
 import android.provider.MediaStore
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -35,6 +37,7 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.ui.editor.BAR_TAG
 import com.itsluminous.clearmovie.ui.editor.EDITOR_TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.PANEL_DONE_TAG
 import com.itsluminous.clearmovie.ui.editor.PANEL_TAG
@@ -213,6 +216,10 @@ class FlowDeviceTest {
 
             compose.onNode(hasContentDescription(s(R.string.editor_item_video) + ",", substring = true)).performClick()
             repeat(2) { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() }
+            // The bar holds more buttons than fit (Transition and Animation come early): scroll to Speed.
+            compose
+                .onNode(hasScrollToNodeAction() and hasAnyAncestor(hasTestTag(BAR_TAG)))
+                .performScrollToNode(hasTestTag(barActionTag(EditAction.SPEED)))
             compose.onNodeWithTag(barActionTag(EditAction.SPEED)).performClick()
             compose.onNodeWithText(context.getString(R.string.speed_value, "2")).performClick()
             compose.waitForIdle()
