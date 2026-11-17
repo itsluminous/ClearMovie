@@ -239,12 +239,10 @@ class CompositionFactory(
 
                 is Source.Caption -> {
                     val (w, h) = boxPixels(segment.placement)
+                    val font = captions.fontKey(source.style.font)
+                    val key = "caption|v${CaptionBitmapRenderer.VERSION}|$font|${plan.height}|${source.text}|${source.style}|${w}x$h"
                     val png =
-                        assets.png(
-                            "caption|v${CaptionBitmapRenderer.VERSION}|${captions.fontKey(
-                                source.style.font,
-                            )}|${plan.height}|${source.text}|${source.style}|${w}x$h",
-                        ) {
+                        assets.png(key) {
                             captions.caption(source.text, source.style, w, h)
                         }
                     image(png, segment.durationUs, effects, MimeTypes.IMAGE_PNG)
@@ -252,12 +250,11 @@ class CompositionFactory(
 
                 is Source.Card -> {
                     val (w, h) = boxPixels(segment.placement)
+                    val font = captions.fontKey(source.style.font)
+                    val key =
+                        "card|v${CaptionBitmapRenderer.VERSION}|$font|${plan.height}|${source.color}|${source.text}|${source.style}|${w}x$h"
                     val png =
-                        assets.png(
-                            "card|v${CaptionBitmapRenderer.VERSION}|${captions.fontKey(
-                                source.style.font,
-                            )}|${plan.height}|${source.color}|${source.text}|${source.style}|${w}x$h",
-                        ) {
+                        assets.png(key) {
                             captions.card(source.color, source.text, source.style, w, h)
                         }
                     image(png, segment.durationUs, effects, MimeTypes.IMAGE_PNG)
