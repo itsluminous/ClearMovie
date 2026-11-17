@@ -944,7 +944,8 @@ private fun Controls(
     val playMinWidth = 12.dp + ICON + 8.dp + playTextDp + 16.dp
     BoxWithConstraints(modifier.fillMaxWidth()) {
         // Words on Play and As exported only when the whole row fits with them (any language, any text size).
-        val needed = 16.dp + playMinWidth + 16.dp + timeDp + 16.dp + (12.dp + ICON + 8.dp + exactTextDp + 12.dp)
+        // The strip's own padding (8 + 8), Play, the time with its padding (8 + 8), As exported.
+        val needed = 16.dp + playMinWidth + 16.dp + timeDp + (12.dp + ICON + 8.dp + exactTextDp + 12.dp)
         val compact = density.fontScale > ICON_ONLY_FONT_SCALE || needed > maxWidth
         TransportRow(
             compact,
