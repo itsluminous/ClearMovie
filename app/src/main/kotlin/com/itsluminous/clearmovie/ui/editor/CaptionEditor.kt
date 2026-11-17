@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -46,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -55,6 +57,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -67,6 +71,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -79,6 +84,7 @@ import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.ProjectCodec
 import com.itsluminous.clearmovie.domain.model.RandomIds
 import com.itsluminous.clearmovie.domain.model.TextBackground
 import com.itsluminous.clearmovie.domain.model.TextClip
@@ -136,11 +142,17 @@ const val CAPTION_SIZE_STEP = 4
 /** The tallest tab's content (Colour: the swatches and two switch rows), at the base text size. */
 private val TAB_CONTENT_MIN = 176.dp
 
-/** Above this text scale the tabs show their icons only. */
-private const val TAB_LABELS_FONT_SCALE = 1.5f
+/** The size sample's height: the middle of the caption, larger than in the preview. */
+private val SAMPLE_HEIGHT = 80.dp
 
-/** Above this text scale the place choices go two by two. */
-private const val PLACE_ONE_ROW_FONT_SCALE = 1.1f
+/** Room a tab label needs besides its text. */
+private val TAB_LABEL_ROOM = 8.dp
+
+/** A chip's padding around its label (16 dp each side), plus a little air. */
+private val CHIP_LABEL_ROOM = 36.dp
+
+/** How strongly a caption with no words shows its sample in the preview. */
+private const val BLANK_SAMPLE_ALPHA = 0.6f
 
 private val CHECKER_LIGHT = Color(0xFFBDBDBD)
 private val CHECKER_DARK = Color(0xFF8A8A8A)
@@ -241,37 +253,46 @@ internal fun ColumnScope.CaptionPanel(
     fun restyle(wanted: CaptionStyle) {
         callbacks.editMerged(key) { setCaptionStyle(caption.id, CaptionStyleOverride.between(defaults, wanted)) }
     }
+    // The caption as the visit found it, kept with the screen: Cancel puts it back even when the visit's
+    // undo step is gone (the system closed the app meanwhile, or Undo ended the step).
+    val startText = rememberSaveable(caption.id.value) { caption.text }
+    val startStyle =
+        rememberSaveable(caption.id.value) { ProjectCodec.json.encodeToString(CaptionStyleOverride.serializer(), caption.style) }
     PanelTitle(
         stringResource(R.string.caption_title),
         onDone = onDone,
         onCancel = {
-            callbacks.revertMerge(key)
+            if (!callbacks.revertMerge(key)) {
+                val style0 = runCatching { ProjectCodec.json.decodeFromString(CaptionStyleOverride.serializer(), startStyle) }.getOrNull()
+                callbacks.edit {
+                    if (clip(caption.id) == null) return@edit this
+                    val words = setText(caption.id, startText)
+                    if (style0 != null) words.setCaptionStyle(caption.id, style0) else words
+                }
+            }
             onDone()
         },
     )
     var tabName by rememberSaveable(caption.id.value) { mutableStateOf(CaptionTab.WORDS.name) }
     val tab = CaptionTab.entries.firstOrNull { it.name == tabName } ?: CaptionTab.WORDS
-    PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
-        // Icon over label in the bar's sizes (24 dp, labelMedium); past 1.5x text only the icon shows, named for
-        // TalkBack, so a label is never cut short.
-        val iconsOnly = LocalDensity.current.fontScale > TAB_LABELS_FONT_SCALE
-        for (t in CaptionTab.entries) {
-            val label = stringResource(tabLabel(t))
-            Tab(
-                selected = t == tab,
-                onClick = { tabName = t.name },
-                modifier = Modifier.heightIn(min = 64.dp).testTag(captionTabTag(t)),
-            ) {
-                Column(
-                    Modifier.padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(painterResource(tabIcon(t)), contentDescription = if (iconsOnly) label else null, modifier = Modifier.size(24.dp))
-                    if (!iconsOnly) Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
-                }
+    // Icon over label in the bar's sizes (24 dp, labelMedium). When a label would not fit its tab (a narrow
+    // phone, large text, a long word) every tab shows its icon only, named for TalkBack, so no label is cut short.
+    val labels = CaptionTab.entries.map { stringResource(tabLabel(it)) }
+    val measurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelMedium
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val perTab = maxWidth / CaptionTab.entries.size
+        val iconsOnly =
+            labels.any { label ->
+                with(density) {
+                    measurer
+                        .measure(label, labelStyle, maxLines = 1)
+                        .size.width
+                        .toDp()
+                } + TAB_LABEL_ROOM > perTab
             }
-        }
+        CaptionTabs(tab, labels, iconsOnly) { tabName = it.name }
     }
     // Below the title and the tabs, which stay put, the tab's content and Reset scroll when the room is short.
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -290,6 +311,34 @@ internal fun ColumnScope.CaptionPanel(
         Spacer(Modifier.height(8.dp))
         ResetButton(caption, callbacks, key)
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun CaptionTabs(
+    tab: CaptionTab,
+    labels: List<String>,
+    iconsOnly: Boolean,
+    onTab: (CaptionTab) -> Unit,
+) {
+    PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
+        for (t in CaptionTab.entries) {
+            val label = labels[t.ordinal]
+            Tab(
+                selected = t == tab,
+                onClick = { onTab(t) },
+                modifier = Modifier.heightIn(min = 64.dp).testTag(captionTabTag(t)),
+            ) {
+                Column(
+                    Modifier.padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(painterResource(tabIcon(t)), contentDescription = if (iconsOnly) label else null, modifier = Modifier.size(24.dp))
+                    if (!iconsOnly) Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                }
+            }
+        }
     }
 }
 
@@ -330,8 +379,17 @@ private fun tabIcon(tab: CaptionTab): Int =
 
 /** Characters a caption may not hold (see TextRules) are left out as they are typed or pasted. */
 internal fun usableCaptionText(typed: String): String {
-    val kept = typed.filter { TextRules.isAllowed(it.toString(), allowNewlines = true) }
-    return kept.take(Limits.MAX_TEXT_LENGTH)
+    val kept = StringBuilder()
+    var i = 0
+    while (i < typed.length) {
+        val cp = typed.codePointAt(i)
+        val chars = String(Character.toChars(cp))
+        // Whole code points only, so a cut never leaves half an emoji.
+        if (kept.length + chars.length > Limits.MAX_TEXT_LENGTH) break
+        if (TextRules.isAllowed(chars, allowNewlines = true)) kept.append(chars)
+        i += Character.charCount(cp)
+    }
+    return kept.toString()
 }
 
 @Composable
@@ -383,12 +441,28 @@ private fun PlaceTab(
     restyle: (CaptionStyle) -> Unit,
 ) {
     val current = CaptionPlaces.placeOf(style.box, usual, safe)
-    // Four across; two by two with large text, so no name is ever cut short.
-    val columns = if (LocalDensity.current.fontScale > PLACE_ONE_ROW_FONT_SCALE) 2 else CaptionPlace.entries.size
+    // Four across when every name fits its chip; two by two otherwise, so no name is ever cut short.
+    val labels = CaptionPlace.entries.map { stringResource(placeLabel(it)) }
+    val measurer = rememberTextMeasurer()
+    val chipStyle = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    var width by remember { mutableStateOf(0.dp) }
+    Spacer(Modifier.fillMaxWidth().height(0.dp).onSizeChanged { width = with(density) { it.width.toDp() } })
+    val perChip = (width - 8.dp * (CaptionPlace.entries.size - 1)) / CaptionPlace.entries.size
+    val fitsInOneRow =
+        labels.all { label ->
+            with(density) {
+                measurer
+                    .measure(label, chipStyle, maxLines = 1)
+                    .size.width
+                    .toDp()
+            } + CHIP_LABEL_ROOM <= perChip
+        }
+    val columns = if (fitsInOneRow) CaptionPlace.entries.size else 2
     for (row in CaptionPlace.entries.chunked(columns)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (place in row) {
-                val label = stringResource(placeLabel(place))
+                val label = labels[place.ordinal]
                 FilterChip(
                     selected = place == current,
                     onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe))) },
@@ -430,19 +504,26 @@ private fun SizeTab(
     restyle: (CaptionStyle) -> Unit,
 ) {
     val percent = style.sizePx * 100 / defaults.sizePx.coerceAtLeast(1)
+    // The range always holds the preset's own size, whatever the preset chose.
+    val low = minOf(CAPTION_MIN_SIZE, defaults.sizePx, style.sizePx).toFloat()
+    val high = maxOf(CAPTION_MAX_SIZE, defaults.sizePx, style.sizePx).toFloat()
     val shown = stringResource(R.string.caption_size_value, percent)
     val label = stringResource(R.string.caption_tab_size)
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.caption_size_smaller), style = MaterialTheme.typography.labelMedium, maxLines = 1)
         Spacer(Modifier.width(16.dp))
         Slider(
-            value = style.sizePx.toFloat().coerceIn(CAPTION_MIN_SIZE.toFloat(), CAPTION_MAX_SIZE.toFloat()),
+            value = style.sizePx.toFloat(),
             onValueChange = { v ->
-                val px = (v / CAPTION_SIZE_STEP).roundToInt() * CAPTION_SIZE_STEP
+                val px =
+                    ((v / CAPTION_SIZE_STEP).roundToInt() * CAPTION_SIZE_STEP).coerceIn(
+                        CaptionStyle.MIN_SIZE_PX,
+                        CaptionStyle.MAX_SIZE_PX,
+                    )
                 if (px != style.sizePx) restyle(style.copy(sizePx = px))
             },
             // No tick marks (24 of them only clutter the track); the size still moves in steps of 4.
-            valueRange = CAPTION_MIN_SIZE.toFloat()..CAPTION_MAX_SIZE.toFloat(),
+            valueRange = low..high,
             modifier =
                 Modifier.weight(1f).heightIn(min = 48.dp).testTag(CAPTION_SIZE_TAG).semantics {
                     contentDescription = label
@@ -453,18 +534,17 @@ private fun SizeTab(
         Text(stringResource(R.string.caption_size_bigger), style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
     Spacer(Modifier.height(8.dp))
-    // The caption as the video will show it, larger than in the preview, on the checkerboard.
+    // The caption as the video will show it, its middle enlarged to a strip, on the checkerboard.
     val sampleText = caption.text.ifBlank { stringResource(R.string.caption_font_sample) }
-    val (w, h) = canvasPixels(style.box)
     Box(
         Modifier
             .fillMaxWidth()
-            .aspectRatio((w.toFloat() / h).coerceIn(1f, 12f))
+            .height(SAMPLE_HEIGHT)
             .clip(RoundedCornerShape(8.dp))
             .checkerboard()
             .testTag(CAPTION_SAMPLE_TAG),
     ) {
-        CaptionImage(sampleText, style)
+        CaptionImage(sampleText, style, contentScale = ContentScale.Crop)
     }
 }
 
@@ -545,15 +625,16 @@ private fun ColourTab(
             .clip(RoundedCornerShape(12.dp))
             .checkerboard()
             .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Six equal cells across the width, each at least 48 dp tall to touch.
         CAPTION_COLOURS.forEachIndexed { i, (colour, name) ->
             val label = stringResource(R.string.caption_colour_choice, stringResource(name))
             val on = style.color == colour
             Box(
                 Modifier
-                    .size(48.dp)
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
                     .clickable(role = Role.RadioButton) { restyle(style.withTextColour(colour)) }
                     .semantics {
                         contentDescription = label
@@ -604,7 +685,7 @@ private fun SwitchRow(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .clickable(role = Role.Switch) { onChange(!checked) }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
             .testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -661,9 +742,13 @@ internal fun CaptionBoxOverlay(
     var snapped by remember { mutableStateOf(false) }
     val primary = MaterialTheme.colorScheme.primary
     val description = stringResource(R.string.caption_box_description)
+    val sample = stringResource(R.string.caption_font_sample)
     BoxWithConstraints(modifier.fillMaxSize()) {
         val w = maxWidth
         val h = maxHeight
+        // Read inside the drag, so a preview that changed size (the keyboard opened) moves the box at the finger's speed.
+        val widthPx by rememberUpdatedState(constraints.maxWidth.toFloat())
+        val heightPx by rememberUpdatedState(constraints.maxHeight.toFloat())
         val box = style.box
         if (start != null) {
             // While dragging: the safe area, and the preset's place when the box sits on it.
@@ -716,8 +801,8 @@ internal fun CaptionBoxOverlay(
                         val (next, snap) =
                             CaptionPlaces.dragged(
                                 from,
-                                moved.x / (w.toPx()).toDouble(),
-                                moved.y / (h.toPx()).toDouble(),
+                                moved.x / widthPx.toDouble(),
+                                moved.y / heightPx.toDouble(),
                                 safe,
                                 defaults.box,
                             )
@@ -730,15 +815,26 @@ internal fun CaptionBoxOverlay(
                     }
                 },
         ) {
+            // A caption with no words yet shows a faint sample, so its place, size, font and colour show at once.
+            if (caption.text.isBlank()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(boxH)
+                        .align(Alignment.Center)
+                        .alpha(BLANK_SAMPLE_ALPHA),
+                ) { CaptionImage(sample, style) }
+            }
             Canvas(Modifier.fillMaxWidth().height(boxH).align(Alignment.Center)) {
                 val dash = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 5.dp.toPx()))
                 drawRoundRect(Color.Black.copy(alpha = 0.6f), cornerRadius = CornerRadius(4.dp.toPx()), style = Stroke(4.dp.toPx()))
                 drawRoundRect(primary, cornerRadius = CornerRadius(4.dp.toPx()), style = Stroke(2.dp.toPx(), pathEffect = dash))
             }
+            // The handle sits inside the box's right end, so it is never cut off at the top of the picture.
             Box(
                 Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-12).dp)
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 4.dp)
                     .size(24.dp)
                     .clip(CircleShape)
                     .background(primary),

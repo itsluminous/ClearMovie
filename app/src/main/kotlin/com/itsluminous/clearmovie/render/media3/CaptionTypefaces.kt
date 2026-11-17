@@ -26,6 +26,14 @@ class CaptionTypefaces private constructor(
     private val resources: Resources,
 ) {
     private val cache = ConcurrentHashMap<CaptionFont, Typeface>()
+    private val fellBack = ConcurrentHashMap.newKeySet<CaptionFont>()
+
+    /** Whether [fontId] draws with the bundled files (false after they failed to load and the system font stood in). */
+    fun isBundled(fontId: String): Boolean {
+        val font = CaptionFont.of(fontId)
+        of(font)
+        return font !in fellBack
+    }
 
     /** The typeface for a style's font id (unknown ids draw as [CaptionFont.DEFAULT]). */
     fun of(fontId: String): Typeface = of(CaptionFont.of(fontId))
@@ -45,6 +53,7 @@ class CaptionTypefaces private constructor(
         } catch (e: Exception) {
             // Not expected with the app's own files; a test runtime without real fonts lands here too.
             Log.w(TAG, "Bundled font ${font.id} could not be loaded: ${e.javaClass.simpleName}")
+            fellBack += font
             Typeface.create(Typeface.SANS_SERIF, if (font.bold) Typeface.BOLD else Typeface.NORMAL)
         }
     }

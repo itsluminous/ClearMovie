@@ -44,6 +44,7 @@ internal fun CaptionImage(
     text: String,
     style: CaptionStyle,
     modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.FillBounds,
 ) {
     val renderer = rememberCaptionRenderer()
     val (w, h) = canvasPixels(style.box)
@@ -51,7 +52,7 @@ internal fun CaptionImage(
     Image(
         bitmap.asImageBitmap(),
         contentDescription = null,
-        contentScale = ContentScale.FillBounds,
+        contentScale = contentScale,
         filterQuality = FilterQuality.High,
         modifier = modifier.fillMaxSize(),
     )

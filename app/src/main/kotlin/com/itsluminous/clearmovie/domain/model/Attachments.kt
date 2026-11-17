@@ -35,7 +35,8 @@ internal class AttachSpans(
                 if (i < 0) return null
                 val slot = layout[i]
                 val into = layout.getOrNull(i - 1)?.overlapToNextMs ?: 0L
-                val start = slot.startMs + into / 2
+                // Rounded up here and down at the end, so neighbours meet exactly even for an odd overlap.
+                val start = slot.startMs + (into + 1) / 2
                 val end = slot.endMs - slot.overlapToNextMs / 2
                 if (end - start >= Limits.MIN_CLIP_MS) start to end else slot.startMs to slot.endMs
             }
@@ -51,17 +52,23 @@ internal class AttachSpans(
     }
 }
 
-/** The caption placed in [span] by its attachment: the whole span, or from its offset with its length cut at the span's end. */
+/**
+ * The caption placed in [span] by its attachment: the whole span, or from
+ * its wanted offset for its wanted length, each cut to fit inside the span.
+ * The wanted values stay as they are, so a span that grows back gives them
+ * back.
+ */
 internal fun TextClip.following(span: Pair<Long, Long>): TextClip {
     val a = requireNotNull(attachedTo)
     val (s, e) = span
     val length = e - s
-    if (a.whole) return copy(startMs = s, durationMs = length, attachedTo = a.copy(offsetMs = 0))
+    if (a.whole) return copy(startMs = s, durationMs = length, attachedTo = a.copy(offsetMs = 0, lengthMs = null))
     val offset = a.offsetMs.coerceIn(0L, (length - Limits.MIN_CLIP_MS).coerceAtLeast(0L))
     val start = s + offset
     val room = e - start
-    val duration = durationMs.coerceAtMost(room).coerceAtLeast(minOf(Limits.MIN_CLIP_MS, room))
-    return copy(startMs = start, durationMs = duration, attachedTo = a.copy(offsetMs = offset))
+    val wanted = a.lengthMs ?: durationMs
+    val duration = wanted.coerceAtMost(room).coerceAtLeast(minOf(Limits.MIN_CLIP_MS, room))
+    return copy(startMs = start, durationMs = duration, attachedTo = a.copy(lengthMs = wanted))
 }
 
 /**
@@ -161,8 +168,12 @@ internal fun Project.reattached(
     val (s, e) = attachSpan(a.clip) ?: return clip.copy(startMs = startMs, durationMs = durationMs, attachedTo = null)
     if (startMs < s || startMs >= e) return clip.copy(startMs = startMs, durationMs = durationMs, attachedTo = null)
     val whole = startMs == s && startMs + durationMs == e
-    return clip.copy(startMs = startMs, durationMs = durationMs, attachedTo = a.copy(offsetMs = startMs - s, whole = whole))
+    val attached = if (whole) CaptionAttachment(a.clip) else CaptionAttachment(a.clip, startMs - s, whole = false, lengthMs = durationMs)
+    return clip.copy(startMs = startMs, durationMs = durationMs, attachedTo = attached)
 }
+
+/** The length a caption wants: its attachment's when it is attached and not whole, else its own. */
+internal val TextClip.wantedMs: Long get() = attachedTo?.takeIf { !it.whole }?.lengthMs ?: durationMs
 
 /** A new caption id for a copy of [caption] made for item [forItem], unused in this project. */
 internal fun Project.copyIdFor(
@@ -182,7 +193,8 @@ private const val COPY_PART = 28
  * After a split of [firstId] into [firstId] and [secondId]: a caption that
  * covered the whole item covers each part, so the words still show over all
  * of it and each part keeps them when it moves; any other caption stays on
- * the part it starts in.
+ * the part it starts in (one that runs past the cut is cut there, and a
+ * join gives it its length back).
  */
 internal fun Project.captionsAfterSplit(
     firstId: ClipId,
@@ -229,7 +241,7 @@ internal fun Project.captionsBeforeJoin(
     fun sameWords(
         a: TextClip,
         b: TextClip,
-    ) = a.text == b.text && a.style == b.style
+    ) = a.text == b.text && a.style == b.style && a.animations == b.animations
     val firstWhole = first.map { it.second }.filter { it.attachedTo!!.whole }
     var project = this
     val keptWhole = mutableSetOf<ClipId>()
@@ -241,12 +253,14 @@ internal fun Project.captionsBeforeJoin(
                 project.withTrackClips(trackId, project.requireTrack(trackId).clips.filterNot { it.id == caption.id })
             } else {
                 val offset = caption.startMs - firstSpan.first
-                project.replaceCaption(trackId, caption.copy(attachedTo = CaptionAttachment(firstId, offset, whole = false)))
+                val attached = CaptionAttachment(firstId, offset, whole = false, lengthMs = caption.wantedMs)
+                project.replaceCaption(trackId, caption.copy(attachedTo = attached))
             }
     }
     for ((trackId, caption) in first) {
         if (caption.attachedTo!!.whole && caption.id !in keptWhole) {
-            project = project.replaceCaption(trackId, caption.copy(attachedTo = caption.attachedTo.copy(whole = false, offsetMs = 0)))
+            val attached = CaptionAttachment(firstId, 0, whole = false, lengthMs = caption.durationMs)
+            project = project.replaceCaption(trackId, caption.copy(attachedTo = attached))
         }
     }
     return project

@@ -69,4 +69,44 @@ class EditSessionTest {
         while (s.undo() != null) n++
         assertThat(n).isEqualTo(50)
     }
+
+    @Test
+    fun `edits with the same key make one step, and anything else ends it`() {
+        val s = EditSession().apply { adopt(start) }
+        s.edit("k") { setPhotoDuration(ClipId("a"), 1000) }
+        s.edit("k") { setPhotoDuration(ClipId("a"), 2000) }
+        s.edit("k") { setPhotoDuration(ClipId("b"), 1500) }
+        assertThat(s.undo()).isEqualTo(start)
+        assertThat(s.canUndo).isFalse()
+        // Redo brings the whole run back.
+        assertThat(s.redo()!!.requireClip(ClipId("b")).durationMs).isEqualTo(1500)
+        // An undo, an edit without the key, or endMerge ends a run.
+        s.edit("k") { setPhotoDuration(ClipId("c"), 1000) }
+        s.endMerge()
+        s.edit("k") { setPhotoDuration(ClipId("c"), 2000) }
+        assertThat(s.undo()!!.requireClip(ClipId("c")).durationMs).isEqualTo(1000)
+        s.edit("j") { setPhotoDuration(ClipId("c"), 2500) }
+        s.edit { setPhotoDuration(ClipId("c"), 2600) }
+        s.edit("j") { setPhotoDuration(ClipId("c"), 2700) }
+        assertThat(s.undo()!!.requireClip(ClipId("c")).durationMs).isEqualTo(2600)
+    }
+
+    @Test
+    fun `reverting a run takes back all of it and leaves nothing to redo`() {
+        val s = EditSession().apply { adopt(start) }
+        s.edit { setPhotoDuration(ClipId("a"), 1000) }
+        val before = s.current
+        s.edit("caption") { setPhotoDuration(ClipId("b"), 1000) }
+        s.edit("caption") { setPhotoDuration(ClipId("c"), 1000) }
+        assertThat(s.revertMerge("other")).isNull()
+        assertThat(s.revertMerge("caption")).isEqualTo(before)
+        assertThat(s.current).isEqualTo(before)
+        assertThat(s.canRedo).isFalse()
+        // Only once: the run is over.
+        assertThat(s.revertMerge("caption")).isNull()
+        // A run ended by an undo can't be reverted any more (its step is gone).
+        s.edit("caption") { setPhotoDuration(ClipId("b"), 1200) }
+        s.undo()
+        assertThat(s.revertMerge("caption")).isNull()
+    }
 }

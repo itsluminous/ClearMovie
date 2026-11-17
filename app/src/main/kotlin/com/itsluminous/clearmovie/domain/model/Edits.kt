@@ -341,7 +341,7 @@ fun Project.nudgedStart(
 private fun Project.placedByHand(
     clip: Clip,
     startMs: Long,
-): Clip = if (clip is TextClip) reattached(clip, startMs, clip.durationMs) else clip.withStartMs(startMs)
+): Clip = if (clip is TextClip) reattached(clip, startMs, clip.wantedMs) else clip.withStartMs(startMs)
 
 /** The clip with its span anchor removed: the user has taken control of its timing. */
 private fun Clip.detached(): Clip =

@@ -271,6 +271,9 @@ class EditorViewModel
             private set
         private var media: ProjectMediaSet? = null
         private var firstLoad = true
+
+        /** The project the preview was last worked out for. */
+        private var lastLoaded: Project? = null
         private var loadedFiles: Map<PresetSlot, File?>? = null
         private var access: MediaAccessState? = null
 
@@ -377,9 +380,11 @@ class EditorViewModel
         fun endMerge() = session.endMerge()
 
         /** Takes back the run of edits made with [mergeKey] (the caption editor's Cancel). */
-        fun revertMerge(mergeKey: String) {
-            session.revertMerge(mergeKey)?.let(::write)
+        fun revertMerge(mergeKey: String): Boolean {
+            val before = session.revertMerge(mergeKey)
+            before?.let(::write)
             publishHistory()
+            return before != null
         }
 
         fun redo() {
@@ -654,6 +659,26 @@ class EditorViewModel
         }
 
         private suspend fun load(project: Project) {
+            // Only captions changed (a word typed, a colour picked, the box dragged): the files and the
+            // media's state are as they were, so the new schedule is worked out straight away, without
+            // looking anything up, and the players carry on.
+            val cached = media
+            val last = lastLoaded
+            // (The same project again is a refresh, which must look the files up: never this way.)
+            if (!firstLoad && cached != null && last != null && project != last && project.withoutCaptions() == last.withoutCaptions()) {
+                val quick =
+                    runCatching {
+                        PreviewSchedule.of(
+                            RenderPlanBuilder(cached.preset, cached.loudness).build(project, height = PREVIEW_HEIGHT),
+                        )
+                    }.getOrNull()
+                if (quick != null && engine.updateCaptions(quick)) {
+                    lastLoaded = project
+                    uiState.update { it.copy(project = session.current ?: project, schedule = quick) }
+                    return
+                }
+            }
+            lastLoaded = project
             val set = projectMedia.forProject(project)
             media = set
             resolver = set.resolver
@@ -805,3 +830,9 @@ class EditorViewModel
             val DEFAULT_KEY_GREEN = ArgbColor(0xFF00D922)
         }
     }
+
+/** The project without its caption rows: what the preview's players depend on. */
+internal fun Project.withoutCaptions(): Project {
+    val text = tracks.filter { it.type == TrackType.TEXT }.map { it.id }.toSet()
+    return copy(tracks = tracks.filterNot { it.id in text }, stacking = stacking.filterNot { it in text })
+}

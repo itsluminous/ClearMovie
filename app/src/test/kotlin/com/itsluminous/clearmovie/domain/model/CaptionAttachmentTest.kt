@@ -102,7 +102,7 @@ class CaptionAttachmentTest {
         val id = p.caption("on c").id
         // c plays 7000..12000; the caption moved to 9000 for 2 s.
         p = p.setTextTiming(id, 9000, 2000).assertValid()
-        assertThat(p.caption("on c").attachedTo).isEqualTo(CaptionAttachment(ClipId("c"), offsetMs = 2000, whole = false))
+        assertThat(p.caption("on c").attachedTo).isEqualTo(CaptionAttachment(ClipId("c"), offsetMs = 2000, whole = false, lengthMs = 2000))
         // Reordered first, c plays 0..5000: the caption still starts 2 s in.
         p = p.moveMainClip(ClipId("c"), 0).assertValid()
         assertThat(p.span("on c")).isEqualTo(2000L to 4000L)
@@ -131,7 +131,7 @@ class CaptionAttachmentTest {
         var p = abc().addCaptionFor(ClipId("c"), "on c", ids)
         val id = p.caption("on c").id
         p = p.setTextTiming(id, 7000, 2000).nudgeClip(id, 500).assertValid()
-        assertThat(p.caption("on c").attachedTo).isEqualTo(CaptionAttachment(ClipId("c"), offsetMs = 500, whole = false))
+        assertThat(p.caption("on c").attachedTo).isEqualTo(CaptionAttachment(ClipId("c"), offsetMs = 500, whole = false, lengthMs = 2000))
         assertThat(p.span("on c")).isEqualTo(7500L to 9500L)
     }
 
@@ -233,7 +233,7 @@ class CaptionAttachmentTest {
         var p = abc().addCaptionFor(ClipId("b"), "late", ids)
         p = p.setTextTiming(p.caption("late").id, 5500, 1000)
         p = p.splitClip(ClipId("b"), 1000, ClipId("b2")).assertValid()
-        assertThat(p.caption("late").attachedTo).isEqualTo(CaptionAttachment(ClipId("b2"), offsetMs = 1500, whole = false))
+        assertThat(p.caption("late").attachedTo).isEqualTo(CaptionAttachment(ClipId("b2"), offsetMs = 1500, whole = false, lengthMs = 1000))
         assertThat(p.span("late")).isEqualTo(5500L to 6500L)
     }
 
@@ -352,5 +352,112 @@ class CaptionAttachmentTest {
         assertThat(CaptionFont.of("../../etc/passwd")).isEqualTo(CaptionFont.DEFAULT)
         assertThat(CaptionFont.of("comic_sans")).isEqualTo(CaptionFont.DEFAULT)
         assertThat(CaptionFont.DEFAULT.id).isEqualTo(CaptionStyle.DEFAULT_FONT)
+    }
+
+    @Test
+    fun `a whole caption nudged later and back is whole again, with its length`() {
+        var p = abc().addCaptionFor(ClipId("b"), "on b", ids)
+        val id = p.caption("on b").id
+        p = p.nudgeClip(id, -500).assertValid()
+        // Earlier than b (3000) is outside it: free.
+        assertThat(p.caption("on b").attachedTo).isNull()
+        p = abc().addCaptionFor(ClipId("c"), "on c", ids)
+        val c = p.caption("on c").id
+        p = p.moveClip(c, 7500).assertValid()
+        assertThat(p.span("on c")).isEqualTo(7500L to 12_000L)
+        assertThat(p.caption("on c").attachedTo).isEqualTo(CaptionAttachment(ClipId("c"), 500, whole = false, lengthMs = 5000))
+        p = p.moveClip(c, 7000).assertValid()
+        assertThat(p.caption("on c").attachedTo).isEqualTo(CaptionAttachment(ClipId("c")))
+        assertThat(p.span("on c")).isEqualTo(7000L to 12_000L)
+    }
+
+    @Test
+    fun `a caption cut by a shorter item gets its length back when the item grows again`() {
+        var p = abc().addCaptionFor(ClipId("c"), "on c", ids)
+        p = p.setTextTiming(p.caption("on c").id, 8000, 3000).assertValid()
+        p = p.setPhotoDuration(ClipId("c"), 2000).assertValid()
+        assertThat(p.span("on c")).isEqualTo(8000L to 9000L)
+        p = p.setPhotoDuration(ClipId("c"), 5000).assertValid()
+        assertThat(p.span("on c")).isEqualTo(8000L to 11_000L)
+    }
+
+    @Test
+    fun `a caption across a split is cut at the cut, and joining gives its length back`() {
+        var p = abc().addCaptionFor(ClipId("b"), "across", ids)
+        p = p.setTextTiming(p.caption("across").id, 3500, 2500).assertValid()
+        val before = p.span("across")
+        p = p.splitClip(ClipId("b"), 1000, ClipId("b2")).assertValid()
+        assertThat(p.span("across")).isEqualTo(3500L to 4000L)
+        assertThat(p.caption("across").attachedTo!!.clip).isEqualTo(ClipId("b"))
+        p = p.joinClips(ClipId("b"), ClipId("b2")).assertValid()
+        assertThat(p.span("across")).isEqualTo(before)
+    }
+
+    @Test
+    fun `captions of items joined by an odd-length transition meet without overlapping`() {
+        var p = abc().setTransition(ClipId("a"), Transition(TransitionKind.CROSSFADE, 651))
+        p = p.addCaptionFor(ClipId("a"), "on a", ids).addCaptionFor(ClipId("b"), "on b", ids).assertValid()
+        assertThat(p.span("on a").second).isEqualTo(p.span("on b").first)
+        assertThat(p.trackOf(p.caption("on a").id)).isEqualTo(p.trackOf(p.caption("on b").id))
+    }
+
+    @Test
+    fun `a photo replaced by a card leaves its caption in place, free`() {
+        var p = abc().addCaptionFor(ClipId("a"), "on a", ids)
+        p = p.replaceMainItem(ClipId("a"), CardClip(ClipId("k"), 3000, ArgbColor.BLACK, "card")).assertValid()
+        assertThat(p.caption("on a").attachedTo).isNull()
+        assertThat(p.span("on a")).isEqualTo(0L to 3000L)
+    }
+
+    @Test
+    fun `deleting a picture-in-picture item deletes its caption`() {
+        var p = abc().addRow(TrackType.VISUAL, id = TrackId("pip"))
+        p = p.addToTrack(TrackId("pip"), Fixtures.photo("p", 2000, PipPlacement()), 1000, ids).addCaptionFor(ClipId("p"), "on pip", ids)
+        p = p.deleteClip(ClipId("p")).assertValid()
+        assertThat(p.captions()).isEmpty()
+    }
+
+    @Test
+    fun `a stored project whose stale caption must pass a free one on its row still loads`() {
+        val codec = ProjectCodec()
+        // Free "x" at 1000 and "on c" (c: 7000..12000) on one row; stored with "on c" stale at 0..500, before "x".
+        val p = abc().addText("x", 1000, 1000, ids).addCaptionFor(ClipId("c"), "on c", ids)
+        val row = p.trackOf(p.caption("x").id)!!
+        val staleCaption = p.caption("on c").copy(startMs = 0, durationMs = 500)
+        val stale = p.copy(tracks = p.tracks.map { t -> if (t.id != row.id) t else t.copy(clips = listOf(staleCaption, p.caption("x"))) })
+        val loaded = codec.decode(codec.encode(stale)) as ProjectDecodeResult.Ok
+        assertThat(loaded.repaired).isTrue()
+        assertThat(loaded.project).isEqualTo(p)
+    }
+
+    @Test
+    fun `an attachment's offset and length are bounded`() {
+        val p = abc().addCaptionFor(ClipId("c"), "on c", ids)
+        val c = p.caption("on c")
+
+        fun with(a: CaptionAttachment) =
+            p.copy(
+                tracks =
+                    p.tracks.map { t ->
+                        t.copy(
+                            clips =
+                                t.clips.map {
+                                    if (it.id ==
+                                        c.id
+                                    ) {
+                                        c.copy(attachedTo = a)
+                                    } else {
+                                        it
+                                    }
+                                },
+                        )
+                    },
+            )
+        assertThat(
+            with(CaptionAttachment(ClipId("c"), offsetMs = -1, whole = false)).validate().map { it.rule },
+        ).contains(Violation.Rule.ANCHOR)
+        assertThat(
+            with(CaptionAttachment(ClipId("c"), whole = false, lengthMs = 0)).validate().map { it.rule },
+        ).contains(Violation.Rule.ANCHOR)
     }
 }

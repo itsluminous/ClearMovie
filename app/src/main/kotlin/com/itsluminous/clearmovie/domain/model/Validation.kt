@@ -101,11 +101,15 @@ private fun Project.checkAttachments(fail: (Violation.Rule, String) -> Unit) {
             val a = (clip as? TextClip)?.attachedTo ?: continue
             val span = spans[a.clip]
             when {
-                span == null -> fail(Violation.Rule.ANCHOR, "${clip.id.value} is attached to an item that is not a photo or video here")
+                span == null -> {
+                    fail(Violation.Rule.ANCHOR, "${clip.id.value} is attached to an item that is not a photo or video here")
+                }
 
-                a.offsetMs < 0 || clip.following(
-                    span,
-                ) != clip -> fail(Violation.Rule.ANCHOR, "${clip.id.value} is not where its item puts it")
+                a.offsetMs !in 0..Limits.MAX_MEDIA_MS ||
+                    a.lengthMs?.let { it !in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS } == true ||
+                    clip.following(span) != clip -> {
+                    fail(Violation.Rule.ANCHOR, "${clip.id.value} is not where its item puts it")
+                }
             }
         }
     }

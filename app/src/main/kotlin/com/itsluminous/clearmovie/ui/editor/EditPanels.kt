@@ -155,8 +155,12 @@ interface EditorCallbacks {
     /** Ends a run of merged edits: the next edit is a step of its own. */
     fun endMerge() = Unit
 
-    /** Takes back the run of edits made with [mergeKey], leaving nothing to redo (the caption editor's Cancel). */
-    fun revertMerge(mergeKey: String) = Unit
+    /**
+     * Takes back the run of edits made with [mergeKey], leaving nothing to
+     * redo (the caption editor's Cancel). False when there was no such run
+     * (it ended, or the app was closed by the system since).
+     */
+    fun revertMerge(mergeKey: String): Boolean = false
 
     fun undo()
 

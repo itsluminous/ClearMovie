@@ -560,7 +560,7 @@
     <string name="caption_tab_size">Size</string>
     <string name="caption_tab_font">Font</string>
     <string name="caption_tab_colour">Colour</string>
-    <string name="caption_place_usual">Usual</string>
+    <string name="caption_place_usual">Preset</string>
     <string name="caption_place_top">Top</string>
     <string name="caption_place_middle">Middle</string>
     <string name="caption_place_bottom">Bottom</string>

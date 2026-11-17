@@ -272,14 +272,16 @@ fun EditorScreen(
     val latestProject by rememberUpdatedState(project)
     var captionVisit by remember { mutableStateOf(openCaptionId) }
     val latestPlayheadMs by rememberUpdatedState(playheadMs)
+    val latestPlaying by rememberUpdatedState(playhead.playing)
     LaunchedEffect(openCaptionId) {
         val was = captionVisit
         captionVisit = openCaptionId
         if (was != null && was != openCaptionId) finishCaption(was, latestProject, actions)
-        // A visit starting: the preview goes to the caption, so every change shows there at once.
+        // A visit starting: the preview stops on the caption, so every change shows there at once.
         val caption = openCaptionId?.let { latestProject?.clip(it) }
-        if (caption != null && was != openCaptionId && latestPlayheadMs !in caption.startMs until caption.endMs) {
-            actions.seek(caption.startMs + caption.durationMs / 2)
+        if (caption != null && was != openCaptionId) {
+            if (latestPlaying) actions.togglePlay()
+            if (latestPlayheadMs !in caption.startMs until caption.endMs) actions.seek(caption.startMs + caption.durationMs / 2)
         }
     }
     // Back from the top bar leaves the editor with the caption editor still open: its visit ends first,
@@ -768,7 +770,7 @@ fun EditorScreen(
                             // Below the top bar and the playback controls, which stay usable.
                             topDp = topDp + controlsDp,
                             bottomDp = bottomDp,
-                            preview = preview,
+                            preview = previewWithBox,
                             onMoved = { state.layoutEvent(LayoutEvent.PopupMoved(it)) },
                             onClose = { state.layoutEvent(LayoutEvent.ShowFewerRows) },
                         )

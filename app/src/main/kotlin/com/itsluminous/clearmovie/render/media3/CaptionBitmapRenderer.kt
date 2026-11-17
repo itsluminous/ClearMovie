@@ -24,8 +24,9 @@ import kotlin.math.roundToInt
  * looks the same in both. A caption is drawn at its box's pixel size: the
  * rounded background, then the text outline, then the text, wrapped to the
  * box and centred vertically. Sizes in [CaptionStyle] are pixels on a
- * 1080-line canvas and scale with [canvasHeight]; text is laid out with
- * linear, sub-pixel metrics so it wraps the same way at every size.
+ * 1080-line canvas: the text is laid out in those units (with linear,
+ * sub-pixel metrics) and the drawing is scaled to [canvasHeight], so it
+ * wraps and shrinks the same way at every export size and in the preview.
  *
  * Text is shaped by the platform with the bundled Noto fonts
  * ([CaptionTypefaces]): Devanagari conjuncts and matras form as in any
@@ -74,6 +75,14 @@ class CaptionBitmapRenderer(
     /** The typeface a style's font id draws with. */
     fun typeface(fontId: String): Typeface = typefaces?.of(fontId) ?: Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
 
+    /**
+     * Which font files a style's font id really draws with: the bundled ones,
+     * or the system's when they could not be loaded. Part of a cached image's
+     * name, so an image drawn with the system font is never reused once the
+     * bundled one works.
+     */
+    fun fontKey(fontId: String): String = if (typefaces?.isBundled(fontId) == true) "noto" else "system"
+
     private fun drawText(
         canvas: Canvas,
         text: String,
@@ -81,11 +90,14 @@ class CaptionBitmapRenderer(
         width: Int,
         height: Int,
     ) {
-        val pad = (PADDING_PX * scale).roundToInt()
-        val layoutWidth = max(1, width - 2 * pad)
+        // Everything is laid out in 1080-line units, then drawn scaled.
+        val logicalW = width / scale
+        val logicalH = height / scale
+        val pad = PADDING_PX.toFloat()
+        val layoutWidth = max(1, (logicalW - 2 * pad).toInt())
         val outline = style.outline?.takeIf { it.widthPx > 0 }
         // The outline is stroked around the glyphs, so it needs its width of room at the box's edges too.
-        val room = (height - 2 * pad - 2 * (outline?.widthPx ?: 0) * scale).coerceAtLeast(1f)
+        val room = (logicalH - 2 * pad - 2 * (outline?.widthPx ?: 0)).coerceAtLeast(1f)
         val paint =
             TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.LINEAR_TEXT_FLAG).apply {
                 typeface = typeface(style.font)
@@ -107,7 +119,7 @@ class CaptionBitmapRenderer(
                 .setBreakStrategy(LineBreaker.BREAK_STRATEGY_BALANCED)
                 .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                 .build()
-        val wanted = style.sizePx * scale
+        val wanted = style.sizePx.toFloat()
         var size = wanted
         paint.textSize = size
         var fill = layout(paint)
@@ -116,14 +128,15 @@ class CaptionBitmapRenderer(
             paint.textSize = size
             fill = layout(paint)
         }
-        val top = ((height - fill.height) / 2f).coerceAtLeast(0f)
+        val top = ((logicalH - fill.height) / 2f).coerceAtLeast(0f)
         canvas.withClip(0, 0, width, height) {
-            translate(pad.toFloat(), top)
+            scale(scale, scale)
+            translate(pad, top)
             outline?.let { o ->
                 val stroke =
                     TextPaint(paint).apply {
                         this.style = Paint.Style.STROKE
-                        strokeWidth = o.widthPx * scale * 2 * (size / wanted)
+                        strokeWidth = o.widthPx * 2 * (size / wanted)
                         strokeJoin = Paint.Join.ROUND
                         color = o.color.toAndroid()
                     }

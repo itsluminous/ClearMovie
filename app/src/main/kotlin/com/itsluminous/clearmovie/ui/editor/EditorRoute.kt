@@ -233,7 +233,7 @@ fun EditorRoute(
 
                 override fun endMerge() = viewModel.endMerge()
 
-                override fun revertMerge(mergeKey: String) = viewModel.revertMerge(mergeKey)
+                override fun revertMerge(mergeKey: String): Boolean = viewModel.revertMerge(mergeKey)
 
                 override fun undo() = viewModel.undo()
 

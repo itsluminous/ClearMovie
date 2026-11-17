@@ -40,7 +40,13 @@ class EditorHarness(
     private val preset: Preset?,
 ) {
     val calls = mutableListOf<String>()
-    private val session = EditSession().apply { adopt(initial) }
+    private var session = EditSession().apply { adopt(initial) }
+
+    /** Stands in for a process death: the view model's session (and its undo history) starts again. */
+    fun newSession() {
+        session = EditSession().apply { adopt(project) }
+    }
+
     var project by mutableStateOf(initial)
         private set
     var playheadUs by mutableStateOf(0L)
@@ -107,8 +113,10 @@ class EditorHarness(
 
             override fun endMerge() = session.endMerge()
 
-            override fun revertMerge(mergeKey: String) {
-                session.revertMerge(mergeKey)?.let { project = it }
+            override fun revertMerge(mergeKey: String): Boolean {
+                val before = session.revertMerge(mergeKey) ?: return false
+                project = before
+                return true
             }
 
             override fun undo() {

@@ -49,7 +49,7 @@ object CaptionPlaces {
         if (place == CaptionPlace.USUAL) return usual
         val w = minOf(usual.w, safe.w)
         val h = minOf(usual.h, safe.h)
-        val x = usual.x.coerceIn(safe.x, safe.x + safe.w - w)
+        val x = usual.x.coerceIn(safe.x, maxOf(safe.x, safe.x + safe.w - w))
         val y =
             when (place) {
                 CaptionPlace.TOP -> safe.y
@@ -79,17 +79,19 @@ object CaptionPlaces {
         safe: NormRect,
         usual: NormRect,
     ): Pair<NormRect, Boolean> {
-        val w = minOf(start.w, safe.w)
-        val h = minOf(start.h, safe.h)
-        var x = (start.x + dx).coerceIn(safe.x, safe.x + safe.w - w)
-        var y = (start.y + dy).coerceIn(safe.y, safe.y + safe.h - h)
+        var w = minOf(start.w, safe.w)
+        var h = minOf(start.h, safe.h)
+        var x = (start.x + dx).coerceIn(safe.x, maxOf(safe.x, safe.x + safe.w - w))
+        var y = (start.y + dy).coerceIn(safe.y, maxOf(safe.y, safe.y + safe.h - h))
         var snapped = false
-        if (w == usual.w && abs(x - usual.x) < SNAP && usual.x >= safe.x - EPS && usual.x + w <= safe.x + safe.w + EPS) {
+        if (abs(w - usual.w) < TOLERANCE && abs(x - usual.x) < SNAP && usual.x >= safe.x - EPS && usual.x + w <= safe.x + safe.w + EPS) {
             x = usual.x
+            if (abs(w - usual.w) < TOLERANCE) w = usual.w
             snapped = true
         }
-        if (h == usual.h && abs(y - usual.y) < SNAP && usual.y >= safe.y - EPS && usual.y + h <= safe.y + safe.h + EPS) {
+        if (abs(h - usual.h) < TOLERANCE && abs(y - usual.y) < SNAP && usual.y >= safe.y - EPS && usual.y + h <= safe.y + safe.h + EPS) {
             y = usual.y
+            if (abs(h - usual.h) < TOLERANCE) h = usual.h
             snapped = true
         }
         return NormRect(x, y, w, h).rounded() to snapped
@@ -98,7 +100,7 @@ object CaptionPlaces {
     private fun same(
         a: NormRect,
         b: NormRect,
-    ) = abs(a.x - b.x) < EPS && abs(a.y - b.y) < EPS && abs(a.w - b.w) < EPS && abs(a.h - b.h) < EPS
+    ) = abs(a.x - b.x) < TOLERANCE && abs(a.y - b.y) < TOLERANCE && abs(a.w - b.w) < TOLERANCE && abs(a.h - b.h) < TOLERANCE
 
     /** To 1/10000 of the canvas (a fifth of a pixel at 1080p): stored boxes stay short and stable. */
     private fun NormRect.rounded(): NormRect {
@@ -110,5 +112,8 @@ object CaptionPlaces {
     }
 
     private const val EPS = 1e-6
+
+    /** Boxes are stored to 1/10000 of the canvas, so two boxes this close are the same place. */
+    private const val TOLERANCE = 1.5e-4
     private const val PRECISION = 10000.0
 }

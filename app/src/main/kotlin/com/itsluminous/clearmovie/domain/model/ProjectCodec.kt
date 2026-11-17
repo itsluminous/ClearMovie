@@ -156,8 +156,10 @@ class ProjectCodec(
         }
     }
 
+    // The same rows with the same items: a repair may re-sort a row by time (a caption that follows its
+    // item can pass a free one), but never moves an item to another row, adds one or drops one.
     private fun Project.sameItemsAs(other: Project): Boolean =
-        tracks.map { t -> t.id to t.clips.map { it.id } } == other.tracks.map { t -> t.id to t.clips.map { it.id } }
+        tracks.map { t -> t.id to t.clips.map { it.id }.toSet() } == other.tracks.map { t -> t.id to t.clips.map { it.id }.toSet() }
 
     private fun failed(
         reason: ProjectDecodeResult.Reason,

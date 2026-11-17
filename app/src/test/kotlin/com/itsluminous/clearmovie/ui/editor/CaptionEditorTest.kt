@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -28,6 +30,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CaptionAttachment
@@ -49,6 +53,7 @@ import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.render.plan.frameWindow
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
+import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -392,5 +397,99 @@ class CaptionEditorTest {
         assertThat(h.caption().text).isEqualTo("नमस्ते सब!")
         // The restore did not close the editor, so the caption was not taken away.
         assertThat(h.project.captions()).hasSize(1)
+    }
+
+    @Test
+    fun `a caption made with the plus on a text row stays free`() {
+        val h = show()
+        h.state!!.selectedRow =
+            h.project.tracks
+                .first { it.type == TrackType.TEXT }
+                .id
+        h.state!!.panel = OpenPanel(Panel.INSERT, trackId = h.state!!.selectedRow)
+        compose.waitForIdle()
+        panel(insertOptionTag("text")).performClick()
+        compose.waitForIdle()
+        panel(TEXT_FIELD_TAG).performTextInput("Free words")
+        panel(PANEL_DONE_TAG).performClick()
+        compose.waitForIdle()
+        assertThat(h.caption().text).isEqualTo("Free words")
+        assertThat(h.caption().attachedTo).isNull()
+    }
+
+    @Test
+    fun `tapping another item on the timeline closes the editor and keeps the words`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(TEXT_FIELD_TAG).performTextInput("Kept")
+        compose
+            .onNodeWithTag(
+                com.itsluminous.clearmovie.ui.editor.timeline
+                    .clipTag(ClipId("v2")),
+            ).performClick()
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isNull()
+        assertThat(h.caption().text).isEqualTo("Kept")
+    }
+
+    @Test
+    fun `Cancel puts the caption back even after the app was closed by the system`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(TEXT_FIELD_TAG).performTextInput("Kept")
+        panel(PANEL_DONE_TAG).performClick()
+        compose.waitForIdle()
+        val id = h.caption().id
+        h.select(id.value)
+        tapBar(EditAction.EDIT_TEXT)
+        tab(CaptionTab.COLOUR)
+        panel(captionColourTag(1)).performClick()
+        compose.waitForIdle()
+        assertThat(h.caption().style).isNotEqualTo(CaptionStyleOverride.NONE)
+        // The view model's undo history is gone; the open editor came back with the screen.
+        h.newSession()
+        panel(PANEL_CANCEL_TAG).performClick()
+        compose.waitForIdle()
+        assertThat(h.caption().style).isEqualTo(CaptionStyleOverride.NONE)
+        assertThat(h.caption().text).isEqualTo("Kept")
+    }
+
+    @Test
+    fun `dragging sideways snaps back onto the preset's place`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        compose.onNodeWithTag(CAPTION_BOX_TAG).performTouchInput { swipe(center, center + Offset(-150f, 0f), 300) }
+        compose.waitForIdle()
+        assertThat(h.style().box.x).isLessThan(defaults.box.x)
+        // Dragged far right it stops at the safe area's edge, close enough to the preset's place to snap onto it.
+        compose.onNodeWithTag(CAPTION_BOX_TAG).performTouchInput { swipe(center, center + Offset(600f, 0f), 300) }
+        compose.waitForIdle()
+        assertThat(h.style().box.x).isWithin(1e-4).of(defaults.box.x)
+        tab(CaptionTab.PLACE)
+        panel(captionPlaceTag(CaptionPlace.USUAL)).assertIsSelected()
+    }
+
+    @Test
+    fun `the editor works on a narrow phone too`() {
+        val h = EditorHarness(project, Fixtures.preset)
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(360.dp, 760.dp))) {
+                ClearMovieTheme(dynamicColor = false) { h.Content() }
+            }
+        }
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        for (t in CaptionTab.entries) {
+            tab(t)
+            val b = compose.onNodeWithTag(captionTabTag(t)).getUnclippedBoundsInRoot()
+            assertThat((b.right - b.left).value).isAtLeast(47.5f)
+        }
+        for (i in CAPTION_COLOURS.indices) {
+            val b = compose.onNodeWithTag(captionColourTag(i)).getUnclippedBoundsInRoot()
+            assertThat(b.right.value).isAtMost(360.5f)
+        }
     }
 }
