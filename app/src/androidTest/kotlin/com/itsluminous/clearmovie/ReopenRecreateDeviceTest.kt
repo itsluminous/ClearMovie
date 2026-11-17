@@ -54,7 +54,9 @@ import kotlin.math.abs
  * video open) must survive its activity being destroyed and created again:
  * a recreate() and a real rotation of the display, also while that video's
  * export runs and when a share arrives at the same launch, and its preview
- * must show the same picture afterwards.
+ * must show the same picture after a recreate (a rotation keeps the
+ * playing state, a recreate pauses it first, so the frame check uses
+ * recreate, the stricter of the two).
  * Before the fix the first two crashed under this test harness with "State
  * must be at least 'CREATED' to be moved to 'DESTROYED'" for the editor's
  * back stack entry (the launch navigate ran off the main thread).
@@ -219,6 +221,8 @@ class ReopenRecreateDeviceTest {
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             editorShown()
+            // The recreate below happens while the export runs (Small takes far longer than this on an emulator).
+            assertThat(workManager.getWorkInfoById(id).get()?.state).isEqualTo(WorkInfo.State.RUNNING)
             scenario.recreate()
             editorShown()
             rotate(scenario, UiAutomation.ROTATION_FREEZE_90)
@@ -314,7 +318,7 @@ class ReopenRecreateDeviceTest {
         // From the intro first, whose orange fills the window: the video's grey there
         // afterwards proves the MAIN player itself landed the seek, not only the overlay.
         seekTo(0f)
-        val earlier = settledFrame()
+        val earlier = settledFrame(window = WindowWanted.NOT_VIDEO)
         assertWithMessage("window at the intro: ${grid(earlier)}").that(windowShowsVideo(earlier)).isFalse()
         seekTo(fraction)
         val at = timeLabel()
@@ -323,7 +327,7 @@ class ReopenRecreateDeviceTest {
         // the seek: on a slow CI emulator the old picture stays steady for over a
         // second. So the picture before the recreate is the first steady one that
         // is no longer the picture from before the seek.
-        val before = settledFrame(unlike = earlier, windowShowsVideo = true)
+        val before = settledFrame(unlike = earlier, window = WindowWanted.VIDEO)
 
         scenario.recreate()
         editorShown()
@@ -331,7 +335,7 @@ class ReopenRecreateDeviceTest {
         compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { timeLabel() == at } }
         // The same playhead to the frame, not only to the second the label shows.
         assertWithMessage("playhead at $us after recreate").that(abs(progress() - position)).isLessThan(POSITION_SLACK)
-        val after = settledFrame(like = before, windowShowsVideo = true)
+        val after = settledFrame(like = before, window = WindowWanted.VIDEO)
 
         save(before, "reopen-preview-$us-before-recreate.png")
         save(after, "reopen-preview-$us-after-recreate.png")
@@ -357,13 +361,14 @@ class ReopenRecreateDeviceTest {
      * earlier frame steady for a while before the restored seek lands. A
      * preview that never shows [like] again still fails the test. With
      * [unlike], it waits for a steady picture that differs from [unlike] (a
-     * seek that has landed). With [windowShowsVideo], it also waits for the
-     * frame's window to show the video (every layer has landed).
+     * seek that has landed). With [window], it also waits for the frame's
+     * window to show the video, or anything but the video (the MAIN layer has
+     * landed its seek; a stale picture from the previous probe is not taken).
      */
     private fun settledFrame(
         like: Bitmap? = null,
         unlike: Bitmap? = null,
-        windowShowsVideo: Boolean = false,
+        window: WindowWanted = WindowWanted.ANY,
     ): Bitmap {
         var last = capture()
         var same = 0
@@ -377,8 +382,13 @@ class ReopenRecreateDeviceTest {
             if (same >= 2) {
                 settled++
                 val moved = unlike == null || meanAbsDiff(unlike, now) >= 1.0
-                val window = !windowShowsVideo || windowShowsVideo(now)
-                if (moved && window && (like == null || meanAbsDiff(like, now) < MAX_DIFF)) {
+                val windowOk =
+                    when (window) {
+                        WindowWanted.ANY -> true
+                        WindowWanted.VIDEO -> windowShowsVideo(now)
+                        WindowWanted.NOT_VIDEO -> !windowShowsVideo(now)
+                    }
+                if (moved && windowOk && (like == null || meanAbsDiff(like, now) < MAX_DIFF)) {
                     Log.i(ExportHarness.TAG, "Preview settled after $settled steady picture(s)")
                     return now
                 }
@@ -395,6 +405,8 @@ class ReopenRecreateDeviceTest {
         val dir = File(checkNotNull(h.context.getExternalFilesDir(null)), "render-tests").apply { mkdirs() }
         File(dir, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+
+    private enum class WindowWanted { ANY, VIDEO, NOT_VIDEO }
 
     private companion object {
         const val TIMEOUT_MS = 20_000L
