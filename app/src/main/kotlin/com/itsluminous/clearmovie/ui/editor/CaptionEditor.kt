@@ -58,7 +58,6 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -446,37 +445,40 @@ private fun PlaceTab(
     val measurer = rememberTextMeasurer()
     val chipStyle = MaterialTheme.typography.labelLarge
     val density = LocalDensity.current
-    var width by remember { mutableStateOf(0.dp) }
-    Spacer(Modifier.fillMaxWidth().height(0.dp).onSizeChanged { width = with(density) { it.width.toDp() } })
-    val perChip = (width - 8.dp * (CaptionPlace.entries.size - 1)) / CaptionPlace.entries.size
-    val fitsInOneRow =
-        labels.all { label ->
-            with(density) {
-                measurer
-                    .measure(label, chipStyle, maxLines = 1)
-                    .size.width
-                    .toDp()
-            } + CHIP_LABEL_ROOM <= perChip
-        }
-    val columns = if (fitsInOneRow) CaptionPlace.entries.size else 2
-    for (row in CaptionPlace.entries.chunked(columns)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (place in row) {
-                val label = labels[place.ordinal]
-                FilterChip(
-                    selected = place == current,
-                    onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe))) },
-                    label = {
-                        Text(
-                            label,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
+    // The width is known before the first frame is drawn, so the chips never jump from two rows to one.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val perChip = (maxWidth - 8.dp * (CaptionPlace.entries.size - 1)) / CaptionPlace.entries.size
+        val fitsInOneRow =
+            labels.all { label ->
+                with(density) {
+                    measurer
+                        .measure(label, chipStyle, maxLines = 1)
+                        .size.width
+                        .toDp()
+                } + CHIP_LABEL_ROOM <= perChip
+            }
+        val columns = if (fitsInOneRow) CaptionPlace.entries.size else 2
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (row in CaptionPlace.entries.chunked(columns)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (place in row) {
+                        val label = labels[place.ordinal]
+                        FilterChip(
+                            selected = place == current,
+                            onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe))) },
+                            label = {
+                                Text(
+                                    label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(captionPlaceTag(place)),
                         )
-                    },
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(captionPlaceTag(place)),
-                )
+                    }
+                }
             }
         }
     }
