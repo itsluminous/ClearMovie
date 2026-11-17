@@ -464,15 +464,14 @@ class ReopenRecreateDeviceTest {
 
         /**
          * MAIN here: intro 0-2 s, a captioned photo, then clip_dark from about
-         * 3.8 s to 6.8 s (each junction a 0.6 s crossfade; the preview cuts to
-         * the incoming item at its start and draws no blend). Measured on the
-         * emulator: the photo at 3.6 s, the video's grey in the window from
-         * 4.0 s. 4.2 s is just after that cut-in, where the old CI failure was
-         * seen (a tap on the video's tile seeks near it); 6.0 s is inside the
+         * 3.8 s to 6.8 s (each junction a 0.6 s crossfade, which the preview
+         * blends as the export does since cm-effects, so the photo shows in
+         * the window until 4.4 s). 4.5 s is just after that cut-in, where the
+         * old CI failure was seen (a tap on the video's tile seeks near it); 6.0 s is inside the
          * video, away from the frame fixture's 4 s loop point (near 5.4 s here),
          * where one frame of difference moves its white square across.
          */
-        val KNOWN_TIMES_US = listOf(4_200_000L, 6_000_000L)
+        val KNOWN_TIMES_US = listOf(4_500_000L, 6_000_000L)
 
         /** Brightest minus darkest luma: a blank or single-colour surface is near 0. */
         const val MIN_SPREAD = 40
