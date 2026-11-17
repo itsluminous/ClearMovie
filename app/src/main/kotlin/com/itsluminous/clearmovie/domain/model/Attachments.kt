@@ -38,7 +38,9 @@ internal class AttachSpans(
                 // Rounded up here and down at the end, so neighbours meet exactly even for an odd overlap.
                 val start = slot.startMs + (into + 1) / 2
                 val end = slot.endMs - slot.overlapToNextMs / 2
-                if (end - start >= Limits.MIN_CLIP_MS) start to end else slot.startMs to slot.endMs
+                // Decided on the halves before rounding, so a neighbour never falls back on one side only.
+                val roomy = slot.durationMs * 2 - into - slot.overlapToNextMs >= 2 * Limits.MIN_CLIP_MS
+                if (roomy && end > start) start to end else slot.startMs to slot.endMs
             }
 
             TrackType.VISUAL -> {

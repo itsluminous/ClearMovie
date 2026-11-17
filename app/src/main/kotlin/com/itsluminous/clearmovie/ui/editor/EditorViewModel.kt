@@ -81,6 +81,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import javax.inject.Inject
 
@@ -658,7 +660,12 @@ class EditorViewModel
             return strips.load(source, r)
         }
 
-        private suspend fun load(project: Project) {
+        /** One load at a time: refresh() and the project's own updates never overlap. */
+        private val loading = Mutex()
+
+        private suspend fun load(project: Project) = loading.withLock { loadNow(project) }
+
+        private suspend fun loadNow(project: Project) {
             // Only captions changed (a word typed, a colour picked, the box dragged): the files and the
             // media's state are as they were, so the new schedule is worked out straight away, without
             // looking anything up, and the players carry on.
@@ -675,6 +682,13 @@ class EditorViewModel
                 if (quick != null && engine.updateCaptions(quick)) {
                     lastLoaded = project
                     uiState.update { it.copy(project = session.current ?: project, schedule = quick) }
+                    // A picker asked to play the change (a caption's animation): play it now.
+                    pendingPreviewUs?.let { at ->
+                        pendingPreviewUs = null
+                        previewFallback?.cancel()
+                        engine.seekTo(at)
+                        engine.play()
+                    }
                     return
                 }
             }

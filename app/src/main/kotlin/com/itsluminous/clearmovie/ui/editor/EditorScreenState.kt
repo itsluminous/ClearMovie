@@ -7,7 +7,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.itsluminous.clearmovie.domain.model.CaptionStyleOverride
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.ProjectCodec
+import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.LayoutEvent
@@ -98,6 +101,9 @@ class EditorScreenState(
     corner: PopupCorner = PopupCorner.BOTTOM_END,
     selectedRow: TrackId? = null,
     behindNoteShown: Boolean = false,
+    captionTab: String = CaptionTab.WORDS.name,
+    captionStartText: String? = null,
+    captionStartStyle: String? = null,
 ) {
     /** The selected item, on any row. */
     var selected by mutableStateOf(selected)
@@ -111,6 +117,18 @@ class EditorScreenState(
     var zoom by mutableStateOf(zoom)
     var layout by mutableStateOf(PreviewLayoutState(allRowsRequested = allRowsRequested, corner = corner))
         private set
+
+    /** The caption editor's open tab, and the caption as the visit found it (text, style JSON), for Cancel. */
+    var captionTab by mutableStateOf(captionTab)
+    var captionStartText by mutableStateOf(captionStartText)
+    var captionStartStyle by mutableStateOf(captionStartStyle)
+
+    /** A visit to the caption editor of [caption] starts: the Words tab, and a snapshot for Cancel. */
+    fun startCaptionVisit(caption: TextClip) {
+        captionTab = CaptionTab.WORDS.name
+        captionStartText = caption.text
+        captionStartStyle = ProjectCodec.json.encodeToString(CaptionStyleOverride.serializer(), caption.style)
+    }
 
     /** The width of the timeline's time span (dp), for the zoom buttons; measured, not saved. */
     var spanWidth by mutableStateOf<Double?>(null)
@@ -136,6 +154,9 @@ class EditorScreenState(
                         s.selectedRow?.value,
                         s.panel?.trackId?.value,
                         s.behindNoteShown,
+                        s.captionTab,
+                        s.captionStartText,
+                        s.captionStartStyle,
                     )
                 },
                 restore = { saved ->
@@ -166,6 +187,9 @@ class EditorScreenState(
                         corner = runCatching { PopupCorner.valueOf(v[8] as String) }.getOrDefault(PopupCorner.BOTTOM_END),
                         selectedRow = (v.getOrNull(9) as String?)?.let { runCatching { TrackId(it) }.getOrNull() },
                         behindNoteShown = v.getOrNull(11) as Boolean? ?: false,
+                        captionTab = v.getOrNull(12) as String? ?: CaptionTab.WORDS.name,
+                        captionStartText = v.getOrNull(13) as String?,
+                        captionStartStyle = v.getOrNull(14) as String?,
                     )
                 },
             )

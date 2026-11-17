@@ -54,7 +54,8 @@ class CaptionBitmapRenderer(
             val r = bg.cornerPx * scale
             canvas.drawRoundRect(RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()), r, r, paint)
         }
-        drawText(canvas, text, style, bitmap.width, bitmap.height)
+        // Laid out on the caption's box in 1080-line units, not on the rounded bitmap, so every export size wraps alike.
+        drawText(canvas, text, style, bitmap.width, bitmap.height, logicalWidth = (style.box.w * LOGICAL_CANVAS_W).toFloat())
         return bitmap
     }
 
@@ -89,9 +90,10 @@ class CaptionBitmapRenderer(
         style: CaptionStyle,
         width: Int,
         height: Int,
+        logicalWidth: Float? = null,
     ) {
         // Everything is laid out in 1080-line units, then drawn scaled.
-        val logicalW = width / scale
+        val logicalW = logicalWidth ?: (width / scale)
         val logicalH = height / scale
         val pad = PADDING_PX.toFloat()
         val layoutWidth = max(1, (logicalW - 2 * pad).toInt())
@@ -158,7 +160,10 @@ class CaptionBitmapRenderer(
          * Part of every cached caption and card image's name: bump it when the
          * drawing changes, so an export never reuses an image drawn the old way.
          */
-        const val VERSION = 2
+        const val VERSION = 3
+
+        /** The canvas width in 1080-line units (the canvas is always 16:9). */
+        private const val LOGICAL_CANVAS_W = 1920.0
 
         private fun ArgbColor.toAndroid(): Int = argb.toInt()
     }

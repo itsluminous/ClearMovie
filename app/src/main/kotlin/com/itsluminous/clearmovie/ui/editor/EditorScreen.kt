@@ -172,6 +172,9 @@ interface EditorActions : EditorCallbacks {
 
     fun togglePlay()
 
+    /** Stops the preview where it is (nothing happens when it is not playing). */
+    fun pause() = Unit
+
     fun exact()
 
     fun fixPreset()
@@ -272,7 +275,6 @@ fun EditorScreen(
     val latestProject by rememberUpdatedState(project)
     var captionVisit by remember { mutableStateOf(openCaptionId) }
     val latestPlayheadMs by rememberUpdatedState(playheadMs)
-    val latestPlaying by rememberUpdatedState(playhead.playing)
     LaunchedEffect(openCaptionId) {
         val was = captionVisit
         captionVisit = openCaptionId
@@ -280,7 +282,9 @@ fun EditorScreen(
         // A visit starting: the preview stops on the caption, so every change shows there at once.
         val caption = openCaptionId?.let { latestProject?.clip(it) }
         if (caption != null && was != openCaptionId) {
-            if (latestPlaying) actions.togglePlay()
+            // The caption as the visit found it, saved with the screen, for Cancel (see CaptionPanel).
+            state.startCaptionVisit(caption as TextClip)
+            actions.pause()
             if (latestPlayheadMs !in caption.startMs until caption.endMs) actions.seek(caption.startMs + caption.durationMs / 2)
         }
     }
@@ -303,6 +307,15 @@ fun EditorScreen(
         Box(m.clipToBounds()) {
             preview(Modifier.fillMaxSize())
             if (editingCaption != null && project != null) CaptionBoxOverlay(editingCaption, project, captionWindow, actions)
+        }
+    }
+    // In the small floating preview the box only shows: dragging there moves the window, as everywhere else.
+    val floatingPreview: @Composable (Modifier) -> Unit = { m ->
+        Box(m.clipToBounds()) {
+            preview(Modifier.fillMaxSize())
+            if (editingCaption != null && project != null) {
+                CaptionBoxOverlay(editingCaption, project, captionWindow, actions, draggable = false)
+            }
         }
     }
 
@@ -667,6 +680,7 @@ fun EditorScreen(
                                         }
                                     },
                                 captionWindow = captionWindow,
+                                captionVisit = state,
                             )
                         } else {
                             val timedClip = selectedClip?.takeIf { selectedSlot == null }
@@ -770,7 +784,7 @@ fun EditorScreen(
                             // Below the top bar and the playback controls, which stay usable.
                             topDp = topDp + controlsDp,
                             bottomDp = bottomDp,
-                            preview = previewWithBox,
+                            preview = floatingPreview,
                             onMoved = { state.layoutEvent(LayoutEvent.PopupMoved(it)) },
                             onClose = { state.layoutEvent(LayoutEvent.ShowFewerRows) },
                         )

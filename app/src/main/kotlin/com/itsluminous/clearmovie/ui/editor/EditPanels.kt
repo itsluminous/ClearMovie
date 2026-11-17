@@ -229,6 +229,7 @@ fun EditPanel(
     onSelectRow: (TrackId) -> Unit = {},
     maxHeight: Dp = 420.dp,
     captionWindow: NormRect = NormRect.FULL,
+    captionVisit: EditorScreenState? = null,
 ) {
     val close = { onPanel(null) }
     val clip = open.clipId?.let { project.clip(it) }
@@ -314,7 +315,15 @@ fun EditPanel(
 
                 Panel.TEXT -> {
                     if (clip is TextClip) {
-                        CaptionPanel(clip, project, captionWindow, callbacks, onDone = close, roomy = maxHeight >= ROOMY_PANEL)
+                        CaptionPanel(
+                            clip,
+                            project,
+                            captionWindow,
+                            callbacks,
+                            onDone = close,
+                            roomy = maxHeight >= ROOMY_PANEL,
+                            visit = captionVisit,
+                        )
                     } else {
                         // Only a caption has this editor (a panel saved by an older version may name another item).
                         LaunchedEffect(open) { close() }

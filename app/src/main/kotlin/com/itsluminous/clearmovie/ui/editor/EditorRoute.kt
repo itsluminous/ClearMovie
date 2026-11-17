@@ -216,6 +216,8 @@ fun EditorRoute(
 
                 override fun togglePlay() = viewModel.togglePlay()
 
+                override fun pause() = viewModel.pause()
+
                 override fun exact() = viewModel.requestDraft()
 
                 override fun fixPreset() {
