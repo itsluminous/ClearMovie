@@ -431,4 +431,75 @@
     <string name="transition_tile_black">काला</string>
     <string name="transition_tile_white">सफ़ेद</string>
     <string name="transition_tile_zoom">ज़ूम</string>
+    <!-- cm-tracks: rows, what shows on top in the video, and items on every row. Plain words only. -->
+    <string name="action_add_row">पंक्ति जोड़ें</string>
+    <string name="action_add_here">यहाँ जोड़ें</string>
+    <string name="action_remove_row">पंक्ति हटाएँ</string>
+    <string name="action_mute_row">पंक्ति की आवाज़ बंद</string>
+    <string name="action_lower_music">बात होने पर संगीत धीमा</string>
+    <string name="action_frame_on">फ़्रेम दिखाएँ</string>
+    <string name="action_move_earlier">पहले</string>
+    <string name="action_move_later">बाद में</string>
+    <string name="action_move_to_row">दूसरी पंक्ति में ले जाएँ</string>
+    <string name="action_fade">फ़ेड</string>
+    <string name="action_position">जगह</string>
+    <string name="stack_show_on_top">सबसे ऊपर दिखाएँ</string>
+    <string name="stack_bring_forward">एक ऊपर लाएँ</string>
+    <string name="stack_send_backward">एक नीचे भेजें</string>
+    <string name="stack_show_at_bottom">सबसे नीचे दिखाएँ</string>
+    <string name="stack_heading">बने हुए वीडियो में</string>
+    <string name="stack_on_top">सबके ऊपर दिखता है</string>
+    <string name="stack_at_bottom">सबके नीचे दिखता है</string>
+    <string name="stack_behind_note">यह पंक्ति अब आपकी फ़ोटो और वीडियो के पीछे है, इसलिए उनके चलते समय यह नहीं दिखेगी।</string>
+    <string name="row_move_up">पंक्ति ऊपर करें</string>
+    <string name="row_move_down">पंक्ति नीचे करें</string>
+    <string name="row_heading">इस स्क्रीन पर</string>
+    <string name="row_menu">मेनू खोलें</string>
+    <string name="row_off">बंद है</string>
+    <string name="row_muted">आवाज़ बंद</string>
+    <string name="list_separator">", "</string>
+    <string name="timeline_named_item">%1$s: %2$s</string>
+    <string name="timeline_timed_item_description">%1$s, %2$s से %3$s तक</string>
+    <string name="add_here_title">%1$s में जोड़ें</string>
+    <string name="insert_new_text">नई लिखावट</string>
+    <string name="insert_new_text_body">वीडियो पर लिखे शब्द, 3 सेकंड के लिए</string>
+    <string name="insert_pip_body">आपकी गैलरी से, कोने में छोटा दिखेगा</string>
+    <string name="insert_sound">संगीत या ध्वनि</string>
+    <string name="insert_sound_body">आपकी फ़ाइलों से</string>
+    <string name="insert_overlay">फ़्रेम वीडियो</string>
+    <string name="insert_overlay_body">आपकी फ़ाइलों से। इसके हरे हिस्सों में नीचे का वीडियो दिखेगा।</string>
+    <string name="text_title">वीडियो पर लिखावट</string>
+    <string name="fade_title">फ़ेड</string>
+    <string name="fade_in">शुरू में फ़ेड: %1$s</string>
+    <string name="fade_out">आख़िर में फ़ेड: %1$s</string>
+    <string name="pip_title">कहाँ दिखे</string>
+    <string name="pip_top_left">ऊपर बाएँ</string>
+    <string name="pip_top_right">ऊपर दाएँ</string>
+    <string name="pip_bottom_left">नीचे बाएँ</string>
+    <string name="pip_bottom_right">नीचे दाएँ</string>
+    <string name="pip_size">आकार: %1$d%%</string>
+    <string name="move_row_busy">इस समय भरी है, इसलिए नई पंक्ति में जाएगा</string>
+    <string name="move_new_row">नई पंक्ति</string>
+    <string name="move_new_row_body">इसका समय वही रहेगा</string>
+    <string name="add_row_title">पंक्ति जोड़ें</string>
+    <string name="add_row_text_body">वीडियो पर शब्दों के लिए</string>
+    <string name="add_row_pip_body">कोने में छोटी फ़ोटो और वीडियो के लिए</string>
+    <string name="add_row_frame_body">हरी खिड़की वाले फ़्रेम वीडियो के लिए</string>
+    <string name="add_row_music_body">पीछे चलने वाले संगीत के लिए</string>
+    <string name="add_row_voice_body">किसी के बोलने के लिए</string>
+    <string name="remove_row_title">%1$s हटाएँ?</string>
+    <string name="editor_wrong_overlay">कृपया फ़्रेम के लिए एक वीडियो चुनें।</string>
+    <string name="editor_wrong_music">कृपया संगीत या ध्वनि की फ़ाइल चुनें।</string>
+    <!-- %1$d is how many picture rows are drawn under this one. -->
+    <plurals name="stack_above_rows">
+        <item quantity="one">%1$d पंक्ति के ऊपर दिखता है</item>
+        <item quantity="other">%1$d पंक्तियों के ऊपर दिखता है</item>
+    </plurals>
+    <!-- %1$d is how many items are on the row. -->
+    <plurals name="remove_row_body">
+        <item quantity="one">इसका %1$d आइटम भी हट जाएगा। आप इसे वापस ला सकते हैं।</item>
+        <item quantity="other">इसके %1$d आइटम भी हट जाएँगे। आप इन्हें वापस ला सकते हैं।</item>
+    </plurals>
+    <!-- Short label in the bar: adds photos and videos at the end. -->
+    <string name="bar_add_media">फ़ोटो जोड़ें</string>
 </resources>

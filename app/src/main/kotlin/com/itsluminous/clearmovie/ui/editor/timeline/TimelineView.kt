@@ -43,10 +43,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -67,6 +69,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -77,6 +80,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -100,7 +104,6 @@ const val TIMELINE_RULER_TAG = "timeline_ruler"
 const val TIMELINE_PLAYHEAD_TAG = "timeline_playhead"
 const val TIMELINE_MAIN_ROW_TAG = "timeline_main_row"
 const val TIMELINE_ROWS_TOGGLE_TAG = "timeline_rows_toggle"
-const val TIMELINE_MAIN_HEADER_TAG = "timeline_header_main"
 
 fun clipTag(id: ClipId) = "timeline_clip_${id.value}"
 
@@ -118,19 +121,47 @@ fun rowTag(key: String) = "timeline_row_$key"
 
 fun headerTag(type: RowType) = "timeline_header_${type.name}"
 
+/** The header of the row with [key] (any row, MAIN included). */
+fun rowHeaderTag(key: String) = "timeline_row_header_$key"
+
+/** The "+" on [side] of item [anchor], on a row other than MAIN. */
+fun timedPlusTag(
+    anchor: ClipId,
+    side: InsertSide,
+) = "timeline_plus_${anchor.value}_${side.name}"
+
+/** The "+" of the empty row with [key]. */
+fun rowAddTag(key: String) = "timeline_row_add_$key"
+
 const val TRIM_START_TAG = "timeline_trim_start"
 const val TRIM_END_TAG = "timeline_trim_end"
 
 /** The kinds of row, for the header icon and name. */
 enum class RowType { MAIN, TEXT, FRAME, PIP, MUSIC, VOICE, SOUND }
 
-/** A row other than MAIN, drawn read-only until cm-tracks makes it editable. */
+/** Where a picture row is drawn: above [below] of the [count] picture rows (sound rows are mixed, not stacked). */
+@Immutable
+data class StackPlace(
+    val below: Int,
+    val count: Int,
+)
+
+/**
+ * A timeline row in screen order. [number] tells two rows of one kind apart
+ * ("Text 2"), and is null for the only row of its kind. [fixed] is a row the
+ * preset manages (its frame, the frame's music, the closing message): its
+ * item stays on it, and nothing else is dropped on it.
+ */
 @Immutable
 data class TimelineRow(
     val key: String,
     val type: RowType,
-    val clips: List<Pair<Long, Long>> = emptyList(),
+    val clips: List<RowClip> = emptyList(),
     val enabled: Boolean = true,
+    val muted: Boolean = false,
+    val number: Int? = null,
+    val stack: StackPlace? = null,
+    val fixed: Boolean = false,
 )
 
 /** A picture for an item's thumbnail strip: the [MainClip] at [sourceMs] of its file. */
@@ -166,6 +197,28 @@ interface TimelineActions {
     fun showAllRows()
 
     fun showFewerRows()
+
+    /** A tap on a row's icon: the row is selected and the bar shows its actions. */
+    fun selectRow(key: String) {}
+
+    /** A long-press on a row's icon, or on its empty space, released without moving. */
+    fun rowMenu(key: String) {}
+
+    /** The "+" on an empty row: something new on it, at the playhead. */
+    fun addHere(key: String) {}
+
+    /** A row dragged by its icon: to [toIndex] of the screen order (counted with the row taken out). */
+    fun moveRow(
+        key: String,
+        toIndex: Int,
+    ) {}
+
+    /** An item on a row other than MAIN dragged to [startMs], on row [toRow] (its own, or another of its kind). */
+    fun moveTimed(
+        id: ClipId,
+        startMs: Long,
+        toRow: String,
+    ) {}
 }
 
 /** Heights at a font scale (ARCHITECTURE section 11.3: MAIN 72 dp, others 48 dp, growing with the text). */
@@ -195,13 +248,23 @@ private const val PAD_DP = 28.0
 
 /**
  * The editor timeline (ARCHITECTURE sections 11.3 to 11.7): a ruler, the
- * playhead, and the rows in screen order, each with its type icon and name at
- * its left edge. The MAIN row shows each item with thumbnails and its length,
- * trim handles on the selected item and the "+" insert points; the other rows
- * are drawn read-only. One pointer handler runs [TimelineGestureArbiter]
- * over all of it, so a pinch, a scroll, a trim, a scrub, a long-press drag
- * and a tap never fight; every gesture also has a button (the contextual bar,
- * the zoom buttons, the item's accessibility actions).
+ * playhead, and the rows in screen order, each with its type icon at its
+ * left edge (the icon alone: TalkBack reads the row's name). The MAIN row
+ * shows each item with thumbnails and its length, trim handles on the
+ * selected item and the "+" insert points; every other row shows its items
+ * at their times, with a "+" before and after each. One pointer handler runs
+ * [TimelineGestureArbiter] over all of it, so a pinch, a scroll, a trim, a
+ * scrub, a long-press drag and a tap never fight:
+ *
+ * - On a row's icon: a tap selects the row, a long-press then a drag up or
+ *   down moves the row on screen (never in the video), and a long-press let
+ *   go without moving opens the row menu.
+ * - On an item: a long-press let go without moving opens its menu; a
+ *   long-press then a drag reorders MAIN, or moves any other item in time
+ *   and, dragged onto another row of its kind, to that row.
+ *
+ * Every gesture also has a button (the contextual bar, the menus, the zoom
+ * buttons, the rows' and items' accessibility actions).
  */
 @Composable
 fun TimelineView(
@@ -222,6 +285,7 @@ fun TimelineView(
     metrics: RowMetrics,
     modifier: Modifier = Modifier,
     onSpanWidth: (Double) -> Unit = {},
+    selectedRow: String? = null,
 ) {
     val totalMs = slots.lastOrNull()?.endMs ?: 0L
     BoxWithConstraints(modifier.fillMaxWidth().testTag(TIMELINE_TAG)) {
@@ -249,10 +313,43 @@ fun TimelineView(
             }
         }
         val selectedIndex = slots.indexOfFirst { it.clip.id == selected }.takeIf { it >= 0 }
+        // A newly selected item shows a "+" on each side (on MAIN beyond its trim handles). When one would be
+        // cut off by the end of the view, the view moves just enough (past the video's own start or end if it
+        // must) to show it. Only a small shift: a long item already well in view never jumps.
+        LaunchedEffect(selected) {
+            val sel = selected ?: return@LaunchedEffect
+            val onMain = slots.any { it.clip.id == sel }
+            val span =
+                slots.firstOrNull { it.clip.id == sel }?.let { it.startMs to it.endMs }
+                    ?: rows.firstNotNullOfOrNull { r -> r.clips.firstOrNull { it.id == sel }?.let { it.startMs to it.endMs } }
+                    ?: return@LaunchedEffect
+            val outward = if (onMain) TimelineGeometry.DISPLACE_DP else TimelineGeometry.PLUS_HIT_DP / 2
+            val room = outward + TimelineGeometry.PLUS_HIT_DP / 2 - PAD_DP
+            val left = z.xOf(span.first.toDouble())
+            val right = z.xOf(span.second.toDouble())
+            val dx =
+                when {
+                    left < room && room - left <= 2 * room -> {
+                        left - room
+                    }
+
+                    right > spanWidth - room && right - (spanWidth - room) <= 2 * room && right - left < spanWidth - 2 * room -> {
+                        right -
+                            (spanWidth - room)
+                    }
+
+                    else -> {
+                        0.0
+                    }
+                }
+            if (dx != 0.0) onZoom(TimelineZoom.nudgePastEnds(z, dx, room, totalMs, spanWidth))
+        }
         val spans = remember(slots) { slots.map { SlotSpan(it.clip.id.value, it.startMs, it.endMs, it.clip.isContent()) } }
         val selectedClip = selectedIndex?.let { slots[it].clip }
         var trim by remember { mutableStateOf<TrimPreview?>(null) }
         var drag by remember { mutableStateOf<DragPreview?>(null) }
+        var rowDrag by remember { mutableStateOf<RowDragPreview?>(null) }
+        var timedDrag by remember { mutableStateOf<TimedDragPreview?>(null) }
         // The layout during a trim shows the trimmed item at its new length.
         val shownSlots = trim?.let { t -> relayout(slots, t.index, TrimMath.dragged(slots[t.index].clip, t.edge, t.deltaMs)) } ?: slots
         val shownSpans =
@@ -275,52 +372,43 @@ fun TimelineView(
                 selectedTrimmable = selectedClip?.isContent() == true && drag == null,
             )
         val shown = rows.filter { it.key in visibleRows }
-        val mainTopInRows =
-            shown.takeWhile { it.type != RowType.MAIN }.sumOf { metrics.heightOf(it.type) + PreviewLayoutReducer.ROW_GAP_DP }
+        val bands = RowOrder.bands(shown.map { it.key to metrics.heightOf(it.type) }, PreviewLayoutReducer.ROW_GAP_DP)
+        val mainTopInRows = shown.indexOfFirst { it.type == RowType.MAIN }.let { i -> if (i >= 0) bands[i].topDp else 0.0 }
+        val timedPlus =
+            shown.filter { it.type != RowType.MAIN }.associate { row ->
+                row.key to TimedRowGeometry.plusPoints(row.clips, z, selected, spanWidth)
+            }
         val haptics = LocalHapticFeedback.current
         val density = LocalDensity.current
         // The handler outlives recompositions: it always calls the latest callbacks.
         val latestOnZoom by rememberUpdatedState(onZoom)
         val latestActionsState = rememberUpdatedState(actions)
-        val latestActions =
-            remember {
-                object : TimelineActions {
-                    override fun select(id: ClipId?) = latestActionsState.value.select(id)
-
-                    override fun seek(ms: Long) = latestActionsState.value.seek(ms)
-
-                    override fun trim(
-                        id: ClipId,
-                        edge: TrimEdge,
-                        deltaMs: Double,
-                    ) = latestActionsState.value.trim(id, edge, deltaMs)
-
-                    override fun move(
-                        id: ClipId,
-                        toContentIndex: Int,
-                    ) = latestActionsState.value.move(id, toContentIndex)
-
-                    override fun insert(
-                        anchor: ClipId,
-                        side: InsertSide,
-                    ) = latestActionsState.value.insert(anchor, side)
-
-                    override fun menu(id: ClipId) = latestActionsState.value.menu(id)
-
-                    override fun transition(lead: ClipId) = latestActionsState.value.transition(lead)
-
-                    override fun showAllRows() = latestActionsState.value.showAllRows()
-
-                    override fun showFewerRows() = latestActionsState.value.showFewerRows()
-                }
-            }
-        val current by rememberUpdatedState(Current(z, geometry, spans, slots, spanWidth, totalMs, mainTopInRows, selectedIndex))
+        val latestActions = remember { LatestActions { latestActionsState.value } }
+        val current by rememberUpdatedState(
+            Current(
+                z,
+                geometry,
+                spans,
+                slots,
+                spanWidth,
+                totalMs,
+                mainTopInRows,
+                selectedIndex,
+                shown,
+                bands,
+                timedPlus,
+                rows.map { it.key },
+                playheadMs,
+            ),
+        )
 
         Column(Modifier.fillMaxWidth()) {
             Box(
                 Modifier
                     .weight(1f, fill = false)
                     .fillMaxWidth()
+                    // The "+" layer spans every row; rows scrolled out of view must not draw over the controls below.
+                    .clipToBounds()
                     .pointerInput(metrics, rowScroll) {
                         timelineGestures(
                             density = { density.density },
@@ -330,8 +418,13 @@ fun TimelineView(
                             onZoom = { latestOnZoom(it) },
                             actions = latestActions,
                             longPressed = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
-                            trimChanged = { trim = it },
-                            dragChanged = { drag = it },
+                            previews =
+                                Previews(
+                                    trim = { trim = it },
+                                    drag = { drag = it },
+                                    row = { rowDrag = it },
+                                    timed = { timedDrag = it },
+                                ),
                             touched = { touching = it },
                         )
                     },
@@ -339,9 +432,25 @@ fun TimelineView(
                 Column(Modifier.fillMaxWidth()) {
                     Ruler(z, totalMs, playheadMs, playing, metrics, spanWidth, latestActions)
                     Column(Modifier.fillMaxWidth().verticalScroll(rowScroll, enabled = false)) {
-                        for (row in shown) {
-                            Row(Modifier.fillMaxWidth().height(metrics.heightOf(row.type).dp).testTag(rowTag(row.key))) {
-                                RowHeader(row.type, metrics)
+                        for ((i, row) in shown.withIndex()) {
+                            val lift = rowLift(rowDrag, bands, i, row.key)
+                            val dragged = rowDrag?.key == row.key
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(metrics.heightOf(row.type).dp)
+                                    .offset { IntOffset(0, (lift * density.density).roundToInt()) }
+                                    .zIndex(if (dragged) 1f else 0f)
+                                    .then(if (dragged) Modifier.shadow(8.dp) else Modifier)
+                                    .then(
+                                        if (timedDrag?.toRow == row.key && timedDrag?.fromRow != row.key) {
+                                            Modifier.border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary))
+                                        } else {
+                                            Modifier
+                                        },
+                                    ).testTag(rowTag(row.key)),
+                            ) {
+                                RowHeader(row, row.key == selectedRow, metrics, shown, rows.map { it.key }, latestActions)
                                 Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                                     if (row.type == RowType.MAIN) {
                                         MainRowContent(
@@ -355,7 +464,7 @@ fun TimelineView(
                                             drag,
                                         )
                                     } else {
-                                        OtherRowContent(row, z)
+                                        TimedRowContent(row, z, selected, playheadMs, timedDrag, latestActions)
                                     }
                                 }
                             }
@@ -364,29 +473,71 @@ fun TimelineView(
                     }
                 }
                 Playhead(z, playheadMs, metrics)
-                // The "+" points over everything, the playhead line included, on the MAIN row.
-                if (drag == null && shown.any { it.type == RowType.MAIN }) {
-                    // Reaches above the row, for the "+" points lifted to its top edge over a transition marker.
-                    val lift = TimelineGeometry.ABOVE_ROW_DP
-                    val top = metrics.rulerDp + mainTopInRows - lift
+                // The "+" points over everything, the playhead line included, on every row. They fade out
+                // while anything is dragged (a trim included) and come back at the new edges on release.
+                // The layer reaches above the rows for a "+" lifted to MAIN's top edge over a transition marker.
+                val lift = TimelineGeometry.ABOVE_ROW_DP
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = drag == null && rowDrag == null && timedDrag == null && trim == null,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
                     Box(
                         Modifier
-                            // The scroll is read when placing, not composing: it changes every frame of a scroll.
                             .offset {
                                 IntOffset(
                                     (metrics.headerDp * density.density).roundToInt(),
-                                    ((top * density.density) - rowScroll.value).roundToInt(),
+                                    ((metrics.rulerDp - lift) * density.density).roundToInt(),
                                 )
                             }.width((fullWidth.value - metrics.headerDp.toFloat()).dp)
-                            .height((metrics.mainDp + lift).dp)
+                            .height(((bands.lastOrNull()?.bottomDp ?: 0.0) + lift).dp)
                             .clipToBounds(),
                     ) {
-                        // In this box the row's top edge is at y = lift.
-                        val markerY = lift + (geometry.markerCentre - geometry.mainTop)
-                        for (m in geometry.markers()) TransitionMarker(m, markerY, shownSlots, actions)
-                        val plus = geometry.plusPoints()
-                        for (b in 0..shownSlots.size) {
-                            PlusButton(plus.firstOrNull { it.boundary == b }, b, shownSlots, actions, lift, lift + metrics.mainDp / 2)
+                        for ((i, row) in shown.withIndex()) {
+                            val band = bands[i]
+                            // MAIN's box starts [lift] above its row, so a lifted "+" fits; the others start at their row.
+                            val above = if (row.type == RowType.MAIN) 0.0 else lift
+                            Box(
+                                Modifier
+                                    // The scroll is read when placing, not composing: it changes every frame of a scroll.
+                                    .offset { IntOffset(0, (((band.topDp + above) * density.density) - rowScroll.value).roundToInt()) }
+                                    .fillMaxWidth()
+                                    .height((band.heightDp + lift - above).dp),
+                            ) {
+                                if (row.type == RowType.MAIN && shownSlots.isEmpty()) {
+                                    // Nothing on MAIN yet: its one "+" adds the first photos and videos.
+                                    Box(Modifier.fillMaxSize().padding(top = lift.dp)) {
+                                        RowAddButton(row, addHereX(z, playheadMs, spanWidth), latestActions)
+                                    }
+                                } else if (row.type == RowType.MAIN) {
+                                    // In this box the row's top edge is at y = lift.
+                                    val markerY = lift + (geometry.markerCentre - geometry.mainTop)
+                                    for (m in geometry.markers()) TransitionMarker(m, markerY, shownSlots, actions)
+                                    val plus = geometry.plusPoints()
+                                    for (b in 0..shownSlots.size) {
+                                        PlusButton(
+                                            plus.firstOrNull { it.boundary == b },
+                                            b,
+                                            shownSlots,
+                                            actions,
+                                            lift,
+                                            lift + metrics.mainDp / 2,
+                                        )
+                                    }
+                                } else if (row.clips.isEmpty() && !row.fixed) {
+                                    // An empty row still has its "+": something new on it, at the playhead.
+                                    RowAddButton(row, addHereX(z, playheadMs, spanWidth), latestActions)
+                                } else {
+                                    for (p in timedPlus[row.key].orEmpty()) {
+                                        if (p.xDp < -TimelineGeometry.PLUS_HIT_DP ||
+                                            p.xDp > spanWidth + TimelineGeometry.PLUS_HIT_DP
+                                        ) {
+                                            continue
+                                        }
+                                        TimedPlusButton(p, row, actions)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -394,6 +545,75 @@ fun TimelineView(
             RowsToggle(hiddenRows, allRowsRequested, rows.size > visibleRows.size || allRowsRequested, metrics, actions)
         }
     }
+}
+
+/** How far row [index] is drawn from its place while a row is dragged: the dragged one follows the finger, the others make room. */
+private fun rowLift(
+    drag: RowDragPreview?,
+    bands: List<RowBand>,
+    index: Int,
+    key: String,
+): Double {
+    if (drag == null) return 0.0
+    if (drag.key == key) return drag.dyDp
+    val from = bands.indexOfFirst { it.key == drag.key }
+    if (from < 0) return 0.0
+    val room = bands[from].heightDp + PreviewLayoutReducer.ROW_GAP_DP
+    return when {
+        index in (from + 1)..drag.dropShownIndex -> -room
+        index in drag.dropShownIndex until from -> room
+        else -> 0.0
+    }
+}
+
+/** The latest [TimelineActions], read when called: the pointer handler outlives recompositions. */
+private class LatestActions(
+    private val latest: () -> TimelineActions,
+) : TimelineActions {
+    override fun select(id: ClipId?) = latest().select(id)
+
+    override fun seek(ms: Long) = latest().seek(ms)
+
+    override fun trim(
+        id: ClipId,
+        edge: TrimEdge,
+        deltaMs: Double,
+    ) = latest().trim(id, edge, deltaMs)
+
+    override fun move(
+        id: ClipId,
+        toContentIndex: Int,
+    ) = latest().move(id, toContentIndex)
+
+    override fun insert(
+        anchor: ClipId,
+        side: InsertSide,
+    ) = latest().insert(anchor, side)
+
+    override fun menu(id: ClipId) = latest().menu(id)
+
+    override fun transition(lead: ClipId) = latest().transition(lead)
+
+    override fun showAllRows() = latest().showAllRows()
+
+    override fun showFewerRows() = latest().showFewerRows()
+
+    override fun selectRow(key: String) = latest().selectRow(key)
+
+    override fun rowMenu(key: String) = latest().rowMenu(key)
+
+    override fun addHere(key: String) = latest().addHere(key)
+
+    override fun moveRow(
+        key: String,
+        toIndex: Int,
+    ) = latest().moveRow(key, toIndex)
+
+    override fun moveTimed(
+        id: ClipId,
+        startMs: Long,
+        toRow: String,
+    ) = latest().moveTimed(id, startMs, toRow)
 }
 
 private fun MainClip.isContent() = this is PhotoClip || this is VideoClip || this is CardClip
@@ -423,6 +643,36 @@ private data class DragPreview(
     val dropIndex: Int,
 )
 
+/** A row being dragged by its icon: [dyDp] from its place, landing at [dropShownIndex] among the shown rows. */
+private data class RowDragPreview(
+    val key: String,
+    val dyDp: Double,
+    val dropShownIndex: Int,
+)
+
+/** An item on a row other than MAIN being dragged: [dxDp] in time, over row [toRow]. */
+private data class TimedDragPreview(
+    val id: ClipId,
+    val fromRow: String,
+    val dxDp: Double,
+    val toRow: String,
+)
+
+/** Where the pointer handler shows what a drag will do. */
+private class Previews(
+    val trim: (TrimPreview?) -> Unit,
+    val drag: (DragPreview?) -> Unit,
+    val row: (RowDragPreview?) -> Unit,
+    val timed: (TimedDragPreview?) -> Unit,
+) {
+    fun clear() {
+        trim(null)
+        drag(null)
+        row(null)
+        timed(null)
+    }
+}
+
 private data class Current(
     val zoom: ZoomState,
     val geometry: TimelineGeometry,
@@ -432,7 +682,25 @@ private data class Current(
     val totalMs: Long,
     val mainTopInRows: Double,
     val selectedIndex: Int?,
-)
+    val shown: List<TimelineRow>,
+    val bands: List<RowBand>,
+    val timedPlus: Map<String, List<TimedPlus>>,
+    val allKeys: List<String>,
+    val playheadMs: Long,
+) {
+    fun row(key: String): TimelineRow? = shown.firstOrNull { it.key == key }
+
+    /** The row a timed item dragged to [inRowsDp] (from the top of the rows) would land on. */
+    fun dropRow(
+        from: TimelineRow,
+        inRowsDp: Double,
+    ): TimelineRow {
+        if (from.fixed) return from
+        val band = bands.firstOrNull { inRowsDp >= it.topDp && inRowsDp < it.bottomDp } ?: return from
+        val target = row(band.key) ?: return from
+        return if (target.type == from.type && !target.fixed) target else from
+    }
+}
 
 /** The pointer handler: feeds [TimelineGestureArbiter] and acts on what it decides. */
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timelineGestures(
@@ -443,8 +711,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
     onZoom: (ZoomState) -> Unit,
     actions: TimelineActions,
     longPressed: () -> Unit,
-    trimChanged: (TrimPreview?) -> Unit,
-    dragChanged: (DragPreview?) -> Unit,
+    previews: Previews,
     touched: (Boolean) -> Unit,
 ) {
     awaitPointerEventScope {
@@ -466,13 +733,23 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                     .filter { it.pressed && !it.previousPressed && it.id != first.id }
                     .forEach { arbiter.down(it.id.value, dp(it.position.x), dp(it.position.y), it.uptimeMillis, start.kind) }
                 val downAt = first.uptimeMillis
-                // Only an item can be long-pressed (the row header's menu is cm-tracks'); nothing else waits.
-                var waiting = start is Hit.OnClip && c0.slots.getOrNull(start.index) != null
+                // Only an item, a row's icon or a row's empty space can be long-pressed; nothing else waits.
+                var waiting =
+                    when (start) {
+                        is Hit.OnClip -> c0.slots.getOrNull(start.index) != null
+                        is Hit.OnHeader, is Hit.OnTimedClip, is Hit.OnRowSpace -> true
+                        is Hit.OnTimedPlus -> start.under != null
+                        else -> false
+                    }
                 var lastSpread: Double? = null
                 var lastCentroid: Offset? = null
                 var lastScroll = first.position
                 var trimDelta = 0.0
                 var dragDx = 0.0
+                var dragDy = 0.0
+
+                // Whether the gesture became a drag, even if only in the event that ended it.
+                var dragged = false
                 var lastSeek = 0L
                 var now = first.uptimeMillis
                 // Several events can arrive before the next frame recomposes: zoom and scroll build on
@@ -509,6 +786,11 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                             }
 
                             !ch.pressed && ch.previousPressed -> {
+                                // Where the finger lets go counts first, judged from where it went down (a
+                                // move just before the release may not have reached this handler), so a
+                                // long-press that moved is a drag, never the menu.
+                                arbiter.move(ch.id.value, dp(ch.position.x), dp(ch.position.y), ch.uptimeMillis)
+                                if (arbiter.mode == GestureMode.DRAG) dragged = true
                                 arbiter.up(ch.id.value, ch.uptimeMillis)
                             }
 
@@ -517,7 +799,8 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                             }
                         }
                     }
-                    if (before == GestureMode.PENDING && arbiter.mode == GestureMode.LONG_PRESSED && start is Hit.OnClip) longPressed()
+                    if (arbiter.mode == GestureMode.DRAG) dragged = true
+                    if (before == GestureMode.PENDING && arbiter.mode in LIFTED && waiting) longPressed()
                     val c = current()
                     val pressed = event.changes.filter { it.pressed }
                     when (arbiter.mode) {
@@ -549,8 +832,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 lastSpread = null
                                 lastCentroid = null
                             }
-                            trimChanged(null)
-                            dragChanged(null)
+                            previews.clear()
                             event.changes.forEach(PointerInputChange::consume)
                         }
 
@@ -580,7 +862,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                             if (ch != null && sel != null) {
                                 trimDelta = dp(ch.position.x - first.position.x) * c.zoom.msPerDp
                                 val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
-                                trimChanged(TrimPreview(sel, edge, trimDelta))
+                                previews.trim(TrimPreview(sel, edge, trimDelta))
                             }
                             event.changes.forEach(PointerInputChange::consume)
                         }
@@ -604,12 +886,51 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
 
                         GestureMode.DRAG -> {
                             val ch = event.changes.firstOrNull { it.id == first.id }
-                            val i = (start as? Hit.OnClip)?.index
-                            if (ch != null && i != null && c.slots[i].clip.isContent()) {
+                            if (ch != null) {
                                 dragDx = dp(ch.position.x - first.position.x)
-                                val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
-                                val drop = TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom)
-                                dragChanged(DragPreview(i, dragDx, drop))
+                                dragDy = dp(ch.position.y - first.position.y)
+                                when (val held = start.held()) {
+                                    is Hit.OnClip -> {
+                                        val i = held.index
+                                        if (c.slots
+                                                .getOrNull(i)
+                                                ?.clip
+                                                ?.isContent() == true
+                                        ) {
+                                            val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
+                                            val drop = TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom)
+                                            previews.drag(DragPreview(i, dragDx, drop))
+                                        }
+                                    }
+
+                                    is Hit.OnHeader -> {
+                                        previews.row(RowDragPreview(held.key, dragDy, RowOrder.dropShownIndex(c.bands, held.key, dragDy)))
+                                    }
+
+                                    is Hit.OnTimedClip -> {
+                                        // The preset's own items (its frame, music and closing voice) follow the video: never dragged.
+                                        val from = c.row(held.key)?.takeUnless { it.fixed }
+                                        if (from != null) {
+                                            val to = c.dropRow(from, dp(ch.position.y) - metrics.rulerDp + rowScroll.value / d)
+                                            // Shown where it will land: never before the start nor past the end.
+                                            val clip = from.clips.firstOrNull { it.id == held.id }
+                                            val shownDx =
+                                                if (clip == null) {
+                                                    dragDx
+                                                } else {
+                                                    val latest =
+                                                        maxOf((c.totalMs - (clip.endMs - clip.startMs)).toDouble(), clip.startMs.toDouble())
+                                                    ((clip.startMs + dragDx * c.zoom.msPerDp).coerceIn(0.0, latest) - clip.startMs) /
+                                                        c.zoom.msPerDp
+                                                }
+                                            previews.timed(TimedDragPreview(held.id, held.key, shownDx, to.key))
+                                        }
+                                    }
+
+                                    else -> {
+                                        Unit
+                                    }
+                                }
                             }
                             event.changes.forEach(PointerInputChange::consume)
                         }
@@ -625,8 +946,24 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                     c.slots.getOrNull(start.point.leadIndex)?.let { actions.transition(it.clip.id) }
                                 }
 
+                                is Hit.OnTimedPlus -> {
+                                    actions.insert(start.plus.anchor, start.plus.side)
+                                }
+
+                                is Hit.OnRowAdd -> {
+                                    actions.addHere(start.key)
+                                }
+
                                 is Hit.OnClip -> {
                                     c.slots.getOrNull(start.index)?.let { actions.select(it.clip.id) }
+                                }
+
+                                is Hit.OnTimedClip -> {
+                                    actions.select(start.id)
+                                }
+
+                                is Hit.OnHeader -> {
+                                    actions.selectRow(start.key)
                                 }
 
                                 Hit.OnRuler -> {
@@ -647,7 +984,13 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         }
 
                         GestureMode.MENU -> {
-                            (start as? Hit.OnClip)?.let { s -> c.slots.getOrNull(s.index)?.let { actions.menu(it.clip.id) } }
+                            when (val held = start.held()) {
+                                is Hit.OnClip -> c.slots.getOrNull(held.index)?.let { actions.menu(it.clip.id) }
+                                is Hit.OnTimedClip -> actions.menu(held.id)
+                                is Hit.OnHeader -> actions.rowMenu(held.key)
+                                is Hit.OnRowSpace -> actions.rowMenu(held.key)
+                                else -> Unit
+                            }
                             event.changes.forEach(PointerInputChange::consume)
                         }
 
@@ -659,16 +1002,20 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                         val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
                                         actions.trim(c.slots[sel].clip.id, edge, trimDelta)
                                     }
-                                    trimChanged(null)
+                                    previews.trim(null)
                                 }
 
-                                GestureMode.DRAG -> {
-                                    val i = (start as? Hit.OnClip)?.index
-                                    if (i != null && c.slots[i].clip.isContent()) {
-                                        val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
-                                        actions.move(c.slots[i].clip.id, TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom))
+                                GestureMode.DRAG, GestureMode.LONG_PRESSED -> {
+                                    if (dragged) {
+                                        // Where the finger let go, which may be further than the last move seen.
+                                        event.changes.firstOrNull { it.id == first.id }?.let { ch ->
+                                            dragDx = dp(ch.position.x - first.position.x)
+                                            dragDy = dp(ch.position.y - first.position.y)
+                                        }
+                                        val fingerInRows = dp(first.position.y) + dragDy - metrics.rulerDp + rowScroll.value / d
+                                        endDrag(start.held(), c, dragDx, dragDy, fingerInRows, actions)
                                     }
-                                    dragChanged(null)
+                                    previews.clear()
                                 }
 
                                 GestureMode.SCRUB -> {
@@ -687,8 +1034,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         }
 
                         GestureMode.CANCELLED -> {
-                            trimChanged(null)
-                            dragChanged(null)
+                            previews.clear()
                         }
 
                         else -> {
@@ -697,14 +1043,63 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                     }
                     if (event.changes.none { it.pressed } && arbiter.isActive) {
                         arbiter.cancel()
-                        trimChanged(null)
-                        dragChanged(null)
+                        previews.clear()
                     }
                 }
             } finally {
-                // Also when the handler is cancelled or a gesture throws: never left "touching".
+                // Also when the handler is cancelled or a gesture throws: never left "touching" or mid-drag.
                 touched(false)
+                previews.clear()
             }
+        }
+    }
+}
+
+private val LIFTED = setOf(GestureMode.LONG_PRESSED, GestureMode.DRAG, GestureMode.MENU)
+
+/** A drag let go: the MAIN item, the row or the timed item goes where it was dropped. */
+private fun endDrag(
+    start: Hit,
+    c: Current,
+    dragDx: Double,
+    dragDy: Double,
+    fingerInRowsDp: Double,
+    actions: TimelineActions,
+) {
+    when (start) {
+        is Hit.OnClip -> {
+            val i = start.index
+            if (c.slots
+                    .getOrNull(i)
+                    ?.clip
+                    ?.isContent() == true
+            ) {
+                val centre = (c.geometry.left(i) + c.geometry.right(i)) / 2 + dragDx
+                actions.move(c.slots[i].clip.id, TimelineGeometry.dropIndex(c.spans, i, centre, c.zoom))
+            }
+        }
+
+        is Hit.OnHeader -> {
+            val shownIndex = RowOrder.dropShownIndex(c.bands, start.key, dragDy)
+            val from = c.shown.indexOfFirst { it.key == start.key }
+            if (from >= 0 && shownIndex != from) {
+                actions.moveRow(start.key, RowOrder.fullIndex(c.allKeys, c.shown.map { it.key }, start.key, shownIndex))
+            }
+        }
+
+        is Hit.OnTimedClip -> {
+            val from = c.row(start.key)?.takeUnless { it.fixed } ?: return
+            val clip = from.clips.firstOrNull { it.id == start.id } ?: return
+            // The row under the finger, as the drag showed it.
+            val to = c.dropRow(from, fingerInRowsDp)
+            // Never before the start, and never past the end, where it would no longer be seen.
+            val latest = (c.totalMs - (clip.endMs - clip.startMs)).coerceAtLeast(0).toDouble()
+            val startMs = (clip.startMs + dragDx * c.zoom.msPerDp).coerceIn(0.0, maxOf(latest, clip.startMs.toDouble())).toLong()
+            if (to.key != from.key || startMs != clip.startMs) actions.moveTimed(start.id, startMs, to.key)
+        }
+
+        else -> {
+            Unit
         }
     }
 }
@@ -728,8 +1123,34 @@ private sealed interface Hit {
         override val kind get() = GestureStart.PLUS
     }
 
+    /**
+     * A "+" on a row other than MAIN. Its touch area reaches over the edge of
+     * item [under]: a tap is the "+", but held or dragged it is that item.
+     */
+    data class OnTimedPlus(
+        val plus: TimedPlus,
+        val key: String,
+        val under: ClipId?,
+    ) : Hit {
+        override val kind get() = if (under != null) GestureStart.CLIP else GestureStart.PLUS
+    }
+
+    /** The "+" on an empty row other than MAIN: Add here. */
+    data class OnRowAdd(
+        val key: String,
+    ) : Hit {
+        override val kind get() = GestureStart.PLUS
+    }
+
     data class OnClip(
         val index: Int,
+    ) : Hit {
+        override val kind get() = GestureStart.CLIP
+    }
+
+    data class OnTimedClip(
+        val key: String,
+        val id: ClipId,
     ) : Hit {
         override val kind get() = GestureStart.CLIP
     }
@@ -742,13 +1163,35 @@ private sealed interface Hit {
         override val kind get() = GestureStart.RULER
     }
 
-    data object OnHeader : Hit {
+    data class OnHeader(
+        val key: String,
+    ) : Hit {
         override val kind get() = GestureStart.HEADER
+    }
+
+    /** A row other than MAIN, away from its items. */
+    data class OnRowSpace(
+        val key: String,
+    ) : Hit {
+        override val kind get() = GestureStart.ROW
     }
 
     data object Elsewhere : Hit {
         override val kind get() = GestureStart.EMPTY
     }
+}
+
+/** What a hold or a drag acts on: a "+" over an item's edge is that item. */
+private fun Hit.held(): Hit = if (this is Hit.OnTimedPlus && under != null) Hit.OnTimedClip(key, under) else this
+
+/** Where an empty row's "+" (Add here) sits: at the playhead, kept on screen. */
+internal fun addHereX(
+    zoom: ZoomState,
+    playheadMs: Long,
+    spanWidth: Double,
+): Double {
+    val half = TimelineGeometry.PLUS_HIT_DP / 2
+    return zoom.xOf(playheadMs.toDouble()).coerceIn(half, (spanWidth - half).coerceAtLeast(half))
 }
 
 private fun hit(
@@ -770,19 +1213,58 @@ private fun hit(
         }
     }
     if (yDp < metrics.rulerDp) return if (xDp < metrics.headerDp) Hit.Elsewhere else Hit.OnRuler
-    if (xDp < metrics.headerDp) return Hit.OnHeader
     val inRows = yDp - metrics.rulerDp + rowScrollDp
-    val mainY = inRows - c.mainTopInRows
-    if (mainY < 0 || mainY > metrics.mainDp) return Hit.Elsewhere
+    val i = c.bands.indexOfFirst { inRows >= it.topDp && inRows < it.bottomDp }
+    if (i < 0) return Hit.Elsewhere
+    val band = c.bands[i]
+    val row = c.shown[i]
+    if (xDp < metrics.headerDp) return Hit.OnHeader(row.key)
     val sx = xDp - metrics.headerDp - PAD_DP
+    if (row.type != RowType.MAIN) {
+        if (row.clips.isEmpty() && !row.fixed &&
+            abs(sx - addHereX(c.zoom, c.playheadMs, c.spanWidth)) <= TimelineGeometry.PLUS_HIT_DP / 2
+        ) {
+            return Hit.OnRowAdd(row.key)
+        }
+        return when (val t = TimedRowGeometry.hitTest(row.clips, c.timedPlus[row.key].orEmpty(), c.zoom, sx)) {
+            is TimedHit.Plus -> {
+                val at = c.zoom.timeAt(sx)
+                val under =
+                    row.clips
+                        .firstOrNull { at >= it.startMs && at < it.endMs }
+                        ?.id
+                        ?.takeUnless { row.fixed }
+                Hit.OnTimedPlus(t.plus, row.key, under)
+            }
+
+            is TimedHit.Clip -> {
+                Hit.OnTimedClip(row.key, t.id)
+            }
+
+            TimedHit.Space -> {
+                Hit.OnRowSpace(row.key)
+            }
+        }
+    }
+    if (c.slots.isEmpty() && abs(sx - addHereX(c.zoom, c.playheadMs, c.spanWidth)) <= TimelineGeometry.PLUS_HIT_DP / 2) {
+        return Hit.OnRowAdd(row.key)
+    }
+    val mainY = inRows - band.topDp
     return when (val t = c.geometry.hitTest(sx, metrics.rulerDp + mainY)) {
         is HitTarget.Plus -> Hit.OnPlus(t.point)
+
         is HitTarget.Marker -> Hit.OnMarker(t.point)
+
         is HitTarget.TrimStart -> Hit.OnTrim(GestureStart.TRIM_START)
+
         is HitTarget.TrimEnd -> Hit.OnTrim(GestureStart.TRIM_END)
+
         is HitTarget.Clip -> Hit.OnClip(t.index)
+
         HitTarget.Ruler -> Hit.OnRuler
-        HitTarget.Empty -> Hit.Elsewhere
+
+        // MAIN's empty space, after its last item: held, it opens the row menu like any row's.
+        HitTarget.Empty -> Hit.OnRowSpace(row.key)
     }
 }
 
@@ -829,7 +1311,7 @@ private fun Ruler(
             Canvas(Modifier.fillMaxSize()) {
                 val pad = PAD_DP.dp.toPx()
                 drawLine(line, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 1.dp.toPx())
-                val firstTick = (zoom.scrollMs / tick).toLong() * tick
+                val firstTick = (zoom.scrollMs.coerceAtLeast(0.0) / tick).toLong() * tick
                 var t = firstTick
                 val end = zoom.timeAt(spanWidth + PAD_DP)
                 while (t <= minOf(end, totalMs.toDouble() + tick)) {
@@ -839,7 +1321,7 @@ private fun Ruler(
                 }
             }
             // Labels at each tick, as text so they scale with the font.
-            val firstTick = (zoom.scrollMs / tick).toLong() * tick
+            val firstTick = (zoom.scrollMs.coerceAtLeast(0.0) / tick).toLong() * tick
             var t = firstTick
             val end = zoom.timeAt(spanWidth + PAD_DP)
             while (t <= minOf(end, totalMs.toDouble())) {
@@ -884,24 +1366,141 @@ private fun Playhead(
 
 @Composable
 private fun RowHeader(
-    type: RowType,
+    row: TimelineRow,
+    selected: Boolean,
     metrics: RowMetrics,
+    shown: List<TimelineRow>,
+    allKeys: List<String>,
+    actions: TimelineActions,
 ) {
-    val (icon, name) = rowLook(type)
-    val label = stringResource(name)
-    // The icon alone; its row's name is what TalkBack reads. A long-press here is kept for
-    // the row menu (cm-tracks), so there is no tooltip.
+    val (icon, _) = rowLook(row.type)
+    val label = rowName(row)
+    val state = rowState(row, selected)
+    val index = shown.indexOfFirst { it.key == row.key }
+    val moveUp = stringResource(R.string.row_move_up)
+    val moveDown = stringResource(R.string.row_move_down)
+    val menu = stringResource(R.string.row_menu)
+    val primary = MaterialTheme.colorScheme.primary
+    // The icon alone; its row's name is what TalkBack reads. A long-press here is the row menu or,
+    // moved, a row drag, so there is no tooltip. Taps and drags come through the timeline's own
+    // handler; these semantics give TalkBack the same actions.
     Box(
         Modifier
             .width(metrics.headerDp.dp)
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .testTag(if (type == RowType.MAIN) TIMELINE_MAIN_HEADER_TAG else headerTag(type))
-            .semantics { contentDescription = label },
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(if (selected) Modifier.border(BorderStroke(2.dp, primary)) else Modifier)
+            .testTag(rowHeaderTag(row.key))
+            .semantics {
+                contentDescription = label
+                if (state.isNotEmpty()) stateDescription = state
+                role = Role.Button
+                this.selected = selected
+                onClick {
+                    actions.selectRow(row.key)
+                    true
+                }
+                onLongClick(menu) {
+                    actions.rowMenu(row.key)
+                    true
+                }
+                customActions =
+                    listOfNotNull(
+                        CustomAccessibilityAction(moveUp) {
+                            actions.moveRow(row.key, shownStep(allKeys, shown, row.key, -1))
+                            true
+                        }.takeIf { index > 0 },
+                        CustomAccessibilityAction(moveDown) {
+                            actions.moveRow(row.key, shownStep(allKeys, shown, row.key, 1))
+                            true
+                        }.takeIf { index in 0 until shown.lastIndex },
+                    )
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp).alpha(if (row.enabled) 1f else 0.5f),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        row.stack?.takeIf { it.count > 1 }?.let { StackBadge(it, Modifier.align(Alignment.TopEnd).padding(4.dp)) }
+        if (row.muted) {
+            Icon(
+                painterResource(R.drawable.ic_volume_off),
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(14.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+}
+
+/**
+ * "Move row up" or "down" by one SHOWN row (rows folded away keep their
+ * places): the screen-order index, with the row taken out, for `moveRow`.
+ */
+fun shownStep(
+    allKeys: List<String>,
+    shown: List<TimelineRow>,
+    key: String,
+    step: Int,
+): Int {
+    val keys = shown.map { it.key }
+    val i = keys.indexOf(key)
+    return RowOrder.fullIndex(allKeys, keys, key, (i + step).coerceIn(0, keys.lastIndex))
+}
+
+/**
+ * Three small bars, the one for this row's part of the stack (top, middle or
+ * bottom third) filled: where the row is drawn in the video, at a glance.
+ * Drawn only; the header's state says it in words.
+ */
+@Composable
+private fun StackBadge(
+    place: StackPlace,
+    modifier: Modifier,
+) {
+    val on = MaterialTheme.colorScheme.primary
+    val off = MaterialTheme.colorScheme.outlineVariant
+    // 0 is the bottom bar, 2 the top one.
+    val level = if (place.count <= 1) 2 else ((place.below * 3) / place.count).coerceIn(0, 2)
+    Canvas(modifier.size(width = 10.dp, height = 10.dp).clearAndSetSemantics { }) {
+        val h = size.height / 5
+        for (bar in 0..2) {
+            val y = size.height - (bar * 2 + 1) * h
+            drawRect(if (bar == level) on else off, topLeft = Offset(0f, y), size = Size(size.width, h))
+        }
+    }
+}
+
+/** A row's name for TalkBack: "Text", or "Text 2" when there are several. */
+@Composable
+fun rowName(row: TimelineRow): String {
+    val base = stringResource(rowLook(row.type).second)
+    return row.number?.let { stringResource(R.string.timeline_item_numbered, base, it) } ?: base
+}
+
+/** What TalkBack says about a row besides its name: where it is drawn, and whether it is off or muted. */
+@Composable
+private fun rowState(
+    row: TimelineRow,
+    selected: Boolean,
+): String {
+    val parts = mutableListOf<String>()
+    if (selected) parts += stringResource(R.string.timeline_selected)
+    row.stack?.let { s ->
+        parts +=
+            when {
+                s.count <= 1 -> return@let
+                s.below == s.count - 1 -> stringResource(R.string.stack_on_top)
+                s.below == 0 -> stringResource(R.string.stack_at_bottom)
+                else -> pluralStringResource(R.plurals.stack_above_rows, s.below, s.below)
+            }
+    }
+    if (!row.enabled) parts += stringResource(R.string.row_off)
+    if (row.muted) parts += stringResource(R.string.row_muted)
+    return parts.joinToString(stringResource(R.string.list_separator))
 }
 
 fun rowLook(type: RowType): Pair<Int, Int> =
@@ -915,10 +1514,45 @@ fun rowLook(type: RowType): Pair<Int, Int> =
         RowType.SOUND -> R.drawable.ic_volume_up to R.string.timeline_row_sound
     }
 
+/** The name of an item on a row other than MAIN, as TalkBack says it. */
+fun rowClipName(
+    kind: RowClipKind,
+    rowType: RowType,
+): Int =
+    when (kind) {
+        RowClipKind.TEXT -> R.string.timeline_row_text
+        RowClipKind.PHOTO -> R.string.editor_item_photo
+        RowClipKind.VIDEO -> R.string.editor_item_video
+        RowClipKind.OVERLAY -> R.string.timeline_row_frame
+        RowClipKind.SOUND -> rowLook(rowType).second
+    }
+
+private fun rowClipIcon(
+    kind: RowClipKind,
+    rowType: RowType,
+): Int =
+    when (kind) {
+        RowClipKind.PHOTO -> R.drawable.ic_image
+        RowClipKind.VIDEO -> R.drawable.ic_videocam
+        else -> rowLook(rowType).first
+    }
+
+/** How much of a caption's words are drawn on its item and read with it. */
+private const val TEXT_SHOWN = 60
+
+/**
+ * A row other than MAIN: its items at their times, each one a TalkBack stop
+ * that selects it (and, held, opens its menu). The item being dragged moves
+ * with the finger in time; the row it would land on is outlined.
+ */
 @Composable
-private fun OtherRowContent(
+private fun TimedRowContent(
     row: TimelineRow,
     zoom: ZoomState,
+    selected: ClipId?,
+    playheadMs: Long,
+    drag: TimedDragPreview?,
+    actions: TimelineActions,
 ) {
     val media = LocalMediaColors.current
     val (fill, on) =
@@ -928,29 +1562,161 @@ private fun OtherRowContent(
             RowType.PIP -> media.visualClip to media.onVisualClip
             else -> media.audioClip to media.onAudioClip
         }
+    val primary = MaterialTheme.colorScheme.primary
+    val selectedLabel = stringResource(R.string.timeline_selected)
+    val playingLabel = stringResource(R.string.editor_item_current)
+    val menuLabel = stringResource(R.string.row_menu)
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
-        for ((start, end) in row.clips) {
-            val x = PAD_DP + zoom.xOf(start.toDouble())
-            val w = (end - start) / zoom.msPerDp
+        for (clip in row.clips) {
+            val dragged = drag?.id == clip.id
+            val x = PAD_DP + zoom.xOf(clip.startMs.toDouble()) + if (dragged) drag.dxDp else 0.0
+            val w = (clip.endMs - clip.startMs) / zoom.msPerDp
             if (x + w < -64 || w <= 0) continue
+            val isSelected = clip.id == selected
+            val words = clip.text?.takeIf { it.isNotBlank() }?.take(TEXT_SHOWN)
+            val kind = stringResource(rowClipName(clip.kind, row.type))
+            val name = if (words != null) stringResource(R.string.timeline_named_item, kind, words) else kind
+            val description =
+                stringResource(
+                    R.string.timeline_timed_item_description,
+                    name,
+                    durationText(clip.startMs * 1000),
+                    durationText(clip.endMs * 1000),
+                )
+            val playing = playheadMs in clip.startMs until clip.endMs
             Box(
                 Modifier
-                    .offset(x = x.dp)
+                    .offset { IntOffset((x * density).roundToInt(), 0) }
                     // An item can be far wider than the screen when zoomed in: never squeezed to the row's width.
                     .wrapContentWidth(Alignment.Start, unbounded = true)
-                    .width(w.dp)
+                    .width(w.coerceAtLeast(2.0).dp)
                     .fillMaxHeight()
-                    .padding(vertical = 6.dp)
+                    .zIndex(if (dragged) 1f else 0f)
+                    .testTag(clipTag(clip.id))
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = description
+                        role = Role.Button
+                        this.selected = isSelected
+                        if (isSelected) {
+                            stateDescription = selectedLabel
+                        } else if (playing) {
+                            stateDescription = playingLabel
+                        }
+                        onClick {
+                            actions.select(clip.id)
+                            true
+                        }
+                        onLongClick(menuLabel) {
+                            actions.menu(clip.id)
+                            true
+                        }
+                    }.padding(vertical = 5.dp, horizontal = 1.dp)
+                    .then(if (dragged) Modifier.shadow(8.dp, RoundedCornerShape(6.dp)) else Modifier)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(if (row.enabled) fill else fill.copy(alpha = 0.4f)),
+                    .background(if (row.enabled) fill else fill.copy(alpha = 0.4f))
+                    .then(if (isSelected) Modifier.border(BorderStroke(3.dp, primary), RoundedCornerShape(6.dp)) else Modifier),
             ) {
-                Icon(
-                    painterResource(rowLook(row.type).first),
-                    contentDescription = null,
-                    tint = on,
-                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 6.dp).size(18.dp),
-                )
+                Row(
+                    Modifier.align(Alignment.CenterStart).padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painterResource(rowClipIcon(clip.kind, row.type)),
+                        contentDescription = null,
+                        tint = on,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    if (words != null && w >= 48) {
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            words,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = on,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clearAndSetSemantics { },
+                        )
+                    }
+                }
             }
+        }
+    }
+}
+
+/** How every "+" looks: a small tonal circle with a thin outline, calm next to the items. */
+@Composable
+private fun PlusCircle() {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.size(TimelineGeometry.PLUS_DP.dp),
+    ) {
+        Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.padding(3.dp))
+    }
+}
+
+/** The "+" of an empty row (24 dp drawn, 48 dp to touch): Add here, at the playhead. */
+@Composable
+private fun RowAddButton(
+    row: TimelineRow,
+    xDp: Double,
+    actions: TimelineActions,
+) {
+    val description = stringResource(R.string.add_here_title, rowName(row))
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .offset(x = (PAD_DP + xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp)
+                .size(TimelineGeometry.PLUS_HIT_DP.dp)
+                .align(Alignment.CenterStart)
+                .testTag(rowAddTag(row.key))
+                .semantics {
+                    contentDescription = description
+                    role = Role.Button
+                    onClick {
+                        actions.addHere(row.key)
+                        true
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            PlusCircle()
+        }
+    }
+}
+
+/** A "+" on a row other than MAIN (24 dp drawn, 48 dp to touch), centred on its item's edge. */
+@Composable
+private fun TimedPlusButton(
+    p: TimedPlus,
+    row: TimelineRow,
+    actions: TimelineActions,
+) {
+    val clip = row.clips.firstOrNull { it.id == p.anchor } ?: return
+    val kind = stringResource(rowClipName(clip.kind, row.type))
+    val words = clip.text?.takeIf { it.isNotBlank() }?.take(TEXT_SHOWN)
+    val name = if (words != null) stringResource(R.string.timeline_named_item, kind, words) else kind
+    val description = stringResource(if (p.side == InsertSide.BEFORE) R.string.timeline_add_before else R.string.timeline_add_after, name)
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .offset(x = (PAD_DP + p.xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp)
+                .size(TimelineGeometry.PLUS_HIT_DP.dp)
+                .align(Alignment.CenterStart)
+                .testTag(timedPlusTag(p.anchor, p.side))
+                .semantics {
+                    contentDescription = description
+                    role = Role.Button
+                    onClick {
+                        actions.insert(p.anchor, p.side)
+                        true
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            PlusCircle()
         }
     }
 }
@@ -1272,16 +2038,7 @@ private fun PlusButton(
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shadowElevation = 2.dp,
-                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.size(TimelineGeometry.PLUS_DP.dp),
-                ) {
-                    Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.padding(2.dp))
-                }
+                PlusCircle()
             }
         }
     }

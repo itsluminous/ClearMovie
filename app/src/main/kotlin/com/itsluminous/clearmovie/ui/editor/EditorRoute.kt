@@ -56,6 +56,8 @@ import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Side
+import com.itsluminous.clearmovie.domain.model.TrackId
+import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.ui.components.PlayFileDialog
 import com.itsluminous.clearmovie.ui.components.WorkDialog
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
@@ -118,6 +120,21 @@ fun EditorRoute(
         }
     }
 
+    // Music, voice and overlay videos come from Files: several at once, as photos and videos do from the gallery.
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { taken(it) }
+
+    /** Opens what a row of [type] takes things from: the gallery, or Files for sounds and overlay videos. */
+    fun pickFor(
+        type: TrackType?,
+        purpose: IntakePurpose,
+    ) = pick(purpose) {
+        when (type) {
+            TrackType.AUDIO -> pickFiles.launch(arrayOf("audio/*"))
+            TrackType.OVERLAY -> pickFiles.launch(arrayOf("video/*"))
+            else -> pickMany.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+        }
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.events.collect {
             when (it) {
@@ -130,6 +147,7 @@ fun EditorRoute(
                 }
 
                 is EditorEvent.Inserted -> {
+                    screen.selectedRow = null
                     screen.selected = it.first
                     screen.panel = null
                 }
@@ -145,6 +163,8 @@ fun EditorRoute(
                                 WantedFile.PHOTO_OR_VIDEO -> R.string.editor_wrong_photo_video
                                 WantedFile.VIDEO -> R.string.editor_wrong_video
                                 WantedFile.SOUND -> R.string.editor_wrong_sound
+                                WantedFile.MUSIC -> R.string.editor_wrong_music
+                                WantedFile.OVERLAY -> R.string.editor_wrong_overlay
                             },
                         ),
                     )
@@ -217,9 +237,22 @@ fun EditorRoute(
                 override fun pickForInsert(
                     anchor: ClipId,
                     side: InsertSide,
-                ) = pick(IntakePurpose.Insert(anchor, if (side == InsertSide.BEFORE) Side.BEFORE else Side.AFTER)) {
-                    pickMany.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                }
+                ) = pickFor(
+                    viewModel.ui.value.project
+                        ?.trackOf(anchor)
+                        ?.type,
+                    IntakePurpose.Insert(anchor, if (side == InsertSide.BEFORE) Side.BEFORE else Side.AFTER),
+                )
+
+                override fun pickForRow(
+                    trackId: TrackId,
+                    atMs: Long,
+                ) = pickFor(
+                    viewModel.ui.value.project
+                        ?.track(trackId)
+                        ?.type,
+                    IntakePurpose.AddToRow(trackId, atMs),
+                )
 
                 override fun pickForReplace(clipId: ClipId) {
                     val clip =

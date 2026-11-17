@@ -439,4 +439,75 @@
     <string name="transition_tile_black">Black</string>
     <string name="transition_tile_white">White</string>
     <string name="transition_tile_zoom">Zoom</string>
+    <!-- cm-tracks: rows, what shows on top in the video, and items on every row. Plain words only. -->
+    <string name="action_add_row">Row add karein</string>
+    <string name="action_add_here">Yahan add karein</string>
+    <string name="action_remove_row">Row hatayein</string>
+    <string name="action_mute_row">Row ki awaaz band</string>
+    <string name="action_lower_music">Baat hone par music dheema</string>
+    <string name="action_frame_on">Frame dikhayein</string>
+    <string name="action_move_earlier">Pehle</string>
+    <string name="action_move_later">Baad me</string>
+    <string name="action_move_to_row">Doosri row me le jaayein</string>
+    <string name="action_fade">Fade</string>
+    <string name="action_position">Jagah</string>
+    <string name="stack_show_on_top">Sabse upar dikhayein</string>
+    <string name="stack_bring_forward">Ek upar layein</string>
+    <string name="stack_send_backward">Ek neeche bhejein</string>
+    <string name="stack_show_at_bottom">Sabse neeche dikhayein</string>
+    <string name="stack_heading">Bane hue video me</string>
+    <string name="stack_on_top">Sabke upar dikhta hai</string>
+    <string name="stack_at_bottom">Sabke neeche dikhta hai</string>
+    <string name="stack_behind_note">Yeh row ab aapke photos aur videos ke peeche hai, isliye unke chalte samay yeh nahi dikhegi.</string>
+    <string name="row_move_up">Row upar karein</string>
+    <string name="row_move_down">Row neeche karein</string>
+    <string name="row_heading">Is screen par</string>
+    <string name="row_menu">Menu kholein</string>
+    <string name="row_off">Band hai</string>
+    <string name="row_muted">Awaaz band</string>
+    <string name="list_separator">", "</string>
+    <string name="timeline_named_item">%1$s: %2$s</string>
+    <string name="timeline_timed_item_description">%1$s, %2$s se %3$s tak</string>
+    <string name="add_here_title">%1$s me add karein</string>
+    <string name="insert_new_text">Naya text</string>
+    <string name="insert_new_text_body">Video par likhe shabd, 3 second ke liye</string>
+    <string name="insert_pip_body">Aapki gallery se, kone me chhota dikhega</string>
+    <string name="insert_sound">Music ya sound</string>
+    <string name="insert_sound_body">Aapki files se</string>
+    <string name="insert_overlay">Frame video</string>
+    <string name="insert_overlay_body">Aapki files se. Iske green hisson me neeche ka video dikhega.</string>
+    <string name="text_title">Video par text</string>
+    <string name="fade_title">Fade</string>
+    <string name="fade_in">Shuru me fade: %1$s</string>
+    <string name="fade_out">Aakhir me fade: %1$s</string>
+    <string name="pip_title">Kahan dikhe</string>
+    <string name="pip_top_left">Upar left</string>
+    <string name="pip_top_right">Upar right</string>
+    <string name="pip_bottom_left">Neeche left</string>
+    <string name="pip_bottom_right">Neeche right</string>
+    <string name="pip_size">Size: %1$d%%</string>
+    <string name="move_row_busy">Is samay bhari hai, isliye nayi row me jaayega</string>
+    <string name="move_new_row">Nayi row</string>
+    <string name="move_new_row_body">Iska samay wahi rahega</string>
+    <string name="add_row_title">Row add karein</string>
+    <string name="add_row_text_body">Video par shabdon ke liye</string>
+    <string name="add_row_pip_body">Kone me chhote photos aur videos ke liye</string>
+    <string name="add_row_frame_body">Green window wale frame videos ke liye</string>
+    <string name="add_row_music_body">Peeche chalne wale music ke liye</string>
+    <string name="add_row_voice_body">Kisi ke bolne ke liye</string>
+    <string name="remove_row_title">%1$s hatayein?</string>
+    <string name="editor_wrong_overlay">Please frame ke liye ek video chunein.</string>
+    <string name="editor_wrong_music">Please music ya sound file chunein.</string>
+    <!-- %1$d is how many picture rows are drawn under this one. -->
+    <plurals name="stack_above_rows">
+        <item quantity="one">%1$d row ke upar dikhta hai</item>
+        <item quantity="other">%1$d rows ke upar dikhta hai</item>
+    </plurals>
+    <!-- %1$d is how many items are on the row. -->
+    <plurals name="remove_row_body">
+        <item quantity="one">Iska %1$d item bhi hat jaayega. Aap ise undo kar sakte hain.</item>
+        <item quantity="other">Iske %1$d items bhi hat jaayenge. Aap inhe undo kar sakte hain.</item>
+    </plurals>
+    <!-- Short label in the bar: adds photos and videos at the end. -->
+    <string name="bar_add_media">Photos add karein</string>
 </resources>

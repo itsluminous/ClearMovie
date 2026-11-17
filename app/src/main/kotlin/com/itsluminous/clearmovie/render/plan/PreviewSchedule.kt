@@ -23,7 +23,10 @@ import com.itsluminous.clearmovie.domain.model.TrackId
  *   and the preview draws the transition from the same [PictureMotion] the
  *   export does.
  * - [overlays]: each OVERLAY row with video (the frame) as a muted player of
- *   its own, drawn over MAIN in stacking order and keyed.
+ *   its own, drawn in stacking order and keyed; and each picture-in-picture
+ *   row the same way, unkeyed, its videos played in their corner and its
+ *   photos drawn there as [Lane.stills]. A picture-in-picture video's sound
+ *   is one of the [sounds].
  * - [sounds]: every sound row (music, voice, the closing message) as an
  *   audio-only player; the MAIN row's own sound comes from the MAIN player,
  *   at [mainGainDbAt].
@@ -136,12 +139,32 @@ data class PreviewSchedule(
         ) : MainContent
     }
 
-    /** A follower player's playlist: plays and silent gaps that add up to the video's length. */
+    /**
+     * A follower player's playlist: plays and silent gaps that add up to the
+     * video's length. [stills] are the row's pictures that are not videos
+     * (picture-in-picture photos), drawn by the preview itself in the gaps.
+     */
     data class Lane(
         val trackId: TrackId,
         val entries: List<LaneEntry>,
+        val stills: List<StillEntry> = emptyList(),
     ) {
         fun indexAt(us: Long): Int = laneIndexAt(entries, us)
+
+        fun stillAt(us: Long): StillEntry? = stills.firstOrNull { us >= it.startUs && us < it.endUs }
+
+        /** Whether anything on this row is drawn at all. */
+        val drawsAnything: Boolean get() = stills.isNotEmpty() || entries.any { it is LaneEntry.Play }
+    }
+
+    /** A picture the preview draws itself on a follower's row: [source] at [placement], from [startUs]. */
+    data class StillEntry(
+        val startUs: Long,
+        val durationUs: Long,
+        val source: Source,
+        val placement: Placement,
+    ) {
+        val endUs: Long get() = startUs + durationUs
     }
 
     data class SoundLane(
@@ -228,9 +251,10 @@ data class PreviewSchedule(
                         Unit
                     }
 
-                    LayerRole.OVERLAY -> {
+                    // A frame row and a picture-in-picture row both follow MAIN in a player of their own.
+                    LayerRole.OVERLAY, LayerRole.VISUAL -> {
                         val lane = overlayLane(layer, total)
-                        if (lane.entries.any { it is LaneEntry.Play }) {
+                        if (lane.drawsAnything) {
                             order += LayerRef.Overlay(overlays.size)
                             overlays += lane
                         }
@@ -248,20 +272,16 @@ data class PreviewSchedule(
                             captions += mine
                         }
                     }
-
-                    // Picture-in-picture rows arrive with cm-tracks; the exact draft shows them meanwhile.
-                    LayerRole.VISUAL -> {
-                        Unit
-                    }
                 }
             }
             val mainSounds =
                 plan.audio
                     .filter { it.role == AudioLayerRole.CLIP && it.trackId == mainTrack }
                     .flatMap { it.segments.filterIsInstance<AudioSegment.Sound>() }
+            // MAIN's own sound plays in the MAIN player; every other row's (a picture-in-picture video's too) in one of its own.
             val sounds =
                 plan.audio
-                    .filter { it.role != AudioLayerRole.CLIP }
+                    .filter { it.role != AudioLayerRole.CLIP || it.trackId != mainTrack }
                     .map { SoundLane(it.trackId, it.role, soundEntries(it, total)) }
                     .filter { lane -> lane.entries.any { it is LaneEntry.Play } }
             val (main, tail) = mainEntries(mainLayers, total, mainSounds)
@@ -431,7 +451,12 @@ data class PreviewSchedule(
                         LaneEntry.Gap(seg.startUs, seg.durationUs)
                     }
                 }
-            return Lane(layer.trackId, covered(entries, total))
+            val stills =
+                layer.segments
+                    .filterIsInstance<VisualSegment.Picture>()
+                    .filter { it.source is Source.Photo || it.source is Source.VideoFrame }
+                    .map { StillEntry(it.startUs, it.durationUs, it.source, it.placement) }
+            return Lane(layer.trackId, covered(entries, total), stills)
         }
 
         private fun soundEntries(

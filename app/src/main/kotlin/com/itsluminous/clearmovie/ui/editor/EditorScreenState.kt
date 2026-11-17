@@ -8,6 +8,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.LayoutEvent
 import com.itsluminous.clearmovie.ui.editor.timeline.PopupCorner
@@ -42,17 +43,47 @@ enum class Panel {
 
     /** The item's start, end and during animations (cm-effects). */
     ANIMATION,
+
+    /** A long-press on a row's icon (or its empty space) without moving: stacking, Add here, Mute, Remove row. */
+    ROW_MENU,
+
+    /** "Add row": which kind of row. */
+    ADD_ROW,
+
+    /** The words of a new caption (at a "+" or "Add here"), or of the selected one. */
+    TEXT,
+
+    /** Trim for a sound. */
+    SOUND_TRIM,
+
+    /** Fade in and out for a sound. */
+    FADE,
+
+    /** Where a picture-in-picture item sits, and how big. */
+    PIP_PLACE,
+
+    /** "Move to another row". */
+    MOVE_TO_ROW,
+
+    /** "Remove row" on a row that still has items: asks first. */
+    REMOVE_ROW,
 }
 
-/** An open panel: what it is about ([clipId]) and, for an insert, where the new item goes. */
+/**
+ * An open panel: what it is about ([clipId], or row [trackId] for the row's
+ * own panels) and, for an insert, where the new item goes. An insert with a
+ * [trackId] and no [clipId] is "Add here" on that row, at the playhead.
+ */
 data class OpenPanel(
     val panel: Panel,
-    val clipId: ClipId,
+    val clipId: ClipId? = null,
     val side: InsertSide? = null,
+    val trackId: TrackId? = null,
 )
 
 /**
- * The editor's on-screen state (ARCHITECTURE section 11.11): the selection,
+ * The editor's on-screen state (ARCHITECTURE section 11.11): the selected
+ * item or row,
  * the open panel or menu, the zoom and scroll, whether all rows were asked
  * for and the floating preview's corner. All of it is saved with the screen,
  * so a rotation, a recreation or a process death brings it back; the
@@ -65,8 +96,17 @@ class EditorScreenState(
     zoom: ZoomState? = null,
     allRowsRequested: Boolean = false,
     corner: PopupCorner = PopupCorner.BOTTOM_END,
+    selectedRow: TrackId? = null,
+    behindNoteShown: Boolean = false,
 ) {
+    /** The selected item, on any row. */
     var selected by mutableStateOf(selected)
+
+    /** The selected row (its icon was tapped); never set together with [selected]. */
+    var selectedRow by mutableStateOf(selectedRow)
+
+    /** Whether "This row is now behind your photos and videos" was said (once per editor). */
+    var behindNoteShown by mutableStateOf(behindNoteShown)
     var panel by mutableStateOf(panel)
     var zoom by mutableStateOf(zoom)
     var layout by mutableStateOf(PreviewLayoutState(allRowsRequested = allRowsRequested, corner = corner))
@@ -93,6 +133,9 @@ class EditorScreenState(
                         s.zoom?.fitAll,
                         s.layout.allRowsRequested,
                         s.layout.corner.name,
+                        s.selectedRow?.value,
+                        s.panel?.trackId?.value,
+                        s.behindNoteShown,
                     )
                 },
                 restore = { saved ->
@@ -100,10 +143,16 @@ class EditorScreenState(
                     val v = saved as List<Any?>
                     val panelName = v[1] as String?
                     val panelClip = v[2] as String?
+                    val panelTrack = v.getOrNull(10) as String?
                     val panel =
-                        if (panelName != null && panelClip != null) {
+                        if (panelName != null && (panelClip != null || panelTrack != null)) {
                             runCatching {
-                                OpenPanel(Panel.valueOf(panelName), ClipId(panelClip), (v[3] as String?)?.let { InsertSide.valueOf(it) })
+                                OpenPanel(
+                                    Panel.valueOf(panelName),
+                                    panelClip?.let(::ClipId),
+                                    (v[3] as String?)?.let { InsertSide.valueOf(it) },
+                                    panelTrack?.let(::TrackId),
+                                )
                             }.getOrNull()
                         } else {
                             null
@@ -115,6 +164,8 @@ class EditorScreenState(
                         zoom = msPerDp?.let { ZoomState(it, v[5] as Double, v[6] as Boolean) },
                         allRowsRequested = v[7] as Boolean,
                         corner = runCatching { PopupCorner.valueOf(v[8] as String) }.getOrDefault(PopupCorner.BOTTOM_END),
+                        selectedRow = (v.getOrNull(9) as String?)?.let { runCatching { TrackId(it) }.getOrNull() },
+                        behindNoteShown = v.getOrNull(11) as Boolean? ?: false,
                     )
                 },
             )

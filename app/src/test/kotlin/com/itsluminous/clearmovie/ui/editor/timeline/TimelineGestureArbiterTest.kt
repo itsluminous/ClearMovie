@@ -71,6 +71,33 @@ class TimelineGestureArbiterTest {
     }
 
     @Test
+    fun `once held, a shake under twice the slop still opens the menu`() {
+        val a = arbiter()
+        a.down(1, 100.0, 50.0, 0, GestureStart.HEADER)
+        assertThat(a.tick(500)).isEqualTo(GestureMode.LONG_PRESSED)
+        // 12 dp: past the 8 dp slop, under the 16 dp a held finger needs to drag.
+        assertThat(a.move(1, 100.0, 62.0, 600)).isEqualTo(GestureMode.LONG_PRESSED)
+        assertThat(a.up(1, 700)).isEqualTo(GestureMode.MENU)
+        val b = arbiter()
+        b.down(1, 100.0, 50.0, 0, GestureStart.HEADER)
+        b.tick(500)
+        assertThat(b.move(1, 100.0, 70.0, 600)).isEqualTo(GestureMode.DRAG)
+        assertThat(b.up(1, 700)).isEqualTo(GestureMode.ENDED)
+    }
+
+    @Test
+    fun `a row's empty space held then moved scrolls, and held then let go opens the menu`() {
+        val a = arbiter()
+        a.down(1, 100.0, 50.0, 0, GestureStart.ROW)
+        assertThat(a.tick(500)).isEqualTo(GestureMode.LONG_PRESSED)
+        assertThat(a.move(1, 160.0, 50.0, 600)).isEqualTo(GestureMode.SCROLL)
+        val b = arbiter()
+        b.down(1, 100.0, 50.0, 0, GestureStart.ROW)
+        b.tick(500)
+        assertThat(b.up(1, 700)).isEqualTo(GestureMode.MENU)
+    }
+
+    @Test
     fun `handles beat items, so movement from a handle trims, never scrolls, and a hold does not lift`() {
         val a = arbiter()
         a.down(1, 100.0, 50.0, 0, GestureStart.TRIM_END)

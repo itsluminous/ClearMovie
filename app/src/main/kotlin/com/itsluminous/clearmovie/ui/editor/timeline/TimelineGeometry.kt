@@ -78,15 +78,11 @@ sealed interface HitTarget {
  * top of the ruler. It decides where the clips, the trim handles and the "+"
  * points go, and what a touch hits. Pure, so the rules are tested on the JVM:
  *
- * - One "+" per boundary where two items touch, half over each side. Never
- *   before the intro or after the ending.
- * - A "+" shows on every boundary when the items on both sides are at least
- *   [PLUS_ROOM_DP] wide; below that only around the selected item and on a
- *   boundary under the playhead.
+ * - One "+" at the end of the row, and one on each side of the selected item
+ *   only (see [plusPoints]). Never before the intro or after the ending.
  * - On the selected item the trim handles take its inner edges, so its "+"
  *   points move outside it, [HANDLE_GAP_DP] clear of the handles' hit area.
- * - No two "+" hit areas overlap: the one around the selected item wins,
- *   then the one under the playhead, then the earlier one.
+ * - No two "+" hit areas overlap, and none overlaps a trim handle's.
  * - A junction with a transition has a marker in the middle of the overlap,
  *   in the lower part of the row; its "+" moves up to the row's top edge
  *   (ARCHITECTURE section 11.6), its hit area just above the marker's, so
@@ -124,9 +120,6 @@ class TimelineGeometry(
         return if (last < first) IntRange.EMPTY else first..last
     }
 
-    /** The x of boundary [b]: before item b, or after the last item. */
-    fun boundaryX(b: Int): Double = if (b < spans.size) left(b) else right(spans.lastIndex)
-
     private fun insertAllowed(b: Int): Boolean {
         if (spans.isEmpty()) return false
         val before = spans.getOrNull(b - 1)
@@ -136,10 +129,6 @@ class TimelineGeometry(
         if (after == null && before?.content == false) return false
         return true
     }
-
-    private fun anchorFor(b: Int): Pair<Int, InsertSide> = if (b > 0) (b - 1) to InsertSide.AFTER else b to InsertSide.BEFORE
-
-    private fun wideEnough(i: Int?): Boolean = i == null || i !in spans.indices || width(i) >= PLUS_ROOM_DP
 
     /** Whether items b - 1 and b overlap (a transition joins them). */
     private fun overlaps(b: Int): Boolean = b in 1 until spans.size && spans[b - 1].endMs > spans[b].startMs
@@ -173,61 +162,57 @@ class TimelineGeometry(
     /** The centre of a marker's hit area: right under a lifted "+", so the two hit areas touch and never overlap. */
     val markerCentre: Double get() = mainTop + PLUS_HIT_DP / 2 + MARKER_HIT_DP / 2
 
-    /** The "+" points to draw. */
+    /**
+     * The "+" points to draw (the owner's rule, replacing cm-timeline's):
+     * - one at the end of the row: after the last photo, video or card, or
+     *   after the intro when there are none yet;
+     * - on the selected item only, one on each side, placed beyond its trim
+     *   handles so neither touch area overlaps a handle's;
+     * - none between unselected items.
+     * A "+" whose hit area would touch a transition marker's moves up to the
+     * row's top edge at the same x (section 11.6). A side "+" past the end of
+     * the view is left out: selecting moves the view so it shows (TimelineView),
+     * and the item's menu has Add before and Add after.
+     */
     fun plusPoints(): List<PlusPoint> {
         val markers = markers()
         if (spans.isEmpty()) return emptyList()
         val sel = selected?.takeIf { it in spans.indices }
-        val candidates = mutableListOf<Pair<PlusPoint, Int>>() // point to priority (lower wins)
-        val playheadX = zoom.xOf(playheadMs)
-        for (b in 0..spans.size) {
-            if (!insertAllowed(b)) continue
-            val x = boundaryX(b)
-            val (anchor, side) = anchorFor(b)
-            val aroundSelected = sel != null && (b == sel || b == sel + 1)
-            val underPlayhead = abs(playheadX - x) <= PLUS_HIT_DP / 2
-            val roomy = wideEnough(b - 1) && wideEnough(b)
-            if (!aroundSelected && !underPlayhead && !roomy) continue
-            val marker = markers.firstOrNull { it.boundary == b }
-            if (marker != null) {
-                // Over the marker, at its x: never on it, and clear of the trim handles as it is.
-                val (a, sd) = if (aroundSelected) sel!! to (if (b == sel) InsertSide.BEFORE else InsertSide.AFTER) else anchor to side
-                candidates += PlusPoint(b, a, sd, marker.xDp, displaced = false, top = true) to if (aroundSelected) 0 else 1
-                continue
-            }
-            if (aroundSelected) {
-                // Around the selected item the "+" always inserts next to it; with trim
-                // handles it moves outside the item, on the neighbour's side.
-                val s = if (b == sel) InsertSide.BEFORE else InsertSide.AFTER
-                val outward = if (b == sel) -1.0 else 1.0
-                val px = if (selectedTrimmable) x + outward * DISPLACE_DP else x
-                candidates += PlusPoint(b, sel!!, s, px, displaced = selectedTrimmable) to 0
-            } else {
-                candidates += PlusPoint(b, anchor, side, x, displaced = false) to if (underPlayhead) 1 else 2
-            }
-        }
-        // No other "+" may come within the gap of a trim handle's hit area (the selected
-        // item's own are placed clear of them already).
+        val out = mutableListOf<PlusPoint>()
         val handles = handleHitAreas()?.toList().orEmpty()
+        val half = PLUS_HIT_DP / 2
 
-        fun clearOfHandles(p: PlusPoint): Boolean =
-            handles.all { h ->
-                p.xDp + PLUS_HIT_DP / 2 + HANDLE_GAP_DP <= h.start ||
-                    p.xDp - PLUS_HIT_DP / 2 - HANDLE_GAP_DP >= h.endInclusive
+        fun clearOfHandles(x: Double) =
+            handles.all { h -> x + half + HANDLE_GAP_DP <= h.start || x - half - HANDLE_GAP_DP >= h.endInclusive }
+
+        fun onScreen(x: Double) = x - half >= -EDGE_ROOM_DP - EPS && x + half <= widthDp + EDGE_ROOM_DP + EPS
+        if (sel != null) {
+            val outward = if (selectedTrimmable) DISPLACE_DP else 0.0
+            val before = left(sel) - outward
+            val after = right(sel) + outward
+            if (insertAllowed(sel) && onScreen(before)) out += PlusPoint(sel, sel, InsertSide.BEFORE, before, displaced = selectedTrimmable)
+            if (insertAllowed(sel + 1) &&
+                onScreen(after)
+            ) {
+                out += PlusPoint(sel + 1, sel, InsertSide.AFTER, after, displaced = selectedTrimmable)
             }
-        val kept = mutableListOf<PlusPoint>()
-        for ((candidate, priority) in candidates.sortedWith(compareBy({ it.second }, { it.first.boundary }))) {
-            // A "+" on the centre line that would touch a marker's hit area goes up to the top edge.
-            val point =
-                if (!candidate.top && markers.any { abs(it.xDp - candidate.xDp) < (PLUS_HIT_DP + MARKER_HIT_DP) / 2 }) {
-                    candidate.copy(top = true)
-                } else {
-                    candidate
-                }
-            if ((priority > 0 || point.top) && !clearOfHandles(point)) continue
-            if (kept.none { it.top == point.top && abs(it.xDp - point.xDp) < PLUS_HIT_DP }) kept += point
         }
-        return kept.sortedBy { it.boundary }
+        val lastContent = spans.indexOfLast { it.content }
+        val end =
+            when {
+                lastContent >= 0 -> PlusPoint(lastContent + 1, lastContent, InsertSide.AFTER, right(lastContent), displaced = false)
+                insertAllowed(1) -> PlusPoint(1, 0, InsertSide.AFTER, right(0), displaced = false)
+                insertAllowed(0) -> PlusPoint(0, 0, InsertSide.BEFORE, left(0), displaced = false)
+                else -> null
+            }
+        // The selected item's own "+" already covers the end when it is the last one.
+        if (end != null && out.none { it.boundary == end.boundary || abs(it.xDp - end.xDp) < PLUS_HIT_DP } && clearOfHandles(end.xDp)) {
+            out += end
+        }
+        // Never on a transition marker: a "+" that would touch one goes up to the row's top edge.
+        return out
+            .map { p -> if (markers.any { abs(it.xDp - p.xDp) < (PLUS_HIT_DP + MARKER_HIT_DP) / 2 }) p.copy(top = true) else p }
+            .sortedBy { it.boundary }
     }
 
     /** The trim handles' hit areas (x ranges) on the selected item, or null. */
@@ -245,10 +230,16 @@ class TimelineGeometry(
         y: Double,
     ): HitTarget {
         // The "+" points and markers come first, over whatever is under them (a lifted "+" reaches above the row).
+        // The end "+" sits on an item's edge. Over a narrow item (under two "+" wide) it takes only taps on
+        // its circle, so that item can still be selected; everywhere else it has its full 48 dp.
+        val under = spans.indices.firstOrNull { x >= left(it) && x < right(it) }
         val plus =
             plusPoints()
-                .filter { abs(it.xDp - x) <= PLUS_HIT_DP / 2 && abs(y - plusCentreY(it)) <= PLUS_HIT_DP / 2 }
-                .minByOrNull { abs(it.xDp - x) }
+                .filter {
+                    val narrow = under != null && !it.displaced && !it.top && width(under) < 2 * PLUS_HIT_DP
+                    val reach = if (narrow) PLUS_CORE_DP else PLUS_HIT_DP / 2
+                    abs(it.xDp - x) <= reach && abs(y - plusCentreY(it)) <= PLUS_HIT_DP / 2
+                }.minByOrNull { abs(it.xDp - x) }
         if (plus != null) return HitTarget.Plus(plus)
         val marker =
             markers()
@@ -275,8 +266,6 @@ class TimelineGeometry(
     }
 
     companion object {
-        /** A "+" shows on every boundary once both neighbours are this wide on screen. */
-        const val PLUS_ROOM_DP = 64.0
         const val PLUS_DP = 24.0
         const val PLUS_HIT_DP = 48.0
         const val HANDLE_DP = 24.0
@@ -294,6 +283,14 @@ class TimelineGeometry(
         const val DISPLACE_DP = (HANDLE_HIT_DP - HANDLE_DP) / 2 + HANDLE_GAP_DP + PLUS_HIT_DP / 2
 
         private const val OFFSCREEN_DP = 64.0
+
+        /** How far past the time span a "+" may sit: the span's padding at each end (TimelineView's PAD_DP). */
+        const val EDGE_ROOM_DP = 28.0
+
+        /** Over a narrow item, how close to the end "+" a tap must be: its drawn circle. */
+        const val PLUS_CORE_DP = 12.0
+
+        private const val EPS = 1e-6
 
         /**
          * Where a dragged content item lands: its content index among the

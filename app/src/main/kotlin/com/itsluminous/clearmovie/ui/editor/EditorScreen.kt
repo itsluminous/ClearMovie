@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -33,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,12 +48,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,14 +77,16 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.media.MediaStatus
-import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.CardClip
+import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.IntroClip
@@ -87,13 +94,16 @@ import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Project
-import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.canJoin
 import com.itsluminous.clearmovie.domain.model.deleteClip
 import com.itsluminous.clearmovie.domain.model.duplicateClip
 import com.itsluminous.clearmovie.domain.model.joinClips
+import com.itsluminous.clearmovie.domain.model.moveClip
 import com.itsluminous.clearmovie.domain.model.moveMainClip
+import com.itsluminous.clearmovie.domain.model.moveRow
+import com.itsluminous.clearmovie.domain.model.removeRow
 import com.itsluminous.clearmovie.domain.model.rotate
 import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.trimVideo
@@ -113,12 +123,13 @@ import com.itsluminous.clearmovie.ui.editor.timeline.RowType
 import com.itsluminous.clearmovie.ui.editor.timeline.SelectionKind
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
 import com.itsluminous.clearmovie.ui.editor.timeline.TimelineActions
-import com.itsluminous.clearmovie.ui.editor.timeline.TimelineRow
 import com.itsluminous.clearmovie.ui.editor.timeline.TimelineView
 import com.itsluminous.clearmovie.ui.editor.timeline.TimelineZoom
 import com.itsluminous.clearmovie.ui.editor.timeline.TrimEdge
 import com.itsluminous.clearmovie.ui.editor.timeline.TrimMath
+import com.itsluminous.clearmovie.ui.editor.timeline.ZoomState
 import com.itsluminous.clearmovie.ui.editor.timeline.itemName
+import com.itsluminous.clearmovie.ui.editor.timeline.rowName
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
 import kotlinx.coroutines.launch
@@ -131,9 +142,12 @@ const val EDITOR_PREVIEW_BOX_TAG = "editor_preview_box"
 const val EDITOR_POPUP_TAG = "editor_preview_popup"
 const val EDITOR_POPUP_CLOSE_TAG = "editor_preview_popup_close"
 const val EDITOR_POPUP_MOVE_TAG = "editor_preview_popup_move"
-const val ZOOM_IN_TAG = "zoom_in"
-const val ZOOM_OUT_TAG = "zoom_out"
-const val ZOOM_FIT_TAG = "zoom_fit_all"
+const val ZOOM_IN_TAG = "bar_action_ZOOM_IN"
+const val ZOOM_OUT_TAG = "bar_action_ZOOM_OUT"
+const val ZOOM_FIT_TAG = "bar_action_FIT_ALL"
+const val TRANSPORT_TAG = "editor_transport"
+const val PLAY_TAG = "editor_play"
+const val TIME_TAG = "editor_time"
 const val UNDO_TAG = "editor_undo"
 const val REDO_TAG = "editor_redo"
 const val EXACT_TAG = "editor_exact"
@@ -184,9 +198,16 @@ fun EditorScreen(
     val slots = ui.slots
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    // A selection or panel whose item went away (an undo, a delete) is dropped.
+    // A selection whose item or row went away (an undo, a delete) is dropped.
     val selectedSlot = slots.firstOrNull { it.clip.id == state.selected }
-    LaunchedEffect(selectedSlot == null, state.selected) { if (selectedSlot == null && state.selected != null) state.selected = null }
+    val selectedClip = state.selected?.let { project?.clip(it) }
+    val selectedTrack = state.selectedRow?.let { project?.track(it) }
+    LaunchedEffect(selectedClip == null, state.selected) { if (selectedClip == null && state.selected != null) state.selected = null }
+    LaunchedEffect(selectedTrack == null, state.selectedRow) {
+        if (selectedTrack == null && state.selectedRow != null) state.selectedRow = null
+    }
+    // The selected item's row, or the selected row: kept on screen first after MAIN when rows fold away.
+    val focusRow = selectedClip?.let { project?.trackOf(it.id)?.id } ?: selectedTrack?.id
     val playheadMs = playhead.positionUs / 1000
     val metrics = RowMetrics(LocalDensity.current.fontScale)
     val rows = project?.let { timelineRows(it) }.orEmpty()
@@ -207,7 +228,7 @@ fun EditorScreen(
         }
     }
 
-    fun deleted(clip: MainClip) {
+    fun deleted(clip: Clip) {
         // One delete's Undo at a time: an earlier one still showing goes, so it can't undo this one.
         snackbar.currentSnackbarData?.dismiss()
         deletedAt = null
@@ -232,12 +253,85 @@ fun EditorScreen(
         }
     }
 
+    // The rows the timeline shows now (measured below): Move row up and down step among these.
+    var shownRows by remember { mutableStateOf(emptyList<String>()) }
+
+    /** A stacking move, with the one-time note when it puts a row behind the photos and videos (section 6.2). */
+    fun restack(
+        trackId: TrackId,
+        move: StackMove,
+    ) {
+        val before = project ?: return
+        var behind = emptyList<TrackId>()
+        if (actions.edit { stack(trackId, move).also { behind = newlyBehindMain(before, it) } } &&
+            behind.isNotEmpty() &&
+            !state.behindNoteShown
+        ) {
+            state.behindNoteShown = true
+            scope.launch { snackbar.showSnackbar(resources.getString(R.string.stack_behind_note), duration = SnackbarDuration.Long) }
+        }
+    }
+
+    fun askRemoveRow(trackId: TrackId) {
+        val track = project?.track(trackId) ?: return
+        if (track.clips.isEmpty()) {
+            actions.edit { removeRow(trackId) }
+            state.panel = null
+        } else {
+            state.panel = OpenPanel(Panel.REMOVE_ROW, trackId = trackId)
+        }
+    }
+
+    // Read when a "+" is tapped: the actions object below outlives recompositions.
+    val mainKey = rememberUpdatedState(project?.main?.id?.value)
     val timelineActions =
         remember(actions, state) {
             object : TimelineActions {
                 override fun select(id: ClipId?) {
                     state.selected = id
-                    if (state.panel?.clipId != id) state.panel = null
+                    state.selectedRow = null
+                    if (state.panel?.clipId != id || state.panel?.trackId != null) state.panel = null
+                }
+
+                override fun selectRow(key: String) {
+                    state.selected = null
+                    state.selectedRow = TrackId(key)
+                    state.panel = null
+                }
+
+                override fun addHere(key: String) {
+                    // MAIN's one "+" (nothing on it yet) opens the gallery, as Add photos does.
+                    if (key == mainKey.value) return actions.pickToAdd()
+                    state.selected = null
+                    state.selectedRow = TrackId(key)
+                    state.panel = OpenPanel(Panel.INSERT, trackId = TrackId(key))
+                }
+
+                override fun rowMenu(key: String) {
+                    state.selected = null
+                    state.selectedRow = TrackId(key)
+                    state.panel = OpenPanel(Panel.ROW_MENU, trackId = TrackId(key))
+                }
+
+                override fun moveRow(
+                    key: String,
+                    toIndex: Int,
+                ) {
+                    // The row just moved is the one being worked on: selected, so it stays shown when rows fold away.
+                    if (actions.edit { moveRow(TrackId(key), toIndex) }) {
+                        state.selected = null
+                        state.selectedRow = TrackId(key)
+                        // A panel about an item goes with that item's selection.
+                        if (state.panel?.clipId != null) state.panel = null
+                    }
+                }
+
+                override fun moveTimed(
+                    id: ClipId,
+                    startMs: Long,
+                    toRow: String,
+                ) {
+                    actions.edit { moveClip(id, startMs, TrackId(toRow)) }
                 }
 
                 override fun seek(ms: Long) = actions.seek(ms)
@@ -269,6 +363,7 @@ fun EditorScreen(
 
                 override fun menu(id: ClipId) {
                     state.selected = id
+                    state.selectedRow = null
                     state.panel = OpenPanel(Panel.ITEM_MENU, id)
                 }
 
@@ -286,13 +381,35 @@ fun EditorScreen(
     fun onBar(action: EditAction) {
         val slot = selectedSlot
         val id = slot?.clip?.id
-        when (action) {
-            EditAction.ADD_MEDIA -> {
+        val row = selectedTrack
+        when {
+            action == EditAction.ADD_MEDIA -> {
                 actions.pickToAdd()
             }
 
-            EditAction.FIT_ALL -> {
+            action == EditAction.FIT_ALL -> {
                 fitAll(state, slots)
+            }
+
+            action == EditAction.ZOOM_IN || action == EditAction.ZOOM_OUT -> {
+                zoomButton(state, slots, playheadMs, zoomIn = action == EditAction.ZOOM_IN)
+            }
+
+            action == EditAction.ADD_ROW -> {
+                state.panel = OpenPanel(Panel.ADD_ROW, trackId = project?.main?.id)
+            }
+
+            row != null && project != null -> {
+                onRowAction(action, row, state, actions, ::restack, ::askRemoveRow, shownRows)
+            }
+
+            selectedClip != null && slot == null && project != null -> {
+                val clip = selectedClip
+                if (action == EditAction.DELETE) {
+                    if (actions.edit { deleteClip(clip.id) }) deleted(clip)
+                } else {
+                    onTimedAction(action, clip, project, state, actions)
+                }
             }
 
             else -> {
@@ -416,18 +533,14 @@ fun EditorScreen(
                     rulerDp = metrics.rulerDp,
                     rows = rows.map { RowSpec(it.key, metrics.heightOf(it.type), it.type == RowType.MAIN) },
                     toggleDp = metrics.toggleDp,
-                    selectedRow =
-                        project
-                            ?.main
-                            ?.id
-                            ?.value
-                            ?.takeIf { selectedSlot != null },
+                    selectedRow = focusRow?.value,
                 )
             LaunchedEffect(input) { state.layoutEvent(LayoutEvent.Measured(input)) }
             // Worked out now from this frame's measurements (the reducer is pure), so a frame never shows the
             // layout of the rows as they were before (the effect above only stores it for the next event).
             val layout = PreviewLayoutReducer.reduce(state.layout, LayoutEvent.Measured(input)).layout
             val visible = layout?.visibleRows ?: rows.map { it.key }
+            SideEffect { if (shownRows != visible) shownRows = visible }
             val hidden = rows.filter { it.key in layout?.hiddenRows.orEmpty() }
 
             val timeline: @Composable (Modifier) -> Unit = { m ->
@@ -440,7 +553,8 @@ fun EditorScreen(
                         visibleRows = visible,
                         hiddenRows = hidden,
                         allRowsRequested = state.layout.allRowsRequested,
-                        selected = selectedSlot?.clip?.id,
+                        selected = selectedClip?.id,
+                        selectedRow = selectedTrack?.id?.value,
                         missing = missing,
                         playheadMs = playheadMs,
                         playing = playhead.playing,
@@ -456,19 +570,67 @@ fun EditorScreen(
             }
             val bottom: @Composable (Modifier) -> Unit = { m ->
                 Box(m.onSizeChanged { bottomDp = with(density) { it.height.toDp().value } }) {
-                    val open = state.panel
-                    if (open != null && project != null) {
-                        EditPanel(open, project, playheadMs, thumbnail, actions, onPanel = { state.panel = it }, onDeleted = {
-                            selectedSlot?.clip?.let(::deleted)
-                        })
-                    } else {
-                        ContextualBar(
-                            actions = barActions(project, slots, selectedSlot, missing),
-                            onAction = ::onBar,
-                            description =
-                                selectedSlot?.let { stringResource(R.string.bar_description, stringResource(itemName(it.clip))) }
-                                    ?: stringResource(R.string.bar_description_nothing),
-                        )
+                    CompositionLocalProvider(LocalShownRows provides visible) {
+                        val open = state.panel
+                        if (open != null && project != null) {
+                            EditPanel(
+                                open,
+                                project,
+                                playheadMs,
+                                thumbnail,
+                                actions,
+                                onPanel = { state.panel = it },
+                                onDeleted = { clip -> deleted(clip) },
+                                onSelect = { selected ->
+                                    state.selectedRow = null
+                                    state.selected = selected
+                                },
+                                rows = rows,
+                                onStack = ::restack,
+                                onRemoveRow = ::askRemoveRow,
+                                onSelectRow = { id ->
+                                    state.selected = null
+                                    state.selectedRow = id
+                                },
+                                // A panel leaves room for the rows (the one it is about first): it scrolls instead.
+                                maxHeight =
+                                    if (window.twoPane) {
+                                        (windowHeight * PANEL_SHARE_TWO_PANE).dp.coerceIn(160.dp, 420.dp)
+                                    } else {
+                                        (windowHeight * PANEL_SHARE).dp.coerceIn(200.dp, 420.dp)
+                                    },
+                            )
+                        } else {
+                            val timedClip = selectedClip?.takeIf { selectedSlot == null }
+                            ContextualBar(
+                                actions =
+                                    when {
+                                        project != null && selectedTrack != null -> rowBar(project, selectedTrack, shownRows)
+                                        project != null && timedClip != null -> timedBar(project, timedClip)
+                                        else -> barActions(project, slots, selectedSlot, missing, state.zoom)
+                                    },
+                                onAction = ::onBar,
+                                description =
+                                    when {
+                                        selectedTrack != null -> {
+                                            val shownRow = rows.firstOrNull { it.key == selectedTrack.id.value }
+                                            stringResource(R.string.bar_description, shownRow?.let { rowName(it) }.orEmpty())
+                                        }
+
+                                        selectedSlot != null -> {
+                                            stringResource(R.string.bar_description, stringResource(itemName(selectedSlot.clip)))
+                                        }
+
+                                        timedClip != null -> {
+                                            stringResource(R.string.bar_description, stringResource(timedItemName(project, timedClip)))
+                                        }
+
+                                        else -> {
+                                            stringResource(R.string.bar_description_nothing)
+                                        }
+                                    },
+                            )
+                        }
                     }
                 }
             }
@@ -477,11 +639,6 @@ fun EditorScreen(
                     playhead = playhead,
                     enabled = ui.schedule?.main?.isNotEmpty() == true,
                     actions = actions,
-                    onZoomIn = { zoomButton(state, slots, playheadMs, zoomIn = true) },
-                    onZoomOut = { zoomButton(state, slots, playheadMs, zoomIn = false) },
-                    onFitAll = { fitAll(state, slots) },
-                    canZoomIn = state.zoom?.let { it.msPerDp > TimelineZoom.closeUpMsPerDp * 1.0001 } ?: true,
-                    canZoomOut = state.zoom?.fitAll != true,
                     modifier = m.onSizeChanged { controlsDp = with(density) { it.height.toDp().value } },
                 )
             }
@@ -589,38 +746,6 @@ private fun fitAll(
 private fun WindowInsets.pane(left: Boolean): WindowInsets =
     only(if (left) WindowInsetsSides.Start + WindowInsetsSides.Vertical else WindowInsetsSides.End + WindowInsetsSides.Vertical)
 
-/** The rows the timeline shows, in screen order. */
-fun timelineRows(project: Project): List<TimelineRow> =
-    project.tracks.map { t ->
-        val type =
-            when (t.type) {
-                TrackType.MAIN -> {
-                    RowType.MAIN
-                }
-
-                TrackType.TEXT -> {
-                    RowType.TEXT
-                }
-
-                TrackType.OVERLAY -> {
-                    RowType.FRAME
-                }
-
-                TrackType.VISUAL -> {
-                    RowType.PIP
-                }
-
-                TrackType.AUDIO -> {
-                    when (t.audioRole) {
-                        AudioRole.MUSIC -> RowType.MUSIC
-                        AudioRole.VOICE -> RowType.VOICE
-                        else -> RowType.SOUND
-                    }
-                }
-            }
-        TimelineRow(t.id.value, type, if (t.type == TrackType.MAIN) emptyList() else t.clips.map { it.startMs to it.endMs }, t.enabled)
-    }
-
 private fun selectionKind(clip: MainClip?): SelectionKind =
     when (clip) {
         null -> SelectionKind.NOTHING
@@ -658,10 +783,17 @@ private fun barActions(
     slots: List<MainSlot>,
     selected: MainSlot?,
     missing: Set<ClipId>,
+    zoom: ZoomState?,
 ): List<BarAction> {
     val clip = selected?.clip
     val kind = selectionKind(clip)
-    if (selected == null || project == null) return ClipActions.forSelection(kind)
+    if (selected == null || project == null) {
+        return ClipActions.forSelection(
+            kind,
+            canZoomIn = zoom?.let { it.msPerDp > TimelineZoom.closeUpMsPerDp * 1.0001 } ?: true,
+            canZoomOut = zoom?.fitAll != true,
+        )
+    }
     val index = contentIndex(slots, selected)
     val count = slots.count { it.clip.isContentClip() }
     return ClipActions.forSelection(
@@ -700,33 +832,41 @@ private fun TopBar(
     modifier: Modifier,
 ) {
     Row(
-        modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 4.dp),
+        modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButton(onClick = actions::back, modifier = Modifier.size(56.dp)) {
-            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
+        IconButton(onClick = actions::back) {
+            Icon(
+                painterResource(R.drawable.ic_arrow_back),
+                contentDescription = stringResource(R.string.action_back),
+                modifier = Modifier.size(ICON),
+            )
         }
         Text(
             title,
             style = MaterialTheme.typography.titleLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+            modifier = Modifier.weight(1f),
         )
-        LabelledIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo)
-        LabelledIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo)
+        // Above 1.3x text, Undo and Redo keep only their icons (named for TalkBack), so the title and Export keep their room.
+        val iconsOnly = LocalDensity.current.fontScale > TOP_BAR_LABELS_FONT_SCALE
+        LabelledIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo, iconsOnly)
+        LabelledIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo, iconsOnly)
         Button(
             onClick = actions::export,
-            modifier = Modifier.heightIn(min = 56.dp).padding(start = 4.dp, end = 8.dp).testTag(EDITOR_EXPORT_TAG),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_EXPORT_TAG),
         ) {
-            Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.editor_export), maxLines = 1)
+            Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.editor_export), style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }
 
-/** An icon with its name under it (ARCHITECTURE section 11: every control has a label). */
+/** An icon with its name under it (ARCHITECTURE section 11: every control has a label), 48 dp to touch. */
 @Composable
 private fun LabelledIcon(
     icon: Int,
@@ -734,40 +874,40 @@ private fun LabelledIcon(
     enabled: Boolean,
     tag: String,
     onClick: () -> Unit,
-    description: String? = null,
+    iconOnly: Boolean = false,
 ) {
+    if (iconOnly) {
+        val name = stringResource(label)
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(tag)) {
+            Icon(painterResource(icon), contentDescription = name, modifier = Modifier.size(ICON))
+        }
+        return
+    }
     TextButton(
         onClick = onClick,
         enabled = enabled,
         shape = RoundedCornerShape(12.dp),
-        contentPadding =
-            androidx.compose.foundation.layout
-                .PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-        modifier =
-            Modifier
-                .widthIn(min = 56.dp)
-                .heightIn(min = 56.dp)
-                .testTag(tag)
-                .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+        modifier = Modifier.heightIn(min = TOUCH).testTag(tag),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(22.dp))
-            Text(stringResource(label), style = MaterialTheme.typography.labelSmall, maxLines = 2, textAlign = TextAlign.Center)
+            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(ICON))
+            Text(stringResource(label), style = MaterialTheme.typography.labelMedium, maxLines = 1)
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The playback strip under the preview: Play, the time, and "As exported"
+ * at the far end, spread across one row that never wraps. At very large text
+ * (more than 1.5x) Play and As exported keep only their icons, still named
+ * for TalkBack. Zooming is in the bar below (with Fit all) and by pinching.
+ */
 @Composable
 private fun Controls(
     playhead: PlayheadUi,
     enabled: Boolean,
     actions: EditorActions,
-    onZoomIn: () -> Unit,
-    onZoomOut: () -> Unit,
-    onFitAll: () -> Unit,
-    canZoomIn: Boolean,
-    canZoomOut: Boolean,
     modifier: Modifier,
 ) {
     val position = durationText(playhead.positionUs)
@@ -775,30 +915,102 @@ private fun Controls(
     val timeLabel = stringResource(R.string.editor_time, position, total)
     val seekLabel = stringResource(R.string.editor_seek)
     val duration = playhead.durationUs.coerceAtLeast(1)
-    // One row on a phone; it wraps at large text sizes, and the layout makes room for it.
-    FlowRow(
-        modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
+    val playLabel = stringResource(if (playhead.playing) R.string.action_pause else R.string.action_play)
+    val playIcon = if (playhead.playing) R.drawable.ic_pause else R.drawable.ic_play
+    val exactLabel = stringResource(R.string.editor_exact)
+    val exactShort = stringResource(R.string.editor_exact_short)
+    val labels = MaterialTheme.typography.labelLarge
+    val timeStyle = MaterialTheme.typography.titleSmall
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    // Play keeps one width whether it says Play or Pause, so the time never shifts when it is pressed.
+    val playWords = listOf(stringResource(R.string.action_play), stringResource(R.string.action_pause))
+    val playTextDp = with(density) { playWords.maxOf { measurer.measure(it, labels).size.width }.toDp() }
+    val exactTextDp =
+        with(density) {
+            measurer
+                .measure(exactShort, labels)
+                .size.width
+                .toDp()
+        }
+    // The time is measured at its widest ("total of total"), so the choice does not flip as it plays.
+    val timeDp =
+        with(density) {
+            measurer
+                .measure(stringResource(R.string.editor_time, total, total), timeStyle)
+                .size.width
+                .toDp()
+        }
+    val playMinWidth = 12.dp + ICON + 8.dp + playTextDp + 16.dp
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        // Words on Play and As exported only when the whole row fits with them (any language, any text size).
+        val needed = 16.dp + playMinWidth + 16.dp + timeDp + 16.dp + (12.dp + ICON + 8.dp + exactTextDp + 12.dp)
+        val compact = density.fontScale > ICON_ONLY_FONT_SCALE || needed > maxWidth
+        TransportRow(
+            compact,
+            enabled,
+            actions,
+            playLabel,
+            playIcon,
+            playMinWidth,
+            timeLabel,
+            seekLabel,
+            playhead,
+            duration,
+            exactLabel,
+            exactShort,
+        )
+    }
+}
+
+@Composable
+private fun TransportRow(
+    compact: Boolean,
+    enabled: Boolean,
+    actions: EditorActions,
+    playLabel: String,
+    playIcon: Int,
+    playMinWidth: Dp,
+    timeLabel: String,
+    seekLabel: String,
+    playhead: PlayheadUi,
+    duration: Long,
+    exactLabel: String,
+    exactShort: String,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 8.dp)
+            .testTag(TRANSPORT_TAG),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        FilledTonalButton(
-            onClick = actions::togglePlay,
-            enabled = enabled,
-            contentPadding =
-                androidx.compose.foundation.layout
-                    .PaddingValues(horizontal = 12.dp),
-            modifier = Modifier.heightIn(min = 56.dp),
-        ) {
-            Icon(painterResource(if (playhead.playing) R.drawable.ic_pause else R.drawable.ic_play), contentDescription = null)
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(if (playhead.playing) R.string.action_pause else R.string.action_play))
+        if (compact) {
+            FilledTonalIconButton(onClick = actions::togglePlay, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(PLAY_TAG)) {
+                Icon(painterResource(playIcon), contentDescription = playLabel, modifier = Modifier.size(ICON))
+            }
+        } else {
+            FilledTonalButton(
+                onClick = actions::togglePlay,
+                enabled = enabled,
+                contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
+                modifier = Modifier.height(TOUCH).widthIn(min = playMinWidth).testTag(PLAY_TAG),
+            ) {
+                Icon(painterResource(playIcon), contentDescription = null, modifier = Modifier.size(ICON))
+                Spacer(Modifier.width(8.dp))
+                Text(playLabel, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
         }
         // The time, which TalkBack can also move (the timeline's ruler is the gesture for it).
         Text(
             timeLabel,
             style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            softWrap = false,
             modifier =
-                Modifier.padding(horizontal = 4.dp).semantics {
+                Modifier.padding(horizontal = 8.dp).testTag(TIME_TAG).semantics {
                     contentDescription = seekLabel
                     stateDescription = timeLabel
                     progressBarRangeInfo = ProgressBarRangeInfo(playhead.positionUs.toFloat() / duration, 0f..1f)
@@ -808,19 +1020,40 @@ private fun Controls(
                     }
                 },
         )
-        LabelledIcon(R.drawable.ic_zoom_out, R.string.zoom_out, canZoomOut, ZOOM_OUT_TAG, onZoomOut)
-        LabelledIcon(R.drawable.ic_zoom_in, R.string.zoom_in, canZoomIn, ZOOM_IN_TAG, onZoomIn)
-        LabelledIcon(R.drawable.ic_fit_screen, R.string.zoom_fit_all, canZoomOut, ZOOM_FIT_TAG, onFitAll)
-        LabelledIcon(
-            R.drawable.ic_visibility,
-            R.string.editor_exact_short,
-            enabled,
-            EXACT_TAG,
-            actions::exact,
-            description = stringResource(R.string.editor_exact),
-        )
+        if (compact) {
+            IconButton(onClick = actions::exact, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(EXACT_TAG)) {
+                Icon(painterResource(R.drawable.ic_visibility), contentDescription = exactLabel, modifier = Modifier.size(ICON))
+            }
+        } else {
+            TextButton(
+                onClick = actions::exact,
+                enabled = enabled,
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                modifier = Modifier.height(TOUCH).testTag(EXACT_TAG).semantics { contentDescription = exactLabel },
+            ) {
+                Icon(painterResource(R.drawable.ic_visibility), contentDescription = null, modifier = Modifier.size(ICON))
+                Spacer(Modifier.width(8.dp))
+                Text(exactShort, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+        }
     }
 }
+
+/** Icons are one size everywhere in the editor; touch targets are 48 dp. */
+private val ICON = 24.dp
+private val TOUCH = 48.dp
+
+/** Above this text size the strip's buttons drop their words (keeping them for TalkBack) so it stays one row. */
+private const val ICON_ONLY_FONT_SCALE = 1.5f
+
+/** The most of an upright window an open panel takes. */
+private const val PANEL_SHARE = 0.3
+
+/** The same in two panes, where the panel shares the right pane with the rows only. */
+private const val PANEL_SHARE_TWO_PANE = 0.38
+
+/** Above this text size Undo and Redo drop their words. */
+private const val TOP_BAR_LABELS_FONT_SCALE = 1.3f
 
 @Composable
 private fun Banners(

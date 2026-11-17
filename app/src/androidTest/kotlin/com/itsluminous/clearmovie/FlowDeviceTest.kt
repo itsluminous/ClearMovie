@@ -190,7 +190,10 @@ class FlowDeviceTest {
             val atStart = context.getString(R.string.editor_time, "0:00", "")
             val of = context.getString(R.string.editor_time, "", "")
             compose.waitUntil(TIMEOUT_MS) { texts(of).any { !it.startsWith(atStart) } }
-            compose.onNodeWithText(s(R.string.action_pause)).performClick()
+            // Paused again unless it already reached the end on a slow device.
+            if (compose.onAllNodes(hasText(s(R.string.action_pause))).fetchSemanticsNodes().isNotEmpty()) {
+                compose.onNodeWithText(s(R.string.action_pause)).performClick()
+            }
         }
     }
 
@@ -214,8 +217,9 @@ class FlowDeviceTest {
             compose.onNodeWithText(s(R.string.home_start_blank)).performClick()
             itemsShown(photos = 2, videos = 1)
 
-            compose.onNode(hasContentDescription(s(R.string.editor_item_video) + ",", substring = true)).performClick()
+            // Zoom lives in the bar shown with nothing selected (with Fit all): zoom first, then select.
             repeat(2) { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() }
+            compose.onNode(hasContentDescription(s(R.string.editor_item_video) + ",", substring = true)).performClick()
             // The bar holds more buttons than fit (Transition and Animation come early): scroll to Speed.
             compose
                 .onNode(hasScrollToNodeAction() and hasAnyAncestor(hasTestTag(BAR_TAG)))

@@ -1,0 +1,150 @@
+package com.itsluminous.clearmovie.ui.editor.timeline
+
+import com.itsluminous.clearmovie.domain.model.ClipId
+import kotlin.math.abs
+
+/** What kind of item a clip on a row other than MAIN is, for its icon, colour and spoken name. */
+enum class RowClipKind { TEXT, PHOTO, VIDEO, OVERLAY, SOUND }
+
+/** One item on a row other than MAIN. [text] is a caption's words. */
+data class RowClip(
+    val id: ClipId,
+    val startMs: Long,
+    val endMs: Long,
+    val kind: RowClipKind,
+    val text: String? = null,
+)
+
+/** A "+" on a row other than MAIN: a new item goes on [side] of [anchor]; [xDp] is its centre on the time span. */
+data class TimedPlus(
+    val anchor: ClipId,
+    val side: InsertSide,
+    val xDp: Double,
+)
+
+/** What a touch on a row other than MAIN landed on. */
+sealed interface TimedHit {
+    data class Plus(
+        val plus: TimedPlus,
+    ) : TimedHit
+
+    data class Clip(
+        val id: ClipId,
+    ) : TimedHit
+
+    /** The row, away from its items. */
+    data object Space : TimedHit
+}
+
+/**
+ * The "+" points and hits of a row whose items have their own times (text,
+ * picture in picture, frame, music, voice), in dp on the time span (the
+ * owner's rule, the same as MAIN's): one "+" at the end of the row, after
+ * its last item; on the selected item only, one on each side, just outside
+ * it; none between unselected items. An empty row's single "+" is drawn by
+ * the timeline itself. These rows have no trim handles. Pure, so the rules
+ * are tested on the JVM.
+ */
+object TimedRowGeometry {
+    fun plusPoints(
+        clips: List<RowClip>,
+        zoom: ZoomState,
+        selected: ClipId?,
+        widthDp: Double = Double.POSITIVE_INFINITY,
+    ): List<TimedPlus> {
+        val sorted = clips.filter { it.endMs > it.startMs }.sortedBy { it.startMs }
+        if (sorted.isEmpty()) return emptyList()
+        val half = TimelineGeometry.PLUS_HIT_DP / 2
+        // Kept whole inside the span's padding at either end, so its full 48 dp is always on screen.
+        val lo = -TimelineGeometry.EDGE_ROOM_DP + half
+        val hi = widthDp + TimelineGeometry.EDGE_ROOM_DP - half
+
+        fun TimedPlus.kept() = copy(xDp = xDp.coerceIn(lo, maxOf(lo, hi)))
+        val out = mutableListOf<TimedPlus>()
+        // The selected item: one "+" on each side, just outside it, so the item itself stays easy to touch.
+        sorted.firstOrNull { it.id == selected }?.let { c ->
+            out += TimedPlus(c.id, InsertSide.BEFORE, zoom.xOf(c.startMs.toDouble()) - half).kept()
+            out += TimedPlus(c.id, InsertSide.AFTER, zoom.xOf(c.endMs.toDouble()) + half).kept()
+        }
+        // One "+" at the end of the row, after its last item.
+        val last = sorted.maxBy { it.endMs }
+        val end = TimedPlus(last.id, InsertSide.AFTER, zoom.xOf(last.endMs.toDouble()) + half).kept()
+        if (out.none { abs(it.xDp - end.xDp) < TimelineGeometry.PLUS_HIT_DP }) out += end
+        return out.sortedBy { it.xDp }
+    }
+
+    /** What a touch at [x] (dp on the time span) hits on a row with [clips] and [points]. */
+    fun hitTest(
+        clips: List<RowClip>,
+        points: List<TimedPlus>,
+        zoom: ZoomState,
+        x: Double,
+    ): TimedHit {
+        val t = zoom.timeAt(x)
+        val clip = clips.firstOrNull { t >= it.startMs && t < it.endMs }
+        // Every "+" here sits outside its item, so it keeps its full 48 dp.
+        points
+            .filter { abs(it.xDp - x) <= TimelineGeometry.PLUS_HIT_DP / 2 }
+            .minByOrNull { abs(it.xDp - x) }
+            ?.let { return TimedHit.Plus(it) }
+        return if (clip != null) TimedHit.Clip(clip.id) else TimedHit.Space
+    }
+}
+
+/** One shown row's band in the row list (dp from the top of the rows, under the ruler). */
+data class RowBand(
+    val key: String,
+    val topDp: Double,
+    val heightDp: Double,
+) {
+    val bottomDp: Double get() = topDp + heightDp
+    val centreDp: Double get() = topDp + heightDp / 2
+}
+
+object RowOrder {
+    /** The bands of [shownHeights] (key to height) stacked with [gapDp] between them. */
+    fun bands(
+        shownHeights: List<Pair<String, Double>>,
+        gapDp: Double,
+    ): List<RowBand> {
+        var top = 0.0
+        return shownHeights.map { (key, h) -> RowBand(key, top, h).also { top += h + gapDp } }
+    }
+
+    /**
+     * Where a row dragged by its icon lands among the SHOWN rows: the number
+     * of other shown rows whose centre is above the dragged row's centre,
+     * moved by [dyDp].
+     */
+    fun dropShownIndex(
+        bands: List<RowBand>,
+        key: String,
+        dyDp: Double,
+    ): Int {
+        val dragged = bands.firstOrNull { it.key == key } ?: return 0
+        val centre = dragged.centreDp + dyDp
+        return bands.count { it.key != key && it.centreDp < centre }
+    }
+
+    /**
+     * The index in the FULL screen order (after taking the row out, as
+     * `Project.moveRow` counts) that puts [key] at [shownIndex] among the
+     * [shown] rows. Rows that are folded away keep their places: the row goes
+     * just before the shown row that will follow it, or just after the one
+     * that will precede it when it goes last.
+     */
+    fun fullIndex(
+        all: List<String>,
+        shown: List<String>,
+        key: String,
+        shownIndex: Int,
+    ): Int {
+        val others = all - key
+        val shownOthers = shown - key
+        val k = shownIndex.coerceIn(0, shownOthers.size)
+        val following = shownOthers.getOrNull(k)
+        if (following != null) return others.indexOf(following)
+        val preceding = shownOthers.getOrNull(k - 1) ?: return 0
+        return others.indexOf(preceding) + 1
+    }
+}

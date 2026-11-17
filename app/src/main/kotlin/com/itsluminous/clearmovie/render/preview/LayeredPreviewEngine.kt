@@ -39,6 +39,8 @@ data class PreviewState(
     val tailVideoSize: VideoSize? = null,
     /** Per overlay lane: whether its picture shows now. */
     val overlayVisible: List<Boolean> = emptyList(),
+    /** Per overlay lane: its player's picture size, or null before it is known (a picture in picture is cropped by it). */
+    val overlaySizes: List<VideoSize?> = emptyList(),
     /** Media that could not be opened; those parts are left out of the preview. */
     val unavailable: Int = 0,
     /**
@@ -157,7 +159,7 @@ class LayeredPreviewEngine(
                 } else {
                     players.create(PlayerRole.OVERLAY, key).apply {
                         setSegments(lane.entries.mapIndexed { j, e -> sources[j] ?: silence(e.durationUs) })
-                        addListener(FollowerListener(this))
+                        addListener(OverlayListener(this, i))
                         overlaySurfaces[i]?.let {
                             setVideoTextureView(it)
                             overlaysAttached += i
@@ -184,6 +186,7 @@ class LayeredPreviewEngine(
             PreviewState(
                 durationUs = next.durationUs,
                 overlayVisible = List(next.overlays.size) { false },
+                overlaySizes = List(next.overlays.size) { null },
                 unavailable = missing,
                 loads = loads,
             )
@@ -519,7 +522,7 @@ class LayeredPreviewEngine(
         }
     }
 
-    private inner class FollowerListener(
+    private open inner class FollowerListener(
         private val player: PreviewPlayer,
     ) : Player.Listener {
         override fun onMediaItemTransition(
@@ -543,6 +546,19 @@ class LayeredPreviewEngine(
         override fun onPlayerError(error: PlaybackException) {
             // A frame or sound that can't play is left out; MAIN keeps playing.
             stateFlow.value = stateFlow.value.copy(unavailable = stateFlow.value.unavailable + 1)
+        }
+    }
+
+    /** An overlay lane's listener: also keeps its picture size, which a picture in picture is cropped by. */
+    private inner class OverlayListener(
+        player: PreviewPlayer,
+        private val index: Int,
+    ) : FollowerListener(player) {
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            if (videoSize.width <= 0 || videoSize.height <= 0) return
+            val now = stateFlow.value
+            if (index !in now.overlaySizes.indices) return
+            stateFlow.value = now.copy(overlaySizes = now.overlaySizes.toMutableList().also { it[index] = videoSize })
         }
     }
 

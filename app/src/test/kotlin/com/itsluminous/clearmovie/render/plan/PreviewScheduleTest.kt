@@ -6,7 +6,9 @@ import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.PartChoice
+import com.itsluminous.clearmovie.domain.model.PipPlacement
 import com.itsluminous.clearmovie.domain.model.PresetChoices
+import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
@@ -16,7 +18,9 @@ import com.itsluminous.clearmovie.domain.model.Transition
 import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addText
+import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.bringToTop
 import com.itsluminous.clearmovie.domain.model.setSpeed
 import com.itsluminous.clearmovie.domain.model.setTransition
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule.LaneEntry
@@ -169,6 +173,38 @@ class PreviewScheduleTest {
         assertThat(s.main).isEmpty()
         assertThat(s.mainIndexAt(0)).isEqualTo(-1)
         assertThat(s.mainGainDbAt(0)).isNull()
+    }
+
+    @Test
+    fun `picture-in-picture rows are drawn in stacking order, videos in their corner and photos as stills`() {
+        val ids = SequentialIds("q")
+        var p = presetProject(Fixtures.photo("a", 10_000))
+        p = p.addTimedClip(Fixtures.video("pv", 3000, pip = PipPlacement.DEFAULT).withStartMs(1000), ids = ids)
+        p = p.addTimedClip(Fixtures.photo("pp", 2000, pip = PipPlacement.DEFAULT).withStartMs(5000), ids = ids)
+        val pipRow = p.trackOf(ClipId("pv"))!!.id
+        val frameRow = p.tracks.first { it.presetRole == PresetRole.FRAME }.id
+        val s = schedule(p)
+        val pipIndex = s.overlays.indexOfFirst { it.trackId == pipRow }
+        val frameIndex = s.overlays.indexOfFirst { it.trackId == frameRow }
+        val lane = s.overlays[pipIndex]
+        // Drawn above MAIN and under the frame, as the stacking says (a new picture-in-picture row's default).
+        assertThat(s.layerOrder.first()).isEqualTo(LayerRef.Main)
+        assertThat(s.layerOrder.indexOf(LayerRef.Overlay(pipIndex))).isLessThan(s.layerOrder.indexOf(LayerRef.Overlay(frameIndex)))
+        val play = lane.entries.filterIsInstance<LaneEntry.Play>().single()
+        // A timed item's start is the video's own time.
+        assertThat(play.startUs).isEqualTo(1_000_000)
+        assertThat(play.placement).isInstanceOf(Placement.Pip::class.java)
+        assertThat(play.key).isNull()
+        assertThat(lane.stills.single().source).isEqualTo(Source.Photo(Fixtures.media("pp")))
+        assertThat(lane.stillAt(5_500_000)).isNotNull()
+        assertThat(lane.stillAt(4_500_000)).isNull()
+        // The video's own sound plays too, in a lane of its own.
+        assertThat(s.sounds.map { it.trackId }).contains(pipRow)
+        // Shown on top: now drawn after the frame.
+        val top = schedule(p.bringToTop(pipRow))
+        val pipTop = top.overlays.indexOfFirst { it.trackId == pipRow }
+        val frameTop = top.overlays.indexOfFirst { it.trackId == frameRow }
+        assertThat(top.layerOrder.indexOf(LayerRef.Overlay(pipTop))).isGreaterThan(top.layerOrder.indexOf(LayerRef.Overlay(frameTop)))
     }
 
     @Test

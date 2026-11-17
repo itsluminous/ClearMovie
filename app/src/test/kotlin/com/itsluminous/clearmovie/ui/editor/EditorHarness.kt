@@ -11,12 +11,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CardClip
+import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EditResult
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Side
+import com.itsluminous.clearmovie.domain.model.TrackId
+import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.domain.model.insertAt
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
@@ -44,6 +48,13 @@ class EditorHarness(
 
     /** What the photo picker "returns" for a "+": put in by the test's stand-in for the view model's intake. */
     var galleryAnswer: List<com.itsluminous.clearmovie.domain.model.MainClip> = emptyList()
+
+    /**
+     * What the gallery or Files "returns" for a "+" or "Add here" on a row
+     * other than MAIN, already made into that row's items (the view model's
+     * intake does that from the files).
+     */
+    var timedAnswer: List<Clip> = emptyList()
 
     private fun ui(): EditorUi =
         EditorUi(
@@ -103,6 +114,21 @@ class EditorHarness(
                 side: InsertSide,
             ) {
                 calls += "pick:${anchor.value}:$side"
+                if (project.trackOf(anchor)?.type != TrackType.MAIN) {
+                    // As the view model places them: before an item backwards, each just before the last one.
+                    val s = if (side == InsertSide.BEFORE) Side.BEFORE else Side.AFTER
+                    val ordered = if (s == Side.BEFORE) timedAnswer.reversed() else timedAnswer
+                    edit {
+                        var p = this
+                        var a = anchor
+                        for (c in ordered) {
+                            p = p.insertAt(p.trackOf(a)!!.id, a, s, c)
+                            a = c.id
+                        }
+                        p
+                    }
+                    return
+                }
                 // The view model's intake: the picked items go in at the "+", in order.
                 edit {
                     var p = this
@@ -156,6 +182,23 @@ class EditorHarness(
 
             override fun playPart(clipId: ClipId) {
                 calls += "playPart:${clipId.value}"
+            }
+
+            override fun pickForRow(
+                trackId: TrackId,
+                atMs: Long,
+            ) {
+                calls += "pickRow:${trackId.value}:$atMs"
+                val first = timedAnswer.firstOrNull() ?: return
+                edit {
+                    var p = addToTrack(trackId, first, atMs)
+                    var a = first.id
+                    for (c in timedAnswer.drop(1)) {
+                        p = p.insertAt(p.trackOf(a)!!.id, a, Side.AFTER, c)
+                        a = c.id
+                    }
+                    p
+                }
             }
         }
 

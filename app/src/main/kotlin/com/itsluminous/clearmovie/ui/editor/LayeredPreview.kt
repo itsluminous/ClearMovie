@@ -4,8 +4,10 @@ import android.graphics.Bitmap
 import android.view.TextureView
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,6 +74,9 @@ import com.itsluminous.clearmovie.domain.model.TextAlign as CaptionAlign
 /** Test tag of the preview's 16:9 canvas. */
 const val PREVIEW_TAG = "editor_preview"
 
+/** Test tag of a picture-in-picture item's box in the preview. */
+const val PREVIEW_PIP_TAG = "editor_preview_pip"
+
 /**
  * The layered preview (render decision D1): a 16:9 canvas on which the rows
  * are drawn in stacking order, bottom first, as the export draws them. MAIN
@@ -121,9 +126,12 @@ fun LayeredPreview(
                     }
 
                     is LayerRef.Overlay -> {
+                        val lane = schedule.overlays.getOrNull(layer.index)
                         // A new surface for each load: see PreviewState.loads.
-                        key(state.loads) {
-                            OverlayLayer(engine, layer.index, state.overlayVisible.getOrElse(layer.index) { false })
+                        if (lane != null) {
+                            key(state.loads) {
+                                OverlayLayer(engine, layer.index, lane, state, stills, resolver, w, h)
+                            }
                         }
                     }
 
@@ -457,22 +465,92 @@ private fun SoftBackdrop(
 private fun Bitmap.rotated(degrees: Int): Bitmap =
     Bitmap.createBitmap(this, 0, 0, width, height, android.graphics.Matrix().apply { postRotate(degrees.toFloat()) }, true)
 
+/**
+ * A row drawn by a follower player: a frame (keyed, over the whole canvas) or
+ * a picture-in-picture row, its video cover-cropped into its corner with the
+ * export's thin white border, and its photos drawn there in the gaps.
+ */
 @OptIn(UnstableApi::class)
 @Composable
 private fun OverlayLayer(
     engine: LayeredPreviewEngine,
     index: Int,
-    visible: Boolean,
+    lane: PreviewSchedule.Lane,
+    state: PreviewState,
+    stills: StillLoader,
+    resolver: MediaResolver?,
+    w: Dp,
+    h: Dp,
 ) {
-    AndroidView(
-        // Not opaque: the keyed window shows the rows below through it.
-        factory = { context -> TextureView(context).apply { isOpaque = false } },
-        update = {
-            engine.setOverlaySurface(index, it)
-        },
-        onRelease = { view -> if (engine.schedule != null) engine.releaseOverlaySurface(index, view) },
-        modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (visible) 1f else HIDDEN_ALPHA },
-    )
+    val visible = state.overlayVisible.getOrElse(index) { false }
+    val playing = lane.entries.getOrNull(lane.indexAt(state.positionUs)) as? PreviewSchedule.LaneEntry.Play
+    // Between its videos the surface stays where the last one was (or the first will be): drawn, barely.
+    val placement =
+        playing?.placement
+            ?: lane.entries
+                .filterIsInstance<PreviewSchedule.LaneEntry.Play>()
+                .lastOrNull { it.startUs <= state.positionUs }
+                ?.placement
+            ?: lane.entries.firstNotNullOfOrNull { (it as? PreviewSchedule.LaneEntry.Play)?.placement }
+    if (placement != null) {
+        val pip = placement as? Placement.Pip
+        val size = state.overlaySizes.getOrNull(index)
+        val aspect = if (size != null && size.height > 0) size.width * size.pixelWidthHeightRatio / size.height else null
+        PlacedBox(pip, w, h, framed = pip != null && visible) { winW, winH ->
+            val (cw, ch) = if (pip == null || aspect == null) winW to winH else fitted(aspect, pip.rotation, winW, winH, Fit.FILL_CROP)
+            AndroidView(
+                // Not opaque: the keyed window shows the rows below through it.
+                factory = { context -> TextureView(context).apply { isOpaque = false } },
+                update = {
+                    engine.setOverlaySurface(index, it)
+                },
+                onRelease = { view -> if (engine.schedule != null) engine.releaseOverlaySurface(index, view) },
+                modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .requiredSize(cw, ch)
+                        .graphicsLayer {
+                            alpha = if (visible) 1f else HIDDEN_ALPHA
+                            rotationZ = (pip?.rotation ?: Rotation.R0).degrees.toFloat()
+                        },
+            )
+        }
+    }
+    val still = lane.stillAt(state.positionUs)
+    if (still != null && !visible) {
+        val pip = still.placement as? Placement.Pip
+        PlacedBox(pip, w, h, framed = pip != null) { _, _ ->
+            Still(still.source, Fit.FILL_CROP, pip?.rotation ?: Rotation.R0, stills, resolver, h)
+        }
+    }
+}
+
+/** A box at a picture-in-picture rectangle (with its white border), or over the whole canvas. */
+@Composable
+private fun PlacedBox(
+    pip: Placement.Pip?,
+    w: Dp,
+    h: Dp,
+    framed: Boolean,
+    content: @Composable androidx.compose.foundation.layout.BoxScope.(Dp, Dp) -> Unit,
+) {
+    if (pip == null) {
+        Box(Modifier.fillMaxSize()) { content(w, h) }
+        return
+    }
+    val winW = w * pip.rect.w.toFloat()
+    val winH = h * pip.rect.h.toFloat()
+    Box(
+        Modifier
+            .offset(w * pip.rect.x.toFloat(), h * pip.rect.y.toFloat())
+            .size(winW, winH)
+            .clipToBounds()
+            .testTag(PREVIEW_PIP_TAG),
+    ) {
+        content(winW, winH)
+        // The export's thin white border, scaled from its 1080-line canvas.
+        if (framed) Box(Modifier.fillMaxSize().border(BorderStroke((h.value * PIP_BORDER_LINES / CANVAS_LINES).dp, Color.White)))
+    }
 }
 
 @Composable
@@ -543,6 +621,9 @@ private fun ArgbColor.toColor(): Color = Color(argb.toInt())
 
 private const val CANVAS_LINES = 1080f
 private const val CANVAS_ASPECT = 16.0 / 9.0
+
+/** The picture-in-picture border's width on the export's 1080-line canvas. */
+private const val PIP_BORDER_LINES = 4f
 
 /** The width the preview's blurred background is shrunk to before it is stretched back. */
 private const val BACKDROP_PX = 24

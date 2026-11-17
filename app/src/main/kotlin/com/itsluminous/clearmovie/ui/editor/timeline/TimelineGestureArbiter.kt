@@ -2,8 +2,12 @@ package com.itsluminous.clearmovie.ui.editor.timeline
 
 import kotlin.math.hypot
 
-/** Where a gesture started, from [TimelineGeometry.hitTest] (or a row header). */
-enum class GestureStart { CLIP, TRIM_START, TRIM_END, RULER, PLUS, HEADER, EMPTY }
+/**
+ * Where a gesture started, from [TimelineGeometry.hitTest] (or a row header).
+ * [ROW] is a row other than MAIN away from its items: a long-press there opens
+ * the row menu, anything else on it scrolls.
+ */
+enum class GestureStart { CLIP, TRIM_START, TRIM_END, RULER, PLUS, HEADER, ROW, EMPTY }
 
 /** What a gesture has turned out to be. */
 enum class GestureMode {
@@ -37,9 +41,10 @@ enum class GestureMode {
  *    [PINCH_WINDOW_MS]).
  * 2. Movement past the touch slop before [LONG_PRESS_MS] is a **scroll**, or
  *    a **trim** or **scrub** when it started on a handle or the ruler.
- * 3. [LONG_PRESS_MS] without movement on an item or a row header is a
- *    **long-press**; moving afterwards **drags**, releasing opens the
- *    **menu**.
+ * 3. [LONG_PRESS_MS] without movement on an item, a row header or a row's
+ *    empty space is a **long-press**; moving afterwards more than twice the
+ *    slop **drags** (an item, or a row by its header; on a row's empty space
+ *    it scrolls), releasing opens the **menu**.
  * 4. Releasing before that without moving is a **tap** on what was touched.
  *
  * Handles and the ruler beat the items under them because [start] comes from
@@ -102,8 +107,10 @@ class TimelineGestureArbiter(
     ): GestureMode {
         tick(timeMs)
         if (id != firstId) return mode
-        val moved = hypot(x - downX, y - downY) > touchSlopDp
-        if (!moved) return mode
+        val distance = hypot(x - downX, y - downY)
+        // Once held, a hand that shakes a little still opens the menu: a drag needs twice the slop.
+        val slop = if (mode == GestureMode.LONG_PRESSED) touchSlopDp * HELD_SLOP_FACTOR else touchSlopDp
+        if (distance <= slop) return mode
         mode =
             when (mode) {
                 GestureMode.PENDING -> {
@@ -115,7 +122,8 @@ class TimelineGestureArbiter(
                 }
 
                 GestureMode.LONG_PRESSED -> {
-                    GestureMode.DRAG
+                    // A row's empty space has nothing to drag: held then moved, it scrolls as it always did.
+                    if (start == GestureStart.ROW) GestureMode.SCROLL else GestureMode.DRAG
                 }
 
                 else -> {
@@ -166,7 +174,10 @@ class TimelineGestureArbiter(
         /** Android's usual touch slop (8 dp). */
         const val DEFAULT_SLOP_DP = 8.0
 
-        private val LONG_PRESSABLE = setOf(GestureStart.CLIP, GestureStart.HEADER)
+        /** After a long-press, how many touch slops the finger must move before it drags. */
+        const val HELD_SLOP_FACTOR = 2.0
+
+        private val LONG_PRESSABLE = setOf(GestureStart.CLIP, GestureStart.HEADER, GestureStart.ROW)
         private val DONE = setOf(GestureMode.TAP, GestureMode.MENU, GestureMode.CANCELLED, GestureMode.ENDED)
     }
 }

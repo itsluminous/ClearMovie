@@ -267,6 +267,65 @@ fun Project.moveClip(
     return cleaned.normalized()
 }
 
+/**
+ * "Move to another row" with **A new row**: the timed clip keeps its time
+ * and goes on a new row of its type (for sound, of its role), at that type's
+ * default screen and stacking positions. Its old row goes if it is left
+ * empty. A clip on a row the preset manages stays where it is.
+ */
+fun Project.moveClipToNewRow(
+    clipId: ClipId,
+    ids: IdSource = RandomIds,
+): Project {
+    val source = requireNotNull(trackOf(clipId)) { "No such clip" }
+    require(source.type.isTimed) { "Photos and videos on the main row stay on it" }
+    require(source.presetRole == null) { "This item stays on its own row" }
+    val clip = requireClip(clipId).detached()
+    val without = withTrackClips(source.id, source.clips.filterNot { it.id == clipId })
+    val (placed, _) = without.placeTimed(clip, preferred = null, role = source.audioRole, ids = ids, allowExisting = false)
+    return placed.afterRemovingFrom(source.id).normalized()
+}
+
+/**
+ * "Earlier" and "Later" on a timed clip: moves it by [deltaMs] on its own
+ * row, stopping at the start and end of the video and at its neighbours, so
+ * it never jumps to another row or out of the video. Refused when it can't move that way at all.
+ */
+fun Project.nudgeClip(
+    clipId: ClipId,
+    deltaMs: Long,
+): Project {
+    val track = requireNotNull(trackOf(clipId)) { "No such clip" }
+    require(track.type.isTimed) { "Use moveMainClip on the MAIN row" }
+    require(deltaMs != 0L) { "No move" }
+    val target = requireNotNull(nudgedStart(clipId, deltaMs)) { "No room to move that way" }
+    val clip = requireClip(clipId).detached().withStartMs(target)
+    return withTrackClips(track.id, track.clips.map { if (it.id == clipId) clip else it }).normalized()
+}
+
+/** Where [nudgeClip] would put the clip's start, or null when it can't move that way. */
+fun Project.nudgedStart(
+    clipId: ClipId,
+    deltaMs: Long,
+): Long? {
+    val track = trackOf(clipId) ?: return null
+    if (!track.type.isTimed || deltaMs == 0L) return null
+    val clip = requireClip(clipId)
+    val others = track.clips.filter { it.id != clipId && it.durationMs > 0 }
+    val target =
+        if (deltaMs < 0) {
+            val floor = others.filter { it.endMs <= clip.startMs }.maxOfOrNull { it.endMs } ?: 0L
+            (clip.startMs + deltaMs).coerceAtLeast(floor)
+        } else {
+            // Never past its next neighbour, nor past the end of the video, where it would not be seen.
+            val ceiling = others.filter { it.startMs >= clip.endMs }.minOfOrNull { it.startMs } ?: totalDurationMs()
+            (clip.startMs + deltaMs).coerceAtMost(ceiling - clip.durationMs)
+        }
+    // A move only ever goes the way asked: "Later" never ends up earlier (a video that got shorter, say).
+    val forward = deltaMs > 0
+    return target.takeIf { it >= 0 && if (forward) it > clip.startMs else it < clip.startMs }
+}
+
 /** The clip with its span anchor removed: the user has taken control of its timing. */
 private fun Clip.detached(): Clip =
     when (this) {

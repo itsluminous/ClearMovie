@@ -51,13 +51,34 @@ class TransitionMarkerGeometryTest {
         assertThat(markers[0].leadIndex).isEqualTo(1)
         assertThat(markers[0].xDp).isWithin(1e-9).of(g.zoom.xOf(4500.0))
         assertThat(markers[1].xDp).isWithin(1e-9).of(g.zoom.xOf(6750.0))
-        val plus = g.plusPoints().associateBy { it.boundary }
-        assertThat(plus.getValue(2).top).isTrue()
-        assertThat(plus.getValue(2).xDp).isWithin(1e-9).of(markers[0].xDp)
-        assertThat(plus.getValue(1).top).isFalse()
-        // On the row's top edge, and the marker inside the row under it.
-        assertThat(g.plusCentreY(plus.getValue(2))).isEqualTo(g.mainTop)
+        // Nothing selected: only the row's end "+", after c, on the centre line (no marker there).
+        val plus = g.plusPoints()
+        assertThat(plus.map { it.boundary }).containsExactly(4)
+        assertThat(plus.single().top).isFalse()
         assertThat(g.markerCentre + TimelineGeometry.MARKER_HIT_DP / 2).isAtMost(g.mainBottom)
+    }
+
+    @Test
+    fun `a plus that would touch a marker moves up to the row's top edge`() {
+        // The intro (no trim handles) selected, with a 0.5 s transition into a: its "+" after it sits on the
+        // junction, next to the marker in the middle of the overlap, so it goes up to the top edge.
+        val withIntroTransition =
+            listOf(
+                SlotSpan("intro", 0, 2000, content = false),
+                SlotSpan("a", 1500, 4500, content = true),
+                SlotSpan("b", 4500, 7500, content = true),
+            )
+        val g =
+            TimelineGeometry(withIntroTransition, ZoomState(10.0, 0.0, false), 2000.0, 28.0, 72.0, 0, -1e4, selectedTrimmable = false)
+        val marker = g.markers().single()
+        val after = g.plusPoints().single { it.anchorIndex == 0 && it.side == InsertSide.AFTER }
+        assertThat(after.top).isTrue()
+        assertThat(g.plusCentreY(after)).isEqualTo(g.mainTop)
+        assertThat(abs(after.xDp - marker.xDp)).isLessThan((TimelineGeometry.PLUS_HIT_DP + TimelineGeometry.MARKER_HIT_DP) / 2)
+        // Their hit areas touch and never overlap.
+        val p = Box(after.xDp, g.plusCentreY(after), TimelineGeometry.PLUS_HIT_DP)
+        val m = Box(marker.xDp, g.markerCentre, TimelineGeometry.MARKER_HIT_DP)
+        assertThat(p.overlaps(m)).isFalse()
     }
 
     @Test

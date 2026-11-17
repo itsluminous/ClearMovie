@@ -60,7 +60,9 @@ class TimelinePiecesTest {
             ClipActions.forSelection(SelectionKind.PHOTO, hasNext = false).first { it.action == EditAction.TRANSITION }.enabled,
         ).isFalse()
         assertThat(order(SelectionKind.ENDING)).containsExactly(EditAction.PLAY, EditAction.REPLACE, EditAction.SKIP).inOrder()
-        assertThat(order(SelectionKind.NOTHING)).containsExactly(EditAction.ADD_MEDIA, EditAction.FIT_ALL).inOrder()
+        assertThat(
+            order(SelectionKind.NOTHING),
+        ).containsExactly(EditAction.ADD_MEDIA, EditAction.ZOOM_OUT, EditAction.ZOOM_IN, EditAction.FIT_ALL, EditAction.ADD_ROW).inOrder()
     }
 
     @Test

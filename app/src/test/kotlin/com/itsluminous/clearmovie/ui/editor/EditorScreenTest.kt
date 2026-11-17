@@ -9,6 +9,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -168,7 +169,7 @@ class EditorScreenTest {
         assertThat((preview.right - preview.left).v() / (preview.bottom - preview.top).v()).isWithin(0.03f).of(16f / 9f)
         compose.onNodeWithTag(TIMELINE_MAIN_ROW_TAG).assertIsDisplayed()
         compose.onNodeWithTag(barActionTag(EditAction.ADD_MEDIA)).assertIsDisplayed()
-        compose.onNodeWithTag(ZOOM_IN_TAG).assertIsDisplayed()
+        bar(EditAction.ZOOM_IN).assertIsDisplayed()
         compose.onNodeWithTag(UNDO_TAG).assertIsDisplayed()
     }
 
@@ -246,7 +247,7 @@ class EditorScreenTest {
         zoomIns: Int = 3,
     ) {
         tapEmpty()
-        repeat(zoomIns) { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() }
+        repeat(zoomIns) { bar(EditAction.ZOOM_IN).performClick() }
         reveal(h, id)
         compose.onNodeWithTag(clipTag(ClipId(id))).performClick()
         compose.waitForIdle()
@@ -263,9 +264,9 @@ class EditorScreenTest {
         compose.waitForIdle()
     }
 
-    /** A tap on the ruler's left edge: nothing selected. */
+    /** A tap on the ruler's left edge, above the row icons: nothing selected. */
     private fun tapEmpty() {
-        compose.onNodeWithTag(com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_MAIN_HEADER_TAG, useUnmergedTree = true).performClick()
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput { click(Offset(10f * density, 10f * density)) }
         compose.waitForIdle()
     }
 
@@ -363,8 +364,8 @@ class EditorScreenTest {
         val h = show(ScreenSize.COMPACT)
         val node = compose.onAllNodesWithTag(thumbTag(ClipId("v4")), useUnmergedTree = true)[0]
         val before = node.thumbPlan()
-        compose.onNodeWithTag(ZOOM_IN_TAG).performClick()
-        compose.onNodeWithTag(ZOOM_IN_TAG).performClick()
+        bar(EditAction.ZOOM_IN).performClick()
+        bar(EditAction.ZOOM_IN).performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
         val after = compose.onAllNodesWithTag(thumbTag(ClipId("v4")), useUnmergedTree = true)[0].thumbPlan()
@@ -382,17 +383,60 @@ class EditorScreenTest {
         forEachSize { _, h ->
             val fit = h.state!!.zoom!!
             assertThat(fit.fitAll).isTrue()
-            compose.onNodeWithTag(ZOOM_OUT_TAG).assertIsNotEnabled()
-            compose.onNodeWithTag(ZOOM_IN_TAG).performClick()
+            bar(EditAction.ZOOM_OUT).assertIsNotEnabled()
+            bar(EditAction.ZOOM_IN).performClick()
             val zoomed = h.state!!.zoom!!
             assertThat(fit.msPerDp / zoomed.msPerDp).isWithin(1e-6).of(TimelineZoom.BUTTON_FACTOR)
-            compose.onNodeWithTag(ZOOM_IN_TAG).performClick()
-            compose.onNodeWithTag(ZOOM_OUT_TAG).assertIsEnabled().performClick()
+            bar(EditAction.ZOOM_IN).performClick()
+            bar(EditAction.ZOOM_OUT).assertIsEnabled().performClick()
             assertThat(h.state!!.zoom!!.msPerDp).isWithin(1e-6).of(zoomed.msPerDp)
-            compose.onNodeWithTag(ZOOM_FIT_TAG).performClick()
+            bar(EditAction.FIT_ALL).performClick()
             compose.waitForIdle()
             assertThat(h.state!!.zoom!!.fitAll).isTrue()
             assertThat(h.state!!.zoom!!.msPerDp).isWithin(1e-6).of(fit.msPerDp)
+        }
+    }
+
+    /** A bar button, scrolled into view first (the bar scrolls sideways in a narrow pane). */
+    private fun bar(action: EditAction): SemanticsNodeInteraction {
+        compose
+            .onNode(hasScrollToNodeAction() and hasAnyAncestor(hasTestTag(BAR_TAG)))
+            .performScrollToNode(hasTestTag(barActionTag(action)))
+        return compose.onNodeWithTag(barActionTag(action))
+    }
+
+    @Test
+    fun `the playback strip is one row, spread across, with zoom only in the bar`() = assertStripOneRow()
+
+    @Test
+    @Config(qualifiers = "+b+hi+Latn")
+    fun `the playback strip stays one row in Hinglish at 1_3 and 1_5`() = assertStripOneRow(listOf(1.3f, 1.5f))
+
+    @Test
+    @Config(qualifiers = "+hi")
+    fun `the playback strip stays one row in Hindi at 1_3 and 1_5`() = assertStripOneRow(listOf(1.3f, 1.5f))
+
+    private fun assertStripOneRow(scales: List<Float> = listOf(1f, 1.3f, 2f)) {
+        forEachSize(fontScales = scales) { _, _ ->
+            val strip = compose.onNodeWithTag(TRANSPORT_TAG).bounds()
+            val play = compose.onNodeWithTag(PLAY_TAG).bounds()
+            val time = compose.onNodeWithTag(TIME_TAG).bounds()
+            val exact = compose.onNodeWithTag(EXACT_TAG).bounds()
+            // One row: everything centred on one line, and the strip no taller than one 56 dp row plus a little.
+            for (b in listOf(time, exact)) {
+                assertThat(((b.top + b.bottom) / 2).v()).isWithin(2f).of(((play.top + play.bottom) / 2).v())
+            }
+            assertThat((strip.bottom - strip.top).v()).isAtMost(64f)
+            // Spread: Play at the start, As exported at the far end.
+            assertThat((play.left - strip.left).v()).isAtMost(16f)
+            assertThat((strip.right - exact.right).v()).isAtMost(16f)
+            // Play is a compact 48 dp control, not a tall blob.
+            assertThat((play.bottom - play.top).v()).isWithin(1f).of(48f)
+            // Zoom is in the bar, once each, and nowhere in the strip.
+            for (a in listOf(EditAction.ZOOM_IN, EditAction.ZOOM_OUT, EditAction.FIT_ALL)) {
+                assertThat(compose.onAllNodesWithTag(barActionTag(a)).fetchSemanticsNodes().size).isAtMost(1)
+            }
+            assertThat(compose.onAllNodesWithText(s(R.string.zoom_in)).fetchSemanticsNodes().size).isAtMost(1)
         }
     }
 
@@ -425,7 +469,7 @@ class EditorScreenTest {
         val h = harness()
         var size by androidx.compose.runtime.mutableStateOf(ScreenSize.COMPACT)
         compose.setContent { AtSize(size, 1f) { ClearMovieTheme(dynamicColor = false) { h.Content() } } }
-        compose.onNodeWithTag(ZOOM_IN_TAG).performClick()
+        bar(EditAction.ZOOM_IN).performClick()
         reveal(h, "p3")
         compose.onNodeWithTag(clipTag(ClipId("p3"))).performTouchInput { longClick() }
         compose.waitForIdle()
@@ -494,9 +538,18 @@ class EditorScreenTest {
     @Test
     fun `a colour card goes in after the intro from the plus on the boundary`() {
         val h = show(ScreenSize.EXPANDED)
-        // Zoomed so that every boundary has its own plus: boundary 1 is between the intro and the first photo.
-        repeat(3) { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() }
+        // The intro selected: its "+" after it is on boundary 1, between the intro and the first photo.
+        repeat(3) { bar(EditAction.ZOOM_IN).performClick() }
         h.state!!.zoom = h.state!!.zoom!!.copy(scrollMs = 0.0)
+        compose.waitForIdle()
+        compose
+            .onNodeWithTag(
+                clipTag(
+                    h.project.mainClips
+                        .first()
+                        .id,
+                ),
+            ).performClick()
         compose.waitForIdle()
         compose.onNodeWithTag(plusTag(1), useUnmergedTree = true).performClick()
         compose.onNodeWithTag(insertOptionTag("colour")).performClick()
@@ -512,7 +565,7 @@ class EditorScreenTest {
     @Test
     fun `a long-press then a drag moves an item, and the model order follows`() {
         forEachSize { _, h ->
-            repeat(2) { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() }
+            repeat(2) { bar(EditAction.ZOOM_IN).performClick() }
             h.state!!.zoom = h.state!!.zoom!!.copy(scrollMs = 6000.0)
             compose.waitForIdle()
             val p1 = compose.onNodeWithTag(clipTag(ClipId("p1"))).fetchSemanticsNode().boundsInRoot
@@ -534,7 +587,7 @@ class EditorScreenTest {
     @Test
     fun `a long-press without moving opens the item's menu, with Add before and after`() {
         val h = show(ScreenSize.COMPACT)
-        repeat(2) { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() }
+        repeat(2) { bar(EditAction.ZOOM_IN).performClick() }
         reveal(h, "v4")
         compose.onNodeWithTag(clipTag(ClipId("v4"))).performTouchInput { longClick() }
         compose.waitForIdle()
@@ -702,14 +755,12 @@ class EditorScreenTest {
     }
 
     @Test
-    fun `main controls are at least 56 dp and bar buttons at least 72 dp wide, at font scale 2`() {
+    fun `main controls are at least 48 dp to touch and bar buttons at least 72 dp wide, at font scale 2`() {
         forEachSize(fontScales = listOf(1f, 2f)) { _, h ->
-            val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).bounds()
-            assertThat((export.bottom - export.top).v()).isAtLeast(55.5f)
-            for (tag in listOf(UNDO_TAG, REDO_TAG, ZOOM_IN_TAG, ZOOM_OUT_TAG, ZOOM_FIT_TAG)) {
+            for (tag in listOf(EDITOR_EXPORT_TAG, UNDO_TAG, REDO_TAG, PLAY_TAG, EXACT_TAG)) {
                 val b = compose.onNodeWithTag(tag).bounds()
-                assertThat((b.bottom - b.top).v()).isAtLeast(55.5f)
-                assertThat((b.right - b.left).v()).isAtLeast(55.5f)
+                assertThat((b.bottom - b.top).v()).isAtLeast(47.5f)
+                assertThat((b.right - b.left).v()).isAtLeast(47.5f)
             }
             selectItem(h, "v2")
             for (a in listOf(EditAction.TRIM, EditAction.VOLUME)) {

@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -96,9 +98,11 @@ fun ContextualBar(
     val measurer = rememberTextMeasurer()
     val style = MaterialTheme.typography.labelMedium
     val density = LocalDensity.current
+    // Up to 1.3x text a label stays on one line (the bar scrolls instead); larger, labels wrap at their words.
+    val oneLine = density.fontScale <= ONE_LINE_FONT_SCALE
     val longestWordPx =
-        remember(labels, style, density) {
-            labels.flatMap { it.split(' ') }.maxOfOrNull { measurer.measure(it, style).size.width } ?: 0
+        remember(labels, style, density, oneLine) {
+            labels.flatMap { if (oneLine) listOf(it) else it.split(' ') }.maxOfOrNull { measurer.measure(it, style).size.width } ?: 0
         }
     val natural = maxOf(MIN_BUTTON, with(density) { longestWordPx.toDp() } + BUTTON_PADDING * 2)
     val surface = MaterialTheme.colorScheme.surfaceContainer
@@ -106,6 +110,9 @@ fun ContextualBar(
         BoxWithConstraints(Modifier.fillMaxWidth().testTag(BAR_TAG).semantics { contentDescription = description }) {
             val itemWidth = barItemWidth(maxWidth, natural, actions.size)
             val state = rememberLazyListState()
+            // Another selection has other buttons: they start from the first, never mid-way.
+            val kinds = actions.map { it.action }
+            LaunchedEffect(kinds) { state.scrollToItem(0) }
             val canBack by remember { derivedStateOf { state.canScrollBackward } }
             val canForward by remember { derivedStateOf { state.canScrollForward } }
             LazyRow(state = state, modifier = Modifier.fillMaxWidth()) {
@@ -161,14 +168,23 @@ private fun BarButton(
     onAction: (EditAction) -> Unit,
 ) {
     val label = stringResource(barLabel(action.action))
+    val checked = action.checked
     Column(
         Modifier
             .width(width)
             .heightIn(min = 72.dp)
             .padding(2.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = action.enabled, role = Role.Button) { onAction(action.action) }
-            .alpha(if (action.enabled) 1f else 0.38f)
+            .then(
+                if (checked == null) {
+                    Modifier.clickable(enabled = action.enabled, role = Role.Button) { onAction(action.action) }
+                } else {
+                    // A switch: TalkBack says whether it is on; it looks pressed while on.
+                    Modifier
+                        .background(if (checked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                        .toggleable(value = checked, enabled = action.enabled, role = Role.Switch) { onAction(action.action) }
+                },
+            ).alpha(if (action.enabled) 1f else 0.38f)
             .padding(horizontal = BUTTON_PADDING - 2.dp, vertical = 8.dp)
             .testTag(barActionTag(action.action)),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -202,8 +218,27 @@ fun barLabel(action: EditAction): Int =
         EditAction.ANIMATION -> R.string.action_animation
         EditAction.PLAY -> R.string.action_play
         EditAction.SKIP -> R.string.review_skip
-        EditAction.ADD_MEDIA -> R.string.editor_add_media
+        EditAction.ADD_MEDIA -> R.string.bar_add_media
+        EditAction.ZOOM_OUT -> R.string.zoom_out
+        EditAction.ZOOM_IN -> R.string.zoom_in
         EditAction.FIT_ALL -> R.string.zoom_fit_all
+        EditAction.ADD_ROW -> R.string.action_add_row
+        EditAction.ADD_HERE -> R.string.action_add_here
+        EditAction.SHOW_ON_TOP -> R.string.stack_show_on_top
+        EditAction.BRING_FORWARD -> R.string.stack_bring_forward
+        EditAction.SEND_BACKWARD -> R.string.stack_send_backward
+        EditAction.SHOW_AT_BOTTOM -> R.string.stack_show_at_bottom
+        EditAction.MOVE_ROW_UP -> R.string.row_move_up
+        EditAction.MOVE_ROW_DOWN -> R.string.row_move_down
+        EditAction.REMOVE_ROW -> R.string.action_remove_row
+        EditAction.MUTE_ROW -> R.string.action_mute_row
+        EditAction.LOWER_MUSIC -> R.string.action_lower_music
+        EditAction.FRAME_ON -> R.string.action_frame_on
+        EditAction.MOVE_EARLIER -> R.string.action_move_earlier
+        EditAction.MOVE_LATER -> R.string.action_move_later
+        EditAction.MOVE_TO_ROW -> R.string.action_move_to_row
+        EditAction.FADE -> R.string.action_fade
+        EditAction.POSITION -> R.string.action_position
     }
 
 fun barIcon(action: EditAction): Int =
@@ -229,9 +264,31 @@ fun barIcon(action: EditAction): Int =
         EditAction.PLAY -> R.drawable.ic_play
         EditAction.SKIP -> R.drawable.ic_skip_next
         EditAction.ADD_MEDIA -> R.drawable.ic_add
+        EditAction.ZOOM_OUT -> R.drawable.ic_zoom_out
+        EditAction.ZOOM_IN -> R.drawable.ic_zoom_in
         EditAction.FIT_ALL -> R.drawable.ic_fit_screen
+        EditAction.ADD_ROW -> R.drawable.ic_playlist_add
+        EditAction.ADD_HERE -> R.drawable.ic_add
+        EditAction.SHOW_ON_TOP -> R.drawable.ic_flip_to_front
+        EditAction.BRING_FORWARD -> R.drawable.ic_keyboard_arrow_up
+        EditAction.SEND_BACKWARD -> R.drawable.ic_keyboard_arrow_down
+        EditAction.SHOW_AT_BOTTOM -> R.drawable.ic_flip_to_back
+        EditAction.MOVE_ROW_UP -> R.drawable.ic_arrow_upward
+        EditAction.MOVE_ROW_DOWN -> R.drawable.ic_arrow_downward
+        EditAction.REMOVE_ROW -> R.drawable.ic_delete
+        EditAction.MUTE_ROW -> R.drawable.ic_volume_off
+        EditAction.LOWER_MUSIC -> R.drawable.ic_volume_down
+        EditAction.FRAME_ON -> R.drawable.ic_frame
+        EditAction.MOVE_EARLIER -> R.drawable.ic_chevron_left
+        EditAction.MOVE_LATER -> R.drawable.ic_chevron_right
+        EditAction.MOVE_TO_ROW -> R.drawable.ic_swap_vert
+        EditAction.FADE -> R.drawable.ic_fade
+        EditAction.POSITION -> R.drawable.ic_open_with
     }
 
 private val MIN_BUTTON = 72.dp
+
+/** The largest text size at which a bar label is kept on one line. */
+private const val ONE_LINE_FONT_SCALE = 1.3f
 private val BUTTON_PADDING = 8.dp
 private val FADE = 24.dp

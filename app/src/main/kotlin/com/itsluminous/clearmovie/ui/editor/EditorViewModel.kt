@@ -21,24 +21,35 @@ import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.data.project.ProjectMediaSet
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.CardClip
+import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EditResult
 import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.EndingKind
+import com.itsluminous.clearmovie.domain.model.FrameSpec
 import com.itsluminous.clearmovie.domain.model.IntroClip
+import com.itsluminous.clearmovie.domain.model.KeySpec
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
+import com.itsluminous.clearmovie.domain.model.MediaClip
+import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
+import com.itsluminous.clearmovie.domain.model.PipPlacement
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.RandomIds
 import com.itsluminous.clearmovie.domain.model.Side
+import com.itsluminous.clearmovie.domain.model.Track
+import com.itsluminous.clearmovie.domain.model.TrackId
+import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.domain.model.insertAt
 import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.domain.model.replaceMainItem
@@ -137,7 +148,7 @@ sealed interface EditorEvent {
 }
 
 /** What a chosen file had to be. */
-enum class WantedFile { PHOTO_OR_VIDEO, VIDEO, SOUND }
+enum class WantedFile { PHOTO_OR_VIDEO, VIDEO, SOUND, MUSIC, OVERLAY }
 
 /**
  * Why photos or videos are being taken in from the gallery. Kept in the
@@ -164,12 +175,19 @@ sealed interface IntakePurpose {
         val clipId: ClipId,
     ) : IntakePurpose
 
+    /** "Add here" on a picture-in-picture, music, voice or frame row: at [atMs] on row [trackId]. */
+    data class AddToRow(
+        val trackId: TrackId,
+        val atMs: Long,
+    ) : IntakePurpose
+
     fun encode(): String =
         when (this) {
             Add -> "add"
             is Insert -> "insert:${side.name}:${anchor.value}"
             is Replace -> "replace:${clipId.value}"
             is ReplacePart -> "part:${clipId.value}"
+            is AddToRow -> "row:$atMs:${trackId.value}"
         }
 
     companion object {
@@ -181,6 +199,7 @@ sealed interface IntakePurpose {
                     "insert" -> Insert(ClipId(parts[2]), Side.valueOf(parts[1]))
                     "replace" -> Replace(ClipId(parts[1]))
                     "part" -> ReplacePart(ClipId(parts[1]))
+                    "row" -> AddToRow(TrackId(parts[2]), parts[1].toLong().coerceAtLeast(0))
                     else -> null
                 }
             }.getOrNull()
@@ -403,9 +422,24 @@ class EditorViewModel
             val project = session.current
             clearIntake()
             if (purpose == null || project == null) return
-            when (purpose) {
-                is IntakePurpose.ReplacePart -> {
+            val timedRow =
+                when (purpose) {
+                    is IntakePurpose.Insert -> project.trackOf(purpose.anchor)?.takeIf { it.type.isTimed }
+                    is IntakePurpose.AddToRow -> project.track(purpose.trackId)
+                    else -> null
+                }
+            when {
+                purpose is IntakePurpose.ReplacePart -> {
                     replacePart(purpose.clipId, items.firstOrNull(), project)
+                }
+
+                timedRow != null -> {
+                    placeOnRow(purpose, timedRow, items, project)
+                }
+
+                purpose is IntakePurpose.AddToRow -> {
+                    // The row went away while the files were being taken in.
+                    Unit
                 }
 
                 else -> {
@@ -436,6 +470,10 @@ class EditorViewModel
                             is IntakePurpose.Replace -> {
                                 edit { replaceMainItem(purpose.clipId, clips.first()) }
                             }
+
+                            else -> {
+                                false
+                            }
                         }
                     if (applied) {
                         val first = if (purpose is IntakePurpose.Replace) purpose.clipId else clips.first().id
@@ -444,6 +482,109 @@ class EditorViewModel
                 }
             }
         }
+
+        /**
+         * Picked files going on a row other than MAIN (section 11.6): at a "+"
+         * (before or after its item, in order) or by "Add here" (at the
+         * playhead, then one after another). Where that is taken, the model
+         * puts an item on the highest free row of its kind, or a new one. A
+         * file that is not what the row holds is left out and said.
+         */
+        private suspend fun placeOnRow(
+            purpose: IntakePurpose,
+            row: Track,
+            items: List<IntakeItem>,
+            project: Project,
+        ) {
+            val (clips, skipped) = timedClips(row, items, project)
+            if (clips.isEmpty()) {
+                eventChannel.send(
+                    if (row.type == TrackType.VISUAL) EditorEvent.Skipped(skipped) else EditorEvent.WrongFile(wantedFor(row)),
+                )
+                return
+            }
+            if (skipped > 0) eventChannel.send(EditorEvent.Skipped(skipped))
+            val applied =
+                edit {
+                    var p = this
+                    when (purpose) {
+                        is IntakePurpose.Insert -> {
+                            // Before an item they go in backwards, each just before the last one placed, so they keep their order.
+                            val ordered = if (purpose.side == Side.BEFORE) clips.reversed() else clips
+                            var anchor = purpose.anchor
+                            for (c in ordered) {
+                                p = p.insertAt(requireNotNull(p.trackOf(anchor)).id, anchor, purpose.side, c)
+                                anchor = c.id
+                            }
+                        }
+
+                        is IntakePurpose.AddToRow -> {
+                            p = p.addToTrack(row.id, clips.first(), purpose.atMs)
+                            var anchor = clips.first().id
+                            for (c in clips.drop(1)) {
+                                p = p.insertAt(requireNotNull(p.trackOf(anchor)).id, anchor, Side.AFTER, c)
+                                anchor = c.id
+                            }
+                        }
+
+                        else -> {
+                            Unit
+                        }
+                    }
+                    p
+                }
+            if (applied) {
+                val first = if (purpose is IntakePurpose.Insert && purpose.side == Side.BEFORE) clips.last() else clips.first()
+                eventChannel.send(EditorEvent.Inserted(first.id))
+            }
+        }
+
+        private fun wantedFor(row: Track): WantedFile =
+            when (row.type) {
+                TrackType.OVERLAY -> WantedFile.OVERLAY
+                TrackType.AUDIO -> WantedFile.MUSIC
+                else -> WantedFile.PHOTO_OR_VIDEO
+            }
+
+        /** The items a row of [row]'s kind can hold from [items], and how many were left out. */
+        private suspend fun timedClips(
+            row: Track,
+            items: List<IntakeItem>,
+            project: Project,
+        ): Pair<List<Clip>, Int> {
+            if (row.type == TrackType.VISUAL) {
+                val made = newMainItems(projectId, items, project.photoDurationMs, project.defaultFit, probe)
+                val pips = made.clips.filterIsInstance<MediaClip>().map { it.withPip(PipPlacement.DEFAULT) }
+                return pips to made.skipped + (made.clips.size - pips.size)
+            }
+            val out = mutableListOf<Clip>()
+            for (item in items) {
+                val ref = item.ref ?: continue
+                val facts = probe.probe(projectId, ref, item.info?.mime) ?: continue
+                val ms = facts.durationMs?.takeIf { it in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS } ?: continue
+                out +=
+                    when {
+                        row.type == TrackType.AUDIO && facts.hasAudio -> {
+                            AudioClip(RandomIds.clipId(), ref, startMs = 0, durationMs = ms, sourceDurationMs = ms)
+                        }
+
+                        row.type == TrackType.OVERLAY && facts.hasVideo && !facts.isImage -> {
+                            OverlayClip(RandomIds.clipId(), ref, 0, ms, ms, key = overlayKey(), repeat = false)
+                        }
+
+                        else -> {
+                            continue
+                        }
+                    }
+            }
+            return out to items.size - out.size
+        }
+
+        /** An extra overlay is keyed like the preset's frame, or by the usual green without a preset. */
+        private fun overlayKey(): KeySpec =
+            uiState.value.preset
+                ?.frame
+                ?.key ?: KeySpec(DEFAULT_KEY_GREEN, FrameSpec.DEFAULT_TOLERANCE, FrameSpec.DEFAULT_SOFTNESS)
 
         private suspend fun replacePart(
             clipId: ClipId,
@@ -641,5 +782,8 @@ class EditorViewModel
             const val KEY_POSITION = "editor_position_us"
             const val KEY_PLAYING = "editor_playing"
             const val KEY_NOTES_SHOWN = "editor_notes_shown"
+
+            /** The green an extra overlay's window is keyed by when there is no preset frame to copy. */
+            val DEFAULT_KEY_GREEN = ArgbColor(0xFF00D922)
         }
     }

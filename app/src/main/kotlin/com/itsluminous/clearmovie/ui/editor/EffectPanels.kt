@@ -332,7 +332,7 @@ internal fun AnimationPanel(
     close: () -> Unit,
 ) {
     PanelTitle(stringResource(R.string.animation_title), onDone = close, onCancel = null)
-    val slot = project.mainSlot(open.clipId) ?: return
+    val slot = open.clipId?.let { project.mainSlot(it) } ?: return
     val clip = slot.clip
     val tabs = AnimSlot.entries.filter { clip.animationChoices(it).isNotEmpty() }
     if (tabs.isEmpty()) {

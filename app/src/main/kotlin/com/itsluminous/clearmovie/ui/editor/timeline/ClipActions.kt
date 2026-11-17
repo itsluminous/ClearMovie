@@ -23,25 +23,109 @@ enum class EditAction {
     PLAY,
     SKIP,
     ADD_MEDIA,
+    ZOOM_OUT,
+    ZOOM_IN,
     FIT_ALL,
+
+    // cm-tracks: rows, and items on rows other than MAIN.
+    ADD_ROW,
+    ADD_HERE,
+    SHOW_ON_TOP,
+    BRING_FORWARD,
+    SEND_BACKWARD,
+    SHOW_AT_BOTTOM,
+    MOVE_ROW_UP,
+    MOVE_ROW_DOWN,
+    REMOVE_ROW,
+
+    /** A switch: the row's sound is off. */
+    MUTE_ROW,
+
+    /** A switch: "Lower music when people talk", on a music row. */
+    LOWER_MUSIC,
+
+    /** A switch: the preset frame is shown. */
+    FRAME_ON,
+    MOVE_EARLIER,
+    MOVE_LATER,
+    MOVE_TO_ROW,
+    FADE,
+    POSITION,
 }
 
 /** What is selected, as far as the bar is concerned. */
-enum class SelectionKind { NOTHING, PHOTO, VIDEO, TEXT_CARD, COLOUR_CARD, INTRO, ENDING }
+enum class SelectionKind {
+    NOTHING,
+    PHOTO,
+    VIDEO,
+    TEXT_CARD,
+    COLOUR_CARD,
+    INTRO,
+    ENDING,
 
-/** One button: [enabled] is false where the action can't apply here (Move left on the first item). */
+    /** A photo or video on a picture-in-picture row. */
+    PIP_PHOTO,
+    PIP_VIDEO,
+
+    /** A caption on a text row. */
+    TEXT,
+
+    /** Music, a voice or a sound. */
+    SOUND,
+
+    /** The preset frame. */
+    FRAME,
+
+    /** An extra overlay video on a frame row. */
+    OVERLAY,
+}
+
+/**
+ * One button: [enabled] is false where the action can't apply here (Move
+ * left on the first item). [checked] makes it a switch, on or off.
+ */
 data class BarAction(
     val action: EditAction,
     val enabled: Boolean = true,
+    val checked: Boolean? = null,
+)
+
+/** What a selected row allows, for [ClipActions.forRow]. */
+data class RowFacts(
+    val isMain: Boolean,
+    val isVisual: Boolean,
+    val isSound: Boolean,
+    val isMusic: Boolean,
+    val isPresetFrame: Boolean,
+    val removable: Boolean,
+    val canMoveUp: Boolean,
+    val canMoveDown: Boolean,
+    val canGoForward: Boolean,
+    val canGoBackward: Boolean,
+    val muted: Boolean,
+    val enabled: Boolean,
+    val lowerWhenTalking: Boolean,
+)
+
+/** What a selected item on a row other than MAIN allows, for [ClipActions.forTimed]. */
+data class TimedFacts(
+    val canMoveEarlier: Boolean,
+    val canMoveLater: Boolean,
+    /** Items on rows the preset manages stay on their row and keep their time. */
+    val fixed: Boolean,
+    val isMusic: Boolean = false,
+    val lowerWhenTalking: Boolean = true,
+    val frameOn: Boolean = true,
 )
 
 /**
  * The bar's actions per selection, most-used first (ARCHITECTURE section
- * 11.2). Add text and Move to another row arrive with the milestones that
- * build them (cm-tracks, cm-captions); the plan does not ask for them to be
- * shown before then, so they are left out rather than shown disabled.
- * Transition (into the next item) is greyed out on an item with nothing
- * after it ([hasNext]).
+ * 11.2). Add text and Style arrive with cm-captions; the plan does not ask
+ * for them to be shown before then, so they are left out rather than shown
+ * disabled. Transition (into the next item) is greyed out on an item with
+ * nothing after it ([hasNext]). A MAIN item's "Move to another row" is left
+ * out: the model moves items only between rows of one kind, and MAIN is the
+ * only row of its kind.
  */
 object ClipActions {
     fun forSelection(
@@ -51,13 +135,22 @@ object ClipActions {
         canMoveRight: Boolean = true,
         canJoin: Boolean = false,
         hasNext: Boolean = true,
+        canZoomIn: Boolean = true,
+        canZoomOut: Boolean = true,
     ): List<BarAction> {
         val moves = listOf(BarAction(EditAction.MOVE_LEFT, canMoveLeft), BarAction(EditAction.MOVE_RIGHT, canMoveRight))
         val effects = listOf(BarAction(EditAction.TRANSITION, hasNext), BarAction(EditAction.ANIMATION))
         val list =
             when (kind) {
                 SelectionKind.NOTHING -> {
-                    listOf(BarAction(EditAction.ADD_MEDIA), BarAction(EditAction.FIT_ALL))
+                    // The one place for zoom (with pinching): next to Fit all.
+                    listOf(
+                        BarAction(EditAction.ADD_MEDIA),
+                        BarAction(EditAction.ZOOM_OUT, canZoomOut),
+                        BarAction(EditAction.ZOOM_IN, canZoomIn),
+                        BarAction(EditAction.FIT_ALL, canZoomOut),
+                        BarAction(EditAction.ADD_ROW),
+                    )
                 }
 
                 SelectionKind.PHOTO -> {
@@ -107,10 +200,81 @@ object ClipActions {
                 SelectionKind.ENDING -> {
                     listOf(EditAction.PLAY, EditAction.REPLACE, EditAction.SKIP).map(::BarAction)
                 }
+
+                else -> {
+                    emptyList()
+                }
             }
         // A photo or video that is gone: Replace and Delete come first, the rest stay usable.
         if (!missing) return list
         val first = list.filter { it.action == EditAction.REPLACE || it.action == EditAction.DELETE }
         return first.sortedBy { it.action != EditAction.REPLACE } + (list - first.toSet())
     }
+
+    /** The actions for an item on a row other than MAIN, most-used first. */
+    fun forTimed(
+        kind: SelectionKind,
+        facts: TimedFacts,
+    ): List<BarAction> {
+        val moves =
+            if (facts.fixed) {
+                emptyList()
+            } else {
+                listOf(
+                    BarAction(EditAction.MOVE_EARLIER, facts.canMoveEarlier),
+                    BarAction(EditAction.MOVE_LATER, facts.canMoveLater),
+                    BarAction(EditAction.MOVE_TO_ROW),
+                )
+            }
+        val delete = listOf(BarAction(EditAction.DELETE))
+        return when (kind) {
+            SelectionKind.TEXT -> {
+                listOf(BarAction(EditAction.EDIT_TEXT)) + moves + delete
+            }
+
+            SelectionKind.PIP_PHOTO -> {
+                listOf(EditAction.DURATION, EditAction.POSITION, EditAction.ROTATE).map(::BarAction) + moves + delete
+            }
+
+            SelectionKind.PIP_VIDEO -> {
+                listOf(EditAction.TRIM, EditAction.VOLUME, EditAction.POSITION, EditAction.ROTATE).map(::BarAction) + moves + delete
+            }
+
+            SelectionKind.SOUND -> {
+                listOf(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE).map(::BarAction) +
+                    listOfNotNull(BarAction(EditAction.LOWER_MUSIC, checked = facts.lowerWhenTalking).takeIf { facts.isMusic }) +
+                    moves + delete
+            }
+
+            SelectionKind.FRAME -> {
+                listOf(BarAction(EditAction.FRAME_ON, checked = facts.frameOn))
+            }
+
+            SelectionKind.OVERLAY -> {
+                moves + delete
+            }
+
+            else -> {
+                forSelection(kind)
+            }
+        }
+    }
+
+    /** The actions for a selected row (its icon was tapped): Add here, its sound, where it is drawn, where it is on screen. */
+    fun forRow(row: RowFacts): List<BarAction> =
+        buildList {
+            add(BarAction(if (row.isMain) EditAction.ADD_MEDIA else EditAction.ADD_HERE))
+            if (row.isSound) add(BarAction(EditAction.MUTE_ROW, checked = row.muted))
+            if (row.isMusic) add(BarAction(EditAction.LOWER_MUSIC, checked = row.lowerWhenTalking))
+            if (row.isPresetFrame) add(BarAction(EditAction.FRAME_ON, checked = row.enabled))
+            if (row.isVisual) {
+                add(BarAction(EditAction.SHOW_ON_TOP, row.canGoForward))
+                add(BarAction(EditAction.BRING_FORWARD, row.canGoForward))
+                add(BarAction(EditAction.SEND_BACKWARD, row.canGoBackward))
+                add(BarAction(EditAction.SHOW_AT_BOTTOM, row.canGoBackward))
+            }
+            add(BarAction(EditAction.MOVE_ROW_UP, row.canMoveUp))
+            add(BarAction(EditAction.MOVE_ROW_DOWN, row.canMoveDown))
+            if (row.removable) add(BarAction(EditAction.REMOVE_ROW))
+        }
 }

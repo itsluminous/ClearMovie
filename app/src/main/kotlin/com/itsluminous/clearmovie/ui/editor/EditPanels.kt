@@ -50,6 +50,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -66,10 +67,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.CardClip
+import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.Fit
@@ -81,6 +85,8 @@ import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.domain.model.TextRules
+import com.itsluminous.clearmovie.domain.model.TrackId
+import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.deleteClip
 import com.itsluminous.clearmovie.domain.model.duplicateClip
@@ -97,6 +103,7 @@ import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.ui.components.preciseDurationText
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
+import com.itsluminous.clearmovie.ui.editor.timeline.TimelineRow
 import com.itsluminous.clearmovie.ui.editor.timeline.TrimMath
 import com.itsluminous.clearmovie.ui.editor.timeline.itemName
 import kotlin.math.log10
@@ -163,9 +170,23 @@ interface EditorCallbacks {
 
     /** Plays the intro or the ending on its own. */
     fun playPart(clipId: ClipId)
+
+    /**
+     * "Add here" on a picture-in-picture, music, voice or frame row: opens
+     * the gallery or Files, and what is picked goes on row [trackId] at
+     * [atMs] (or, where that is taken, on a new row of its kind).
+     */
+    fun pickForRow(
+        trackId: TrackId,
+        atMs: Long,
+    )
 }
 
-/** The open panel, in place of the contextual bar. */
+/**
+ * The open panel, in place of the contextual bar. It is about an item
+ * ([OpenPanel.clipId], on any row) or a row ([OpenPanel.trackId]); when that
+ * goes away (an undo) the panel closes.
+ */
 @Composable
 fun EditPanel(
     open: OpenPanel,
@@ -174,41 +195,137 @@ fun EditPanel(
     thumbnail: ThumbSource,
     callbacks: EditorCallbacks,
     onPanel: (OpenPanel?) -> Unit,
-    onDeleted: () -> Unit,
+    onDeleted: (Clip) -> Unit,
     modifier: Modifier = Modifier,
+    onSelect: (ClipId) -> Unit = {},
+    rows: List<TimelineRow> = emptyList(),
+    onStack: (TrackId, StackMove) -> Unit = { _, _ -> },
+    onRemoveRow: (TrackId) -> Unit = {},
+    onSelectRow: (TrackId) -> Unit = {},
+    maxHeight: Dp = 420.dp,
 ) {
     val close = { onPanel(null) }
-    val clip = project.mainSlot(open.clipId)?.clip
-    // The item went away (an undo): the panel closes, after this frame rather than during it.
-    LaunchedEffect(clip == null) { if (clip == null) close() }
-    if (clip == null) return
+    val clip = open.clipId?.let { project.clip(it) }
+    val track = open.trackId?.let { project.track(it) } ?: clip?.let { project.trackOf(it.id) }
+    val gone = (open.clipId != null && clip == null) || track == null
+    // The item or row went away (an undo): the panel closes, after this frame rather than during it.
+    LaunchedEffect(gone) { if (gone) close() }
+    if (gone || track == null) return
+    val onMain = track.type == TrackType.MAIN
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth().testTag(PANEL_TAG)) {
         Column(
             Modifier
                 .fillMaxWidth()
                 .heightIn(
-                    max = 420.dp,
+                    max = maxHeight,
                 ).verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             when (open.panel) {
-                Panel.TRIM -> (clip as? VideoClip)?.let { TrimPanel(it, thumbnail, callbacks, close) }
-                Panel.DURATION -> DurationPanel(clip, callbacks, close)
-                Panel.SPLIT -> (clip as? VideoClip)?.let { SplitPanel(it, project, playheadMs, thumbnail, callbacks, close) }
-                Panel.SPEED -> (clip as? VideoClip)?.let { SpeedPanel(it, callbacks, close) }
-                Panel.LOOP -> (clip as? VideoClip)?.let { LoopPanel(it, callbacks, close) }
-                Panel.VOLUME -> (clip as? VideoClip)?.let { VolumePanel(it, callbacks, close) }
-                Panel.FIT -> (clip as? MediaClip)?.let { FitPanel(it, callbacks, close) }
-                Panel.INSERT -> InsertPanel(open, clip, callbacks, onPanel)
-                Panel.CARD_TEXT -> CardTextPanel(open, clip, callbacks, close)
-                Panel.CARD_COLOUR -> CardColourPanel(open, clip, callbacks, close)
-                Panel.ITEM_MENU -> ItemMenuPanel(clip, callbacks, onPanel, onDeleted)
-                Panel.TRANSITION -> TransitionPanel(open, project, thumbnail, callbacks, close, onPanel)
-                Panel.ANIMATION -> AnimationPanel(open, project, thumbnail, callbacks, close)
+                Panel.TRIM -> {
+                    (clip as? VideoClip)?.let { TrimPanel(it, thumbnail, callbacks, close) }
+                }
+
+                Panel.DURATION -> {
+                    (clip as? MainClip)?.let { DurationPanel(it, callbacks, close) }
+                }
+
+                Panel.SPLIT -> {
+                    (clip as? VideoClip)?.let { SplitPanel(it, project, playheadMs, thumbnail, callbacks, close) }
+                }
+
+                Panel.SPEED -> {
+                    (clip as? VideoClip)?.let { SpeedPanel(it, callbacks, close) }
+                }
+
+                Panel.LOOP -> {
+                    (clip as? VideoClip)?.let { LoopPanel(it, callbacks, close) }
+                }
+
+                Panel.VOLUME -> {
+                    volumeOf(clip)?.let { VolumePanel(clip!!.id, it, callbacks, close) }
+                }
+
+                Panel.FIT -> {
+                    (clip as? MediaClip)?.let { FitPanel(it, callbacks, close) }
+                }
+
+                Panel.INSERT -> {
+                    if (onMain && clip is MainClip) {
+                        InsertPanel(open, clip, callbacks, onPanel)
+                    } else {
+                        TimedInsertPanel(open, track, clip, rows, playheadMs, callbacks, onPanel)
+                    }
+                }
+
+                Panel.CARD_TEXT -> {
+                    (clip as? MainClip)?.let { CardTextPanel(open, it, callbacks, close) }
+                }
+
+                Panel.CARD_COLOUR -> {
+                    (clip as? MainClip)?.let { CardColourPanel(open, it, callbacks, close) }
+                }
+
+                Panel.ITEM_MENU -> {
+                    if (onMain && clip is MainClip) {
+                        ItemMenuPanel(clip, callbacks, onPanel, onDeleted)
+                        RowSection(track, project, callbacks, onPanel, onStack, onRemoveRow, withAddHere = false)
+                    } else if (clip != null) {
+                        TimedItemMenuPanel(clip, track, project, callbacks, onPanel, onDeleted, onStack, onRemoveRow)
+                    }
+                }
+
+                Panel.ROW_MENU -> {
+                    RowMenuPanel(track, project, rows, callbacks, onPanel, onStack, onRemoveRow)
+                }
+
+                Panel.ADD_ROW -> {
+                    AddRowPanel(callbacks, onSelectRow = onSelectRow, close = close)
+                }
+
+                Panel.TEXT -> {
+                    TextPanel(open, track, clip, playheadMs, callbacks, onSelect, close)
+                }
+
+                Panel.SOUND_TRIM -> {
+                    (clip as? AudioClip)?.let { SoundTrimPanel(it, callbacks, close) }
+                }
+
+                Panel.FADE -> {
+                    (clip as? AudioClip)?.let { FadePanel(it, callbacks, close) }
+                }
+
+                Panel.PIP_PLACE -> {
+                    (clip as? MediaClip)?.let { PipPlacePanel(it, callbacks, close) }
+                }
+
+                Panel.MOVE_TO_ROW -> {
+                    clip?.let { MoveToRowPanel(it, project, rows, callbacks, close) }
+                }
+
+                Panel.REMOVE_ROW -> {
+                    RemoveRowPanel(track, rows, callbacks, close)
+                }
+
+                Panel.TRANSITION -> {
+                    TransitionPanel(open, project, thumbnail, callbacks, close, onPanel)
+                }
+
+                Panel.ANIMATION -> {
+                    AnimationPanel(open, project, thumbnail, callbacks, close)
+                }
             }
         }
     }
 }
+
+/** The volume a video or a sound has now (dB), or null for an item without sound. */
+private fun volumeOf(clip: Clip?): Double? =
+    when (clip) {
+        is VideoClip -> clip.volumeDb
+        is AudioClip -> clip.volumeDb
+        else -> null
+    }
 
 @Composable
 internal fun PanelTitle(
@@ -482,15 +599,16 @@ private fun LoopPanel(
 
 @Composable
 private fun VolumePanel(
-    clip: VideoClip,
+    clipId: ClipId,
+    volumeDb: Double,
     callbacks: EditorCallbacks,
     close: () -> Unit,
 ) {
-    var percent by rememberSaveable(clip.id.value) { mutableFloatStateOf(dbToPercent(clip.volumeDb)) }
+    var percent by rememberSaveable(clipId.value) { mutableFloatStateOf(dbToPercent(volumeDb)) }
     PanelTitle(
         stringResource(R.string.volume_title),
         onDone = {
-            callbacks.edit { setVolume(clip.id, percentToDb(percent)) }
+            callbacks.edit { setVolume(clipId, percentToDb(percent)) }
             close()
         },
         onCancel = close,
@@ -559,13 +677,20 @@ private fun FitPanel(
     }
 }
 
+/**
+ * One large option in a panel or menu: an icon, a title and an optional
+ * line under it. [selected] marks the chosen one (null: not a choice of
+ * one); [enabled] false greys it out where it can't apply (Show on top for
+ * the top row), so the options never move about.
+ */
 @Composable
-private fun Choice(
+internal fun Choice(
     title: String,
     body: String?,
     selected: Boolean?,
     icon: Int,
     tag: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val primary = MaterialTheme.colorScheme.primary
@@ -577,7 +702,8 @@ private fun Choice(
             .clip(RoundedCornerShape(12.dp))
             .then(
                 if (selected == true) Modifier.border(BorderStroke(2.dp, primary), RoundedCornerShape(12.dp)) else Modifier,
-            ).clickable(role = Role.Button, onClick = onClick)
+            ).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.38f)
             .semantics(mergeDescendants = true) { if (selected != null) this.selected = selected }
             .padding(12.dp)
             .testTag(tag),
@@ -644,14 +770,14 @@ private fun CardTextPanel(
     close: () -> Unit,
 ) {
     val editing = open.side == null
-    var text by rememberSaveable(open.clipId.value, editing) { mutableStateOf(if (editing) (clip as? CardClip)?.text.orEmpty() else "") }
+    var text by rememberSaveable(clip.id.value, editing) { mutableStateOf(if (editing) (clip as? CardClip)?.text.orEmpty() else "") }
     val usable = text.isNotBlank() && TextRules.isValidText(text)
     val submit = {
         if (usable) {
             if (editing) {
                 callbacks.edit { setText(clip.id, text.trim()) }
             } else {
-                callbacks.insertCard(open.clipId, open.side!!, text.trim(), CARD_COLOURS.first().first)
+                callbacks.insertCard(clip.id, open.side!!, text.trim(), CARD_COLOURS.first().first)
             }
             close()
         }
@@ -699,7 +825,7 @@ private fun CardColourPanel(
                         if (editing) {
                             callbacks.edit { setCardColor(clip.id, colour) }
                         } else {
-                            callbacks.insertCard(open.clipId, open.side!!, null, colour)
+                            callbacks.insertCard(clip.id, open.side!!, null, colour)
                         }
                         close()
                     }.semantics {
@@ -717,7 +843,7 @@ private fun ItemMenuPanel(
     clip: MainClip,
     callbacks: EditorCallbacks,
     onPanel: (OpenPanel?) -> Unit,
-    onDeleted: () -> Unit,
+    onDeleted: (Clip) -> Unit,
 ) {
     PanelTitle(stringResource(itemName(clip)), onDone = null, onCancel = { onPanel(null) })
     val content = clip is PhotoClip || clip is VideoClip || clip is CardClip
@@ -738,7 +864,7 @@ private fun ItemMenuPanel(
             onPanel(null)
         }
         Choice(stringResource(R.string.action_delete), null, null, R.drawable.ic_delete, "menu_delete") {
-            if (callbacks.edit { deleteClip(clip.id) }) onDeleted()
+            if (callbacks.edit { deleteClip(clip.id) }) onDeleted(clip)
             onPanel(null)
         }
     }

@@ -34,29 +34,81 @@ class TimelineGeometryTest {
     )
 
     @Test
-    fun `one shared plus per boundary, never before the intro or after the ending`() {
-        // 10 ms per dp: every item is at least 200 dp wide.
-        val plus = geometry(10.0, playheadMs = -10_000.0).plusPoints()
-        assertThat(plus.map { it.boundary }).containsExactly(1, 2, 3, 4).inOrder()
-        // Each sits on its boundary and inserts after the item on its left.
-        assertThat(plus.map { it.xDp }).containsExactly(200.0, 500.0, 800.0, 1100.0).inOrder()
-        assertThat(plus.map { it.anchorIndex to it.side }).containsExactly(
-            0 to InsertSide.AFTER,
-            1 to InsertSide.AFTER,
-            2 to InsertSide.AFTER,
-            3 to InsertSide.AFTER,
-        )
+    fun `nothing selected, one plus at the end of the row and none between items`() {
+        // 10 ms per dp: every item is at least 200 dp wide; at 100 ms per dp, 30 dp.
+        for (scale in listOf(10.0, 100.0)) {
+            val plus = geometry(scale, playheadMs = 5000.0).plusPoints()
+            // After the last item (c), never after the ending.
+            assertThat(plus.map { it.anchorIndex to it.side }).containsExactly(3 to InsertSide.AFTER)
+            assertThat(plus.single().xDp).isWithin(1e-9).of(11_000 / scale)
+        }
     }
 
     @Test
-    fun `zoomed out, only the selected item's plus points show, plus one under the playhead`() {
-        // 100 ms per dp: items are 30 dp, under the 64 dp threshold.
-        val none = geometry(100.0, playheadMs = -1e6).plusPoints()
-        assertThat(none).isEmpty()
-        val selected = geometry(100.0, selected = 2, playheadMs = -1e6).plusPoints()
-        assertThat(selected.map { it.anchorIndex to it.side }).containsExactly(2 to InsertSide.BEFORE, 2 to InsertSide.AFTER)
-        val underPlayhead = geometry(100.0, playheadMs = 5000.0).plusPoints()
-        assertThat(underPlayhead.map { it.boundary }).containsExactly(2)
+    fun `an empty MAIN, only the intro and ending, has one plus after the intro`() {
+        val g =
+            TimelineGeometry(
+                listOf(SlotSpan("intro", 0, 2000, content = false), SlotSpan("end", 2000, 4000, content = false)),
+                ZoomState(10.0, 0.0, false),
+                2000.0,
+                28.0,
+                72.0,
+                selected = null,
+                playheadMs = 0.0,
+                selectedTrimmable = false,
+            )
+        assertThat(g.plusPoints().map { it.anchorIndex to it.side }).containsExactly(0 to InsertSide.AFTER)
+    }
+
+    @Test
+    fun `selecting an item shows a plus on its two sides only, and moving the selection moves them`() {
+        // Zoomed out further, the selected item's "+" can sit where the end one would, which then gives way.
+        for (scale in listOf(10.0, 20.0)) {
+            for (sel in listOf(1, 2)) {
+                val plus = geometry(scale, selected = sel, playheadMs = -1e6).plusPoints()
+                val sides = plus.filter { it.anchorIndex == sel }.map { it.side }
+                assertThat(sides).containsExactly(InsertSide.BEFORE, InsertSide.AFTER)
+                // Besides those, only the row's end "+" (after c).
+                assertThat(plus.filter { it.anchorIndex != sel }.map { it.anchorIndex to it.side }).containsExactly(3 to InsertSide.AFTER)
+            }
+            // The last item selected: its right "+" is also the end one.
+            val last = geometry(scale, selected = 3, playheadMs = -1e6).plusPoints()
+            assertThat(last.map { it.anchorIndex to it.side }).containsExactly(3 to InsertSide.BEFORE, 3 to InsertSide.AFTER)
+        }
+    }
+
+    @Test
+    fun `plus and trim handle areas never meet, at the narrowest and widest zoom and at both ends of the view`() {
+        // The narrowest (close-up, about 4 ms per dp) and widest (fit all of 13 s in 300 dp) scales,
+        // with the first and the last item selected, at the start and the end of the view.
+        val widest = 13_000 / 300.0
+        for (scale in listOf(TimelineZoom.closeUpMsPerDp, 10.0, widest)) {
+            for (sel in listOf(1, 3)) {
+                for (scroll in listOf(0.0, 9000.0)) {
+                    val g =
+                        TimelineGeometry(
+                            spans,
+                            ZoomState(scale, scroll, false),
+                            300.0,
+                            28.0,
+                            72.0,
+                            selected = sel,
+                            playheadMs = -1e6,
+                            selectedTrimmable = true,
+                        )
+                    val (start, end) = g.handleHitAreas()!!
+                    for (p in g.plusPoints()) {
+                        val lo = p.xDp - TimelineGeometry.PLUS_HIT_DP / 2
+                        val hi = p.xDp + TimelineGeometry.PLUS_HIT_DP / 2
+                        assertThat(hi <= start.start || lo >= start.endInclusive).isTrue()
+                        assertThat(hi <= end.start || lo >= end.endInclusive).isTrue()
+                        // And a touch on either handle is the handle, never a "+".
+                        assertThat(g.hitTest((start.start + start.endInclusive) / 2, g.mainCentre)).isEqualTo(HitTarget.TrimStart(sel))
+                        assertThat(g.hitTest((end.start + end.endInclusive) / 2, g.mainCentre)).isEqualTo(HitTarget.TrimEnd(sel))
+                    }
+                }
+            }
+        }
     }
 
     @Test
@@ -107,7 +159,7 @@ class TimelineGeometryTest {
     }
 
     @Test
-    fun `a plus kept only for the playhead stays clear of the selected item's handles`() {
+    fun `with a narrow neighbour, no plus lands on the selected item's handles`() {
         // Item 2 selected; item 3 is narrow (20 dp) and the playhead sits on the boundary after it,
         // 20 dp from item 2's end handle: that "+" would cover the handle, so it is not drawn.
         val narrow =
@@ -134,7 +186,7 @@ class TimelineGeometryTest {
         for (p in g.plusPoints()) {
             for (h in handles) assertThat(p.xDp + half <= h.start + 1e-9 || p.xDp - half >= h.endInclusive - 1e-9).isTrue()
         }
-        // The playhead's boundary (x 820) is 20 dp past the end handle: no "+" there.
+        // The boundary after the narrow item (x 820) is 20 dp past the end handle: no "+" there.
         assertThat(g.plusPoints().map { it.boundary }).doesNotContain(4)
         assertThat(g.hitTest(795.0, g.mainCentre)).isEqualTo(HitTarget.TrimEnd(2))
     }

@@ -129,6 +129,23 @@ object TimelineZoom {
         return state.copy(scrollMs = scroll)
     }
 
+    /**
+     * Scrolls by [dxDp] for a selected item's "+" buttons, allowed up to
+     * [roomDp] past the video's start or end. Leaves fit all (the scale stays);
+     * the next scroll by hand comes back within the video.
+     */
+    fun nudgePastEnds(
+        state: ZoomState,
+        dxDp: Double,
+        roomDp: Double,
+        totalMs: Long,
+        widthDp: Double,
+    ): ZoomState {
+        val extra = roomDp * state.msPerDp
+        val scroll = (state.scrollMs + dxDp * state.msPerDp).coerceIn(-extra, maxScrollMs(state.msPerDp, totalMs, widthDp) + extra)
+        return state.copy(scrollMs = scroll, fitAll = false)
+    }
+
     /** Scrolls so that [timeMs] is on screen, at [atFraction] of the width when it has to move. */
     fun reveal(
         state: ZoomState,
