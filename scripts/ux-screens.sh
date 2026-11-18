@@ -57,6 +57,8 @@ if [ ${#configs[@]} -eq 0 ]; then
 fi
 
 d() { "$adb" -s "$ANDROID_SERIAL" "$@"; }
+# A run that hangs (a wedged emulator) is given up after UX_RUN_TIMEOUT seconds, so the other configs still run.
+limited() { perl -e 'alarm shift; exec @ARGV' "${UX_RUN_TIMEOUT:-1500}" "$@"; }
 sh() { d shell "$@" | tr -d '\r'; }
 
 orig_font=$(sh settings get system font_scale)
@@ -113,11 +115,12 @@ for config in "${configs[@]}"; do
   exportarg=false
   for e in ${UX_EXPORT_CONFIGS:-base dark w320f20hl}; do [ "$e" = "$name" ] && exportarg=true; done
   for method in tour stateless; do
-    d shell am instrument -w -e uxtour "$name" -e uxdyn "$dynarg" -e uxexport "$exportarg" \
-      -e class "com.itsluminous.clearmovie.ui.UxTour#$method" "$runner" | tr -d '\r' | tail -3
+    limited "$adb" -s "$ANDROID_SERIAL" shell am instrument -w -e uxtour "$name" -e uxdyn "$dynarg" -e uxexport "$exportarg" \
+      -e class "com.itsluminous.clearmovie.ui.UxTour#$method" "$runner" | tr -d '\r' | tail -3 || echo "$name $method: gave up or failed"
   done
   rm -rf "${out:?}/$name"
-  d pull "$files/ux/$name" "$out/$name" >/dev/null
+  d pull "$files/ux/$name" "$out/$name" >/dev/null || echo "no pictures for $name"
+  mkdir -p "$out/$name"
   printf '%s\t%s\n' "config" "$config" >>"$out/$name/manifest.txt"
   if [ "$colours" = dyn ]; then
     if [ "$orig_palette" = "null" ]; then
