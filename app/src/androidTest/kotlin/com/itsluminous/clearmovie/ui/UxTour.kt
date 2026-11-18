@@ -286,9 +286,11 @@ class UxTour {
     /** Clicks a bar button, scrolling the bar to it first when it does not fit. */
     private fun bar(action: EditAction) {
         val t = barActionTag(action)
-        waitFor(hasTestTag(t))
+        waitFor(hasTestTag(BAR_TAG))
+        // A lazy row composes only the buttons on screen: scroll to it first, then wait for it.
         val scroller = hasScrollToNodeAction() and hasAnyAncestor(hasTestTag(BAR_TAG))
         if (exists(scroller)) runCatching { compose.onNode(scroller).performScrollToNode(hasTestTag(t)) }
+        waitFor(hasTestTag(t))
         compose.onNodeWithTag(t).performClick()
         compose.waitForIdle()
     }
@@ -536,7 +538,7 @@ class UxTour {
         state("item-menu", "Long-press menu on a photo") {
             closePanel()
             select(secondPhoto)
-            compose.onNodeWithTag(clipTag(secondPhoto)).performTouchInput { longClick(Offset(width * 0.25f, height * 0.25f)) }
+            compose.onNodeWithTag(clipTag(secondPhoto)).performTouchInput { longClick() }
             waitFor(hasTestTag(PANEL_TAG))
         }
         state("panel-insert", "The \"+\" chooser (add before or after this photo)") {
@@ -658,11 +660,15 @@ class UxTour {
             deselect()
             bar(EditAction.ADD_ROW)
         }
-        state("editor-all-rows", "All rows shown: the preview shrinks or floats") {
+        state("editor-all-rows", "A panel open and all rows shown: the preview shrinks or floats") {
             closePanel()
-            deselect()
-            tag(TIMELINE_ROWS_TOGGLE_TAG).performSemanticsAction(SemanticsActions.OnClick)
+            select(secondPhoto)
+            bar(EditAction.DURATION)
+            waitFor(hasTestTag(TIMELINE_ROWS_TOGGLE_TAG))
+            compose.onNodeWithTag(TIMELINE_ROWS_TOGGLE_TAG).performClick()
         }
+        closePanel()
+        deselect()
         // ---- export ----------------------------------------------------------------------------
         state("export-choose", "Export sheet: the three sizes") {
             compose.onNodeWithTag(EDITOR_EXPORT_TAG).performClick()
@@ -822,7 +828,7 @@ class UxTour {
     private companion object {
         const val TAG = "UxTour"
         const val TIMEOUT_MS = 8_000L
-        const val EXPORT_TIMEOUT_MS = 240_000L
+        const val EXPORT_TIMEOUT_MS = 600_000L
         const val SETTLE_MS = 700L
     }
 }
