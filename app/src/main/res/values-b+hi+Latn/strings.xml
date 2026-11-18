@@ -372,7 +372,7 @@
     <string name="volume_mute">Awaaz band</string>
     <string name="zoom_in">Zoom in</string>
     <string name="zoom_out">Zoom out</string>
-    <string name="zoom_fit_all">Poora dikhayein</string>
+    <string name="zoom_fit_all">Sab dekhein</string>
     <string name="duration_minutes_seconds_tenths">%1$d:%2$02d.%3$d</string>
     <plurals name="loop_times">
         <item quantity="one">%1$d baar chalega</item>
@@ -440,12 +440,12 @@
     <string name="transition_tile_white">White</string>
     <string name="transition_tile_zoom">Zoom</string>
     <!-- cm-tracks: rows, what shows on top in the video, and items on every row. Plain words only. -->
-    <string name="action_add_row">Row add karein</string>
+    <string name="action_add_row">Row jodein</string>
     <string name="action_add_here">Yahan add karein</string>
     <string name="action_remove_row">Row hatayein</string>
     <string name="action_mute_row">Row ki awaaz band</string>
     <string name="action_lower_music">Baat hone par music dheema</string>
-    <string name="bar_lower_music">Baat par dheema</string>
+    <string name="bar_lower_music">Baat pe kam</string>
     <string name="action_frame_on">Frame dikhayein</string>
     <string name="action_move_earlier">Pehle</string>
     <string name="action_move_later">Baad me</string>
@@ -509,7 +509,24 @@
         <item quantity="other">Iske %1$d items bhi hat jaayenge. Aap inhe undo kar sakte hain.</item>
     </plurals>
     <!-- Short label in the bar: adds photos and videos at the end. -->
-    <string name="bar_add_media">Photos add karein</string>
+    <string name="bar_add_media">Photo jodein</string>
+    <!-- Bar labels (cm-ux-review): short forms of longer names used elsewhere, so each fits one line
+         of a bar button (about 66 dp at 12 sp, 10 sp at the least). Menus and panels keep the full words. -->
+    <string name="bar_skip">Chhodein</string>
+    <string name="bar_move_to_row">Doosri row</string>
+    <string name="bar_show_on_top">Sabse upar</string>
+    <string name="bar_bring_forward">Ek upar</string>
+    <string name="bar_send_backward">Ek neeche</string>
+    <string name="bar_show_at_bottom">Sabse neeche</string>
+    <string name="bar_move_row_up">Row upar</string>
+    <string name="bar_move_row_down">Row neeche</string>
+    <string name="bar_mute_row">Awaaz band</string>
+    <string name="bar_add_here">Yahan jodein</string>
+    <string name="bar_duplicate">Copy karein</string>
+    <string name="bar_move_left">Baayein</string>
+    <string name="bar_move_right">Daayein</string>
+    <string name="bar_frame_on">Frame dikhe</string>
+    <string name="bar_delete">Hatayein</string>
     <!-- cm-captions: the caption editor. -->
     <string name="action_add_caption">Caption jodein</string>
     <string name="caption_title">Caption</string>

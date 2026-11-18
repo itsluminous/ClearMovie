@@ -247,6 +247,10 @@ private fun BarButton(
     }
 }
 
+/**
+ * A bar button's label: one or two short words, the bar_ forms where the full name used in menus and
+ * panels would not fit one line of a button in English, Hindi or Hinglish.
+ */
 fun barLabel(action: EditAction): Int =
     when (action) {
         EditAction.TRIM -> R.string.action_trim
@@ -258,36 +262,36 @@ fun barLabel(action: EditAction): Int =
         EditAction.FIT -> R.string.action_fit
         EditAction.ROTATE -> R.string.action_rotate
         EditAction.REPLACE -> R.string.action_replace
-        EditAction.DUPLICATE -> R.string.action_duplicate
-        EditAction.MOVE_LEFT -> R.string.action_move_left
-        EditAction.MOVE_RIGHT -> R.string.action_move_right
+        EditAction.DUPLICATE -> R.string.bar_duplicate
+        EditAction.MOVE_LEFT -> R.string.bar_move_left
+        EditAction.MOVE_RIGHT -> R.string.bar_move_right
         EditAction.JOIN -> R.string.action_join
-        EditAction.DELETE -> R.string.action_delete
+        EditAction.DELETE -> R.string.bar_delete
         EditAction.EDIT_TEXT -> R.string.action_edit_text
         EditAction.COLOUR -> R.string.action_colour
         EditAction.TRANSITION -> R.string.action_transition
         EditAction.ANIMATION -> R.string.action_animation
         EditAction.PLAY -> R.string.action_play
-        EditAction.SKIP -> R.string.review_skip
+        EditAction.SKIP -> R.string.bar_skip
         EditAction.ADD_MEDIA -> R.string.bar_add_media
         EditAction.ZOOM_OUT -> R.string.zoom_out
         EditAction.ZOOM_IN -> R.string.zoom_in
         EditAction.FIT_ALL -> R.string.zoom_fit_all
         EditAction.ADD_ROW -> R.string.action_add_row
-        EditAction.ADD_HERE -> R.string.action_add_here
-        EditAction.SHOW_ON_TOP -> R.string.stack_show_on_top
-        EditAction.BRING_FORWARD -> R.string.stack_bring_forward
-        EditAction.SEND_BACKWARD -> R.string.stack_send_backward
-        EditAction.SHOW_AT_BOTTOM -> R.string.stack_show_at_bottom
-        EditAction.MOVE_ROW_UP -> R.string.row_move_up
-        EditAction.MOVE_ROW_DOWN -> R.string.row_move_down
+        EditAction.ADD_HERE -> R.string.bar_add_here
+        EditAction.SHOW_ON_TOP -> R.string.bar_show_on_top
+        EditAction.BRING_FORWARD -> R.string.bar_bring_forward
+        EditAction.SEND_BACKWARD -> R.string.bar_send_backward
+        EditAction.SHOW_AT_BOTTOM -> R.string.bar_show_at_bottom
+        EditAction.MOVE_ROW_UP -> R.string.bar_move_row_up
+        EditAction.MOVE_ROW_DOWN -> R.string.bar_move_row_down
         EditAction.REMOVE_ROW -> R.string.action_remove_row
-        EditAction.MUTE_ROW -> R.string.action_mute_row
+        EditAction.MUTE_ROW -> R.string.bar_mute_row
         EditAction.LOWER_MUSIC -> R.string.bar_lower_music
-        EditAction.FRAME_ON -> R.string.action_frame_on
+        EditAction.FRAME_ON -> R.string.bar_frame_on
         EditAction.MOVE_EARLIER -> R.string.action_move_earlier
         EditAction.MOVE_LATER -> R.string.action_move_later
-        EditAction.MOVE_TO_ROW -> R.string.action_move_to_row
+        EditAction.MOVE_TO_ROW -> R.string.bar_move_to_row
         EditAction.FADE -> R.string.action_fade
         EditAction.POSITION -> R.string.action_position
         EditAction.ADD_CAPTION -> R.string.action_add_caption

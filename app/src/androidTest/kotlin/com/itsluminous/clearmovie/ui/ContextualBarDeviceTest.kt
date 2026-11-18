@@ -290,6 +290,9 @@ class ContextualBarDeviceTest {
                         "BarLabels",
                         "${phone.value.toInt()} dp, $tag at $scale: smaller $shrunk; two lines $two; cut past two lines $cut",
                     )
+                    // cm-ux-review: every bar label is short enough for one line of its button at the
+                    // phone's usual text sizes, in every language; a second line is left for larger text.
+                    assertWithMessage("${phone.value.toInt()} dp, $tag at $scale: labels on two lines").that(two).isEmpty()
                 }
             }
         }
@@ -327,11 +330,12 @@ class ContextualBarDeviceTest {
 
     @Test
     fun aLabelTooLongEvenAtTenSpTakesExactlyTwoLinesAndItsNeighboursMatchIt() {
-        // "Move to another row" needs about 95 dp at 10 sp; an 80 dp button holds about 70, two lines of it enough.
-        val actions = listOf(EditAction.DELETE, EditAction.MOVE_TO_ROW, EditAction.SPLIT, EditAction.DUPLICATE).map { BarAction(it) }
-        showBar(actions, 360.dp, "en", 1f)
-        val long = label(EditAction.MOVE_TO_ROW).layout()
-        val text = compose.activity.getString(barLabel(EditAction.MOVE_TO_ROW))
+        // At twice the text size even 10 sp is 20 dp tall type: "Lower for talk" then needs about 140 dp,
+        // and a button about 95, so it takes two lines; "Delete" still fits on one at full size.
+        val actions = listOf(EditAction.DELETE, EditAction.LOWER_MUSIC, EditAction.SPLIT, EditAction.DUPLICATE).map { BarAction(it) }
+        showBar(actions, 360.dp, "en", 2f)
+        val long = label(EditAction.LOWER_MUSIC).layout()
+        val text = compose.activity.getString(barLabel(EditAction.LOWER_MUSIC))
         assertWithMessage("too long at 10 sp").that(fits(text, MIN_LABEL_FONT_SIZE.value, long.size.width)).isFalse()
         assertWithMessage("lines").that(long.lineCount).isEqualTo(2)
         assertWithMessage("not cut").that(long.isLineEllipsized(1)).isFalse()
@@ -341,6 +345,6 @@ class ContextualBarDeviceTest {
         assertWithMessage(
             "neighbour at full size",
         ).that(sizes[compose.activity.getString(barLabel(EditAction.DELETE))]).isEqualTo(12f)
-        assertLevel(actions, "en, 360 dp")
+        assertLevel(actions, "en, 360 dp, text at 2x")
     }
 }

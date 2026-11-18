@@ -553,6 +553,23 @@
     </plurals>
     <!-- Short label in the bar: adds photos and videos at the end. -->
     <string name="bar_add_media">Add photos</string>
+    <!-- Bar labels (cm-ux-review): short forms of longer names used elsewhere, so each fits one line
+         of a bar button (about 66 dp at 12 sp, 10 sp at the least). Menus and panels keep the full words. -->
+    <string name="bar_skip">Skip</string>
+    <string name="bar_move_to_row">Other row</string>
+    <string name="bar_show_on_top">To top</string>
+    <string name="bar_bring_forward">Forward</string>
+    <string name="bar_send_backward">Backward</string>
+    <string name="bar_show_at_bottom">To bottom</string>
+    <string name="bar_move_row_up">Row up</string>
+    <string name="bar_move_row_down">Row down</string>
+    <string name="bar_mute_row">Mute row</string>
+    <string name="bar_add_here">Add here</string>
+    <string name="bar_duplicate">Duplicate</string>
+    <string name="bar_move_left">Move left</string>
+    <string name="bar_move_right">Move right</string>
+    <string name="bar_frame_on">Show frame</string>
+    <string name="bar_delete">Delete</string>
     <!-- cm-captions: the caption editor. -->
     <string name="action_add_caption">Add caption</string>
     <string name="caption_title">Caption</string>

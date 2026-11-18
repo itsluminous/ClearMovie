@@ -502,6 +502,23 @@
     </plurals>
     <!-- Short label in the bar: adds photos and videos at the end. -->
     <string name="bar_add_media">फ़ोटो जोड़ें</string>
+    <!-- Bar labels (cm-ux-review): short forms of longer names used elsewhere, so each fits one line
+         of a bar button (about 66 dp at 12 sp, 10 sp at the least). Menus and panels keep the full words. -->
+    <string name="bar_skip">छोड़ें</string>
+    <string name="bar_move_to_row">दूसरी पंक्ति</string>
+    <string name="bar_show_on_top">सबसे ऊपर</string>
+    <string name="bar_bring_forward">एक ऊपर</string>
+    <string name="bar_send_backward">एक नीचे</string>
+    <string name="bar_show_at_bottom">सबसे नीचे</string>
+    <string name="bar_move_row_up">पंक्ति ऊपर</string>
+    <string name="bar_move_row_down">पंक्ति नीचे</string>
+    <string name="bar_mute_row">आवाज़ बंद</string>
+    <string name="bar_add_here">यहाँ जोड़ें</string>
+    <string name="bar_duplicate">कॉपी बनाएँ</string>
+    <string name="bar_move_left">बाएँ खिसकाएँ</string>
+    <string name="bar_move_right">दाएँ खिसकाएँ</string>
+    <string name="bar_frame_on">फ़्रेम दिखाएँ</string>
+    <string name="bar_delete">हटाएँ</string>
     <!-- cm-captions: the caption editor. -->
     <string name="action_add_caption">कैप्शन जोड़ें</string>
     <string name="caption_title">कैप्शन</string>
