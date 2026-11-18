@@ -47,6 +47,7 @@ import com.itsluminous.clearmovie.ui.editor.barActionTag
 import com.itsluminous.clearmovie.ui.editor.barGrowth
 import com.itsluminous.clearmovie.ui.editor.barItemWidth
 import com.itsluminous.clearmovie.ui.editor.barLabel
+import com.itsluminous.clearmovie.ui.editor.barLabelSlotTag
 import com.itsluminous.clearmovie.ui.editor.barLabelTag
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
 import com.itsluminous.clearmovie.ui.editor.timeline.ClipActions
@@ -106,6 +107,7 @@ class ContextualBarDeviceTest {
     private companion object {
         const val MAX_LINES = 2
         const val WIDE = 100_000
+        const val SLOT_SLACK_DP = 4f
     }
 
     private class Tools(
@@ -196,7 +198,17 @@ class ContextualBarDeviceTest {
         where: String,
     ) {
         val buttons = actions.map { compose.onNodeWithTag(barActionTag(it.action)).getUnclippedBoundsInRoot() }
-        val labels = actions.map { label(it.action).getUnclippedBoundsInRoot() }
+        // The label slots, which place the icons; a label's own box may round a pixel differently per script.
+        val labels = actions.map { compose.onNodeWithTag(barLabelSlotTag(it.action), useUnmergedTree = true).getUnclippedBoundsInRoot() }
+        // Each label's text sits in its slot: same top, and never a line deeper than it. Rounding of
+        // each line's ascent and descent leaves up to 2 dp below the slot, inside the button's 8 dp
+        // bottom padding; a second line the slot has no room for would be 16 dp or more.
+        for (a in actions) {
+            val slot = compose.onNodeWithTag(barLabelSlotTag(a.action), useUnmergedTree = true).getUnclippedBoundsInRoot()
+            val text = label(a.action).getUnclippedBoundsInRoot()
+            assertWithMessage("$where: ${a.action} text top").that(abs(text.top.value - slot.top.value)).isLessThan(0.6f)
+            assertWithMessage("$where: ${a.action} text inside its slot").that((text.bottom - slot.bottom).value).isAtMost(SLOT_SLACK_DP)
+        }
         for ((b, l) in buttons.zip(labels)) {
             assertWithMessage(
                 "$where: height",

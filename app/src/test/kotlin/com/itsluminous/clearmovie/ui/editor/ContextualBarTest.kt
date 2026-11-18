@@ -138,7 +138,7 @@ class ContextualBarTest {
                             runCatching {
                                 compose
                                     .onNodeWithTag(
-                                        barLabelTag(a.action),
+                                        barLabelSlotTag(a.action),
                                         useUnmergedTree = true,
                                     ).getUnclippedBoundsInRoot()
                             }.getOrNull()

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -62,6 +63,8 @@ const val BAR_FADE_START_TAG = "contextual_bar_fade_start"
 fun barActionTag(action: EditAction) = "bar_action_${action.name}"
 
 fun barLabelTag(action: EditAction) = "bar_label_${action.name}"
+
+fun barLabelSlotTag(action: EditAction) = "bar_label_slot_${action.name}"
 
 /**
  * The width of each button in a bar of [count] buttons across [barWidth]
@@ -226,13 +229,21 @@ private fun BarButton(
     ) {
         Icon(painterResource(barIcon(action.action)), contentDescription = null, modifier = Modifier.size(24.dp))
         Spacer(Modifier.height(4.dp))
-        AutoSizeLabel(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            textAlign = TextAlign.Center,
-            lines = lines,
-            modifier = Modifier.fillMaxWidth().testTag(barLabelTag(action.action)),
-        )
+        val style = MaterialTheme.typography.labelMedium
+        // A slot of whole lines: fonts round their own ascent and descent per script and size, so a
+        // Hindi label can be a pixel taller than its neighbour; the slot keeps every button's icon
+        // level. The label inside is measured freely and drawn from the slot's top.
+        check(style.lineHeight.isSp) { "bar labels need a line height in sp" }
+        val slot = with(LocalDensity.current) { style.lineHeight.toDp() } * lines
+        Box(Modifier.fillMaxWidth().height(slot).testTag(barLabelSlotTag(action.action)), contentAlignment = Alignment.TopCenter) {
+            AutoSizeLabel(
+                label,
+                style = style,
+                textAlign = TextAlign.Center,
+                lines = lines,
+                modifier = Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).testTag(barLabelTag(action.action)),
+            )
+        }
     }
 }
 
