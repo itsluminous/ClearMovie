@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
 import com.itsluminous.clearmovie.domain.model.ThemeMode
 
 /**
@@ -128,6 +130,21 @@ fun ClearMovieTheme(
             }
         }
     CompositionLocalProvider(LocalMediaColors provides if (darkTheme) MediaColors.Dark else MediaColors.Light) {
-        MaterialTheme(colorScheme = colorScheme, content = content)
+        MaterialTheme(colorScheme = colorScheme, typography = ClearMovieTypography, content = content)
     }
 }
+
+/**
+ * Material 3's type scale, with labels drawn without letter spacing. Labels
+ * are fitted to their buttons (AutoSizeLabel), and on Android 10 an
+ * auto-sized label measured as if drawn without its spacing; with none
+ * anywhere, every label in the app looks alike and measures as drawn.
+ */
+private val ClearMovieTypography: Typography =
+    Typography().let {
+        it.copy(
+            labelLarge = it.labelLarge.copy(letterSpacing = 0.sp),
+            labelMedium = it.labelMedium.copy(letterSpacing = 0.sp),
+            labelSmall = it.labelSmall.copy(letterSpacing = 0.sp),
+        )
+    }

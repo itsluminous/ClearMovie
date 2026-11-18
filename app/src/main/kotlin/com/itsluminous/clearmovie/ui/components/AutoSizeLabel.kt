@@ -51,6 +51,11 @@ internal val LocalLabelSizeProbe = staticCompositionLocalOf<((String, TextUnit) 
  * [lines], worked out with [labelLines], so that when one of them needs two
  * lines every one of them is as tall and their icons stay level.
  *
+ * Labels are drawn and measured without letter spacing (the app's theme has
+ * none on labels): on CI's Android 10 an auto-sized label measured as if
+ * drawn without its spacing, so a row measured with it reserved a second
+ * line no label used.
+ *
  * Give it the width it may use (for example `fillMaxWidth()` inside a
  * fixed-width button); without a bound (Constraints.Infinity) it simply
  * draws at full size on one line.
@@ -69,7 +74,7 @@ fun AutoSizeLabel(
     Text(
         text,
         modifier = modifier,
-        style = style,
+        style = unspaced(style),
         color = color,
         textAlign = textAlign,
         minLines = lines.coerceIn(1, MAX_LABEL_LINES),
@@ -88,7 +93,7 @@ fun labelLines(
     labels: List<String>,
     style: TextStyle,
     widthPx: Int,
-): Int = if (labels.any { !fitsOnOneLine(measurer, it, style.copy(fontSize = minSize(style)), widthPx) }) MAX_LABEL_LINES else 1
+): Int = if (labels.any { !fitsOnOneLine(measurer, it, unspaced(style).copy(fontSize = minSize(style)), widthPx) }) MAX_LABEL_LINES else 1
 
 /**
  * [labelLines] in a composable, for labels about [width] wide; 1 when the
@@ -150,6 +155,22 @@ private fun pickSize(
     }
     return min.sp
 }
+
+/** [style] without letter spacing, as every label is drawn and measured. */
+private fun unspaced(style: TextStyle): TextStyle = style.copy(letterSpacing = 0.sp)
+
+/**
+ * Whether [text] fits on one line in [widthPx] at [style]'s own size, laid
+ * out and spaced as a label is. For layouts that choose between
+ * arrangements by their labels (tabs with or without names, chips in one
+ * row or two).
+ */
+fun labelFits(
+    measurer: TextMeasurer,
+    text: String,
+    style: TextStyle,
+    widthPx: Int,
+): Boolean = fitsOnOneLine(measurer, text, unspaced(style), widthPx)
 
 private fun fullSize(style: TextStyle): TextUnit = if (style.fontSize.isSpecified) style.fontSize else DEFAULT_SIZE
 

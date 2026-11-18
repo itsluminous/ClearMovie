@@ -96,6 +96,7 @@ import com.itsluminous.clearmovie.domain.model.setText
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
+import com.itsluminous.clearmovie.ui.components.labelFits
 import com.itsluminous.clearmovie.ui.components.rememberLabelLines
 import kotlin.math.roundToInt
 
@@ -291,14 +292,10 @@ internal fun ColumnScope.CaptionPanel(
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val room = maxWidth / CaptionTab.entries.size - TAB_LABEL_ROOM
+        val roomPx = with(density) { room.roundToPx() }
         val iconsOnly =
             labels.flatMap { it.split(' ') }.any { word ->
-                with(density) {
-                    measurer
-                        .measure(word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), maxLines = 1)
-                        .size.width
-                        .toDp()
-                } > room
+                !labelFits(measurer, word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), roomPx)
             }
         val lines = rememberLabelLines(labels, labelStyle, room, density)
         CaptionTabs(tab, labels, iconsOnly, lines) {
@@ -478,15 +475,8 @@ private fun PlaceTab(
     // The width is known before the first frame is drawn, so the chips never jump from two rows to one.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val perChip = (maxWidth - 8.dp * (CaptionPlace.entries.size - 1)) / CaptionPlace.entries.size
-        val fitsInOneRow =
-            labels.all { label ->
-                with(density) {
-                    measurer
-                        .measure(label, chipStyle, maxLines = 1)
-                        .size.width
-                        .toDp()
-                } + CHIP_LABEL_ROOM <= perChip
-            }
+        val chipRoomPx = with(density) { (perChip - CHIP_LABEL_ROOM).roundToPx() }
+        val fitsInOneRow = labels.all { label -> labelFits(measurer, label, chipStyle, chipRoomPx) }
         val columns = if (fitsInOneRow) CaptionPlace.entries.size else 2
         // Two by two a name may still need a smaller size or two lines: then every chip takes two, all as tall.
         val lines = rememberLabelLines(labels, chipStyle, (maxWidth - 8.dp * (columns - 1)) / columns - CHIP_LABEL_ROOM, density)

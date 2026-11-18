@@ -105,6 +105,7 @@ class ContextualBarDeviceTest {
 
     private companion object {
         const val MAX_LINES = 2
+        const val WIDE = 100_000
     }
 
     private class Tools(
@@ -124,11 +125,12 @@ class ContextualBarDeviceTest {
         sp: Float,
         widthPx: Int,
         lines: Int = 1,
-        spaced: Boolean = true,
+        spaced: Boolean = false,
     ): TextLayoutResult =
         measurer!!.measure(
             text,
-            style.copy(fontSize = sp.sp, letterSpacing = if (spaced) style.letterSpacing else 0.sp),
+            // Spaced: Material's 0.5 sp, for the diagnostic log only; labels have none.
+            style.copy(fontSize = sp.sp, letterSpacing = if (spaced) 0.5.sp else 0.sp),
             maxLines = lines,
             constraints = Constraints.fixedWidth(widthPx),
         )
@@ -226,7 +228,9 @@ class ContextualBarDeviceTest {
                                 // One line, uncut, at 10 sp or more: as wide as the words at 10 sp, or wider.
                                 assertWithMessage("$where: not cut").that(layout.isLineEllipsized(0)).isFalse()
                                 val size = requireNotNull(sizes[text]) { "$where: no size reported" }
-                                assertWithMessage("$where: one line at 10 sp or more").that(size).isAtLeast(MIN_LABEL_FONT_SIZE.value)
+                                assertWithMessage("$where: one line at 10 sp or more (drawn ${layout.lineWidth()} px)")
+                                    .that(size)
+                                    .isAtLeast(MIN_LABEL_FONT_SIZE.value)
                                 if (size < 12f) shrunk += a.action
                                 // The drawn line against the same words measured at that size (with and without
                                 // letter spacing), so CI shows how far Android 10's measuring is from its drawing.
@@ -234,7 +238,7 @@ class ContextualBarDeviceTest {
                                     Log.i(
                                         "BarLabels",
                                         "$where: drawn ${layout.lineWidth()} px; measured ${at(text, size, box).lineWidth()} px, " +
-                                            "unspaced ${at(text, size, box, spaced = false).lineWidth()} px",
+                                            "with 0.5 sp spacing ${at(text, size, box, spaced = true).lineWidth()} px",
                                     )
                                 }
                             } else {
@@ -260,8 +264,8 @@ class ContextualBarDeviceTest {
                             val why =
                                 chunk.zip(layouts).joinToString { (a, l) ->
                                     val w = t.context.getString(barLabel(a.action))
-                                    "${a.action} '$w' box ${l.size.width} size ${sizes[w]} fits10 ${fits(w, 10f, l.size.width)} " +
-                                        "fits10-2 ${fits(w, 10f, l.size.width - 2)}"
+                                    "${a.action} '$w' box ${l.size.width} lines ${l.lineCount} size ${sizes[w]} drawn ${l.lineWidth()} " +
+                                        "measured ${at(w, sizes[w] ?: 10f, l.size.width).lineWidth()} fits10 ${fits(w, 10f, l.size.width)}"
                                 }
                             assertWithMessage("$tag at $scale on ${phone.value.toInt()} dp: second line used ($why)")
                                 .that(layouts.any { it.lineCount == 2 })
@@ -287,7 +291,7 @@ class ContextualBarDeviceTest {
                     style = MaterialTheme.typography.labelMedium
                     val m = rememberTextMeasurer()
                     measurer = m
-                    val full = m.measure(label, style, maxLines = 1, softWrap = false).size.width
+                    val full = at(label, 12f, WIDE).lineWidth()
                     // Nine tenths of the room it needs at 12 sp: it has to shrink, and fits at about 10.8 sp.
                     val box = with(LocalDensity.current) { (full * 0.9f).toDp() }
                     AutoSizeLabel(label, modifier = Modifier.width(box).testTag("hindi"), style = style)
