@@ -18,9 +18,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.isFinite
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
-import kotlin.math.ceil
 
 /** The smallest size a label is shrunk to; below it, it takes a second line instead. */
 val MIN_LABEL_FONT_SIZE: TextUnit = 10.sp
@@ -80,7 +80,7 @@ fun labelLines(
     widthPx: Int,
 ): Int = if (labels.any { !fitsOnOneLine(measurer, it, style.copy(fontSize = minSize(style)), widthPx) }) MAX_LABEL_LINES else 1
 
-/** [labelLines] in a composable, for labels each [width] wide. */
+/** [labelLines] in a composable, for labels each [width] wide; 1 when the width is unbounded. */
 @Composable
 fun rememberLabelLines(
     labels: List<String>,
@@ -89,10 +89,10 @@ fun rememberLabelLines(
     density: Density,
 ): Int {
     val measurer = rememberTextMeasurer()
-    // A pixel short of the room: each padding around a label rounds to whole pixels on its own, so
-    // its real width can come out a pixel under [width]; a row never then says one line for a label
-    // that takes two.
-    val px = with(density) { width.roundToPx() } - 1
+    // Two pixels short of the room: each padding around a label rounds to whole pixels on its own,
+    // so its real width can come out up to two pixels under [width]; a row never then says one line
+    // for a label that takes two.
+    val px = if (width.isFinite) with(density) { width.roundToPx() } - 2 else Constraints.Infinity
     return remember(labels, style, px, density.fontScale, density.density) { labelLines(measurer, labels, style, px.coerceAtLeast(0)) }
 }
 
@@ -101,10 +101,13 @@ private fun fitsOnOneLine(
     text: String,
     style: TextStyle,
     widthPx: Int,
-): Boolean =
-    // The laid-out line's own width, as Text draws it: on Android 10 the paragraph's intrinsic width
-    // reads several percent wider (letter spacing), which would make a row take two lines for nothing.
-    measurer.measure(text, style, maxLines = 1, softWrap = false).let { ceil(it.getLineRight(0) - it.getLineLeft(0)) } <= widthPx
+): Boolean {
+    if (widthPx >= MAX_MEASURE_PX) return true
+    // Laid out as the label is: wrapping on, in exactly its width. An unbounded single line is laid out
+    // another way on Android 10 (BoringLayout), which reads wider than what Text draws.
+    val layout = measurer.measure(text, style, maxLines = MAX_LABEL_LINES, constraints = Constraints.fixedWidth(widthPx))
+    return layout.lineCount == 1 && !layout.hasVisualOverflow
+}
 
 private fun pickSize(
     full: TextUnit,
@@ -144,4 +147,7 @@ private class ShrinkThenWrap(
 }
 
 private val DEFAULT_SIZE = 14.sp
+
+/** Wider than any screen; at or past it a label is taken as unbounded (and Constraints stay valid). */
+private const val MAX_MEASURE_PX = 100_000
 private const val STEP = 0.5f

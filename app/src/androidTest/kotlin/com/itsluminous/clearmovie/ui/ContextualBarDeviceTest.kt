@@ -91,29 +91,42 @@ class ContextualBarDeviceTest {
 
     private fun TextLayoutResult.lineWidth(line: Int = 0) = getLineRight(line) - getLineLeft(line)
 
-    private class Tools(
-        val measurer: TextMeasurer,
-        val context: Context,
-        val style: TextStyle,
-    ) {
-        /** [text] on one line at [sp]: its width in pixels. */
-        fun width(
-            text: String,
-            sp: Float,
-        ): Float =
-            // Read the same way as the label's own line (left to right edge), which on Android 10 is not
-            // what the paragraph reports as its intrinsic width.
-            measurer.measure(text, style.copy(fontSize = sp.sp), maxLines = 1, softWrap = false).let {
-                it.getLineRight(0) -
-                    it.getLineLeft(0)
-            }
-
-        /** How many lines [text] takes at 10 sp in [widthPx], with no limit. */
-        fun lines(
-            text: String,
-            widthPx: Int,
-        ): Int = measurer.measure(text, style.copy(fontSize = MIN_LABEL_FONT_SIZE), constraints = Constraints(maxWidth = widthPx)).lineCount
+    private companion object {
+        const val MAX_LINES = 2
     }
+
+    private class Tools(
+        val context: Context,
+    )
+
+    private var measurer: TextMeasurer? = null
+    private var style: TextStyle = TextStyle.Default
+
+    /**
+     * [text] at [sp] laid out the way a label is: wrapping on, in exactly
+     * [widthPx] (the label's own width). Measuring it unbounded instead takes
+     * another layout path on Android 10 that reads wider than Text draws.
+     */
+    private fun at(
+        text: String,
+        sp: Float,
+        widthPx: Int,
+        lines: Int = 1,
+    ): TextLayoutResult =
+        measurer!!.measure(text, style.copy(fontSize = sp.sp), maxLines = lines, constraints = Constraints.fixedWidth(widthPx))
+
+    /** Whether [text] at [sp] fits on one line in [widthPx]. */
+    private fun fits(
+        text: String,
+        sp: Float,
+        widthPx: Int,
+    ): Boolean = at(text, sp, widthPx, lines = MAX_LINES).let { it.lineCount == 1 && !it.hasVisualOverflow }
+
+    /** How many lines [text] takes at 10 sp in [widthPx], with no limit. */
+    private fun linesAtTen(
+        text: String,
+        widthPx: Int,
+    ): Int = at(text, MIN_LABEL_FONT_SIZE.value, widthPx, lines = Int.MAX_VALUE).lineCount
 
     /** Every action any bar can show. */
     private val bars: List<List<BarAction>> =
@@ -140,7 +153,10 @@ class ContextualBarDeviceTest {
                 DeviceConfigurationOverride.FontScale(scale) then DeviceConfigurationOverride.Locales(LocaleList(tag)),
             ) {
                 ClearMovieTheme(dynamicColor = false) {
-                    tools = Tools(rememberTextMeasurer(), LocalContext.current, MaterialTheme.typography.labelMedium)
+                    val context = LocalContext.current
+                    tools = Tools(context)
+                    measurer = rememberTextMeasurer()
+                    style = MaterialTheme.typography.labelMedium
                     // They all fit, so each gets [item].
                     ContextualBar(actions, onAction = {}, description = "bar", modifier = Modifier.width(item * actions.size + 1.dp))
                 }
@@ -185,23 +201,24 @@ class ContextualBarDeviceTest {
                             val where = "${a.action} in $tag at $scale on ${phone.value.toInt()} dp"
                             val text = t.context.getString(barLabel(a.action))
                             val layout = label(a.action).layout()
-                            val box = layout.size.width.toFloat()
-                            // Measured under the same text size setting, so 10 sp here is 10 sp on screen.
-                            val tenSp = t.width(text, MIN_LABEL_FONT_SIZE.value)
+                            val box = layout.size.width
                             if (layout.lineCount == 1) {
-                                // One line: drawn at 10 sp or more.
-                                assertWithMessage("$where: one line at 10 sp or more").that(layout.lineWidth()).isAtLeast(tenSp - 1f)
-                                if (layout.lineWidth() < t.width(text, 12f) - 1f) shrunk += a.action
+                                // One line, uncut, at 10 sp or more: as wide as the words at 10 sp, or wider.
+                                assertWithMessage("$where: not cut").that(layout.isLineEllipsized(0)).isFalse()
+                                assertWithMessage("$where: one line at 10 sp or more")
+                                    .that(layout.lineWidth())
+                                    .isAtLeast(at(text, MIN_LABEL_FONT_SIZE.value, box).lineWidth() - 1f)
+                                if (!fits(text, 12f, box)) shrunk += a.action
                             } else {
                                 // Two lines only when it does not fit on one even at 10 sp.
-                                assertWithMessage("$where: wraps only when needed").that(tenSp).isGreaterThan(box)
+                                assertWithMessage(
+                                    "$where: wraps only when needed",
+                                ).that(fits(text, MIN_LABEL_FONT_SIZE.value, box)).isFalse()
                                 two += a.action
                                 // Cut only when two lines at 10 sp are not enough, the last resort.
                                 if (layout.isLineEllipsized(1)) {
                                     cut += a.action
-                                    assertWithMessage(
-                                        "$where: cut only past two lines",
-                                    ).that(t.lines(text, layout.size.width)).isGreaterThan(2)
+                                    assertWithMessage("$where: cut only past two lines").that(linesAtTen(text, box)).isGreaterThan(2)
                                 }
                             }
                         }
@@ -219,43 +236,38 @@ class ContextualBarDeviceTest {
     @Test
     fun aLongHindiLabelShrinksToOneLineAtTenSpOrMore() {
         val label = "दूसरी पंक्ति में ले जाएँ"
-        var tools: Tools? = null
-        var box = 0.dp
         content = {
             ClearMovieTheme(dynamicColor = false) {
-                val style = MaterialTheme.typography.labelMedium
-                val t = Tools(rememberTextMeasurer(), LocalContext.current, style)
-                tools = t
+                style = MaterialTheme.typography.labelMedium
+                val m = rememberTextMeasurer()
+                measurer = m
+                val full = m.measure(label, style, maxLines = 1, softWrap = false).size.width
                 // Nine tenths of the room it needs at 12 sp: it has to shrink, and fits at about 10.8 sp.
-                box = with(LocalDensity.current) { (t.width(label, 12f) * 0.9f).toDp() }
+                val box = with(LocalDensity.current) { (full * 0.9f).toDp() }
                 AutoSizeLabel(label, modifier = Modifier.width(box).testTag("hindi"), style = style)
             }
         }
         compose.waitForIdle()
-        val t = tools!!
         val layout = compose.onNodeWithTag("hindi", useUnmergedTree = true).layout()
-        Log.i(
-            "BarLabels",
-            "Hindi label in ${box.value} dp: ${layout.lineWidth()} px wide; at 10 sp ${t.width(
-                label,
-                10f,
-            )}, at 12 sp ${t.width(label, 12f)}",
-        )
+        val box = layout.size.width
+        val ten = at(label, MIN_LABEL_FONT_SIZE.value, box).lineWidth()
+        Log.i("BarLabels", "Hindi label in $box px: ${layout.lineWidth()} px wide; at 10 sp $ten")
         assertWithMessage("lines").that(layout.lineCount).isEqualTo(1)
         assertWithMessage("not cut").that(layout.isLineEllipsized(0)).isFalse()
-        assertWithMessage("fits").that(layout.lineWidth()).isAtMost(layout.size.width + 1.5f)
-        assertWithMessage("10 sp or more").that(layout.lineWidth()).isAtLeast(t.width(label, 10f) - 1f)
-        assertWithMessage("smaller than 12 sp").that(layout.lineWidth()).isLessThan(t.width(label, 12f) - 1f)
+        assertWithMessage("fits").that(layout.lineWidth()).isAtMost(box + 1.5f)
+        assertWithMessage("10 sp or more").that(layout.lineWidth()).isAtLeast(ten - 1f)
+        // At 12 sp it would not fit on one line, so the one line it is on is smaller than 12 sp.
+        assertWithMessage("too wide at 12 sp").that(fits(label, 12f, box)).isFalse()
     }
 
     @Test
     fun aLabelTooLongEvenAtTenSpTakesExactlyTwoLinesAndItsNeighboursMatchIt() {
         // "Move to another row" needs about 95 dp at 10 sp; an 80 dp button holds about 70, two lines of it enough.
         val actions = listOf(EditAction.DELETE, EditAction.MOVE_TO_ROW, EditAction.SPLIT, EditAction.DUPLICATE).map { BarAction(it) }
-        val t = showBar(actions, 360.dp, "en", 1f)
+        showBar(actions, 360.dp, "en", 1f)
         val long = label(EditAction.MOVE_TO_ROW).layout()
-        val text = t.context.getString(barLabel(EditAction.MOVE_TO_ROW))
-        assertWithMessage("too long at 10 sp").that(t.width(text, 10f)).isGreaterThan(long.size.width.toFloat())
+        val text = compose.activity.getString(barLabel(EditAction.MOVE_TO_ROW))
+        assertWithMessage("too long at 10 sp").that(fits(text, MIN_LABEL_FONT_SIZE.value, long.size.width)).isFalse()
         assertWithMessage("lines").that(long.lineCount).isEqualTo(2)
         assertWithMessage("not cut").that(long.isLineEllipsized(1)).isFalse()
         // Its neighbours keep one line at full size, but are as tall, icons level.
@@ -263,7 +275,9 @@ class ContextualBarDeviceTest {
         assertWithMessage("neighbour on one line").that(short.lineCount).isEqualTo(1)
         assertWithMessage(
             "neighbour at full size",
-        ).that(short.lineWidth()).isWithin(1f).of(t.width(t.context.getString(barLabel(EditAction.DELETE)), 12f))
+        ).that(short.lineWidth()).isWithin(1f).of(
+            at(compose.activity.getString(barLabel(EditAction.DELETE)), 12f, short.size.width).lineWidth(),
+        )
         assertLevel(actions, "en, 360 dp")
     }
 }
