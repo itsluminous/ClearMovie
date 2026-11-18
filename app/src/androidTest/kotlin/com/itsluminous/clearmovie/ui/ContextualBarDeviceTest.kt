@@ -229,7 +229,9 @@ class ContextualBarDeviceTest {
                     val shrunk = mutableListOf<EditAction>()
                     val two = mutableListOf<EditAction>()
                     val cut = mutableListOf<EditAction>()
-                    for (chunk in all.chunked(2)) {
+                    // Three at a time: the widest (about 103 dp at 1.3x) still fit CI's 320 dp screen, and
+                    // fewer compositions keep the slow API 29 job well inside its time limit.
+                    for (chunk in all.chunked(3)) {
                         val t = showBar(chunk, phone, tag, scale)
                         for (a in chunk) {
                             val where = "${a.action} in $tag at $scale on ${phone.value.toInt()} dp"

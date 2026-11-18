@@ -62,7 +62,8 @@ jobs:
     name: Instrumented tests (API ${{ matrix.api-level }})
     needs: check
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # About 50 minutes on API 29's software-rendered emulator; a slow runner went past an hour.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
