@@ -279,6 +279,17 @@ class EditorViewModel
         private var loadedFiles: Map<PresetSlot, File?>? = null
         private var access: MediaAccessState? = null
 
+        /**
+         * One load at a time: refresh() and the project's own updates never overlap. Declared
+         * before `init`: the loader starts there and, when the project is already open, calls
+         * load() before the constructor returns.
+         */
+        private val loading = Mutex()
+
+        /** Where the preview plays from once it has the video just edited ([previewFrom]), or null; read by load(), so above `init`. */
+        private var pendingPreviewUs: Long? = null
+        private var previewFallback: Job? = null
+
         init {
             viewModelScope.launch {
                 val opened = repository.open(projectId)
@@ -660,9 +671,6 @@ class EditorViewModel
             return strips.load(source, r)
         }
 
-        /** One load at a time: refresh() and the project's own updates never overlap. */
-        private val loading = Mutex()
-
         private suspend fun load(project: Project) = loading.withLock { loadNow(project) }
 
         private suspend fun loadNow(project: Project) {
@@ -738,10 +746,6 @@ class EditorViewModel
         }
 
         fun togglePlay() = engine.togglePlay()
-
-        /** Where the preview plays from once it has the video just edited ([previewFrom]), or null. */
-        private var pendingPreviewUs: Long? = null
-        private var previewFallback: Job? = null
 
         /**
          * Plays the preview from [us] as soon as it has the edit just made (a
