@@ -532,7 +532,8 @@ class UxTour {
         }
         state("panel-transition-end", "Transition picker, scrolled") { compose.onNodeWithTag(PANEL_TAG).performTouchInput { swipeUp() } }
         state("panel-animation", "Animation picker") {
-            closePanel()
+            deselect()
+            select(secondPhoto)
             bar(EditAction.ANIMATION)
         }
         state("item-menu", "Long-press menu on a photo") {
@@ -651,7 +652,8 @@ class UxTour {
         }
         state("remove-row-confirm", "Remove row: the question") {
             closePanel()
-            compose.onAllNodes(header)[1].performSemanticsAction(SemanticsActions.OnClick)
+            // The text row (the first): the preset frame's row cannot be removed.
+            compose.onAllNodes(header)[0].performSemanticsAction(SemanticsActions.OnClick)
             bar(EditAction.REMOVE_ROW)
             waitFor(hasTestTag(com.itsluminous.clearmovie.ui.editor.REMOVE_ROW_CONFIRM_TAG))
         }
