@@ -94,6 +94,9 @@ import com.itsluminous.clearmovie.domain.model.deleteClip
 import com.itsluminous.clearmovie.domain.model.setCaptionStyle
 import com.itsluminous.clearmovie.domain.model.setText
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
+import com.itsluminous.clearmovie.ui.components.rememberLabelLines
 import kotlin.math.roundToInt
 
 // The caption editor (cm-captions, ARCHITECTURE section 11.1): the panel and
@@ -144,8 +147,8 @@ private val TAB_CONTENT_MIN = 176.dp
 /** The size sample's height: the middle of the caption, larger than in the preview. */
 private val SAMPLE_HEIGHT = 80.dp
 
-/** Room a tab label needs besides its text: 16 dp each side, as Material tabs have. */
-private val TAB_LABEL_ROOM = 32.dp
+/** Room a tab label keeps clear of its tab's edges: 8 dp each side. */
+private val TAB_LABEL_ROOM = 16.dp
 
 /** A chip's padding around its label (16 dp each side), plus a little air. */
 private val CHIP_LABEL_ROOM = 36.dp
@@ -279,24 +282,26 @@ internal fun ColumnScope.CaptionPanel(
     var ownTab by rememberSaveable(caption.id.value) { mutableStateOf(CaptionTab.WORDS.name) }
     val tabName = visit?.captionTab ?: ownTab
     val tab = CaptionTab.entries.firstOrNull { it.name == tabName } ?: CaptionTab.WORDS
-    // Icon over label in the bar's sizes (24 dp, labelMedium). When a label would not fit its tab (a narrow
-    // phone, large text, a long word) every tab shows its icon only, named for TalkBack, so no label is cut short.
+    // Icon over label in the bar's sizes (24 dp, labelMedium). A long label is drawn smaller to fit its tab,
+    // then on two lines (AutoSizeLabel), every tab as tall. Only when a single word would not fit even at the
+    // smallest size (a narrow phone, large text) does every tab show its icon only, named for TalkBack.
     val labels = CaptionTab.entries.map { stringResource(tabLabel(it)) }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val perTab = maxWidth / CaptionTab.entries.size
+        val room = maxWidth / CaptionTab.entries.size - TAB_LABEL_ROOM
         val iconsOnly =
-            labels.any { label ->
+            labels.flatMap { it.split(' ') }.any { word ->
                 with(density) {
                     measurer
-                        .measure(label, labelStyle, maxLines = 1)
+                        .measure(word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), maxLines = 1)
                         .size.width
                         .toDp()
-                } + TAB_LABEL_ROOM > perTab
+                } > room
             }
-        CaptionTabs(tab, labels, iconsOnly) {
+        val lines = rememberLabelLines(labels, labelStyle, room, density)
+        CaptionTabs(tab, labels, iconsOnly, lines) {
             if (visit != null) visit.captionTab = it.name else ownTab = it.name
         }
     }
@@ -325,6 +330,7 @@ private fun CaptionTabs(
     tab: CaptionTab,
     labels: List<String>,
     iconsOnly: Boolean,
+    lines: Int,
     onTab: (CaptionTab) -> Unit,
 ) {
     PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
@@ -336,12 +342,19 @@ private fun CaptionTabs(
                 modifier = Modifier.heightIn(min = if (iconsOnly) 48.dp else 64.dp).testTag(captionTabTag(t)),
             ) {
                 Column(
-                    Modifier.padding(vertical = 8.dp),
+                    Modifier.padding(horizontal = TAB_LABEL_ROOM / 2, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(painterResource(tabIcon(t)), contentDescription = if (iconsOnly) label else null, modifier = Modifier.size(24.dp))
-                    if (!iconsOnly) Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                    if (!iconsOnly) {
+                        AutoSizeLabel(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lines = lines,
+                        )
+                    }
                 }
             }
         }
@@ -361,7 +374,7 @@ private fun ResetButton(
     ) {
         Icon(painterResource(R.drawable.ic_restore), contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.caption_reset), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        AutoSizeLabel(stringResource(R.string.caption_reset))
     }
 }
 
@@ -475,6 +488,8 @@ private fun PlaceTab(
                 } + CHIP_LABEL_ROOM <= perChip
             }
         val columns = if (fitsInOneRow) CaptionPlace.entries.size else 2
+        // Two by two a name may still need a smaller size or two lines: then every chip takes two, all as tall.
+        val lines = rememberLabelLines(labels, chipStyle, (maxWidth - 8.dp * (columns - 1)) / columns - CHIP_LABEL_ROOM, density)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (row in CaptionPlace.entries.chunked(columns)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -484,11 +499,10 @@ private fun PlaceTab(
                             selected = place == current,
                             onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe))) },
                             label = {
-                                Text(
+                                AutoSizeLabel(
                                     label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    lines = lines,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             },

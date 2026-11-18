@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -50,6 +52,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -91,6 +94,7 @@ import com.itsluminous.clearmovie.render.plan.MotionMath
 import com.itsluminous.clearmovie.render.plan.PictureMotion
 import com.itsluminous.clearmovie.render.plan.TransitionPart
 import com.itsluminous.clearmovie.render.plan.TransitionRole
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
 import com.itsluminous.clearmovie.ui.editor.timeline.TransitionGroup
@@ -204,23 +208,33 @@ internal fun TransitionPanel(
             if (applied) preview(len)
         },
     )
-    // Three equal actions across the width.
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Three equal actions across the width, all as tall as the tallest (a name on two lines), names centred.
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(
             onClick = { current?.let { t -> callbacks.edit { applyTransitionToAll(t.copy(durationMs = wanted)) } } },
             enabled = current != null && !forAll,
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_APPLY_ALL_TAG),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .heightIn(min = 48.dp)
+                    .testTag(TRANSITION_APPLY_ALL_TAG),
         ) {
             OneLine(stringResource(if (forAll) R.string.transition_applied_all else R.string.transition_apply_all))
         }
         OutlinedButton(
             onClick = { callbacks.edit { setTransition(slot.clip.id, null) } },
             enabled = current != null,
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag(TRANSITION_REMOVE_TAG),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .heightIn(min = 48.dp)
+                    .testTag(TRANSITION_REMOVE_TAG),
         ) {
             OneLine(stringResource(R.string.transition_remove))
         }
-        InsertHereButton(insertHere, Modifier.weight(1f))
+        InsertHereButton(insertHere, Modifier.weight(1f).fillMaxHeight())
     }
     val pictures =
         junctionPictures(slot, next, thumbnail, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.primaryContainer)
@@ -259,14 +273,14 @@ private fun InsertHereButton(
     }
 }
 
-/** A button or tile label: one line, never wrapped (the full text is in its semantics). */
+/** A button or tile label: drawn smaller to stay on one line, else on two at 10 sp (AutoSizeLabel). */
 @Composable
 private fun OneLine(
     text: String,
     style: androidx.compose.ui.text.TextStyle = LocalTextStyle.current,
     color: Color = Color.Unspecified,
 ) {
-    Text(text, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    AutoSizeLabel(text, style = style, color = color, textAlign = TextAlign.Center)
 }
 
 @Composable

@@ -17,6 +17,7 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.Locales
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.then
 import androidx.compose.ui.unit.DpSize
@@ -221,6 +222,76 @@ class EditorScreenshots {
                 FileOutputStream(
                     File(out, "$prefix-rowmenu-$tag-${mode.name.lowercase()}.png"),
                 ).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            }
+        }
+    }
+
+    /**
+     * The contextual bar alone, for nothing selected, a photo and a caption: a 360 dp and a 411 dp phone
+     * held upright, and the right pane of a phone held sideways; light and dark; font scale 1.0 and 1.3;
+     * English, Hindi and Hinglish. Files: `<prefix>-bar-<kind>-<size>-<theme>-font<scale>-<lang>.png`.
+     */
+    @Test
+    fun bar() {
+        val prefix = InstrumentationRegistry.getArguments().getString("screenshots")
+        assumeTrue("screenshots run only when asked", prefix != null)
+        compose.setContent { screen() }
+        val schedule = PreviewSchedule.of(RenderPlanBuilder(RenderHarness.preset).build(project))
+        val ui = EditorUi(project = project, preset = RenderHarness.preset, schedule = schedule, canUndo = true)
+        val caption =
+            project.tracks
+                .flatMap { it.clips }
+                .first { it is com.itsluminous.clearmovie.domain.model.TextClip }
+                .id
+        val out = File(checkNotNull(compose.activity.getExternalFilesDir(null)), "screens").apply { mkdirs() }
+        val sizes = listOf("360" to DpSize(360.dp, 780.dp), "411" to DpSize(411.dp, 891.dp), "sideways" to DpSize(891.dp, 411.dp))
+        for ((kind, selected) in listOf("nothing" to null, "photo" to ClipId("p1"), "text" to caption)) {
+            for ((sizeName, size) in sizes) {
+                for (mode in listOf(ThemeMode.LIGHT, ThemeMode.DARK)) {
+                    for (scale in listOf(1.0f, 1.3f)) {
+                        for (tag in listOf("en", "hi", "hi-Latn")) {
+                            // Every combination in English; the other languages upright on the 360 dp phone, light.
+                            if (tag != "en" && (sizeName != "360" || mode != ThemeMode.LIGHT)) continue
+                            screen = {
+                                DeviceConfigurationOverride(
+                                    DeviceConfigurationOverride.ForcedSize(size) then DeviceConfigurationOverride.FontScale(scale) then
+                                        DeviceConfigurationOverride.Locales(
+                                            androidx.compose.ui.text.intl
+                                                .LocaleList(tag),
+                                        ),
+                                ) {
+                                    ClearMovieTheme(themeMode = mode, dynamicColor = false) {
+                                        androidx.compose.runtime.key(kind, sizeName, mode, scale, tag) {
+                                            val state =
+                                                androidx.compose.runtime.remember {
+                                                    com.itsluminous.clearmovie.ui.editor
+                                                        .EditorScreenState(selected = selected)
+                                                }
+                                            EditorScreen(
+                                                ui = ui,
+                                                title = "Birthday",
+                                                playhead = PlayheadUi(7_000_000, schedule.durationUs, false),
+                                                preview = { m -> Box(m.background(Color(0xFF3A6EA5))) },
+                                                thumbnail = { _, _ -> null },
+                                                actions = actions,
+                                                state = state,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            compose.waitForIdle()
+                            Thread.sleep(300)
+                            val bitmap =
+                                compose
+                                    .onNodeWithTag(com.itsluminous.clearmovie.ui.editor.BAR_TAG)
+                                    .captureToImage()
+                                    .asAndroidBitmap()
+                            val name = "$prefix-bar-$kind-$sizeName-${mode.name.lowercase()}-font$scale-$tag.png"
+                            FileOutputStream(File(out, name)).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        }
+                    }
+                }
             }
         }
     }

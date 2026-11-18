@@ -437,6 +437,7 @@
     <string name="action_remove_row">पंक्ति हटाएँ</string>
     <string name="action_mute_row">पंक्ति की आवाज़ बंद</string>
     <string name="action_lower_music">बात होने पर संगीत धीमा</string>
+    <string name="bar_lower_music">बात पर धीमा</string>
     <string name="action_frame_on">फ़्रेम दिखाएँ</string>
     <string name="action_move_earlier">पहले</string>
     <string name="action_move_later">बाद में</string>

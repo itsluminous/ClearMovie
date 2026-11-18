@@ -111,6 +111,7 @@ import com.itsluminous.clearmovie.domain.model.rotate
 import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.render.plan.frameWindow
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.durationText
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
 import com.itsluminous.clearmovie.ui.editor.timeline.ClipActions
@@ -943,7 +944,7 @@ private fun TopBar(
         ) {
             Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.editor_export), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            AutoSizeLabel(stringResource(R.string.editor_export), style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -974,7 +975,7 @@ private fun LabelledIcon(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(ICON))
-            Text(stringResource(label), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            AutoSizeLabel(stringResource(label), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -1087,7 +1088,7 @@ private fun TransportRow(
             ) {
                 Icon(painterResource(playIcon), contentDescription = null, modifier = Modifier.size(ICON))
                 Spacer(Modifier.width(8.dp))
-                Text(playLabel, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                AutoSizeLabel(playLabel, style = MaterialTheme.typography.labelLarge)
             }
         }
         // The time, which TalkBack can also move (the timeline's ruler is the gesture for it).
@@ -1120,7 +1121,7 @@ private fun TransportRow(
             ) {
                 Icon(painterResource(R.drawable.ic_visibility), contentDescription = null, modifier = Modifier.size(ICON))
                 Spacer(Modifier.width(8.dp))
-                Text(exactShort, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                AutoSizeLabel(exactShort, style = MaterialTheme.typography.labelLarge)
             }
         }
     }

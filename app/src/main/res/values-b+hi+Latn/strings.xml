@@ -445,6 +445,7 @@
     <string name="action_remove_row">Row hatayein</string>
     <string name="action_mute_row">Row ki awaaz band</string>
     <string name="action_lower_music">Baat hone par music dheema</string>
+    <string name="bar_lower_music">Baat par dheema</string>
     <string name="action_frame_on">Frame dikhayein</string>
     <string name="action_move_earlier">Pehle</string>
     <string name="action_move_later">Baad me</string>

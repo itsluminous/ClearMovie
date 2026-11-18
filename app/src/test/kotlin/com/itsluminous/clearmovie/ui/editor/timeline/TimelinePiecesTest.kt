@@ -8,6 +8,9 @@ import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.ui.editor.BAR_MAX
+import com.itsluminous.clearmovie.ui.editor.BAR_MIN
+import com.itsluminous.clearmovie.ui.editor.BAR_TARGET
 import com.itsluminous.clearmovie.ui.editor.IntakePurpose
 import com.itsluminous.clearmovie.ui.editor.barItemWidth
 import com.itsluminous.clearmovie.ui.editor.dbToPercent
@@ -79,18 +82,39 @@ class TimelinePiecesTest {
     }
 
     @Test
-    fun `the bar's buttons are sized so that the last visible one is always cut in half`() {
-        val w = barItemWidth(400.dp, 72.dp, 11)
-        val visible = 400.dp / w
-        assertThat(abs(visible - visible.toInt() - 0.5f)).isLessThan(0.001f)
-        assertThat(w).isAtLeast(72.dp)
-        // When they all fit, they share the width.
-        assertThat(barItemWidth(400.dp, 72.dp, 3) * 3).isLessThan(400.dp)
-        assertThat(barItemWidth(400.dp, 72.dp, 3).value).isWithin(0.5f).of(400f / 3)
-        // A wide label (large font) keeps the button at least that wide, still cut in half.
-        val big = barItemWidth(400.dp, 150.dp, 8)
-        assertThat(big).isAtLeast(150.dp)
-        assertThat(400.dp / big % 1f).isWithin(0.001f).of(0.5f)
+    fun `the bar's buttons share the width when they fit, and are compact with half of one cut off when not`() {
+        // Six at 64 dp fit in 411 dp: they share it.
+        assertThat(barItemWidth(411.dp, 6).value).isWithin(0.01f).of(411f / 6)
+        for ((bar, count) in listOf(360.dp to 6, 360.dp to 11, 411.dp to 7, 411.dp to 11, 460.dp to 9, 840.dp to 14)) {
+            val w = barItemWidth(bar, count)
+            val visible = bar / w
+            // Compact (never a third of the screen), 4.5 to 5.5 on a phone, and the last one half shown.
+            assertThat(w).isAtLeast(BAR_MIN)
+            assertThat(w).isAtMost(BAR_MAX)
+            assertThat(abs(visible - visible.toInt() - 0.5f)).isLessThan(0.001f)
+            if (bar <= 411.dp) {
+                assertThat(visible).isIn(
+                    com.google.common.collect.Range
+                        .closed(4.5f, 5.5f),
+                )
+            }
+        }
+        // Larger text widens them, still half of one cut off.
+        val big = barItemWidth(411.dp, 11, BAR_MIN * 1.5f, BAR_TARGET * 1.5f, BAR_MAX * 1.5f)
+        assertThat(big).isAtLeast(BAR_MIN * 1.5f)
+        assertThat(411.dp / big % 1f).isWithin(0.001f).of(0.5f)
+        // Between whole-and-a-half widths that fall in the range, the nearest to it: never a 100 dp gap.
+        for (bar in listOf(150.dp, 250.dp, 320.dp)) {
+            val w = barItemWidth(bar, 9)
+            assertThat((bar / w) % 1f).isWithin(0.001f).of(0.5f)
+            assertThat(w).isAtMost(BAR_MAX + 4.dp)
+            assertThat(w).isAtLeast(BAR_MIN)
+        }
+        // Narrow: one and a half while that keeps [BAR_MIN]; narrower still, [BAR_MIN] itself.
+        assertThat(100.dp / barItemWidth(100.dp, 4)).isWithin(0.001f).of(1.5f)
+        assertThat(barItemWidth(90.dp, 4)).isEqualTo(BAR_MIN)
+        // Larger text never makes a button narrower than its own minimum.
+        assertThat(barItemWidth(120.dp, 5, BAR_MIN * 1.5f, BAR_TARGET * 1.5f, BAR_MAX * 1.5f)).isEqualTo(BAR_MIN * 1.5f)
     }
 
     @Test

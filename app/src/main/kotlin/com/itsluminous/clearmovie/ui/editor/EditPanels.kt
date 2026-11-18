@@ -102,6 +102,7 @@ import com.itsluminous.clearmovie.domain.model.setText
 import com.itsluminous.clearmovie.domain.model.setVolume
 import com.itsluminous.clearmovie.domain.model.splitClip
 import com.itsluminous.clearmovie.domain.model.trimVideo
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.preciseDurationText
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
@@ -387,14 +388,14 @@ internal fun PanelTitle(
         )
         if (onCancel != null) {
             TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_CANCEL_TAG)) {
-                Text(stringResource(R.string.action_cancel))
+                AutoSizeLabel(stringResource(R.string.action_cancel))
             }
         }
         if (onDone != null) {
             Button(onClick = onDone, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_DONE_TAG)) {
                 Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(stringResource(doneLabel))
+                AutoSizeLabel(stringResource(doneLabel))
             }
         }
     }

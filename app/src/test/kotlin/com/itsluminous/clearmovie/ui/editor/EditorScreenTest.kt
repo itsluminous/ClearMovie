@@ -774,7 +774,7 @@ class EditorScreenTest {
     }
 
     @Test
-    fun `main controls are at least 48 dp to touch and bar buttons at least 72 dp wide, at font scale 2`() {
+    fun `main controls are at least 48 dp to touch and bar buttons at least the bar's minimum wide, at font scale 2`() {
         forEachSize(fontScales = listOf(1f, 2f)) { _, h ->
             for (tag in listOf(EDITOR_EXPORT_TAG, UNDO_TAG, REDO_TAG, PLAY_TAG, EXACT_TAG)) {
                 val b = compose.onNodeWithTag(tag).bounds()
@@ -784,7 +784,7 @@ class EditorScreenTest {
             selectItem(h, "v2")
             for (a in listOf(EditAction.TRIM, EditAction.ADD_CAPTION)) {
                 val b = compose.onNodeWithTag(barActionTag(a)).bounds()
-                assertThat((b.right - b.left).v()).isAtLeast(67.5f)
+                assertThat((b.right - b.left).v()).isAtLeast(BAR_MIN.value - 0.5f)
                 assertThat((b.bottom - b.top).v()).isAtLeast(67.5f)
             }
             // Whole labels at font scale 2 are checked on the device screenshots: Robolectric's

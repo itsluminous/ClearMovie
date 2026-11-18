@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -43,14 +42,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.rememberLabelLines
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
 import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
+import kotlin.math.abs
 import kotlin.math.floor
 
 /** Test tags. */
@@ -60,32 +61,62 @@ const val BAR_FADE_START_TAG = "contextual_bar_fade_start"
 
 fun barActionTag(action: EditAction) = "bar_action_${action.name}"
 
+fun barLabelTag(action: EditAction) = "bar_label_${action.name}"
+
 /**
- * The width of each button in a bar of [count] buttons across [barWidth]:
- * every button is at least [natural] wide (72 dp, or the longest word of the
- * longest label). When they don't all fit, the width is chosen so that the
- * bar shows a whole number of buttons plus half of one, so the last one is
- * always cut off and the bar reads as scrollable (ARCHITECTURE section 11.2).
+ * The width of each button in a bar of [count] buttons across [barWidth]
+ * (ARCHITECTURE section 11.2). Every button gets the same width, so the
+ * icons sit at equal distances:
+ * - When they all fit at [min] each, they share the whole width.
+ * - When they don't, each is a compact width between [min] and [max],
+ *   closest to [target], chosen so the bar shows a whole number of buttons
+ *   and half of one: the last one is always cut off, so the bar reads as
+ *   scrollable. On a 360 to 411 dp phone that is 4.5 or 5.5 buttons.
+ * A label too long for its button is drawn smaller, then on two lines
+ * (`AutoSizeLabel`); the long labels never set the width of the others.
  */
 fun barItemWidth(
     barWidth: Dp,
-    natural: Dp,
     count: Int,
+    min: Dp = BAR_MIN,
+    target: Dp = BAR_TARGET,
+    max: Dp = BAR_MAX,
 ): Dp {
-    if (count <= 0) return natural
-    // When they all fit they share the width, a little under it, so rounding to pixels never makes the bar scrollable.
-    if (natural * count <= barWidth) return (barWidth - 1.dp) / count
-    val whole = floor(barWidth / natural - 0.5f).toInt().coerceAtLeast(1)
-    return maxOf(natural, barWidth / (whole + 0.5f))
+    if (count <= 0) return target
+    // When they all fit they share the width (the bar floors it to whole pixels, so it never scrolls).
+    if (min * count <= barWidth) return barWidth / count
+    // Otherwise a whole number and a half on screen, never narrower than [min]: the width nearest to
+    // [min]..[max], then nearest [target]. A bar too narrow even for one and a half keeps [min].
+    return (1 until count)
+        .map { n -> barWidth / (n + 0.5f) }
+        .filter { it >= min }
+        .minWithOrNull(compareBy<Dp>({ abs((it - it.coerceIn(min, max)).value) }, { abs((it - target).value) }))
+        ?: min
 }
+
+/** The compact button widths; they grow with text at 1.3x and larger ([barGrowth]). */
+val BAR_MIN = 64.dp
+val BAR_TARGET = 80.dp
+val BAR_MAX = 96.dp
+
+/** How much the bar's buttons widen with large text: as the text, up to half again. */
+const val BAR_GROWTH = 1.5f
+
+/** The text size from which the bar's buttons widen with it; below it they keep their width and labels shrink. */
+const val BAR_GROWTH_FROM = 1.3f
+
+/** The factor the bar's widths are multiplied by at text size [fontScale]. */
+fun barGrowth(fontScale: Float): Float = if (fontScale < BAR_GROWTH_FROM) 1f else fontScale.coerceAtMost(BAR_GROWTH)
 
 /**
  * The contextual bar (ARCHITECTURE section 11.2): one row of icon-above-label
  * buttons for what is selected, most-used first. It scrolls sideways when
  * they don't fit, and then shows it two ways: the last visible button is
  * cut off, and a fade with a chevron sits on the side with more buttons
- * (on the left in right-to-left languages). Labels wrap rather than being
- * cut short, and the bar grows with the font size.
+ * (on the left in right-to-left languages). A long label is drawn smaller,
+ * down to 10 sp, to stay on one line; only one too long even then takes a
+ * second line, and then every button in the bar is two lines tall, so the
+ * icons stay level. Buttons widen with text at 1.3x and larger.
  */
 @Composable
 fun ContextualBar(
@@ -94,21 +125,20 @@ fun ContextualBar(
     description: String,
     modifier: Modifier = Modifier,
 ) {
-    val labels = actions.map { stringResource(barLabel(it.action)) }
-    val measurer = rememberTextMeasurer()
-    val style = MaterialTheme.typography.labelMedium
-    val density = LocalDensity.current
-    // Up to 1.3x text a label stays on one line (the bar scrolls instead); larger, labels wrap at their words.
-    val oneLine = density.fontScale <= ONE_LINE_FONT_SCALE
-    val longestWordPx =
-        remember(labels, style, density, oneLine) {
-            labels.flatMap { if (oneLine) listOf(it) else it.split(' ') }.maxOfOrNull { measurer.measure(it, style).size.width } ?: 0
-        }
-    val natural = maxOf(MIN_BUTTON, with(density) { longestWordPx.toDp() } + BUTTON_PADDING * 2)
+    val grow = barGrowth(LocalDensity.current.fontScale)
     val surface = MaterialTheme.colorScheme.surfaceContainer
     Surface(color = surface, modifier = modifier.fillMaxWidth()) {
         BoxWithConstraints(Modifier.fillMaxWidth().testTag(BAR_TAG).semantics { contentDescription = description }) {
-            val itemWidth = barItemWidth(maxWidth, natural, actions.size)
+            val density = LocalDensity.current
+            // Whole pixels, rounded down: buttons that fit never add up to more than the bar.
+            val itemWidth =
+                with(density) {
+                    floor(barItemWidth(maxWidth, actions.size, BAR_MIN * grow, BAR_TARGET * grow, BAR_MAX * grow).toPx()).toDp()
+                }
+            // When one label needs a second line every button takes two, so they are all as tall and the icons stay level.
+            val labels = actions.map { stringResource(barLabel(it.action)) }
+            val lines =
+                rememberLabelLines(labels, MaterialTheme.typography.labelMedium, itemWidth - BUTTON_PADDING * 2, density)
             val state = rememberLazyListState()
             // Another selection has other buttons: they start from the first, never mid-way.
             val kinds = actions.map { it.action }
@@ -117,7 +147,7 @@ fun ContextualBar(
             val canForward by remember { derivedStateOf { state.canScrollForward } }
             LazyRow(state = state, modifier = Modifier.fillMaxWidth()) {
                 items(actions, key = { it.action.name }) { a ->
-                    BarButton(a, itemWidth, onAction)
+                    BarButton(a, itemWidth, lines, onAction)
                 }
             }
             val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -165,6 +195,7 @@ private fun androidx.compose.foundation.layout.BoxScope.Fade(
 private fun BarButton(
     action: BarAction,
     width: Dp,
+    lines: Int,
     onAction: (EditAction) -> Unit,
 ) {
     val label = stringResource(barLabel(action.action))
@@ -192,7 +223,13 @@ private fun BarButton(
     ) {
         Icon(painterResource(barIcon(action.action)), contentDescription = null, modifier = Modifier.size(24.dp))
         Spacer(Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+        AutoSizeLabel(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+            lines = lines,
+            modifier = Modifier.fillMaxWidth().testTag(barLabelTag(action.action)),
+        )
     }
 }
 
@@ -232,7 +269,7 @@ fun barLabel(action: EditAction): Int =
         EditAction.MOVE_ROW_DOWN -> R.string.row_move_down
         EditAction.REMOVE_ROW -> R.string.action_remove_row
         EditAction.MUTE_ROW -> R.string.action_mute_row
-        EditAction.LOWER_MUSIC -> R.string.action_lower_music
+        EditAction.LOWER_MUSIC -> R.string.bar_lower_music
         EditAction.FRAME_ON -> R.string.action_frame_on
         EditAction.MOVE_EARLIER -> R.string.action_move_earlier
         EditAction.MOVE_LATER -> R.string.action_move_later
@@ -288,9 +325,5 @@ fun barIcon(action: EditAction): Int =
         EditAction.ADD_CAPTION -> R.drawable.ic_closed_caption
     }
 
-private val MIN_BUTTON = 72.dp
-
-/** The largest text size at which a bar label is kept on one line. */
-private const val ONE_LINE_FONT_SCALE = 1.3f
-private val BUTTON_PADDING = 8.dp
+private val BUTTON_PADDING = 4.dp
 private val FADE = 24.dp
