@@ -6,6 +6,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -27,6 +28,14 @@ val MIN_LABEL_FONT_SIZE: TextUnit = 10.sp
 
 /** A label never takes more than this many lines. */
 const val MAX_LABEL_LINES = 2
+
+/**
+ * For tests: told the words and the size of every label as it settles on
+ * one. Null (nothing told) in the app. Device tests read the size this way
+ * because a line's drawn width is not a reliable measure of it on every
+ * Android version.
+ */
+internal val LocalLabelSizeProbe = staticCompositionLocalOf<((String, TextUnit) -> Unit)?> { null }
 
 /**
  * A label for a button, bar item, tab or chip that fits the room it has, in
@@ -56,6 +65,7 @@ fun AutoSizeLabel(
     lines: Int = 1,
 ) {
     val full = fullSize(style)
+    val probe = LocalLabelSizeProbe.current
     Text(
         text,
         modifier = modifier,
@@ -65,7 +75,7 @@ fun AutoSizeLabel(
         minLines = lines.coerceIn(1, MAX_LABEL_LINES),
         maxLines = MAX_LABEL_LINES,
         overflow = TextOverflow.Ellipsis,
-        autoSize = remember(full) { ShrinkThenWrap(full) },
+        autoSize = remember(full, probe) { ShrinkThenWrap(full, probe) },
     )
 }
 
@@ -80,20 +90,37 @@ fun labelLines(
     widthPx: Int,
 ): Int = if (labels.any { !fitsOnOneLine(measurer, it, style.copy(fontSize = minSize(style)), widthPx) }) MAX_LABEL_LINES else 1
 
-/** [labelLines] in a composable, for labels each [width] wide; 1 when the width is unbounded. */
+/**
+ * [labelLines] in a composable, for labels about [width] wide; 1 when the
+ * width is unbounded. Two pixels are kept in hand, since the label's real
+ * width depends on how its paddings round: a row may then reserve a second
+ * line a label does not quite need, but never misses one that wraps.
+ */
 @Composable
 fun rememberLabelLines(
     labels: List<String>,
     style: TextStyle,
     width: Dp,
     density: Density,
+): Int = rememberLabelLinesPx(labels, style, if (width.isFinite) with(density) { width.roundToPx() } - 2 else Constraints.Infinity, density)
+
+/**
+ * [labelLines] for labels each exactly [widthPx] wide. A caller that knows
+ * how its paddings round (each rounds to whole pixels on its own) passes the
+ * label's real width here, so a row neither reserves a second line for a
+ * label that fits nor misses one that wraps.
+ */
+@Composable
+fun rememberLabelLinesPx(
+    labels: List<String>,
+    style: TextStyle,
+    widthPx: Int,
+    density: Density,
 ): Int {
     val measurer = rememberTextMeasurer()
-    // Two pixels short of the room: each padding around a label rounds to whole pixels on its own,
-    // so its real width can come out up to two pixels under [width]; a row never then says one line
-    // for a label that takes two.
-    val px = if (width.isFinite) with(density) { width.roundToPx() } - 2 else Constraints.Infinity
-    return remember(labels, style, px, density.fontScale, density.density) { labelLines(measurer, labels, style, px.coerceAtLeast(0)) }
+    return remember(labels, style, widthPx, density.fontScale, density.density) {
+        labelLines(measurer, labels, style, widthPx.coerceAtLeast(0))
+    }
 }
 
 private fun fitsOnOneLine(
@@ -131,6 +158,7 @@ private fun minSize(style: TextStyle): TextUnit = minOf(MIN_LABEL_FONT_SIZE.valu
 /** Compose's auto size, told to try one line at each size before it settles for two lines at 10 sp. */
 private class ShrinkThenWrap(
     private val full: TextUnit,
+    private val probe: ((String, TextUnit) -> Unit)?,
 ) : TextAutoSize {
     override fun TextAutoSizeLayoutScope.getFontSize(
         constraints: Constraints,
@@ -139,9 +167,9 @@ private class ShrinkThenWrap(
         pickSize(full, constraints.maxWidth) { size ->
             val layout = performLayout(constraints, text, size)
             layout.lineCount == 1 && !layout.hasVisualOverflow
-        }
+        }.also { probe?.invoke(text.text, it) }
 
-    override fun equals(other: Any?): Boolean = other is ShrinkThenWrap && other.full == full
+    override fun equals(other: Any?): Boolean = other is ShrinkThenWrap && other.full == full && other.probe === probe
 
     override fun hashCode(): Int = full.hashCode()
 }

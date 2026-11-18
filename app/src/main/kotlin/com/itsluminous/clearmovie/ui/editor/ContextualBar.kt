@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
-import com.itsluminous.clearmovie.ui.components.rememberLabelLines
+import com.itsluminous.clearmovie.ui.components.rememberLabelLinesPx
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
 import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
 import kotlin.math.abs
@@ -137,8 +137,10 @@ fun ContextualBar(
                 }
             // When one label needs a second line every button takes two, so they are all as tall and the icons stay level.
             val labels = actions.map { stringResource(barLabel(it.action)) }
-            val lines =
-                rememberLabelLines(labels, MaterialTheme.typography.labelMedium, itemWidth - BUTTON_PADDING * 2, density)
+            // The label's real width: the button's, less each padding rounded to pixels as BarButton lays them out.
+            val labelPx =
+                with(density) { itemWidth.roundToPx() - 2 * OUTER_PADDING.roundToPx() - 2 * (BUTTON_PADDING - OUTER_PADDING).roundToPx() }
+            val lines = rememberLabelLinesPx(labels, MaterialTheme.typography.labelMedium, labelPx, density)
             val state = rememberLazyListState()
             // Another selection has other buttons: they start from the first, never mid-way.
             val kinds = actions.map { it.action }
@@ -200,11 +202,12 @@ private fun BarButton(
 ) {
     val label = stringResource(barLabel(action.action))
     val checked = action.checked
+    // These paddings set the label's width; ContextualBar's labelPx subtracts the same ones.
     Column(
         Modifier
             .width(width)
             .heightIn(min = 72.dp)
-            .padding(2.dp)
+            .padding(OUTER_PADDING)
             .clip(RoundedCornerShape(12.dp))
             .then(
                 if (checked == null) {
@@ -216,7 +219,7 @@ private fun BarButton(
                         .toggleable(value = checked, enabled = action.enabled, role = Role.Switch) { onAction(action.action) }
                 },
             ).alpha(if (action.enabled) 1f else 0.38f)
-            .padding(horizontal = BUTTON_PADDING - 2.dp, vertical = 8.dp)
+            .padding(horizontal = BUTTON_PADDING - OUTER_PADDING, vertical = 8.dp)
             .testTag(barActionTag(action.action)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -325,5 +328,7 @@ fun barIcon(action: EditAction): Int =
         EditAction.ADD_CAPTION -> R.drawable.ic_closed_caption
     }
 
+/** Room between a label and its button's edge: [OUTER_PADDING] outside the ripple, the rest inside. */
 private val BUTTON_PADDING = 4.dp
+private val OUTER_PADDING = 2.dp
 private val FADE = 24.dp
