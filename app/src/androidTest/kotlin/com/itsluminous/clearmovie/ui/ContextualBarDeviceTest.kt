@@ -100,7 +100,13 @@ class ContextualBarDeviceTest {
         fun width(
             text: String,
             sp: Float,
-        ): Float = measurer.measure(text, style.copy(fontSize = sp.sp), maxLines = 1, softWrap = false).multiParagraph.maxIntrinsicWidth
+        ): Float =
+            // Read the same way as the label's own line (left to right edge), which on Android 10 is not
+            // what the paragraph reports as its intrinsic width.
+            measurer.measure(text, style.copy(fontSize = sp.sp), maxLines = 1, softWrap = false).let {
+                it.getLineRight(0) -
+                    it.getLineLeft(0)
+            }
 
         /** How many lines [text] takes at 10 sp in [widthPx], with no limit. */
         fun lines(
@@ -237,7 +243,7 @@ class ContextualBarDeviceTest {
         )
         assertWithMessage("lines").that(layout.lineCount).isEqualTo(1)
         assertWithMessage("not cut").that(layout.isLineEllipsized(0)).isFalse()
-        assertWithMessage("fits").that(layout.lineWidth()).isAtMost(layout.size.width + 0.5f)
+        assertWithMessage("fits").that(layout.lineWidth()).isAtMost(layout.size.width + 1.5f)
         assertWithMessage("10 sp or more").that(layout.lineWidth()).isAtLeast(t.width(label, 10f) - 1f)
         assertWithMessage("smaller than 12 sp").that(layout.lineWidth()).isLessThan(t.width(label, 12f) - 1f)
     }

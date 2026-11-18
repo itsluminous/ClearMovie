@@ -101,7 +101,10 @@ private fun fitsOnOneLine(
     text: String,
     style: TextStyle,
     widthPx: Int,
-): Boolean = ceil(measurer.measure(text, style, maxLines = 1, softWrap = false).multiParagraph.maxIntrinsicWidth) <= widthPx
+): Boolean =
+    // The laid-out line's own width, as Text draws it: on Android 10 the paragraph's intrinsic width
+    // reads several percent wider (letter spacing), which would make a row take two lines for nothing.
+    measurer.measure(text, style, maxLines = 1, softWrap = false).let { ceil(it.getLineRight(0) - it.getLineLeft(0)) } <= widthPx
 
 private fun pickSize(
     full: TextUnit,
