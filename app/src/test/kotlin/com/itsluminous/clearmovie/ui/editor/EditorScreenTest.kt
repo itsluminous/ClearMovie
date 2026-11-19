@@ -923,13 +923,14 @@ class EditorScreenTest {
     }
 
     @Test
-    fun `an empty video offers Add photos and videos`() {
+    fun `an empty video offers Add photos and videos once`() {
         val empty = EditorHarness(ProjectFactory.blank(Fixtures.PROJECT_ID), null)
         show(ScreenSize.COMPACT, h = empty)
         compose.onNodeWithText(s(R.string.editor_empty)).assertIsDisplayed()
-        tapBar(EditAction.ADD_MEDIA)
+        // The big button is the one control for it; the bar leaves out its own (no duplicate controls).
+        compose.onNodeWithTag(barActionTag(EditAction.ADD_MEDIA)).assertDoesNotExist()
         compose.onNodeWithTag(EMPTY_ADD_TAG).performClick()
-        assertThat(empty.calls).containsExactly("add", "add")
+        assertThat(empty.calls).containsExactly("add")
     }
 
     @Test

@@ -37,10 +37,12 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
@@ -185,7 +187,9 @@ class UxTour {
     ) {
         compose.waitForIdle()
         Thread.sleep(SETTLE_MS)
-        val bitmap: Bitmap = automation.takeScreenshot()
+        val full: Bitmap = automation.takeScreenshot()
+        // Half size: still sharp enough to judge, and a whole run stays small on disk.
+        val bitmap = Bitmap.createScaledBitmap(full, full.width / 2, full.height / 2, true)
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         manifest += "$name.png\t$what"
     }
@@ -295,6 +299,12 @@ class UxTour {
         compose.waitForIdle()
     }
 
+    /** Scrolls the screen up by most of its height, from its middle (never from a button pinned at the bottom). */
+    private fun pageDown() {
+        compose.onRoot().performTouchInput { swipe(Offset(centerX, height * 0.7f), Offset(centerX, height * 0.15f), 500) }
+        compose.waitForIdle()
+    }
+
     private fun barToEnd() {
         repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
     }
@@ -375,7 +385,7 @@ class UxTour {
                 state("home-needs-setup", "Home and preset pick, the preset's files not chosen yet") { homeScrollTo(presetName) }
                 state("preset-setup", "Preset setup, first visit") { clickText(presetName) }
                 state("preset-setup-end", "Preset setup, scrolled to the end") {
-                    compose.onNodeWithTag(com.itsluminous.clearmovie.ui.preset.SETUP_LIST_TAG).performTouchInput { swipeUp() }
+                    repeat(2) { pageDown() }
                 }
                 if (exists(hasTestTag(com.itsluminous.clearmovie.ui.preset.SETUP_LIST_TAG))) back()
             }
@@ -410,7 +420,7 @@ class UxTour {
                 waitFor(hasTestTag(com.itsluminous.clearmovie.ui.preset.REVIEW_LIST_TAG))
             }
             state("review-end", "Preset review, scrolled to the end") {
-                compose.onNodeWithTag(com.itsluminous.clearmovie.ui.preset.REVIEW_LIST_TAG).performTouchInput { swipeUp() }
+                repeat(2) { pageDown() }
             }
             pickerAnswers(listOf(photos[0], videos[0], photos[1], photos[2], videos[1]))
             state("editor-new", "Editor right after picking 3 photos and 2 videos with the preset") {
@@ -436,8 +446,7 @@ class UxTour {
                 waitFor(hasTestTag(SETTINGS_LIST_TAG))
             }
             state("settings-end", "Settings scrolled to the end (storage, about)") {
-                compose.onNodeWithTag(SETTINGS_LIST_TAG).performTouchInput { swipeUp() }
-                compose.onNodeWithTag(SETTINGS_LIST_TAG).performTouchInput { swipeUp() }
+                repeat(3) { pageDown() }
             }
             if (exists(hasTestTag(SETTINGS_LIST_TAG))) back()
             pickerCancels()
@@ -537,23 +546,29 @@ class UxTour {
             bar(EditAction.ANIMATION)
         }
         state("item-menu", "Long-press menu on a photo") {
-            closePanel()
-            select(secondPhoto)
+            // Zoomed in and nothing selected, so the long press lands on the photo itself, not on a "+" or a
+            // transition marker drawn over a narrow item.
+            deselect()
+            repeat(3) { runCatching { compose.onNodeWithTag(ZOOM_IN_TAG).performClick() } }
             compose.onNodeWithTag(clipTag(secondPhoto)).performTouchInput { longClick() }
             waitFor(hasTestTag(PANEL_TAG))
+        }
+        runCatching {
+            closePanel()
+            deselect()
+            compose.onNodeWithTag(ZOOM_FIT_TAG).performClick()
         }
         state("panel-insert", "The \"+\" chooser (add before or after this photo)") {
             closePanel()
             select(secondPhoto)
+            // The "+" after the selected photo (the other "+" points are row ends).
             val plus =
-                SemanticsMatcher("a + point") { n ->
-                    n.config
-                        .getOrElse(androidx.compose.ui.semantics.SemanticsProperties.TestTag) {
-                            ""
-                        }.startsWith("timeline_plus_")
-                }
+                androidx.compose.ui.test.hasContentDescription(
+                    context.getString(R.string.timeline_add_after, s(R.string.editor_item_photo)),
+                    substring = true,
+                )
             waitFor(plus)
-            compose.onAllNodes(plus).onFirst().performClick()
+            compose.onAllNodes(plus).onFirst().performSemanticsAction(SemanticsActions.OnClick)
             waitFor(hasTestTag(PANEL_TAG))
         }
         state("caption-words", "Caption editor: Words") {

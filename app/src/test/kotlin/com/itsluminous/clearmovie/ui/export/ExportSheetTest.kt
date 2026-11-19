@@ -158,7 +158,7 @@ class ExportSheetTest {
             compose.onNodeWithTag(exportQualityTag(ExportQuality.SMALL)).assertIsSelected()
             compose
                 .onNodeWithTag(EXPORT_SAVE_TAG)
-                .performScrollTo()
+                .assertIsDisplayed()
                 .assertIsEnabled()
                 .performClick()
             assertThat(calls).containsExactly("save:SMALL")
@@ -185,9 +185,9 @@ class ExportSheetTest {
     @Test
     fun `a size that does not fit says how much to free and cannot be saved`() {
         show(sizes.copy(shortBy = mapOf(ExportQuality.GOOD to 5_000_000)))
-        compose.onNodeWithTag(EXPORT_SAVE_TAG).performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag(EXPORT_SAVE_TAG).assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithTag(exportQualityTag(ExportQuality.SMALL)).performScrollTo().performClick()
-        compose.onNodeWithTag(EXPORT_SAVE_TAG).performScrollTo().assertIsEnabled()
+        compose.onNodeWithTag(EXPORT_SAVE_TAG).assertIsDisplayed().assertIsEnabled()
     }
 
     @Test
@@ -201,12 +201,10 @@ class ExportSheetTest {
             compose.onNodeWithText(s(R.string.export_leave_ok)).assertExists()
             compose
                 .onNodeWithTag(EXPORT_STOP_TAG)
-                .performScrollTo()
                 .assertIsDisplayed()
                 .performClick()
             compose
                 .onNodeWithTag(EXPORT_HIDE_TAG)
-                .performScrollTo()
                 .assertIsDisplayed()
                 .performClick()
             assertThat(calls).containsExactly("askStop", "hide").inOrder()
@@ -224,11 +222,11 @@ class ExportSheetTest {
     @Test
     fun `Stop asks first, and only Stop stops`() {
         compose.setContent { ClearMovieTheme(dynamicColor = false) { ExportSheet(ExportStep.Running(10, null, false), null, actions) } }
-        compose.onNodeWithTag(EXPORT_STOP_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(EXPORT_STOP_TAG).assertIsDisplayed().performClick()
         compose.onNodeWithText(s(R.string.export_stop_confirm_title)).assertExists()
         compose.onNodeWithText(s(R.string.export_keep_saving)).performClick()
         assertThat(calls).isEmpty()
-        compose.onNodeWithTag(EXPORT_STOP_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(EXPORT_STOP_TAG).assertIsDisplayed().performClick()
         compose.onNodeWithText(s(R.string.export_stop_confirm_body)).assertExists()
         // The question's Stop button, not the sheet's.
         compose.onNodeWithText(s(R.string.export_stop_confirm_title)).assertExists()
@@ -246,9 +244,9 @@ class ExportSheetTest {
             show(ExportStep.Done("content://media/x/video/media/1", "Spasht Dhaara.mp4", 48_000_000), size, 2f)
             compose.onNodeWithText(s(R.string.export_done_title)).assertExists()
             compose.onNodeWithText("Spasht Dhaara.mp4", substring = true).assertExists()
-            compose.onNodeWithTag(EXPORT_PLAY_TAG).performScrollTo().performClick()
-            compose.onNodeWithTag(EXPORT_SHARE_TAG).performScrollTo().performClick()
-            compose.onNodeWithTag(EXPORT_CLOSE_TAG).performScrollTo().performClick()
+            compose.onNodeWithTag(EXPORT_PLAY_TAG).assertIsDisplayed().performClick()
+            compose.onNodeWithTag(EXPORT_SHARE_TAG).assertIsDisplayed().performClick()
+            compose.onNodeWithTag(EXPORT_CLOSE_TAG).assertIsDisplayed().performClick()
             assertThat(calls).containsExactly("play", "share", "close").inOrder()
         }
     }

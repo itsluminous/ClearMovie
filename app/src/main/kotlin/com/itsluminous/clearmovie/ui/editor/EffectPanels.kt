@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -61,6 +62,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -95,6 +97,8 @@ import com.itsluminous.clearmovie.render.plan.PictureMotion
 import com.itsluminous.clearmovie.render.plan.TransitionPart
 import com.itsluminous.clearmovie.render.plan.TransitionRole
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
+import com.itsluminous.clearmovie.ui.components.labelFits
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
 import com.itsluminous.clearmovie.ui.editor.timeline.TransitionGroup
@@ -209,32 +213,52 @@ internal fun TransitionPanel(
         },
     )
     // Three equal actions across the width, all as tall as the tallest (a name on two lines), names centred.
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(
-            onClick = { current?.let { t -> callbacks.edit { applyTransitionToAll(t.copy(durationMs = wanted)) } } },
-            enabled = current != null && !forAll,
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .heightIn(min = 48.dp)
-                    .testTag(TRANSITION_APPLY_ALL_TAG),
-        ) {
-            OneLine(stringResource(if (forAll) R.string.transition_applied_all else R.string.transition_apply_all))
+    // When a word of one would not fit its third even at the smallest size (a narrow phone, large text),
+    // they stack, each the full width, so no name is cut.
+    val words =
+        listOf(
+            stringResource(if (forAll) R.string.transition_applied_all else R.string.transition_apply_all),
+            stringResource(R.string.transition_remove),
+            stringResource(R.string.transition_insert_here),
+        )
+    val measurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val thirdPx = with(density) { ((maxWidth - 16.dp) / 3 - ACTION_PADDING * 2).roundToPx() }
+        val stacked =
+            words.flatMap { it.split(' ') }.any { word ->
+                !labelFits(measurer, word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), thirdPx)
+            }
+        val apply: @Composable (Modifier) -> Unit = { m ->
+            OutlinedButton(
+                onClick = { current?.let { t -> callbacks.edit { applyTransitionToAll(t.copy(durationMs = wanted)) } } },
+                enabled = current != null && !forAll,
+                contentPadding = PaddingValues(horizontal = ACTION_PADDING),
+                modifier = m.heightIn(min = 48.dp).testTag(TRANSITION_APPLY_ALL_TAG),
+            ) { OneLine(words[0]) }
         }
-        OutlinedButton(
-            onClick = { callbacks.edit { setTransition(slot.clip.id, null) } },
-            enabled = current != null,
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .heightIn(min = 48.dp)
-                    .testTag(TRANSITION_REMOVE_TAG),
-        ) {
-            OneLine(stringResource(R.string.transition_remove))
+        val remove: @Composable (Modifier) -> Unit = { m ->
+            OutlinedButton(
+                onClick = { callbacks.edit { setTransition(slot.clip.id, null) } },
+                enabled = current != null,
+                contentPadding = PaddingValues(horizontal = ACTION_PADDING),
+                modifier = m.heightIn(min = 48.dp).testTag(TRANSITION_REMOVE_TAG),
+            ) { OneLine(words[1]) }
         }
-        InsertHereButton(insertHere, Modifier.weight(1f).fillMaxHeight())
+        if (stacked) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                apply(Modifier.fillMaxWidth())
+                remove(Modifier.fillMaxWidth())
+                InsertHereButton(insertHere, Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                apply(Modifier.weight(1f).fillMaxHeight())
+                remove(Modifier.weight(1f).fillMaxHeight())
+                InsertHereButton(insertHere, Modifier.weight(1f).fillMaxHeight())
+            }
+        }
     }
     val pictures =
         junctionPictures(slot, next, thumbnail, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.primaryContainer)
@@ -268,10 +292,17 @@ private fun InsertHereButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp).testTag(TRANSITION_INSERT_TAG)) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = ACTION_PADDING),
+        modifier = modifier.heightIn(min = 48.dp).testTag(TRANSITION_INSERT_TAG),
+    ) {
         OneLine(stringResource(R.string.transition_insert_here))
     }
 }
+
+/** Room between an action's name and its outline: the names get the width, the button stays 48 dp tall. */
+private val ACTION_PADDING = 8.dp
 
 /** A button or tile label: drawn smaller to stay on one line, else on two at 10 sp (AutoSizeLabel). */
 @Composable

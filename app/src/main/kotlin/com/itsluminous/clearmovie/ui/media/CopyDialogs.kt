@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.media.CopyBudget
+import com.itsluminous.clearmovie.ui.components.ScrollingBody
 
 /** A size such as "1.4 GB", in the phone's own units and digits. */
 @Composable
@@ -50,7 +51,27 @@ fun CopyBudgetDialog(
 ) {
     BasicAlertDialog(onDismissRequest = onChooseFewer) {
         Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 560.dp)) {
-            Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp)) {
+            // The words scroll in a short window (a phone held sideways); the three answers stay in sight.
+            ScrollingBody(
+                modifier = Modifier.padding(24.dp),
+                surface = MaterialTheme.colorScheme.surfaceContainerHigh,
+                actions = {
+                    Spacer(Modifier.height(16.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (verdict.offerAllowAll) {
+                            Button(onClick = onAllowAll, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                                Text(stringResource(R.string.media_access_allow_all))
+                            }
+                        }
+                        OutlinedButton(onClick = onCopyAnyway, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                            Text(stringResource(R.string.copy_budget_copy_anyway))
+                        }
+                        TextButton(onClick = onChooseFewer, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                            Text(stringResource(R.string.copy_budget_choose_fewer))
+                        }
+                    }
+                },
+            ) {
                 Text(stringResource(R.string.copy_budget_title), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(16.dp))
                 Text(
@@ -63,19 +84,9 @@ fun CopyBudgetDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(24.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (verdict.offerAllowAll) {
-                        Button(onClick = onAllowAll, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                            Text(stringResource(R.string.media_access_allow_all))
-                        }
-                    }
-                    OutlinedButton(onClick = onCopyAnyway, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                        Text(stringResource(R.string.copy_budget_copy_anyway))
-                    }
-                    TextButton(onClick = onChooseFewer, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                        Text(stringResource(R.string.copy_budget_choose_fewer))
-                    }
+                if (verdict.offerAllowAll) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.copy_budget_allow_all_hint), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

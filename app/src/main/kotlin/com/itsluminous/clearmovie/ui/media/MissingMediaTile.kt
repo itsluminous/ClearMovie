@@ -7,9 +7,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -55,7 +56,17 @@ fun MissingMediaTile(
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(12.dp))
-            FilledTonalButton(onClick = onReplace, modifier = Modifier.heightIn(min = 48.dp)) {
+            // The error colours, so the button stands out on the error card in light and dark (a tonal
+            // button's own colours were dark on dark red in the dark theme).
+            Button(
+                onClick = onReplace,
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
                 Text(stringResource(R.string.action_replace))
             }
         }

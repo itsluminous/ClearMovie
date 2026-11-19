@@ -47,7 +47,7 @@ class PickStepTest {
         compose.setContentOnce(size, access)
         compose.onNodeWithText(s(R.string.media_access_title)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(s(R.string.media_access_privacy)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(s(R.string.media_access_continue)).performScrollTo().performClick()
+        compose.onNodeWithText(s(R.string.media_access_continue)).assertIsDisplayed().performClick()
         assertThat(requests).isEqualTo(1)
         assertThat(launches).isEqualTo(0)
     }
@@ -84,7 +84,7 @@ class PickStepTest {
         compose.setContentOnce(ScreenSize.COMPACT, access)
         compose.onNodeWithText(s(R.string.media_access_denied_title)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(s(R.string.media_access_denied_body)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(s(R.string.media_access_try_again)).performScrollTo().performClick()
+        compose.onNodeWithText(s(R.string.media_access_try_again)).assertIsDisplayed().performClick()
         assertThat(requests).isEqualTo(1)
         assertThat(launches).isEqualTo(0)
         // Android says yes this time: the picker opens.
@@ -97,9 +97,9 @@ class PickStepTest {
     fun `when Android won't ask again it offers Open Settings, and Not now still opens the picker`() {
         val access = controller(MediaAccessState.DeniedForGood)
         compose.setContentOnce(ScreenSize.MEDIUM, access)
-        compose.onNodeWithText(s(R.string.media_access_open_settings)).performScrollTo().performClick()
+        compose.onNodeWithText(s(R.string.media_access_open_settings)).assertIsDisplayed().performClick()
         assertThat(settingsOpened).isEqualTo(1)
-        compose.onNodeWithText(s(R.string.media_access_not_now)).performScrollTo().performClick()
+        compose.onNodeWithText(s(R.string.media_access_not_now)).assertIsDisplayed().performClick()
         compose.waitForIdle()
         assertThat(launches).isEqualTo(1)
     }
@@ -145,7 +145,7 @@ class PickStepTest {
                 })
             }
         }
-        compose.onNodeWithText(s(R.string.media_access_not_now)).performScrollTo().performClick()
+        compose.onNodeWithText(s(R.string.media_access_not_now)).assertIsDisplayed().performClick()
         compose.waitForIdle()
         assertThat(launches).isEqualTo(1)
         tester.emulateSavedInstanceStateRestore()

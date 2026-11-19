@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -315,7 +316,16 @@ internal fun PipPlacePanel(
         Corner.BOTTOM_LEFT to R.string.pip_bottom_left,
         Corner.BOTTOM_RIGHT to R.string.pip_bottom_right,
     )) {
-        Choice(stringResource(label), null, corner == c, R.drawable.ic_picture_in_picture, pipCornerTag(c)) { corner = c }
+        // The icon's small picture sits bottom right: mirrored, it shows each corner.
+        val flip =
+            Modifier.graphicsLayer {
+                scaleX = if (c == Corner.TOP_LEFT || c == Corner.BOTTOM_LEFT) -1f else 1f
+                scaleY = if (c == Corner.TOP_LEFT || c == Corner.TOP_RIGHT) -1f else 1f
+            }
+        Choice(stringResource(label), null, corner == c, R.drawable.ic_picture_in_picture, pipCornerTag(c), iconModifier = flip) {
+            corner =
+                c
+        }
     }
     val shown = stringResource(R.string.pip_size, percent.roundToInt())
     Text(shown, style = MaterialTheme.typography.bodyLarge)

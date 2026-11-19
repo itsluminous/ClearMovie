@@ -90,8 +90,8 @@ class StorageScreensTest {
                 val rule = show(size, 2f) { MediaAccessExplainer(state, { continued++ }, { notNow++ }, { settings++ }) }
                 rule.onNodeWithText(s(title)).performScrollTo().assertIsDisplayed()
                 rule.onNodeWithText(s(R.string.media_access_privacy)).performScrollTo().assertIsDisplayed()
-                rule.onNodeWithText(s(button)).performScrollTo().performClick()
-                rule.onNodeWithText(s(R.string.media_access_not_now)).performScrollTo().performClick()
+                rule.onNodeWithText(s(button)).assertIsDisplayed().performClick()
+                rule.onNodeWithText(s(R.string.media_access_not_now)).assertIsDisplayed().performClick()
                 assertThat(continued + settings).isEqualTo(1)
                 assertThat(settings).isEqualTo(if (state == MediaAccessState.DeniedForGood) 1 else 0)
                 assertThat(notNow).isEqualTo(1)
@@ -173,9 +173,9 @@ class StorageScreensTest {
             android.text.format.Formatter
                 .formatShortFileSize(context, 1_400_000_000)
         rule.onNodeWithText(context.resources.getQuantityString(R.plurals.copy_budget_body, 3, 3, size)).assertIsDisplayed()
-        rule.onNodeWithText(s(R.string.media_access_allow_all)).performScrollTo().performClick()
-        rule.onNodeWithText(s(R.string.copy_budget_copy_anyway)).performScrollTo().performClick()
-        rule.onNodeWithText(s(R.string.copy_budget_choose_fewer)).performScrollTo().performClick()
+        rule.onNodeWithText(s(R.string.media_access_allow_all)).assertIsDisplayed().performClick()
+        rule.onNodeWithText(s(R.string.copy_budget_copy_anyway)).assertIsDisplayed().performClick()
+        rule.onNodeWithText(s(R.string.copy_budget_choose_fewer)).assertIsDisplayed().performClick()
         assertThat(calls).containsExactly("all", "copy", "fewer").inOrder()
     }
 

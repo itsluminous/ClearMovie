@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -45,12 +46,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.project.ProjectSummary
@@ -136,8 +140,11 @@ fun HomeScreen(
             // Wide windows get more columns, but never so narrow that a preset's name breaks.
             val columns = (maxWidth / MIN_CARD_WIDTH).toInt().coerceIn(1, window.columns)
             val enabled = !busy && share?.ready != false
+            // Cards side by side are given one height (a grid row cannot match them), enough for a three-line text.
+            val cardHeight = if (columns > 1) SIDE_BY_SIDE_CARD else 96.dp
             Column(Modifier.fillMaxSize()) {
-                if (busy || share?.ready == false) LinearProgressIndicator(Modifier.fillMaxWidth())
+                // Busy, the shared items not ready, or the presets still being read (so the cards never jump into place).
+                if (busy || share?.ready == false || presets == null) LinearProgressIndicator(Modifier.fillMaxWidth())
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
                     state = rememberLazyGridState(),
@@ -153,9 +160,13 @@ fun HomeScreen(
                         Heading(stringResource(if (share != null) R.string.share_choose_preset else R.string.home_new_video))
                     }
                     items(presets.orEmpty(), key = { "preset-" + it.preset.id.value }) { card ->
-                        PresetCardView(card, enabled = enabled, onClick = { onPreset(card.preset.id) })
+                        PresetCardView(card, enabled = enabled, minHeight = cardHeight, onClick = { onPreset(card.preset.id) })
                     }
-                    item(key = "blank") { BlankCard(enabled = enabled, onClick = onStartBlank) }
+                    if (presets !=
+                        null
+                    ) {
+                        item(key = "blank") { BlankCard(enabled = enabled, minHeight = cardHeight, onClick = onStartBlank) }
+                    }
                     if (share != null) return@LazyVerticalGrid
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Heading(stringResource(R.string.home_my_videos), Modifier.padding(top = 8.dp))
@@ -243,19 +254,21 @@ private fun Heading(
 private fun PresetCardView(
     card: PresetCard,
     enabled: Boolean,
+    minHeight: Dp,
     onClick: () -> Unit,
 ) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        val name = presetName(card.preset)
+        CardBody(name, {
             Thumb(card.thumbnail?.let { { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } })
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(presetName(card.preset), style = MaterialTheme.typography.titleLarge)
+        }) {
+            Column {
+                Text(name, style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(4.dp))
                 val (line, warn) =
                     when (val s = card.state) {
@@ -287,19 +300,19 @@ private fun PresetCardView(
 @Composable
 private fun BlankCard(
     enabled: Boolean,
+    minHeight: Dp,
     onClick: () -> Unit,
 ) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Thumb(null, icon = R.drawable.ic_photo_library)
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.home_start_blank), style = MaterialTheme.typography.titleLarge)
+        val name = stringResource(R.string.home_start_blank)
+        CardBody(name, { Thumb(null, icon = R.drawable.ic_photo_library) }) {
+            Column {
+                Text(name, style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(R.string.home_start_blank_body),
@@ -340,6 +353,49 @@ private fun VideoCard(
     }
 }
 
+/**
+ * A card's picture and words: side by side when the card's [title] fits
+ * beside the picture on one line, the picture above the words otherwise
+ * (a narrow phone, large text), so a name never breaks into a column of
+ * single words next to it.
+ */
+@Composable
+private fun CardBody(
+    title: String,
+    picture: @Composable () -> Unit,
+    words: @Composable () -> Unit,
+) {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.titleLarge
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(16.dp)) {
+        val titleDp =
+            with(density) {
+                measurer
+                    .measure(title, style)
+                    .size.width
+                    .toDp()
+            }
+        if (THUMB_WIDTH + 16.dp + titleDp <= maxWidth) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                picture()
+                Spacer(Modifier.width(16.dp))
+                words()
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                picture()
+                words()
+            }
+        }
+    }
+}
+
+private val THUMB_WIDTH = 112.dp
+
+/** The height of preset cards shown two or three to a row. */
+private val SIDE_BY_SIDE_CARD = 168.dp
+
 /** A 16:9 picture well: the preset's frame, or an icon. */
 @Composable
 private fun Thumb(
@@ -349,7 +405,7 @@ private fun Thumb(
     val media = LocalMediaColors.current
     Box(
         Modifier
-            .width(112.dp)
+            .width(THUMB_WIDTH)
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(8.dp))
             .background(media.previewBackground),

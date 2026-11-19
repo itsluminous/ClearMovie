@@ -56,6 +56,7 @@
     <string name="copy_budget_free">Aapke phone me %1$s jagah khaali hai.</string>
     <string name="copy_budget_copy_anyway">Phir bhi copy karein</string>
     <string name="copy_budget_choose_fewer">Kam chunein</string>
+    <string name="copy_budget_allow_all_hint">Agar aap saari photos ki ijaazat dein, to kuch copy nahi karna padega.</string>
     <string name="copy_no_space_title">Jagah kam hai</string>
     <string name="copy_no_space_body">Inke liye %1$s jagah chahiye, par aapke phone me sirf %2$s khaali hai. Thodi jagah khaali karein, ya kam photos aur videos chunein.</string>
     <string name="copy_progress_title">Aapki photos aur videos ki copy ban rahi hai</string>
@@ -138,7 +139,7 @@
     <string name="export_quality_good_hint">Phone par saaf, aur bhejne me aasaan</string>
     <string name="export_quality_small">Chhota</string>
     <string name="export_quality_small_hint">WhatsApp par sabse jaldi bheja jaata hai</string>
-    <string name="export_suggested">Suggested</string>
+    <string name="export_suggested">Sujhaav</string>
     <string name="export_size_about">Lagbhag %1$s</string>
     <string name="export_needs_space">%1$s aur khaali jagah chahiye</string>
     <string name="export_save">Video save karein</string>
@@ -168,6 +169,7 @@
     <string name="export_try_again">Phir se koshish karein</string>
     <string name="export_blocked_missing">Is video ki ek photo ya video delete ho gayi ya kahin aur chali gayi. Pehle us par Replace tap karein, phir save karein.</string>
     <string name="export_blocked_preset">Preset ki ek file delete ho gayi ya kahin aur chali gayi. Pehle editor me Theek karein tap karein, phir save karein.</string>
+    <string name="export_blocked_title">Abhi save nahi ho sakta</string>
     <string name="export_other_running_title">Ek aur video save ho raha hai</string>
     <string name="export_other_running_body">Ek waqt par ek hi video save ho sakta hai. Use rok kar yeh wala save karein?</string>
     <string name="export_other_replace">Iske bajaye yeh save karein</string>

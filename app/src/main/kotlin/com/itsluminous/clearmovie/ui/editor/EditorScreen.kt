@@ -517,7 +517,7 @@ fun EditorScreen(
                     }
 
                     EditAction.ADD_CAPTION -> {
-                        startCaption(id, actions, state)
+                        startCaption(id, project, actions, state)
                     }
 
                     EditAction.COLOUR -> {
@@ -871,11 +871,16 @@ private fun barActions(
     val clip = selected?.clip
     val kind = selectionKind(clip)
     if (selected == null || project == null) {
-        return ClipActions.forSelection(
-            kind,
-            canZoomIn = zoom?.let { it.msPerDp > TimelineZoom.closeUpMsPerDp * 1.0001 } ?: true,
-            canZoomOut = zoom?.fitAll != true,
-        )
+        val actions =
+            ClipActions.forSelection(
+                kind,
+                canZoomIn = zoom?.let { it.msPerDp > TimelineZoom.closeUpMsPerDp * 1.0001 } ?: true,
+                canZoomOut = zoom?.fitAll != true,
+            )
+        // A video with no photos or videos yet shows one big "Add photos and videos" over the timeline:
+        // the bar leaves out its own, so there is one control for it, not two.
+        val empty = slots.none { it.clip.isContentClip() }
+        return if (empty) actions.filter { it.action != EditAction.ADD_MEDIA } else actions
     }
     val index = contentIndex(slots, selected)
     val count = slots.count { it.clip.isContentClip() }
@@ -914,40 +919,68 @@ private fun TopBar(
     actions: EditorActions,
     modifier: Modifier,
 ) {
-    Row(
-        modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        IconButton(onClick = actions::back) {
-            Icon(
-                painterResource(R.drawable.ic_arrow_back),
-                contentDescription = stringResource(R.string.action_back),
-                modifier = Modifier.size(ICON),
-            )
-        }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        // Above 1.3x text, Undo and Redo keep only their icons (named for TalkBack), so the title and Export keep their room.
-        val iconsOnly = LocalDensity.current.fontScale > TOP_BAR_LABELS_FONT_SCALE
-        LabelledIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo, iconsOnly)
-        LabelledIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo, iconsOnly)
-        Button(
-            onClick = actions::export,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_EXPORT_TAG),
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val labelStyle = MaterialTheme.typography.labelMedium
+    val exportStyle = MaterialTheme.typography.labelLarge
+    val undoWord = stringResource(R.string.action_undo)
+    val redoWord = stringResource(R.string.action_redo)
+    val exportWord = stringResource(R.string.editor_export)
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        // Undo and Redo keep their words while the title still has room for a few letters (and up to 1.3x
+        // text); otherwise only their icons (named for TalkBack), so the title is never cut to one letter.
+        val labelled =
+            with(density) {
+                fun w(
+                    text: String,
+                    style: androidx.compose.ui.text.TextStyle,
+                ) = measurer
+                    .measure(text, style)
+                    .size.width
+                    .toDp()
+                val undoDp = maxOf(ICON, w(undoWord, labelStyle)) + 16.dp
+                val redoDp = maxOf(ICON, w(redoWord, labelStyle)) + 16.dp
+                val exportDp = ICON + 8.dp + w(exportWord, exportStyle) + 32.dp
+                val titleRoom = maxWidth - 16.dp - TOUCH - exportDp - undoDp - redoDp - 8.dp * 4
+                titleRoom >= MIN_TITLE
+            }
+        val iconsOnly = LocalDensity.current.fontScale > TOP_BAR_LABELS_FONT_SCALE || !labelled
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
-            Spacer(Modifier.width(8.dp))
-            AutoSizeLabel(stringResource(R.string.editor_export), style = MaterialTheme.typography.labelLarge)
+            IconButton(onClick = actions::back) {
+                Icon(
+                    painterResource(R.drawable.ic_arrow_back),
+                    contentDescription = stringResource(R.string.action_back),
+                    modifier = Modifier.size(ICON),
+                )
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            LabelledIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo, iconsOnly)
+            LabelledIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo, iconsOnly)
+            Button(
+                onClick = actions::export,
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_EXPORT_TAG),
+            ) {
+                Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
+                Spacer(Modifier.width(8.dp))
+                AutoSizeLabel(exportWord, style = exportStyle)
+            }
         }
     }
 }
+
+/** The least room the editor's title keeps before Undo and Redo give up their words. */
+private val MIN_TITLE = 96.dp
 
 /** An icon with its name under it (ARCHITECTURE section 11: every control has a label), 48 dp to touch. */
 @Composable
@@ -983,8 +1016,8 @@ private fun LabelledIcon(
 /**
  * The playback strip under the preview: Play, the time, and "As exported"
  * at the far end, spread across one row that never wraps. At very large text
- * (more than 1.5x) Play and As exported keep only their icons, still named
- * for TalkBack. Zooming is in the bar below (with Fit all) and by pinching.
+ * (more than 1.5x) As exported keeps only its icon, still named for TalkBack;
+ * Play keeps its word whenever the row fits with it. Zooming is in the bar below (with Fit all) and by pinching.
  */
 @Composable
 private fun Controls(
@@ -1031,7 +1064,8 @@ private fun Controls(
         val needed = 16.dp + playMinWidth + 16.dp + timeDp + (12.dp + ICON + 8.dp + exactTextDp + 12.dp)
         // As exported gives up its word first; Play keeps its own while the row still fits (the main action).
         val exactIconOnly = density.fontScale > ICON_ONLY_FONT_SCALE || needed > maxWidth
-        val playIconOnly = density.fontScale > ICON_ONLY_FONT_SCALE || 16.dp + playMinWidth + 16.dp + timeDp + TOUCH > maxWidth
+        // Play keeps its word whenever the row still fits with it, at any text size: it is the one he looks for.
+        val playIconOnly = 16.dp + playMinWidth + 16.dp + timeDp + TOUCH > maxWidth
         TransportRow(
             playIconOnly,
             exactIconOnly,

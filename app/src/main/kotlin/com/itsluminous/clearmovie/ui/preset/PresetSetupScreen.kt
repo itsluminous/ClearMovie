@@ -25,6 +25,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -139,7 +140,11 @@ fun PresetSetupScreen(
     ) { padding ->
         val status = ui.status
         AdaptiveScreen(Modifier.fillMaxSize().padding(padding)) { window ->
-            if (status == null) return@AdaptiveScreen
+            // The files are checked first (a large frame video takes a moment): a moving bar, never a blank page.
+            if (status == null) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                return@AdaptiveScreen
+            }
             val ready = status.isReady
             val side: @Composable (withGuide: Boolean) -> Unit = { withGuide ->
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {

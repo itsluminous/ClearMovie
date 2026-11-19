@@ -258,7 +258,7 @@ private fun PartCard(
     val icon =
         when {
             slot == PresetSlot.FRAME -> R.drawable.ic_frame
-            spoken -> R.drawable.ic_music_note
+            spoken -> R.drawable.ic_record_voice
             else -> R.drawable.ic_videocam
         }
     val presetMs =

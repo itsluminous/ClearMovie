@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -96,6 +97,7 @@ import com.itsluminous.clearmovie.domain.model.setText
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
+import com.itsluminous.clearmovie.ui.components.MoreBelow
 import com.itsluminous.clearmovie.ui.components.labelFits
 import com.itsluminous.clearmovie.ui.components.rememberLabelLines
 import kotlin.math.roundToInt
@@ -196,12 +198,22 @@ private const val BAND_SHOWS = 0x40
  * "Add caption" on photo or video [itemId]: a new caption attached to it,
  * empty and in the preset's style, with the preset's start animation, then
  * the editor on it. The caption is part of the editor visit's undo step.
+ * When the item already has a caption of its own, the editor opens on that
+ * one instead (two captions in one place would be drawn over each other).
  */
 fun startCaption(
     itemId: ClipId,
+    project: Project?,
     actions: EditorCallbacks,
     state: EditorScreenState,
 ) {
+    // An item with its own caption already: that one opens, so a second is never drawn over the first.
+    project
+        ?.tracks
+        ?.flatMap { it.clips }
+        ?.filterIsInstance<TextClip>()
+        ?.firstOrNull { it.attachedTo?.clip == itemId }
+        ?.let { return openCaption(it.id, state) }
     val id = RandomIds.clipId()
     val made = actions.editMerged(captionMergeKey(id)) { addCaptionFor(itemId, "", captionId = id).withEffectDefaultsFor(listOf(id)) }
     if (made) openCaption(id, state)
@@ -284,8 +296,8 @@ internal fun ColumnScope.CaptionPanel(
     val tabName = visit?.captionTab ?: ownTab
     val tab = CaptionTab.entries.firstOrNull { it.name == tabName } ?: CaptionTab.WORDS
     // Icon over label in the bar's sizes (24 dp, labelMedium). A long label is drawn smaller to fit its tab,
-    // then on two lines (AutoSizeLabel), every tab as tall. Only when a single word would not fit even at the
-    // smallest size (a narrow phone, large text) does every tab show its icon only, named for TalkBack.
+    // then on two lines (AutoSizeLabel), every tab as tall. When a single word would not fit even at the
+    // smallest size (a narrow phone, large text) the tabs keep their names and scroll sideways instead.
     val labels = CaptionTab.entries.map { stringResource(tabLabel(it)) }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium
@@ -293,32 +305,36 @@ internal fun ColumnScope.CaptionPanel(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val room = maxWidth / CaptionTab.entries.size - TAB_LABEL_ROOM
         val roomPx = with(density) { room.roundToPx() }
-        val iconsOnly =
+        val scrolls =
             labels.flatMap { it.split(' ') }.any { word ->
                 !labelFits(measurer, word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), roomPx)
             }
-        val lines = rememberLabelLines(labels, labelStyle, room, density)
-        CaptionTabs(tab, labels, iconsOnly, lines) {
+        val lines = if (scrolls) 1 else rememberLabelLines(labels, labelStyle, room, density)
+        CaptionTabs(tab, labels, scrolls, lines) {
             if (visit != null) visit.captionTab = it.name else ownTab = it.name
         }
     }
     // Below the title and the tabs, which stay put, the tab's content and Reset scroll when the room is short.
-    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-        Spacer(Modifier.height(8.dp))
-        // Every tab takes the same room, so changing tabs never makes the panel, and the rows above it, jump;
-        // in a short panel (a phone held sideways) Reset stays in sight instead.
-        Column(Modifier.fillMaxWidth().heightIn(min = if (roomy) TAB_CONTENT_MIN else 0.dp)) {
-            when (tab) {
-                CaptionTab.WORDS -> WordsTab(caption, callbacks, key)
-                CaptionTab.PLACE -> PlaceTab(style, defaults.box, CaptionPlaces.safeArea(window), ::restyle)
-                CaptionTab.SIZE -> SizeTab(caption, style, defaults, ::restyle)
-                CaptionTab.FONT -> FontTab(style, ::restyle)
-                CaptionTab.COLOUR -> ColourTab(style, ::restyle)
+    val scroll = rememberScrollState()
+    Box(Modifier.weight(1f, fill = false)) {
+        Column(Modifier.verticalScroll(scroll)) {
+            Spacer(Modifier.height(8.dp))
+            // Every tab takes the same room, so changing tabs never makes the panel, and the rows above it, jump;
+            // in a short panel (a phone held sideways) Reset stays in sight instead.
+            Column(Modifier.fillMaxWidth().heightIn(min = if (roomy) TAB_CONTENT_MIN else 0.dp)) {
+                when (tab) {
+                    CaptionTab.WORDS -> WordsTab(caption, callbacks, key)
+                    CaptionTab.PLACE -> PlaceTab(style, defaults.box, CaptionPlaces.safeArea(window), ::restyle)
+                    CaptionTab.SIZE -> SizeTab(caption, style, defaults, ::restyle)
+                    CaptionTab.FONT -> FontTab(style, ::restyle)
+                    CaptionTab.COLOUR -> ColourTab(style, ::restyle)
+                }
             }
+            Spacer(Modifier.height(8.dp))
+            ResetButton(caption, callbacks, key)
+            Spacer(Modifier.height(8.dp))
         }
-        Spacer(Modifier.height(8.dp))
-        ResetButton(caption, callbacks, key)
-        Spacer(Modifier.height(8.dp))
+        MoreBelow(scroll)
     }
 }
 
@@ -326,25 +342,28 @@ internal fun ColumnScope.CaptionPanel(
 private fun CaptionTabs(
     tab: CaptionTab,
     labels: List<String>,
-    iconsOnly: Boolean,
+    scrolls: Boolean,
     lines: Int,
     onTab: (CaptionTab) -> Unit,
 ) {
-    PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
+    val tabs: @Composable () -> Unit = {
         for (t in CaptionTab.entries) {
             val label = labels[t.ordinal]
             Tab(
                 selected = t == tab,
                 onClick = { onTab(t) },
-                modifier = Modifier.heightIn(min = if (iconsOnly) 48.dp else 64.dp).testTag(captionTabTag(t)),
+                modifier = Modifier.heightIn(min = 64.dp).testTag(captionTabTag(t)),
             ) {
                 Column(
                     Modifier.padding(horizontal = TAB_LABEL_ROOM / 2, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Icon(painterResource(tabIcon(t)), contentDescription = if (iconsOnly) label else null, modifier = Modifier.size(24.dp))
-                    if (!iconsOnly) {
+                    Icon(painterResource(tabIcon(t)), contentDescription = null, modifier = Modifier.size(24.dp))
+                    if (scrolls) {
+                        // Each tab as wide as its name: the row scrolls, the last tab partly in sight.
+                        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                    } else {
                         AutoSizeLabel(
                             label,
                             style = MaterialTheme.typography.labelMedium,
@@ -354,6 +373,18 @@ private fun CaptionTabs(
                     }
                 }
             }
+        }
+    }
+    if (scrolls) {
+        PrimaryScrollableTabRow(
+            selectedTabIndex = tab.ordinal,
+            containerColor = Color.Transparent,
+            edgePadding = 0.dp,
+            modifier = Modifier.testTag(CAPTION_PANEL_TAG),
+        ) { tabs() }
+    } else {
+        PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
+            tabs()
         }
     }
 }

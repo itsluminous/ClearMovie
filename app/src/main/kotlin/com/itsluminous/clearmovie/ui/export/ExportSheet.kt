@@ -58,6 +58,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.export.ExportQuality
+import com.itsluminous.clearmovie.ui.components.ScrollingBody
 import com.itsluminous.clearmovie.ui.components.sizeText
 import com.itsluminous.clearmovie.work.ExportFailure
 
@@ -165,7 +166,7 @@ fun ExportSheetContent(
                     .fillMaxWidth()
                     .testTag(EXPORT_SHEET_TAG),
         ) {
-            Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp)) {
+            Column(Modifier.padding(24.dp)) {
                 when {
                     blocked != null && step is ExportStep.Choose -> Blocked(blocked, actions)
                     else -> Step(step, wide, actions, onStop)
@@ -206,37 +207,8 @@ private fun ColumnScope.Choose(
 ) {
     var chosen by rememberSaveable { mutableStateOf(ExportQuality.suggested.name) }
     val quality = ExportQuality.parse(chosen) ?: ExportQuality.suggested
-    Title(stringResource(R.string.export_title))
-    if (step.stopped) {
-        Text(stringResource(R.string.export_stopped), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
-        Spacer(Modifier.height(8.dp))
-    }
-    Text(stringResource(R.string.export_choose_body), style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(16.dp))
-    val cards: @Composable (Modifier) -> Unit = { modifier ->
-        for (q in ExportQuality.shown) {
-            QualityCard(
-                quality = q,
-                selected = q == quality,
-                bytes = step.sizes?.get(q),
-                shortBy = step.shortBy[q],
-                onSelect = { chosen = q.name },
-                modifier = modifier,
-            )
-        }
-    }
-    if (wide) {
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            cards(Modifier.weight(1f).fillMaxHeight())
-        }
-    } else {
-        Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            cards(Modifier.fillMaxWidth())
-        }
-    }
-    Spacer(Modifier.height(24.dp))
     val fits = step.shortBy[quality] == null
-    Buttons {
+    Sheet(buttons = {
         TextButton(onClick = actions::close, modifier = Modifier.heightIn(min = 56.dp).testTag(EXPORT_CLOSE_TAG)) {
             Text(stringResource(R.string.action_cancel))
         }
@@ -248,6 +220,39 @@ private fun ColumnScope.Choose(
             Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.export_save))
+        }
+    }) {
+        Title(stringResource(R.string.export_title))
+        if (step.stopped) {
+            Text(
+                stringResource(R.string.export_stopped),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        Text(stringResource(R.string.export_choose_body), style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        val cards: @Composable (Modifier) -> Unit = { modifier ->
+            for (q in ExportQuality.shown) {
+                QualityCard(
+                    quality = q,
+                    selected = q == quality,
+                    bytes = step.sizes?.get(q),
+                    shortBy = step.shortBy[q],
+                    onSelect = { chosen = q.name },
+                    modifier = modifier,
+                )
+            }
+        }
+        if (wide) {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                cards(Modifier.weight(1f).fillMaxHeight())
+            }
+        } else {
+            Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                cards(Modifier.fillMaxWidth())
+            }
         }
     }
 }
@@ -320,31 +325,7 @@ private fun ColumnScope.Running(
     actions: ExportSheetActions,
     onStop: () -> Unit,
 ) {
-    Title(stringResource(R.string.export_saving_title))
-    if (step.percent <= 0) {
-        // Before the first frame (measuring the sound, checking the colours): moving, so it never looks stuck (review F8).
-        LinearProgressIndicator(Modifier.fillMaxWidth().height(8.dp).testTag(EXPORT_PROGRESS_TAG))
-        Spacer(Modifier.height(12.dp))
-        Text(stringResource(R.string.export_getting_ready), style = MaterialTheme.typography.titleMedium)
-    } else {
-        LinearProgressIndicator(
-            progress = { step.percent / 100f },
-            modifier = Modifier.fillMaxWidth().height(8.dp).testTag(EXPORT_PROGRESS_TAG),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(stringResource(R.string.export_percent, step.percent), style = MaterialTheme.typography.titleMedium)
-    }
-    step.minutesLeft?.let {
-        Text(pluralStringResource(R.plurals.export_minutes_left, it, it), style = MaterialTheme.typography.bodyLarge)
-    }
-    if (step.restarted) {
-        Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.export_restarted), style = MaterialTheme.typography.bodyMedium)
-    }
-    Spacer(Modifier.height(12.dp))
-    Text(stringResource(R.string.export_leave_ok), style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(24.dp))
-    Buttons {
+    Sheet(buttons = {
         OutlinedButton(
             onClick = onStop,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
@@ -357,6 +338,30 @@ private fun ColumnScope.Running(
         Button(onClick = actions::hide, modifier = Modifier.heightIn(min = 56.dp).testTag(EXPORT_HIDE_TAG)) {
             Text(stringResource(R.string.export_hide))
         }
+    }) {
+        Title(stringResource(R.string.export_saving_title))
+        if (step.percent <= 0) {
+            // Before the first frame (measuring the sound, checking the colours): moving, so it never looks stuck (review F8).
+            LinearProgressIndicator(Modifier.fillMaxWidth().height(8.dp).testTag(EXPORT_PROGRESS_TAG))
+            Spacer(Modifier.height(12.dp))
+            Text(stringResource(R.string.export_getting_ready), style = MaterialTheme.typography.titleMedium)
+        } else {
+            LinearProgressIndicator(
+                progress = { step.percent / 100f },
+                modifier = Modifier.fillMaxWidth().height(8.dp).testTag(EXPORT_PROGRESS_TAG),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(stringResource(R.string.export_percent, step.percent), style = MaterialTheme.typography.titleMedium)
+        }
+        step.minutesLeft?.let {
+            Text(pluralStringResource(R.plurals.export_minutes_left, it, it), style = MaterialTheme.typography.bodyLarge)
+        }
+        if (step.restarted) {
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.export_restarted), style = MaterialTheme.typography.bodyLarge)
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.export_leave_ok), style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -365,23 +370,7 @@ private fun ColumnScope.Done(
     step: ExportStep.Done,
     actions: ExportSheetActions,
 ) {
-    Icon(
-        painterResource(R.drawable.ic_check_circle),
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.size(48.dp).align(Alignment.CenterHorizontally),
-    )
-    Spacer(Modifier.height(12.dp))
-    Text(
-        stringResource(R.string.export_done_title),
-        style = MaterialTheme.typography.headlineSmall,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().semantics { heading() },
-    )
-    Spacer(Modifier.height(12.dp))
-    Text(stringResource(R.string.export_done_body, step.displayName, sizeText(step.sizeBytes)), style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(24.dp))
-    Buttons {
+    Sheet(buttons = {
         TextButton(onClick = actions::close, modifier = Modifier.heightIn(min = 56.dp).testTag(EXPORT_CLOSE_TAG)) {
             Text(stringResource(R.string.action_close))
         }
@@ -395,6 +384,25 @@ private fun ColumnScope.Done(
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.action_play))
         }
+    }) {
+        Icon(
+            painterResource(R.drawable.ic_check_circle),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(48.dp).align(Alignment.CenterHorizontally),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            stringResource(R.string.export_done_title),
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().semantics { heading() },
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            stringResource(R.string.export_done_body, step.displayName, sizeText(step.sizeBytes)),
+            style = MaterialTheme.typography.bodyLarge,
+        )
     }
 }
 
@@ -403,19 +411,7 @@ private fun ColumnScope.Failed(
     step: ExportStep.Failed,
     actions: ExportSheetActions,
 ) {
-    Problem(
-        title = stringResource(R.string.export_failed_title),
-        body =
-            when (step.reason) {
-                ExportFailure.GONE -> stringResource(R.string.export_failed_gone)
-                ExportFailure.MISSING_MEDIA -> stringResource(R.string.export_failed_missing)
-                ExportFailure.PRESET_BROKEN -> stringResource(R.string.export_failed_preset)
-                ExportFailure.NOTHING -> stringResource(R.string.export_failed_nothing)
-                ExportFailure.NO_SPACE -> stringResource(R.string.export_failed_space, sizeText(step.missingBytes))
-                ExportFailure.FAILED -> stringResource(R.string.export_failed_other)
-            },
-    )
-    Buttons {
+    Sheet(buttons = {
         TextButton(onClick = actions::close, modifier = Modifier.heightIn(min = 56.dp).testTag(EXPORT_CLOSE_TAG)) {
             Text(stringResource(R.string.action_close))
         }
@@ -425,6 +421,19 @@ private fun ColumnScope.Failed(
                 modifier = Modifier.heightIn(min = 56.dp),
             ) { Text(stringResource(R.string.export_try_again)) }
         }
+    }) {
+        Problem(
+            title = stringResource(R.string.export_failed_title),
+            body =
+                when (step.reason) {
+                    ExportFailure.GONE -> stringResource(R.string.export_failed_gone)
+                    ExportFailure.MISSING_MEDIA -> stringResource(R.string.export_failed_missing)
+                    ExportFailure.PRESET_BROKEN -> stringResource(R.string.export_failed_preset)
+                    ExportFailure.NOTHING -> stringResource(R.string.export_failed_nothing)
+                    ExportFailure.NO_SPACE -> stringResource(R.string.export_failed_space, sizeText(step.missingBytes))
+                    ExportFailure.FAILED -> stringResource(R.string.export_failed_other)
+                },
+        )
     }
 }
 
@@ -433,32 +442,34 @@ private fun ColumnScope.Blocked(
     block: ExportBlock,
     actions: ExportSheetActions,
 ) {
-    Problem(
-        title = stringResource(R.string.export_title),
-        body =
-            when (block) {
-                ExportBlock.NOTHING -> stringResource(R.string.export_failed_nothing)
-                ExportBlock.MISSING_MEDIA -> stringResource(R.string.export_blocked_missing)
-                ExportBlock.PRESET_BROKEN -> stringResource(R.string.export_blocked_preset)
-            },
-    )
-    Buttons {
+    Sheet(buttons = {
         Button(onClick = actions::close, modifier = Modifier.heightIn(min = 56.dp).testTag(EXPORT_CLOSE_TAG)) {
             Text(stringResource(R.string.action_ok))
         }
+    }) {
+        Problem(
+            title = stringResource(R.string.export_title),
+            body =
+                when (block) {
+                    ExportBlock.NOTHING -> stringResource(R.string.export_failed_nothing)
+                    ExportBlock.MISSING_MEDIA -> stringResource(R.string.export_blocked_missing)
+                    ExportBlock.PRESET_BROKEN -> stringResource(R.string.export_blocked_preset)
+                },
+        )
     }
 }
 
 @Composable
 private fun ColumnScope.OtherRunning(actions: ExportSheetActions) {
-    Problem(title = stringResource(R.string.export_other_running_title), body = stringResource(R.string.export_other_running_body))
-    Buttons {
+    Sheet(buttons = {
         TextButton(onClick = actions::close, modifier = Modifier.heightIn(min = 56.dp).testTag(EXPORT_CLOSE_TAG)) {
             Text(stringResource(R.string.action_close))
         }
         Button(onClick = actions::replaceOther, modifier = Modifier.heightIn(min = 56.dp)) {
             Text(stringResource(R.string.export_other_replace))
         }
+    }) {
+        Problem(title = stringResource(R.string.export_other_running_title), body = stringResource(R.string.export_other_running_body))
     }
 }
 
@@ -485,18 +496,30 @@ private fun ColumnScope.Problem(
     )
     Spacer(Modifier.height(12.dp))
     Text(body, style = MaterialTheme.typography.bodyLarge)
-    Spacer(Modifier.height(24.dp))
 }
 
-/** The sheet's buttons, at the end; they wrap onto a second line when the text is large. */
+/**
+ * One step of the sheet: its [body] scrolls when the window is short (a
+ * phone held sideways, very large text) while its [buttons] stay in sight
+ * at the end; they wrap onto a second line when the text is large.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Buttons(content: @Composable FlowRowScope.() -> Unit) {
-    FlowRow(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        content = content,
+private fun Sheet(
+    buttons: @Composable FlowRowScope.() -> Unit,
+    body: @Composable ColumnScope.() -> Unit,
+) {
+    ScrollingBody(
+        actions = {
+            Spacer(Modifier.height(16.dp))
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                content = buttons,
+            )
+        },
+        body = body,
     )
 }
 

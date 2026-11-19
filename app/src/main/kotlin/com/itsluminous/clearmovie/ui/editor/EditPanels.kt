@@ -8,9 +8,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -55,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -66,6 +69,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -103,6 +107,7 @@ import com.itsluminous.clearmovie.domain.model.setVolume
 import com.itsluminous.clearmovie.domain.model.splitClip
 import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.MoreBelow
 import com.itsluminous.clearmovie.ui.components.preciseDurationText
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
@@ -244,121 +249,124 @@ fun EditPanel(
         // The caption editor scrolls only its tab's content, so its title, Cancel and Done stay in sight
         // (after typing, a scrolled panel could hide them).
         val scrolls = open.panel != Panel.TEXT
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(
-                    max = maxHeight,
-                ).then(if (scrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            when (open.panel) {
-                Panel.TRIM -> {
-                    (clip as? VideoClip)?.let { TrimPanel(it, thumbnail, callbacks, close) }
-                }
-
-                Panel.DURATION -> {
-                    (clip as? MainClip)?.let { DurationPanel(it, callbacks, close) }
-                }
-
-                Panel.SPLIT -> {
-                    (clip as? VideoClip)?.let { SplitPanel(it, project, playheadMs, thumbnail, callbacks, close) }
-                }
-
-                Panel.SPEED -> {
-                    (clip as? VideoClip)?.let { SpeedPanel(it, callbacks, close) }
-                }
-
-                Panel.LOOP -> {
-                    (clip as? VideoClip)?.let { LoopPanel(it, callbacks, close) }
-                }
-
-                Panel.VOLUME -> {
-                    volumeOf(clip)?.let { VolumePanel(clip!!.id, it, callbacks, close) }
-                }
-
-                Panel.FIT -> {
-                    (clip as? MediaClip)?.let { FitPanel(it, callbacks, close) }
-                }
-
-                Panel.INSERT -> {
-                    if (onMain && clip is MainClip) {
-                        InsertPanel(open, clip, callbacks, onPanel)
-                    } else {
-                        TimedInsertPanel(open, track, clip, rows, playheadMs, callbacks, onPanel, onSelect)
+        val scroll = rememberScrollState()
+        // A panel taller than its room scrolls; the fade at its foot says so.
+        Box(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (scrolls) Modifier.verticalScroll(scroll) else Modifier)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                when (open.panel) {
+                    Panel.TRIM -> {
+                        (clip as? VideoClip)?.let { TrimPanel(it, thumbnail, callbacks, close) }
                     }
-                }
 
-                Panel.CARD_TEXT -> {
-                    (clip as? MainClip)?.let { CardTextPanel(open, it, callbacks, close) }
-                }
-
-                Panel.CARD_COLOUR -> {
-                    (clip as? MainClip)?.let { CardColourPanel(open, it, callbacks, close) }
-                }
-
-                Panel.ITEM_MENU -> {
-                    if (onMain && clip is MainClip) {
-                        ItemMenuPanel(clip, callbacks, onPanel, onDeleted)
-                        RowSection(track, project, callbacks, onPanel, onStack, onRemoveRow, withAddHere = false)
-                    } else if (clip != null) {
-                        TimedItemMenuPanel(clip, track, project, callbacks, onPanel, onDeleted, onStack, onRemoveRow)
+                    Panel.DURATION -> {
+                        (clip as? MainClip)?.let { DurationPanel(it, callbacks, close) }
                     }
-                }
 
-                Panel.ROW_MENU -> {
-                    RowMenuPanel(track, project, rows, callbacks, onPanel, onStack, onRemoveRow)
-                }
-
-                Panel.ADD_ROW -> {
-                    AddRowPanel(callbacks, onSelectRow = onSelectRow, close = close)
-                }
-
-                Panel.TEXT -> {
-                    if (clip is TextClip) {
-                        CaptionPanel(
-                            clip,
-                            project,
-                            captionWindow,
-                            callbacks,
-                            onDone = close,
-                            roomy = maxHeight >= ROOMY_PANEL,
-                            visit = captionVisit,
-                        )
-                    } else {
-                        // Only a caption has this editor (a panel saved by an older version may name another item).
-                        LaunchedEffect(open) { close() }
+                    Panel.SPLIT -> {
+                        (clip as? VideoClip)?.let { SplitPanel(it, project, playheadMs, thumbnail, callbacks, close) }
                     }
-                }
 
-                Panel.SOUND_TRIM -> {
-                    (clip as? AudioClip)?.let { SoundTrimPanel(it, callbacks, close) }
-                }
+                    Panel.SPEED -> {
+                        (clip as? VideoClip)?.let { SpeedPanel(it, callbacks, close) }
+                    }
 
-                Panel.FADE -> {
-                    (clip as? AudioClip)?.let { FadePanel(it, callbacks, close) }
-                }
+                    Panel.LOOP -> {
+                        (clip as? VideoClip)?.let { LoopPanel(it, callbacks, close) }
+                    }
 
-                Panel.PIP_PLACE -> {
-                    (clip as? MediaClip)?.let { PipPlacePanel(it, callbacks, close) }
-                }
+                    Panel.VOLUME -> {
+                        volumeOf(clip)?.let { VolumePanel(clip!!.id, it, callbacks, close) }
+                    }
 
-                Panel.MOVE_TO_ROW -> {
-                    clip?.let { MoveToRowPanel(it, project, rows, callbacks, close) }
-                }
+                    Panel.FIT -> {
+                        (clip as? MediaClip)?.let { FitPanel(it, callbacks, close) }
+                    }
 
-                Panel.REMOVE_ROW -> {
-                    RemoveRowPanel(track, rows, callbacks, close)
-                }
+                    Panel.INSERT -> {
+                        if (onMain && clip is MainClip) {
+                            InsertPanel(open, clip, callbacks, onPanel)
+                        } else {
+                            TimedInsertPanel(open, track, clip, rows, playheadMs, callbacks, onPanel, onSelect)
+                        }
+                    }
 
-                Panel.TRANSITION -> {
-                    TransitionPanel(open, project, thumbnail, callbacks, close, onPanel)
-                }
+                    Panel.CARD_TEXT -> {
+                        (clip as? MainClip)?.let { CardTextPanel(open, it, callbacks, close) }
+                    }
 
-                Panel.ANIMATION -> {
-                    AnimationPanel(open, project, thumbnail, callbacks, close)
+                    Panel.CARD_COLOUR -> {
+                        (clip as? MainClip)?.let { CardColourPanel(open, it, callbacks, close) }
+                    }
+
+                    Panel.ITEM_MENU -> {
+                        if (onMain && clip is MainClip) {
+                            ItemMenuPanel(clip, callbacks, onPanel, onDeleted)
+                            RowSection(track, project, callbacks, onPanel, onStack, onRemoveRow, withAddHere = false)
+                        } else if (clip != null) {
+                            TimedItemMenuPanel(clip, track, project, callbacks, onPanel, onDeleted, onStack, onRemoveRow)
+                        }
+                    }
+
+                    Panel.ROW_MENU -> {
+                        RowMenuPanel(track, project, rows, callbacks, onPanel, onStack, onRemoveRow)
+                    }
+
+                    Panel.ADD_ROW -> {
+                        AddRowPanel(callbacks, onSelectRow = onSelectRow, close = close)
+                    }
+
+                    Panel.TEXT -> {
+                        if (clip is TextClip) {
+                            CaptionPanel(
+                                clip,
+                                project,
+                                captionWindow,
+                                callbacks,
+                                onDone = close,
+                                roomy = maxHeight >= ROOMY_PANEL,
+                                visit = captionVisit,
+                            )
+                        } else {
+                            // Only a caption has this editor (a panel saved by an older version may name another item).
+                            LaunchedEffect(open) { close() }
+                        }
+                    }
+
+                    Panel.SOUND_TRIM -> {
+                        (clip as? AudioClip)?.let { SoundTrimPanel(it, callbacks, close) }
+                    }
+
+                    Panel.FADE -> {
+                        (clip as? AudioClip)?.let { FadePanel(it, callbacks, close) }
+                    }
+
+                    Panel.PIP_PLACE -> {
+                        (clip as? MediaClip)?.let { PipPlacePanel(it, callbacks, close) }
+                    }
+
+                    Panel.MOVE_TO_ROW -> {
+                        clip?.let { MoveToRowPanel(it, project, rows, callbacks, close) }
+                    }
+
+                    Panel.REMOVE_ROW -> {
+                        RemoveRowPanel(track, rows, callbacks, close)
+                    }
+
+                    Panel.TRANSITION -> {
+                        TransitionPanel(open, project, thumbnail, callbacks, close, onPanel)
+                    }
+
+                    Panel.ANIMATION -> {
+                        AnimationPanel(open, project, thumbnail, callbacks, close)
+                    }
                 }
             }
+            if (scrolls) MoreBelow(scroll)
         }
     }
 }
@@ -378,28 +386,122 @@ internal fun PanelTitle(
     onCancel: (() -> Unit)?,
     doneLabel: Int = R.string.action_done,
 ) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).semantics { heading() },
-        )
-        if (onCancel != null) {
-            TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_CANCEL_TAG)) {
-                AutoSizeLabel(stringResource(R.string.action_cancel))
+    val cancel = stringResource(R.string.action_cancel)
+    val done = stringResource(doneLabel)
+    val measurer = rememberTextMeasurer()
+    val titleStyle = MaterialTheme.typography.titleMedium
+    val buttonStyle = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // The title, Cancel and Done side by side only when all three fit at full size; otherwise the title
+        // takes its own line above the buttons, so it is never cut to a few letters and Done never wraps.
+        val needed =
+            with(density) {
+                val titleDp =
+                    measurer
+                        .measure(title, titleStyle)
+                        .size.width
+                        .toDp()
+                val cancelDp =
+                    if (onCancel != null) {
+                        measurer
+                            .measure(cancel, buttonStyle)
+                            .size.width
+                            .toDp() + 24.dp
+                    } else {
+                        0.dp
+                    }
+                val doneDp =
+                    if (onDone != null) {
+                        measurer
+                            .measure(done, buttonStyle)
+                            .size.width
+                            .toDp() + 48.dp + 24.dp
+                    } else {
+                        0.dp
+                    }
+                titleDp + 16.dp + cancelDp + doneDp
+            }
+        val buttons: @Composable () -> Unit = {
+            if (onCancel != null) {
+                TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_CANCEL_TAG)) {
+                    AutoSizeLabel(cancel)
+                }
+            }
+            if (onDone != null) {
+                Button(onClick = onDone, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_DONE_TAG)) {
+                    Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    AutoSizeLabel(done)
+                }
             }
         }
-        if (onDone != null) {
-            Button(onClick = onDone, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_DONE_TAG)) {
-                Icon(painterResource(R.drawable.ic_check), contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                AutoSizeLabel(stringResource(doneLabel))
+        if (needed <= maxWidth) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    style = titleStyle,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+                buttons()
+            }
+        } else {
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(
+                    title,
+                    style = titleStyle,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) { buttons() }
             }
         }
     }
 }
+
+/**
+ * A frame of [clip] with [lines] (times such as "Starts at 0:02.5") beside it when they fit there on one line
+ * each, and under it otherwise (a narrow phone, large text), so a time is never broken across lines.
+ */
+@Composable
+private fun PreviewBeside(
+    clip: MainClip,
+    sourceMs: Long,
+    thumbnail: ThumbSource,
+    lines: List<String>,
+) {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.bodyLarge
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val wordsDp = with(density) { lines.maxOf { measurer.measure(it, style).size.width }.toDp() }
+        val words: @Composable () -> Unit = {
+            Column {
+                for (line in lines) Text(line, style = style, maxLines = 1, softWrap = false)
+            }
+        }
+        if (PREVIEW_MAX + 12.dp + wordsDp <= maxWidth) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FramePreview(clip, sourceMs, thumbnail)
+                words()
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FramePreview(clip, sourceMs, thumbnail)
+                words()
+            }
+        }
+    }
+}
+
+private val PREVIEW_MAX = 200.dp
 
 @Composable
 private fun FramePreview(
@@ -410,7 +512,7 @@ private fun FramePreview(
     val bitmap by produceState<Bitmap?>(null, clip, sourceMs / 100) { value = thumbnail(clip, sourceMs) }
     Box(
         Modifier
-            .widthIn(max = 200.dp)
+            .widthIn(max = PREVIEW_MAX)
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(6.dp))
@@ -447,15 +549,17 @@ private fun TrimPanel(
         },
         onCancel = close,
     )
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        FramePreview(clip, (if (showingEnd) end - 1 else start).roundToLong().coerceAtLeast(0), thumbnail)
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.trim_from, preciseDurationText(start.roundToLong())), style = MaterialTheme.typography.bodyLarge)
-            Text(stringResource(R.string.trim_to, preciseDurationText(end.roundToLong())), style = MaterialTheme.typography.bodyLarge)
-            val length = clip.copy(trimStartMs = start.roundToLong(), trimEndMs = end.roundToLong()).durationMs
-            Text(stringResource(R.string.trim_length, preciseDurationText(length)), style = MaterialTheme.typography.bodyMedium)
-        }
-    }
+    val length = clip.copy(trimStartMs = start.roundToLong(), trimEndMs = end.roundToLong()).durationMs
+    PreviewBeside(
+        clip,
+        (if (showingEnd) end - 1 else start).roundToLong().coerceAtLeast(0),
+        thumbnail,
+        listOf(
+            stringResource(R.string.trim_from, preciseDurationText(start.roundToLong())),
+            stringResource(R.string.trim_to, preciseDurationText(end.roundToLong())),
+            stringResource(R.string.trim_length, preciseDurationText(length)),
+        ),
+    )
     val label = stringResource(R.string.trim_title)
     val shownRange = stringResource(R.string.trim_range, preciseDurationText(start.roundToLong()), preciseDurationText(end.roundToLong()))
     RangeSlider(
@@ -538,9 +642,11 @@ private fun StepButton(
     FilledTonalButton(
         onClick = onClick,
         shape = CircleShape,
+        // No content padding: the default 24 dp a side squeezed the sign to a few dp inside the circle.
+        contentPadding = PaddingValues(0.dp),
         modifier = Modifier.size(56.dp).semantics { contentDescription = text },
     ) {
-        Icon(painterResource(icon), contentDescription = null)
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(28.dp))
     }
 }
 
@@ -569,10 +675,12 @@ private fun SplitPanel(
         onCancel = close,
         doneLabel = R.string.split_here,
     )
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        FramePreview(clip, clip.trimStartMs + clip.speed.sourceMs(at.roundToLong()) % (clip.trimEndMs - clip.trimStartMs), thumbnail)
-        Text(stringResource(R.string.split_at, preciseDurationText(at.roundToLong())), style = MaterialTheme.typography.bodyLarge)
-    }
+    PreviewBeside(
+        clip,
+        clip.trimStartMs + clip.speed.sourceMs(at.roundToLong()) % (clip.trimEndMs - clip.trimStartMs),
+        thumbnail,
+        listOf(stringResource(R.string.split_at, preciseDurationText(at.roundToLong()))),
+    )
     val label = stringResource(R.string.split_title)
     val cutAt = stringResource(R.string.split_at, preciseDurationText(at.roundToLong()))
     Slider(
@@ -596,19 +704,36 @@ private fun SpeedPanel(
     close: () -> Unit,
 ) {
     PanelTitle(stringResource(R.string.speed_title), onDone = close, onCancel = null)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Two even rows of three, so no speed is left alone on a line.
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = SPEED_COLUMNS,
+    ) {
         for (speed in Speed.entries) {
             val text = stringResource(R.string.speed_value, speedNumber(speed))
             FilterChip(
                 selected = clip.speed == speed,
                 onClick = { callbacks.edit { setSpeed(clip.id, speed) } },
-                label = { Text(text, style = MaterialTheme.typography.titleMedium) },
-                modifier = Modifier.heightIn(min = 48.dp),
+                label = {
+                    Text(
+                        text,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        softWrap = false,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             )
         }
     }
     Spacer(Modifier.height(8.dp))
 }
+
+private const val SPEED_COLUMNS = 3
 
 /** 0.25, 0.5, 1, 1.5, 2, 4 in the phone's own digits. */
 @Composable
@@ -737,6 +862,7 @@ internal fun Choice(
     icon: Int,
     tag: String,
     enabled: Boolean = true,
+    iconModifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val primary = MaterialTheme.colorScheme.primary
@@ -755,7 +881,7 @@ internal fun Choice(
             .testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(icon), contentDescription = null, tint = primary, modifier = Modifier.size(32.dp))
+        Icon(painterResource(icon), contentDescription = null, tint = primary, modifier = Modifier.size(32.dp).then(iconModifier))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)

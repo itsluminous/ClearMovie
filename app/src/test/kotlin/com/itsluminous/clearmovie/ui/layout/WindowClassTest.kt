@@ -25,9 +25,10 @@ class WindowClassTest {
     }
 
     @Test
-    fun `a short window is two panes even when narrow, and a tall tablet is two panes in portrait`() {
+    fun `a short window is two panes even when narrow, and a tablet held upright is one`() {
         assertThat(WindowClass.of(560.dp, 400.dp).twoPane).isTrue()
-        assertThat(WindowClass.of(800.dp, 1280.dp).twoPane).isTrue()
+        assertThat(WindowClass.of(800.dp, 1280.dp).twoPane).isFalse()
+        assertThat(WindowClass.of(1280.dp, 800.dp).twoPane).isTrue()
         // Split screen on a phone: narrow and tall is one pane.
         assertThat(WindowClass.of(411.dp, 600.dp).twoPane).isFalse()
     }

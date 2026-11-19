@@ -48,6 +48,7 @@
     <string name="copy_budget_free">आपके फ़ोन में %1$s जगह खाली है।</string>
     <string name="copy_budget_copy_anyway">फिर भी कॉपी करें</string>
     <string name="copy_budget_choose_fewer">कम चुनें</string>
+    <string name="copy_budget_allow_all_hint">अगर आप सभी फ़ोटो की अनुमति दें, तो कुछ भी कॉपी नहीं करना पड़ेगा।</string>
     <string name="copy_no_space_title">जगह कम है</string>
     <string name="copy_no_space_body">इनके लिए %1$s जगह चाहिए, पर आपके फ़ोन में सिर्फ़ %2$s खाली है। थोड़ी जगह खाली करें, या कम फ़ोटो और वीडियो चुनें।</string>
     <string name="copy_progress_title">आपकी फ़ोटो और वीडियो की कॉपी बन रही है</string>
@@ -160,6 +161,7 @@
     <string name="export_try_again">फिर से कोशिश करें</string>
     <string name="export_blocked_missing">इस वीडियो की एक फ़ोटो या वीडियो हटा दी गई या कहीं और चली गई। पहले उस पर बदलें टैप करें, फिर सेव करें।</string>
     <string name="export_blocked_preset">प्रीसेट की एक फ़ाइल हटा दी गई या कहीं और चली गई। पहले एडिटर में ठीक करें टैप करें, फिर सेव करें।</string>
+    <string name="export_blocked_title">अभी सेव नहीं हो सकता</string>
     <string name="export_other_running_title">एक और वीडियो सेव हो रहा है</string>
     <string name="export_other_running_body">एक समय पर एक ही वीडियो सेव हो सकता है। उसे रोककर यह वाला सेव करें?</string>
     <string name="export_other_replace">इसके बजाय यह सेव करें</string>

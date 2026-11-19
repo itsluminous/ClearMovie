@@ -8,7 +8,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -123,7 +122,7 @@ class MediaIntakeTest {
         compose.onNodeWithText(context.resources.getQuantityString(R.plurals.copy_budget_body, 3, 3, size)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.media_access_allow_all)).assertIsDisplayed()
 
-        compose.onNodeWithText(context.getString(R.string.copy_budget_copy_anyway)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.copy_budget_copy_anyway)).assertIsDisplayed().performClick()
         waitFor { intake.state.value is IntakeState.Done }
 
         val items = (intake.state.value as IntakeState.Done).items
@@ -159,7 +158,7 @@ class MediaIntakeTest {
     fun `Choose fewer copies nothing`() {
         intake.start(project, shareVideos(), MediaAccessState.Denied)
         waitFor { intake.state.value is IntakeState.Confirm }
-        compose.onNodeWithText(context.getString(R.string.copy_budget_choose_fewer)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.copy_budget_choose_fewer)).assertIsDisplayed().performClick()
         waitFor { intake.state.value == IntakeState.Cancelled }
         assertThat(files.projectMediaDir(project).listFiles().orEmpty()).isEmpty()
     }
@@ -168,7 +167,7 @@ class MediaIntakeTest {
     fun `Cancel during the copy leaves no file`() {
         intake.start(project, shareVideos(bytesEach = 200 * 1024 * 1024), MediaAccessState.Denied)
         waitFor { intake.state.value is IntakeState.Confirm }
-        compose.onNodeWithText(context.getString(R.string.copy_budget_copy_anyway)).performScrollTo().performClick()
+        compose.onNodeWithText(context.getString(R.string.copy_budget_copy_anyway)).assertIsDisplayed().performClick()
         waitFor { (intake.state.value as? IntakeState.Copying)?.copiedBytes?.let { it > 0 } == true }
         compose.onNodeWithText(context.getString(R.string.copy_progress_title)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.action_cancel)).performClick()

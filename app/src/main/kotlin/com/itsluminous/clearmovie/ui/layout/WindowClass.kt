@@ -15,14 +15,18 @@ enum class HeightClass { COMPACT, MEDIUM, EXPANDED }
 data class WindowClass(
     val width: WidthClass,
     val height: HeightClass,
+    /** The window is at least as wide as it is tall. */
+    val wide: Boolean = true,
 ) {
     /**
-     * Two panes side by side (ARCHITECTURE section 11.1): medium or expanded
-     * width, or compact height (a phone held sideways). Never the raw
-     * orientation: a tall tablet in portrait is two-pane, a phone in split
-     * screen may not be.
+     * Two panes side by side (ARCHITECTURE section 11.1): compact height (a
+     * phone held sideways), or medium or expanded width in a window wider
+     * than tall (a tablet held sideways, a wide split screen). A tablet held
+     * upright stacks like a phone (cm-ux-review: side by side it left most
+     * of both panes empty). The window's own shape decides, never the
+     * device's orientation, so split screen counts too.
      */
-    val twoPane: Boolean get() = width != WidthClass.COMPACT || height == HeightClass.COMPACT
+    val twoPane: Boolean get() = height == HeightClass.COMPACT || (width != WidthClass.COMPACT && wide)
 
     /** Columns for lists of cards. */
     val columns: Int
@@ -57,6 +61,7 @@ data class WindowClass(
                         height < EXPANDED_HEIGHT -> HeightClass.MEDIUM
                         else -> HeightClass.EXPANDED
                     },
+                wide = width >= height,
             )
     }
 }

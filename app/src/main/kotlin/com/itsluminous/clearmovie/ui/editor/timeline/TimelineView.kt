@@ -76,6 +76,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -91,6 +92,7 @@ import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.durationText
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
 import kotlinx.coroutines.withTimeoutOrNull
@@ -2059,25 +2061,40 @@ private fun RowsToggle(
         } else {
             pluralStringResource(R.plurals.timeline_show_all_rows, hidden.size, hidden.size)
         }
-    TextButton(
-        onClick = { if (allRowsRequested) actions.showFewerRows() else actions.showAllRows() },
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = metrics.toggleDp.dp)
-                .testTag(TIMELINE_ROWS_TOGGLE_TAG),
-    ) {
-        Icon(
-            painterResource(if (allRowsRequested) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
-            contentDescription = null,
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(label, modifier = Modifier.weight(1f, fill = false))
-        if (!allRowsRequested) {
-            // The kinds of the hidden rows, so it is clear what is behind the control.
-            for (row in hidden.distinctBy { it.type }) {
-                Spacer(Modifier.width(6.dp))
-                Icon(painterResource(rowLook(row.type).first), contentDescription = null, modifier = Modifier.size(18.dp))
+    val kinds = if (allRowsRequested) emptyList() else hidden.distinctBy { it.type }
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // The kinds of the hidden rows, so it is clear what is behind the control, only when they fit beside
+        // the words at full size; the words come first (they shrink, then take two lines, never three).
+        val wordsDp =
+            with(density) {
+                measurer
+                    .measure(label, style)
+                    .size.width
+                    .toDp()
+            }
+        val showKinds = 24.dp + 24.dp + 8.dp + wordsDp + 24.dp * kinds.size <= maxWidth
+        TextButton(
+            onClick = { if (allRowsRequested) actions.showFewerRows() else actions.showAllRows() },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = metrics.toggleDp.dp)
+                    .testTag(TIMELINE_ROWS_TOGGLE_TAG),
+        ) {
+            Icon(
+                painterResource(if (allRowsRequested) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
+                contentDescription = null,
+            )
+            Spacer(Modifier.width(8.dp))
+            AutoSizeLabel(label, style = style, modifier = Modifier.weight(1f, fill = false))
+            if (showKinds) {
+                for (row in kinds) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(painterResource(rowLook(row.type).first), contentDescription = null, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
