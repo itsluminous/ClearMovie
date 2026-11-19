@@ -22,7 +22,8 @@
 # fixtures are used otherwise). Never commit personal media. A real export
 # (progress, then done) runs only for the configs in $UX_EXPORT_CONFIGS
 # (default "base dark w320f20hl"); the others show the sheet's states as
-# stand-ins.
+# stand-ins. UX_ONLY=caption,panel-transition takes only the states whose
+# names start with those words.
 set -euo pipefail
 
 : "${ANDROID_SERIAL:?set ANDROID_SERIAL to the device to use}"
@@ -121,6 +122,7 @@ for config in "${configs[@]}"; do
   for e in ${UX_EXPORT_CONFIGS:-base dark w320f20hl}; do [ "$e" = "$name" ] && exportarg=true; done
   for method in tour stateless; do
     limited "$adb" -s "$ANDROID_SERIAL" shell am instrument -w -e uxtour "$name" -e uxdyn "$dynarg" -e uxexport "$exportarg" \
+      ${UX_ONLY:+-e uxonly "$UX_ONLY"} \
       -e class "com.itsluminous.clearmovie.ui.UxTour#$method" "$runner" | tr -d '\r' | tail -3 || echo "$name $method: gave up or failed"
   done
   rm -rf "${out:?}/$name"
