@@ -3,35 +3,29 @@
 CI builds release APKs on every push to `main`, every `v*` tag and every pull
 request to `main`. Only a `v*` tag is signed: pushes to `main`, pull requests
 and forks build unsigned APKs, so the checks below always run and no signed
-build of an unreleased commit leaves CI. A `v*` tag refuses to publish unless the APKs are
+build of an unreleased commit leaves CI. A `v*` tag refuses to publish unless the APK is
 signed and the tag matches `versionName`.
 
-## The five APKs
+## The APK
 
-ClearMovie bundles small native libraries from AndroidX (Compose's
-`libandroidx.graphics.path.so` and DataStore's `libdatastore_shared_counter.so`),
-so each release has one APK per processor type plus a universal one:
+Each release is one APK, `ClearMovie-<version>.apk`, that works on every
+processor type. ClearMovie bundles small native libraries from AndroidX
+(Compose's `libandroidx.graphics.path.so` and DataStore's
+`libdatastore_shared_counter.so`), but they are so small that per-ABI APKs came
+out the same size as the universal one, so 0.0.1 was the last release split by
+ABI.
 
-| File | abiCode | versionCode |
-| --- | --- | --- |
-| `ClearMovie-<version>-universal.apk` | 0 | base × 10 |
-| `ClearMovie-<version>-armeabi-v7a.apk` | 1 | base × 10 + 1 |
-| `ClearMovie-<version>-arm64-v8a.apk` | 2 | base × 10 + 2 |
-| `ClearMovie-<version>-x86.apk` | 3 | base × 10 + 3 |
-| `ClearMovie-<version>-x86_64.apk` | 4 | base × 10 + 4 |
+Its versionCode is `base × 10`, where `base` is `baseVersionCode` in
+`app/build.gradle.kts`. Raise `baseVersionCode` by one for each release. 0.0.1's
+per-ABI APKs used `base × 10 + abiCode`, codes 10 (universal) to 14 (x86_64);
+from base 2 on, every code (20, 30, ...) is above all of them, so a phone with
+any 0.0.1 APK installs the next release as an update.
 
-`base` is `baseVersionCode` in `app/build.gradle.kts`. Every per-ABI APK has a
-higher code than the universal one, so moving from the universal APK to the
-matching per-ABI APK is always an update. Raise `baseVersionCode` by one for each
-release.
-
-`scripts/verify-release-apks.sh` (run by the release job) checks the names, that
-each per-ABI APK contains only its own `lib/<abi>/` folder, the versionCodes,
-and, when signed, a v2 and a v3 signature on every APK. It also guards the
-splits: if the universal APK ships any `.so` but fewer than four per-ABI APKs
-exist, it fails with "Native code found but ABI splits are off". If a change ever
-removes every native library, it fails until `splits.abi` is removed on purpose
-and this page is updated.
+`scripts/verify-release-apks.sh` (run by the release job) checks that there is
+exactly one APK, named after the versionName inside it; that if it ships any
+`.so`, all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64) carry the same
+libraries; that the versionCode is `base × 10` and, for any version after
+0.0.1, above 14; and, when signed, a v2 and a v3 signature.
 
 ## One-time keystore setup
 
@@ -74,11 +68,11 @@ Locally, the same four values go in environment variables
    fastlane convention) at
    `fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt`, and,
    for a longer GitHub Release text, `docs/release-notes/v<versionName>.md`.
-   (F-Droid looks changelogs up by an APK's own versionCode,
-   `base × 10 + abiCode`, so an F-Droid listing would need its own files.)
-3. Push a tag matching `versionName`, such as `v0.0.1`. The release job builds
-   and signs the five APKs and verifies them; once the instrumented tests have
-   also passed, the publish job attaches all five to a GitHub Release. Its text
+   (F-Droid looks changelogs up by the APK's own versionCode, `base × 10`,
+   so an F-Droid listing would need its own files.)
+3. Push a tag matching `versionName`, such as `v0.0.2`. The release job builds,
+   signs and verifies the APK; once the instrumented tests have also passed,
+   the publish job attaches it to a GitHub Release. Its text
    is `docs/release-notes/<tag>.md` if it exists, otherwise the changelog (or a
    one-line stand-in if that is missing too), plus GitHub's generated commit
    list.

@@ -493,6 +493,6 @@ into `MediaAccessState`).
 ## Build and release
 
 See [building.md](building.md) and [release-signing.md](release-signing.md):
-per-ABI APK splits with `versionCode = base × 10 + abiCode`, and the CI
+one APK for every processor type with `versionCode = base × 10`, and the CI
 workflow `.github/workflows/android.yml` with `check`, `instrumented`
 (API 29 and 36 emulators) and `release` jobs, plus a tag-only `publish` job.

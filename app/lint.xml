@@ -27,7 +27,4 @@
     <issue id="StringFormatMatches" severity="error" />
     <issue id="StringFormatCount" severity="error" />
     <issue id="MissingQuantity" severity="error" />
-    <!-- Lint cannot read the ABI list from splitAbis in app/build.gradle.kts,
-         which does include x86_64; verify-release-apks.sh checks the real APKs. -->
-    <issue id="ChromeOsAbiSupport" severity="ignore" />
 </lint>

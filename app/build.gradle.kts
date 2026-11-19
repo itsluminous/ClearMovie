@@ -1,5 +1,3 @@
-import com.android.build.api.variant.FilterConfiguration
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -23,22 +21,14 @@ val hasReleaseSigning =
         !signingKeyAlias.isNullOrBlank() &&
         !signingKeyPassword.isNullOrBlank()
 
-// Base version code. Every APK's real versionCode is `baseVersionCode * 10 + abiCode`
-// (see abiVersionCodes below and docs/release-signing.md). The release job reads this
-// line to find fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt.
+// Base version code. The APK's versionCode is `baseVersionCode * 10`
+// (defaultConfig below; see docs/release-signing.md). 0.0.1 shipped as per-ABI
+// APKs with codes 10-14 (base * 10 + abiCode); the * 10 keeps every later
+// release (base 2 and up, codes 20 and up) above all of them, so a phone with
+// any 0.0.1 APK accepts the next single APK as an update. Raise this by one for
+// each release. The release job reads this line to find
+// fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt.
 val baseVersionCode = 1
-
-// ABI splits: AndroidX ships small native libraries (Compose graphics-path,
-// DataStore's shared counter), so each processor type gets its own APK, plus a
-// universal one. The release job's native-code guard
-// (scripts/verify-release-apks.sh) fails if these splits are switched off while
-// .so files still ship.
-val splitAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
-
-// abiCode per output: 0 universal, 1 armeabi-v7a, 2 arm64-v8a, 3 x86, 4 x86_64.
-// Every per-ABI APK gets a higher code than the universal one, so moving from the
-// universal APK to the matching per-ABI APK is always an update.
-val abiVersionCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86" to 3, "x86_64" to 4)
 
 android {
     namespace = "com.itsluminous.clearmovie"
@@ -48,7 +38,7 @@ android {
         applicationId = "com.itsluminous.ClearMovie"
         minSdk = 29
         targetSdk = 36
-        versionCode = baseVersionCode
+        versionCode = baseVersionCode * 10
         versionName = "0.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -87,15 +77,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-        }
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include(*splitAbis.toTypedArray())
-            isUniversalApk = true
         }
     }
 
@@ -180,16 +161,14 @@ kotlin {
 androidComponents {
     onVariants { variant ->
         variant.outputs.forEach { output ->
-            val abi = output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }?.identifier
-            output.versionCode.set(baseVersionCode * 10 + (abi?.let { abiVersionCodes.getValue(it) } ?: 0))
             if (variant.buildType == "release") {
-                // ClearMovie-<versionName>-<abi>.apk, and -universal for the fat APK.
+                // One APK for every processor type: ClearMovie-<versionName>.apk.
                 // VariantOutputImpl is AGP-internal (ClearSMS uses it too); fail at
-                // configuration time, not with oddly named APKs, if an AGP bump removes it.
+                // configuration time, not with an oddly named APK, if an AGP bump removes it.
                 val impl =
                     output as? com.android.build.api.variant.impl.VariantOutputImpl
                         ?: throw GradleException("AGP no longer exposes VariantOutputImpl; update the APK naming in app/build.gradle.kts")
-                impl.outputFileName.set(output.versionName.map { "ClearMovie-$it-${abi ?: "universal"}.apk" })
+                impl.outputFileName.set(output.versionName.map { "ClearMovie-$it.apk" })
             }
         }
     }

@@ -37,29 +37,26 @@ Run checks the same way CI does:
   koverHtmlReportDebug` writes a report under `app/build/reports/kover/` showing
   which lines are missed.
 
-`./gradlew assembleRelease` produces release APKs under
-`app/build/outputs/apk/release/`: one per processor type (`arm64-v8a`,
-`armeabi-v7a`, `x86_64`, `x86`) and a universal one. The split exists because some
-AndroidX libraries ship small native (`.so`) files. Each APK has its own
-`versionCode`, `base × 10 + abiCode` (0 universal, 1 armeabi-v7a, 2 arm64-v8a,
-3 x86, 4 x86_64), so an update always installs the right APK. Without the signing
-environment variables (`SIGNING_KEYSTORE_FILE`, `SIGNING_KEYSTORE_PASSWORD`,
-`SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`) the APKs are unsigned.
-
-The release APKs are named `ClearMovie-<version>-<abi>.apk` and
-`ClearMovie-<version>-universal.apk`. Debug builds are split the same way
-(`app-<abi>-debug.apk`); `installDebug` picks the one that matches the device.
+`./gradlew assembleRelease` produces one release APK,
+`app/build/outputs/apk/release/ClearMovie-<version>.apk`, for every processor
+type: it carries the small AndroidX native (`.so`) libraries for `arm64-v8a`,
+`armeabi-v7a`, `x86_64` and `x86`. Its `versionCode` is `base × 10` (see
+[release-signing.md](release-signing.md)). Without the signing environment
+variables (`SIGNING_KEYSTORE_FILE`, `SIGNING_KEYSTORE_PASSWORD`,
+`SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`) the APK is unsigned. The debug
+build is `app/build/outputs/apk/debug/app-debug.apk`.
 Check a release build the way CI does:
 
 ```bash
 ./gradlew assembleRelease
-scripts/verify-release-apks.sh     # names, ABI-split guard, versionCodes
+scripts/verify-release-apks.sh     # one APK, its name, native libraries, versionCode
 ```
 
-GitHub Actions builds signed APKs on `v*` tags, using a key held in repository
-secrets, and attaches all five to the GitHub Release (see
-[release-signing.md](release-signing.md)). CI fails if the universal APK contains
-native libraries but the per-ABI APKs are missing. Keystores are never committed
+GitHub Actions builds a signed APK on `v*` tags, using a key held in repository
+secrets, and attaches it to the GitHub Release (see
+[release-signing.md](release-signing.md)). CI fails if there is not exactly one
+APK, if its name does not match its versionName, or if an ABI is missing native
+libraries the others have. Keystores are never committed
 (`*.jks` and `*.keystore` are gitignored).
 
 ## Instrumented tests

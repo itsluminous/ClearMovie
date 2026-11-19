@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
-# Verifies the release APKs that `./gradlew assembleRelease` produced.
+# Verifies the release APK that `./gradlew assembleRelease` produced.
 #
 #   scripts/verify-release-apks.sh [apk-dir]     (default app/build/outputs/apk/release)
 #
-# CI's release job runs it on every push and pull request, so the native-code
-# guard always runs. It checks:
-#   1. Native-code guard: if the universal APK ships any lib/<abi>/*.so, all
-#      four per-ABI APKs must exist ("Native code found but ABI splits are
-#      off"). If no .so ships at all, per-ABI APKs must NOT exist either, so
-#      removing the splits stays a deliberate change (docs/release-signing.md).
-#   2. Each per-ABI APK contains only its own lib/<abi>/ folder.
-#   3. versionCodes are distinct and follow base*10 + abiCode
-#      (0 universal, 1 armeabi-v7a, 2 arm64-v8a, 3 x86, 4 x86_64).
-#   4. With VERIFY_SIGNATURES=true, every APK passes `apksigner verify` with
-#      both a v2 and a v3 signature.
+# CI's release job runs it on every push and pull request. ClearMovie ships one
+# APK for every processor type (docs/release-signing.md). It checks:
+#   1. Exactly one APK, named ClearMovie-<versionName>.apk, where versionName is
+#      read from the APK itself, and no stale APKs from an earlier build.
+#   2. Native code: if the APK ships any lib/<abi>/*.so, it ships the same
+#      libraries for all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64), so
+#      no processor type is left without them.
+#   3. versionCode is base*10. Any versionName other than 0.0.1 needs a code
+#      above 14, the highest code 0.0.1's per-ABI APKs used, so every 0.0.1
+#      install accepts it as an update.
+#   4. With VERIFY_SIGNATURES=true, the APK passes `apksigner verify` with both
+#      a v2 and a v3 signature.
 # It needs the Android SDK build-tools (aapt2, apksigner) under $ANDROID_HOME.
 set -euo pipefail
 
 dir="${1:-app/build/outputs/apk/release}"
-abis=(armeabi-v7a arm64-v8a x86 x86_64) # in abiCode order 1..4
+abis=(armeabi-v7a arm64-v8a x86 x86_64)
+# The last per-ABI release: 0.0.1, versionCodes 10 (universal) to 14 (x86_64).
+last_split_version="0.0.1"
+last_split_max_code=14
 
 fail() {
   echo "FAIL: $*" >&2
@@ -46,7 +50,6 @@ native_libs() {
 }
 
 shopt -s nullglob
-universal=("$dir"/ClearMovie-*-universal.apk)
 all=("$dir"/*.apk)
 shopt -u nullglob
 
@@ -55,92 +58,62 @@ for apk in ${all[@]+"${all[@]}"}; do
   printf '  %-45s %10s bytes\n' "$(basename "$apk")" "$(wc -c < "$apk" | tr -d ' ')"
 done
 
-[ "${#universal[@]}" -eq 1 ] || fail "expected exactly one ClearMovie-<version>-universal.apk, found ${#universal[@]}"
-universal="${universal[0]}"
-version="$(basename "$universal" | sed -E 's/^ClearMovie-(.+)-universal\.apk$/\1/')"
+# 1. Exactly one APK, from the last build, with the right name.
+[ "${#all[@]}" -eq 1 ] || fail "expected exactly one APK (ClearMovie-<version>.apk), found ${#all[@]}"
+apk="${all[0]}"
+name="$(basename "$apk")"
 
-# Only the APKs of the LAST build count: an APK left over from an earlier build
-# (say, per-ABI APKs from before splits were switched off) must not satisfy the
-# guard. AGP lists the outputs of the build in output-metadata.json.
+# An APK left over from an earlier build must not pass for this one. AGP lists
+# the outputs of the build in output-metadata.json.
 metadata="$dir/output-metadata.json"
 if [ -f "$metadata" ]; then
   built="$(sed -nE 's/.*"outputFile": *"([^"]+)".*/\1/p' "$metadata" | sort)"
-  present="$(for apk in ${all[@]+"${all[@]}"}; do basename "$apk"; done | sort)"
-  [ "$built" = "$present" ] || fail "APKs in $dir do not match output-metadata.json (stale files from an earlier build?). Built: [$(echo $built)] present: [$(echo $present)]"
+  [ "$built" = "$name" ] || fail "$name does not match output-metadata.json (stale file from an earlier build?). Built: [$(echo $built)]"
 fi
 
-# Every APK must be one of the five expected names; anything else means the
-# naming in app/build.gradle.kts changed.
-for apk in ${all[@]+"${all[@]}"}; do
-  name="$(basename "$apk")"
-  case "$name" in
-    "ClearMovie-$version-universal.apk") ;;
-    "ClearMovie-$version-armeabi-v7a.apk" | "ClearMovie-$version-arm64-v8a.apk" | \
-      "ClearMovie-$version-x86.apk" | "ClearMovie-$version-x86_64.apk") ;;
-    *) fail "unexpected APK name $name (expected ClearMovie-$version-<abi>.apk)" ;;
-  esac
-done
+badging="$("$aapt2" dump badging "$apk")" || fail "aapt2 could not read $name"
+version_name="$(printf '%s\n' "$badging" | sed -nE "s/^package:.* versionName='([^']*)'.*/\1/p" | head -n 1)"
+version_code="$(printf '%s\n' "$badging" | sed -nE "s/^package:.* versionCode='([0-9]+)'.*/\1/p" | head -n 1)"
+[ -n "$version_name" ] || fail "could not read the versionName of $name"
+[ -n "$version_code" ] || fail "could not read the versionCode of $name"
+[ "$name" = "ClearMovie-$version_name.apk" ] || fail "unexpected APK name $name (expected ClearMovie-$version_name.apk)"
 
-per_abi=()
-for abi in "${abis[@]}"; do
-  [ -f "$dir/ClearMovie-$version-$abi.apk" ] && per_abi+=("$abi")
-done
-
-libs="$(native_libs "$universal")" || exit 1
+# 2. Native code for every ABI.
+libs="$(native_libs "$apk")" || exit 1
 echo
-echo "Native libraries in the universal APK:"
+echo "Native libraries in $name:"
 if [ -n "$libs" ]; then echo "$libs" | sed 's/^/  /'; else echo "  (none)"; fi
-echo "Per-ABI APKs: ${#per_abi[@]} (${per_abi[*]+${per_abi[*]}})"
-
-# 1. Native-code guard.
-if [ -n "$libs" ] && [ "${#per_abi[@]}" -lt "${#abis[@]}" ]; then
-  fail "Native code found but ABI splits are off: the universal APK ships .so files, but only ${#per_abi[@]} of ${#abis[@]} per-ABI APKs exist. Re-enable splits.abi in app/build.gradle.kts."
+if [ -n "$libs" ]; then
+  # The union of library file names, which every ABI must carry.
+  names="$(printf '%s\n' "$libs" | awk -F/ '{print $NF}' | sort -u)"
+  for abi in "${abis[@]}"; do
+    have="$(printf '%s\n' "$libs" | awk -F/ -v abi="$abi" '$2 == abi {print $NF}' | sort -u)"
+    [ "$have" = "$names" ] || fail "lib/$abi/ in $name has [$(echo $have)], expected [$(echo $names)]"
+  done
+  extra="$(printf '%s\n' "$libs" | cut -d/ -f2 | sort -u | grep -vxF -e armeabi-v7a -e arm64-v8a -e x86 -e x86_64 || true)"
+  [ -z "$extra" ] || echo "Note: other ABI folders too: $(echo $extra)"
 fi
-if [ -z "$libs" ] && [ "${#per_abi[@]}" -gt 0 ]; then
-  fail "No native code ships any more, but ABI splits are still on. Remove splits.abi on purpose and update docs/release-signing.md."
-fi
 
-# 2. Each per-ABI APK holds only its own ABI's libraries.
-for abi in ${per_abi[@]+"${per_abi[@]}"}; do
-  apk="$dir/ClearMovie-$version-$abi.apk"
-  folders="$(native_libs "$apk" | cut -d/ -f2 | sort -u)" || exit 1
-  [ "$folders" = "$abi" ] || fail "$(basename "$apk") contains lib/ folders [$(echo "$folders" | tr '\n' ' ')], expected only $abi"
-done
-
-# 3. versionCodes: base*10 + abiCode, all distinct.
-version_code() { "$aapt2" dump badging "$1" | sed -nE "s/.*versionCode='([0-9]+)'.*/\1/p" | head -n 1; }
-universal_code="$(version_code "$universal")"
-[ -n "$universal_code" ] || fail "could not read the versionCode of $(basename "$universal")"
-[ $((universal_code % 10)) -eq 0 ] || fail "universal versionCode $universal_code is not base*10"
-base=$((universal_code / 10))
+# 3. versionCode.
 echo
-echo "versionCodes (base $base):"
-echo "  universal    $universal_code"
-code=1
-for abi in "${abis[@]}"; do
-  apk="$dir/ClearMovie-$version-$abi.apk"
-  if [ -f "$apk" ]; then
-    actual="$(version_code "$apk")"
-    printf '  %-12s %s\n' "$abi" "$actual"
-    [ "$actual" = "$((base * 10 + code))" ] || fail "$abi versionCode is $actual, expected $((base * 10 + code))"
-  fi
-  code=$((code + 1))
-done
+echo "versionName $version_name, versionCode $version_code"
+[ $((version_code % 10)) -eq 0 ] || fail "versionCode $version_code is not baseVersionCode*10"
+if [ "$version_name" != "$last_split_version" ] && [ "$version_code" -le "$last_split_max_code" ]; then
+  fail "versionCode $version_code must be above $last_split_max_code (0.0.1's per-ABI APKs), or phones with 0.0.1 cannot update. Raise baseVersionCode."
+fi
 
 # 4. Signatures (CI sets VERIFY_SIGNATURES=true when the signing secrets exist).
 if [ "${VERIFY_SIGNATURES:-false}" = "true" ]; then
   [ -x "$apksigner" ] || fail "apksigner not found in $build_tools"
-  for apk in ${all[@]+"${all[@]}"}; do
-    echo
-    echo "==> apksigner verify $(basename "$apk")"
-    # --min-sdk-version 24: for minSdk 29 apksigner checks only the v3 block;
-    # asking for an older floor makes it verify the v2 block as well.
-    out="$("$apksigner" verify --verbose --print-certs --min-sdk-version 24 "$apk")" || fail "apksigner rejected $(basename "$apk")"
-    echo "$out" | grep -E 'Verified using v[23] scheme|Signer: certificate (DN|SHA-256)' || true
-    echo "$out" | grep -qE 'Verified using v2 scheme .*: true' || fail "$(basename "$apk") has no v2 signature"
-    echo "$out" | grep -qE 'Verified using v3 scheme .*: true' || fail "$(basename "$apk") has no v3 signature"
-  done
+  echo
+  echo "==> apksigner verify $name"
+  # --min-sdk-version 24: for minSdk 29 apksigner checks only the v3 block;
+  # asking for an older floor makes it verify the v2 block as well.
+  out="$("$apksigner" verify --verbose --print-certs --min-sdk-version 24 "$apk")" || fail "apksigner rejected $name"
+  echo "$out" | grep -E 'Verified using v[23] scheme|Signer: certificate (DN|SHA-256)' || true
+  echo "$out" | grep -qE 'Verified using v2 scheme .*: true' || fail "$name has no v2 signature"
+  echo "$out" | grep -qE 'Verified using v3 scheme .*: true' || fail "$name has no v3 signature"
 fi
 
 echo
-echo "OK: release APKs verified."
+echo "OK: release APK verified."
