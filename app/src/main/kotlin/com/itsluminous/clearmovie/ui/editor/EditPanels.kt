@@ -395,33 +395,25 @@ internal fun PanelTitle(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         // The title, Cancel and Done side by side only when all three fit at full size; otherwise the title
         // takes its own line above the buttons, so it is never cut to a few letters and Done never wraps.
-        val needed =
+        val sizes =
             with(density) {
-                val titleDp =
-                    measurer
-                        .measure(title, titleStyle)
-                        .size.width
-                        .toDp()
-                val cancelDp =
-                    if (onCancel != null) {
-                        measurer
-                            .measure(cancel, buttonStyle)
-                            .size.width
-                            .toDp() + 24.dp
-                    } else {
-                        0.dp
-                    }
-                val doneDp =
-                    if (onDone != null) {
-                        measurer
-                            .measure(done, buttonStyle)
-                            .size.width
-                            .toDp() + 48.dp + 24.dp
-                    } else {
-                        0.dp
-                    }
-                titleDp + 16.dp + cancelDp + doneDp
+                fun width(
+                    text: String,
+                    style: androidx.compose.ui.text.TextStyle,
+                ) = measurer
+                    .measure(text, style)
+                    .size.width
+                    .toDp()
+                Triple(
+                    width(title, titleStyle),
+                    if (onCancel != null) width(cancel, buttonStyle) + 24.dp else 0.dp,
+                    if (onDone != null) width(done, buttonStyle) + 48.dp + 24.dp else 0.dp,
+                )
             }
+        val (titleDp, cancelDp, doneDp) = sizes
+        val needed = titleDp + 16.dp + cancelDp + doneDp
+        // Even under the title, Cancel and Done may not fit side by side (very large text): then they stack.
+        val buttonsFit = cancelDp + 8.dp + doneDp <= maxWidth
         val buttons: @Composable () -> Unit = {
             if (onCancel != null) {
                 TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp).testTag(PANEL_CANCEL_TAG)) {
@@ -456,11 +448,19 @@ internal fun PanelTitle(
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { heading() },
                 )
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) { buttons() }
+                if (buttonsFit) {
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) { buttons() }
+                } else {
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalAlignment = Alignment.End,
+                    ) { buttons() }
+                }
             }
         }
     }

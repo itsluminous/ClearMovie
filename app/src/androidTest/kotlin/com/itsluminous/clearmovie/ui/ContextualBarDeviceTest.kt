@@ -196,6 +196,7 @@ class ContextualBarDeviceTest {
     private fun assertLevel(
         actions: List<BarAction>,
         where: String,
+        slack: Float = SLOT_SLACK_DP,
     ) {
         val buttons = actions.map { compose.onNodeWithTag(barActionTag(it.action)).getUnclippedBoundsInRoot() }
         // The label slots, which place the icons; a label's own box may round a pixel differently per script.
@@ -207,7 +208,7 @@ class ContextualBarDeviceTest {
             val slot = compose.onNodeWithTag(barLabelSlotTag(a.action), useUnmergedTree = true).getUnclippedBoundsInRoot()
             val text = label(a.action).getUnclippedBoundsInRoot()
             assertWithMessage("$where: ${a.action} text top").that(abs(text.top.value - slot.top.value)).isLessThan(0.6f)
-            assertWithMessage("$where: ${a.action} text inside its slot").that((text.bottom - slot.bottom).value).isAtMost(SLOT_SLACK_DP)
+            assertWithMessage("$where: ${a.action} text inside its slot").that((text.bottom - slot.bottom).value).isAtMost(slack)
         }
         for ((b, l) in buttons.zip(labels)) {
             assertWithMessage(
@@ -345,6 +346,7 @@ class ContextualBarDeviceTest {
         assertWithMessage(
             "neighbour at full size",
         ).that(sizes[compose.activity.getString(barLabel(EditAction.DELETE))]).isEqualTo(12f)
-        assertLevel(actions, "en, 360 dp, text at 2x")
+        // Line rounding grows with the text: twice the slack at twice the size.
+        assertLevel(actions, "en, 360 dp, text at 2x", slack = SLOT_SLACK_DP * 2)
     }
 }
