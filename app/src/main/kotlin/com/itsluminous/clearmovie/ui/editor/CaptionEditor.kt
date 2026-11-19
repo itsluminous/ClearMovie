@@ -538,7 +538,11 @@ internal fun PlaceTab(
 ) {
     // A place that gives the same box as an earlier one (Bottom when the preset's own place is at the bottom)
     // is left out, so no two chips do the same thing.
-    val places = places.distinctBy { CaptionPlaces.box(it, usual, safe) }
+    val places =
+        places.distinctBy { place ->
+            // Compared as stored (to 1/10000 of the canvas), so a preset box with more digits still matches.
+            CaptionPlaces.box(place, usual, safe).let { b -> listOf(b.x, b.y, b.w, b.h).map { Math.round(it * 10000) } }
+        }
     val current = CaptionPlaces.placeOf(style.box, usual, safe, places)
     // Across when every name fits its chip; two by two otherwise, so no name is ever cut short.
     val labels = places.map { stringResource(placeLabel(it)) }
