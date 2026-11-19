@@ -333,7 +333,8 @@ class ContextualBarDeviceTest {
     fun aLabelTooLongEvenAtTenSpTakesExactlyTwoLinesAndItsNeighboursMatchIt() {
         // At twice the text size even 10 sp is 20 dp tall type: "Lower for talk" then needs about 140 dp,
         // and a button about 95, so it takes two lines; "Delete" still fits on one at full size.
-        val actions = listOf(EditAction.DELETE, EditAction.LOWER_MUSIC, EditAction.SPLIT, EditAction.DUPLICATE).map { BarAction(it) }
+        // Two only: at 2x each button is about 120 dp, and CI's screen is 320 dp (a lazy row lays out what is on it).
+        val actions = listOf(EditAction.DELETE, EditAction.LOWER_MUSIC).map { BarAction(it) }
         showBar(actions, 360.dp, "en", 2f)
         val long = label(EditAction.LOWER_MUSIC).layout()
         val text = compose.activity.getString(barLabel(EditAction.LOWER_MUSIC))

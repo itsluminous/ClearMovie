@@ -17,7 +17,6 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.then
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.intl.LocaleList
@@ -99,9 +98,10 @@ class UxLayoutDeviceTest {
             assertWithMessage("$tag: title cut").that(title.isLineEllipsized(title.lineCount - 1)).isFalse()
             val done = compose.onNodeWithText(localized(tag, R.string.action_done), useUnmergedTree = true).layout()
             assertWithMessage("$tag: Done on one line").that(done.lineCount).isEqualTo(1)
+            // Inside the forced 320 dp window (the device's own window may be narrower than the forced size).
             assertWithMessage("$tag: Done button in sight")
                 .that(compose.onNodeWithTag(PANEL_DONE_TAG).getUnclippedBoundsInRoot().right)
-                .isAtMost(compose.onRoot().getUnclippedBoundsInRoot().right)
+                .isAtMost(320.dp)
         }
     }
 
@@ -111,12 +111,11 @@ class UxLayoutDeviceTest {
         at("hi") {
             CaptionTabs(CaptionTab.WORDS, labels, scrolls = true, lines = 1, scrollTabWidth = 320.dp / 3.5f) {}
         }
-        val root = compose.onRoot().getUnclippedBoundsInRoot()
-        // Every name is drawn (none is icon-only), and the fourth tab is cut by the edge: the row reads as one that scrolls.
+        // Every name is drawn (none is icon-only), and the fourth tab is cut by the 320 dp edge: the row reads as one that scrolls.
         for (label in labels.take(3)) compose.onNodeWithText(label, useUnmergedTree = true).assertExists()
         val fourth = compose.onNodeWithTag(captionTabTag(CaptionTab.FONT)).getUnclippedBoundsInRoot()
-        assertWithMessage("fourth tab starts in sight").that(fourth.left).isLessThan(root.right)
-        assertWithMessage("fourth tab is cut").that(fourth.right).isGreaterThan(root.right)
+        assertWithMessage("fourth tab starts in sight").that(fourth.left).isLessThan(320.dp)
+        assertWithMessage("fourth tab is cut").that(fourth.right).isGreaterThan(320.dp)
     }
 
     @Test

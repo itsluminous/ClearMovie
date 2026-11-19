@@ -5,6 +5,7 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -127,7 +128,7 @@ class ExportFlowDeviceTest {
             compose.onNodeWithTag(EDITOR_EXPORT_TAG).performClick()
             waitFor(hasTestTag(EXPORT_SAVE_TAG))
             compose.onNodeWithTag(exportQualityTag(ExportQuality.BEST)).performScrollTo().performClick()
-            compose.onNodeWithTag(EXPORT_SAVE_TAG).performScrollTo().performClick()
+            compose.onNodeWithTag(EXPORT_SAVE_TAG).assertIsDisplayed().performClick()
             waitFor(hasTestTag(EXPORT_PROGRESS_TAG))
 
             rotate(scenario, ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
@@ -152,11 +153,11 @@ class ExportFlowDeviceTest {
 
             // Share hands the video to the phone's share sheet.
             intending(hasAction(Intent.ACTION_CHOOSER)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
-            compose.onNodeWithTag(EXPORT_SHARE_TAG).performScrollTo().performClick()
+            compose.onNodeWithTag(EXPORT_SHARE_TAG).assertIsDisplayed().performClick()
             intended(hasAction(Intent.ACTION_CHOOSER))
 
             // Play opens it in the app's own player.
-            compose.onNodeWithTag(EXPORT_PLAY_TAG).performScrollTo().performClick()
+            compose.onNodeWithTag(EXPORT_PLAY_TAG).assertIsDisplayed().performClick()
             waitFor(hasText(s(R.string.action_close)))
             compose.onAllNodes(hasText(s(R.string.action_close))).fetchSemanticsNodes().let { assertThat(it).isNotEmpty() }
         }
@@ -173,7 +174,7 @@ class ExportFlowDeviceTest {
             scenario.recreate()
             waitFor(hasTestTag(EXPORT_SAVE_TAG))
             compose.onNodeWithTag(exportQualityTag(ExportQuality.SMALL)).assertIsSelected()
-            compose.onNodeWithTag(EXPORT_CLOSE_TAG).performScrollTo().performClick()
+            compose.onNodeWithTag(EXPORT_CLOSE_TAG).assertIsDisplayed().performClick()
             compose.onNodeWithText(s(R.string.export_title)).assertDoesNotExist()
             assertThat(exportWork()?.state?.isFinished ?: true).isTrue()
         }
