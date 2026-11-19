@@ -269,7 +269,7 @@ class PresetManagerStoreTest {
         runBlocking<Unit> {
             val caption = store.definition(builtIn)!!.preset
             // Measured on old/Frame-White.mp4 (1920 x 1080): the blue strip is rows 862-993, columns 272-1901.
-            assertThat(caption.caption.box).isEqualTo(NormRect(0.155, 0.7981, 0.825, 0.1222))
+            assertThat(caption.caption.box).isEqualTo(NormRect(0.15, 0.7981, 0.83, 0.1222))
             assertThat(caption.caption.background).isNull()
             assertThat(caption.caption.outline).isNull()
             assertThat(caption.caption.color).isEqualTo(ArgbColor.WHITE)

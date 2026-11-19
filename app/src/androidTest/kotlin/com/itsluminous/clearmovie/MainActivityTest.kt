@@ -54,7 +54,7 @@ class MainActivityTest {
     @Test
     fun launchesToHomeAndOpensSettings() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitForText(context.getString(R.string.home_empty_title))
+            waitForText(context.getString(R.string.home_new_video))
             compose.onNodeWithContentDescription(context.getString(R.string.action_settings)).performClick()
             waitForText(context.getString(R.string.settings_section_theme))
             assertThat(scenario.state.isAtLeast(Lifecycle.State.RESUMED)).isTrue()
@@ -64,7 +64,7 @@ class MainActivityTest {
     @Test
     fun recreateKeepsTheSettingsScreen() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitForText(context.getString(R.string.home_empty_title))
+            waitForText(context.getString(R.string.home_new_video))
             compose.onNodeWithContentDescription(context.getString(R.string.action_settings)).performClick()
             waitForText(context.getString(R.string.settings_section_theme))
 
@@ -78,7 +78,7 @@ class MainActivityTest {
     @Test
     fun darkOverrideReachesTheWholeActivityAndSameAsPhoneRestoresIt() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitForText(context.getString(R.string.home_empty_title))
+            waitForText(context.getString(R.string.home_new_video))
             compose.onNodeWithContentDescription(context.getString(R.string.action_settings)).performClick()
             waitForText(context.getString(R.string.settings_section_theme))
 

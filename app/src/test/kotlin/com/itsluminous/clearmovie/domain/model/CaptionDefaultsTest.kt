@@ -15,7 +15,7 @@ class CaptionDefaultsTest {
 
     @Test
     fun `a plain caption style and the default words survive saving and reading`() {
-        val plain = CaptionStyle(box = NormRect(0.155, 0.7981, 0.825, 0.1222), outline = null, background = null)
+        val plain = CaptionStyle(box = NormRect(0.15, 0.7981, 0.83, 0.1222), outline = null, background = null)
         val p = Fixtures.richProject().copy(captionDefaults = plain, captionDefaultText = LocalizedText(hi = "सुंदर प्रकृति"))
         val back = roundTrip(p)
         assertThat(back.captionDefaults).isEqualTo(plain)

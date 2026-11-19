@@ -62,7 +62,7 @@ class PresetParserTest {
         // 272-1901 of Frame-White.mp4 at 1920 x 1080), clear of the logo, as plain white text with no band.
         assertThat(p.caption).isEqualTo(
             CaptionStyle(
-                box = NormRect(0.155, 0.7981, 0.825, 0.1222),
+                box = NormRect(0.15, 0.7981, 0.83, 0.1222),
                 sizePx = 60,
                 color = ArgbColor.WHITE,
                 outline = null,

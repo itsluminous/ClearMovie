@@ -16,7 +16,7 @@
     "music": { "enabled": true, "gainDb": -8, "role": "MUSIC" }
   },
   "caption": {
-    "box": { "x": 0.155, "y": 0.7981, "w": 0.825, "h": 0.1222 },
+    "box": { "x": 0.15, "y": 0.7981, "w": 0.83, "h": 0.1222 },
     "align": "center",
     "font": "noto_sans_devanagari_bold",
     "sizePx": 60,

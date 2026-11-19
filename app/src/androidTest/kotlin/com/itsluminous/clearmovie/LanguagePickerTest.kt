@@ -88,7 +88,7 @@ class LanguagePickerTest {
     }
 
     private fun openSettings(home: Context) {
-        compose.waitForText(home.getString(R.string.home_empty_title))
+        compose.waitForText(home.getString(R.string.home_new_video))
         compose.onNodeWithContentDescription(home.getString(R.string.action_settings)).performClick()
         compose.waitForText(home.getString(R.string.settings_section_language))
     }
@@ -114,7 +114,7 @@ class LanguagePickerTest {
 
         // Opened again: the app starts in Hinglish without touching the picker.
         ActivityScenario.launch(MainActivity::class.java).use {
-            compose.waitForText(hinglish.getString(R.string.home_empty_title))
+            compose.waitForText(hinglish.getString(R.string.home_new_video))
             compose.onNodeWithContentDescription(hinglish.getString(R.string.action_settings)).performClick()
             compose.waitForText(hinglish.getString(R.string.settings_section_language))
 

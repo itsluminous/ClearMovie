@@ -86,7 +86,7 @@ class CaptionPlacesTest {
     @Test
     fun `a preset box on the frame below its window widens the safe area, and a drag can go back there`() {
         // cm-preset-manager: the built-in preset's caption sits on the frame's blue strip, under the window.
-        val strip = NormRect(0.155, 0.7981, 0.825, 0.1222)
+        val strip = NormRect(0.15, 0.7981, 0.83, 0.1222)
         val wide = CaptionPlaces.safeArea(window, strip)
         assertThat(strip.inside(wide)).isTrue()
         assertThat(wide.y + wide.h).isWithin(1e-9).of(strip.y + strip.h)
