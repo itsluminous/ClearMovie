@@ -298,10 +298,9 @@ fun PresetEditScreen(
                 }
                 if (window.twoPane) {
                     Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Box(
-                            Modifier.weight(1f).fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) { preview(true, Modifier.fillMaxWidth()) }
+                        BoxWithConstraints(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.Center) {
+                            preview(true, Modifier.width(minOf(maxWidth, maxHeight * 16f / 9f)))
+                        }
                         Column(Modifier.weight(1f).fillMaxSize()) { editor() }
                     }
                 } else {
@@ -332,13 +331,14 @@ fun PresetEditScreen(
                     modifier = Modifier.fillMaxWidth().testTag(PRESET_NAME_TAG),
                 )
             }
+            val openCaption = {
+                openedStyle = ui.draftStyle?.let { ProjectCodec.json.encodeToString(CaptionStyle.serializer(), it) }
+                openedWords = ui.draftWords
+                tab = CaptionTab.WORDS.name
+                captionOpen = true
+            }
             val captions: @Composable () -> Unit = {
-                CaptionsCard(preview = { preview(false, Modifier.fillMaxWidth()) }, onChange = {
-                    openedStyle = ui.draftStyle?.let { ProjectCodec.json.encodeToString(CaptionStyle.serializer(), it) }
-                    openedWords = ui.draftWords
-                    tab = CaptionTab.WORDS.name
-                    captionOpen = true
-                })
+                CaptionsCard(preview = { preview(false, Modifier.fillMaxWidth()) }, onChange = openCaption)
             }
             val files: @Composable () -> Unit = { FilesCard(ui.status, onFiles) }
             val save: @Composable () -> Unit = {
@@ -349,22 +349,20 @@ fun PresetEditScreen(
                 ) { AutoSizeLabel(stringResource(R.string.preset_save)) }
             }
             if (window.twoPane) {
-                Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                // The picture on the left, as large as the height allows; everything else scrolls on the right.
+                Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                        preview(false, Modifier.width(minOf(maxWidth, maxHeight * 16f / 9f)))
+                    }
                     Column(
-                        Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()).testTag(PRESET_EDIT_LIST_TAG),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         nameField()
+                        CaptionsCard(preview = null, onChange = openCaption)
                         files()
                         save()
                     }
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                            .padding(vertical = 16.dp)
-                            .testTag(PRESET_EDIT_LIST_TAG),
-                    ) { captions() }
                 }
             } else {
                 Column(
@@ -462,7 +460,7 @@ private fun ConfirmDialog(
 
 @Composable
 private fun CaptionsCard(
-    preview: @Composable () -> Unit,
+    preview: (@Composable () -> Unit)?,
     onChange: () -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
@@ -473,7 +471,7 @@ private fun CaptionsCard(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            preview()
+            preview?.invoke()
             OutlinedButton(
                 onClick = onChange,
                 modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp).testTag(PRESET_CAPTION_CHANGE_TAG),

@@ -199,7 +199,10 @@ class PresetEditScreenTest {
         val calls = show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false), size, scale)
         compose.onNodeWithTag(PRESET_FILES_TAG).performScrollTo().performClick()
         assertThat(calls.files).isEqualTo(1)
-        compose.onNodeWithTag(PRESET_CAPTION_PREVIEW_TAG).performScrollTo().assertIsDisplayed()
+        // In two panes the picture stays put on the left; on a phone it scrolls with the rest.
+        val preview = compose.onNodeWithTag(PRESET_CAPTION_PREVIEW_TAG)
+        if (size == ScreenSize.COMPACT) preview.performScrollTo()
+        preview.assertIsDisplayed()
     }
 
     @Test
