@@ -1,5 +1,8 @@
 package com.itsluminous.clearmovie.domain.model
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
 /**
  * A preset (ARCHITECTURE section 8, schema 1): the intro, frame and ending,
  * the caption style and the defaults a new project starts from. It carries
@@ -16,7 +19,7 @@ data class Preset(
     val intro: IntroSpec? = null,
     val ending: EndingSpec? = null,
     val frame: FrameSpec? = null,
-    val caption: CaptionStyle = CaptionStyle(),
+    val caption: CaptionStyle = CaptionStyle.STANDARD,
     val defaultText: LocalizedText? = null,
     val photoDurationMs: Long = Project.DEFAULT_PHOTO_MS,
     val defaultFit: Fit = Fit.FILL_CROP,
@@ -30,11 +33,20 @@ data class Preset(
 }
 
 /** Text in the shipped languages: English, Hindi and Hinglish. At least one is set. */
+@Serializable
 data class LocalizedText(
     val en: String? = null,
     val hi: String? = null,
-    val hiLatn: String? = null,
-)
+    @SerialName("hi-Latn") val hiLatn: String? = null,
+) {
+    /** Each text that is set. */
+    val all: List<String> get() = listOfNotNull(en, hi, hiLatn)
+
+    companion object {
+        /** The same words in every language: the user's own words, which are never translated. */
+        fun same(text: String) = LocalizedText(text, text, text)
+    }
+}
 
 /** The intro is always a video. */
 data object IntroSpec

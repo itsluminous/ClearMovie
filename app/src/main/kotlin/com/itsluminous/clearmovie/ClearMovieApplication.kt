@@ -75,6 +75,8 @@ class ClearMovieApplication :
         appScope.launch {
             runCatching { appFiles.sweep(System.currentTimeMillis()) }
             runCatching { presetStore.sweepOrphans() }
+            // A deleted preset whose last video is gone takes its files with it.
+            runCatching { presetStore.sweepRetired() }
             runCatching { mediaAccess.reconcileGrants(contentResolver.persistedUriPermissions.map { it.uri.toString() }) }
         }
     }

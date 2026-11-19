@@ -547,4 +547,39 @@
     <string name="caption_reset">प्रीसेट जैसा करें</string>
     <string name="caption_box_description">कैप्शन का बॉक्स। कैप्शन खिसकाने के लिए इसे खींचें, या जगह चुनें।</string>
     <string name="caption_colour_choice">%1$s अक्षर</string>
+
+    <!-- cm-preset-manager: making, editing and deleting presets. -->
+    <string name="preset_new">नया प्रीसेट</string>
+    <string name="preset_new_body">आपका अपना इंट्रो, फ़्रेम, अंत और कैप्शन का स्टाइल</string>
+    <string name="preset_edit">प्रीसेट बदलें</string>
+    <string name="preset_edit_for">%1$s बदलें</string>
+    <string name="preset_name_label">नाम</string>
+    <string name="preset_parts_title">इसमें क्या होगा</string>
+    <string name="preset_parts_body">फ़ाइलें आप अगले कदम में चुनेंगे। प्रीसेट बनने के बाद ये हिस्से नहीं बदलते, क्योंकि इससे बने वीडियो इन्हीं का इस्तेमाल करते हैं।</string>
+    <string name="preset_ending_voice">बोला गया संदेश</string>
+    <string name="preset_ending_video">वीडियो</string>
+    <string name="preset_ending_none">कोई अंत नहीं</string>
+    <string name="preset_create">बनाएँ</string>
+    <string name="preset_create_failed">प्रीसेट नहीं बन सका। फ़ोन में थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
+    <string name="preset_files_title">फ़ाइलें</string>
+    <string name="preset_files_change">फ़ाइलें बदलें</string>
+    <string name="preset_files_choose">फ़ाइलें चुनें</string>
+    <string name="preset_caption_title">कैप्शन</string>
+    <string name="preset_caption_body">नया कैप्शन इन्हीं शब्दों के साथ, इसी जगह और इसी स्टाइल में शुरू होगा।</string>
+    <string name="preset_caption_change">कैप्शन का स्टाइल बदलें</string>
+    <string name="preset_caption_no_words">कोई शब्द नहीं</string>
+    <string name="preset_caption_words_label">नया कैप्शन इन शब्दों से शुरू होगा</string>
+    <string name="preset_save">सेव करें</string>
+    <string name="preset_delete">प्रीसेट हटाएँ</string>
+    <string name="preset_delete_title">यह प्रीसेट हटाएँ?</string>
+    <string name="preset_delete_body">%1$s अब नहीं दिखेगा। इससे पहले बनाए गए वीडियो पहले की तरह चलते रहेंगे।</string>
+    <string name="preset_reset">प्रीसेट पहले जैसा करें</string>
+    <string name="preset_reset_title">यह प्रीसेट पहले जैसा करें?</string>
+    <string name="preset_reset_body">इसका नाम, शब्द और कैप्शन का स्टाइल वैसे हो जाएँगे जैसे ClearMovie में आते हैं। इसकी फ़ाइलें रहेंगी।</string>
+    <string name="preset_reset_done">प्रीसेट वैसा हो गया है जैसा ClearMovie में आता है।</string>
+    <string name="preset_not_saved">प्रीसेट सेव नहीं हो सका। फ़ोन में थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
+    <string name="preset_discard_title">बदलाव छोड़ दें?</string>
+    <string name="preset_discard_body">इस प्रीसेट में किए गए बदलाव अभी सेव नहीं हुए हैं।</string>
+    <string name="preset_discard">छोड़ दें</string>
+    <string name="preset_keep_editing">बदलते रहें</string>
 </resources>

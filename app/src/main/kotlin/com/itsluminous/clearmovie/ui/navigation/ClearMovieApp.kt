@@ -28,6 +28,8 @@ import com.itsluminous.clearmovie.ui.home.HomeEvent
 import com.itsluminous.clearmovie.ui.home.HomeScreen
 import com.itsluminous.clearmovie.ui.home.HomeViewModel
 import com.itsluminous.clearmovie.ui.pick.MediaPickRoute
+import com.itsluminous.clearmovie.ui.preset.PresetCreateRoute
+import com.itsluminous.clearmovie.ui.preset.PresetEditRoute
 import com.itsluminous.clearmovie.ui.preset.PresetReviewRoute
 import com.itsluminous.clearmovie.ui.preset.PresetSetupRoute
 import com.itsluminous.clearmovie.ui.settings.SettingsRoute
@@ -164,6 +166,26 @@ fun ClearMovieApp(
                 onVideo = { openEditor(it) },
                 onOpenSettings = dropUnlessResumed { navController.navigate(Routes.SETTINGS) },
                 snackbar = snackbar,
+                onEditPreset = { navController.navigate(Routes.presetEdit(it)) { launchSingleTop = true } },
+                onNewPreset = dropUnlessResumed { navController.navigate(Routes.PRESET_NEW) },
+            )
+        }
+        composable(Routes.PRESET_NEW) {
+            PresetCreateRoute(
+                onCreated = {
+                    navController.navigate(Routes.presetEdit(it)) {
+                        // Back from the new preset's editor goes Home, not to the form that made it.
+                        popUpTo(Routes.PRESET_NEW) { inclusive = true }
+                    }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.PRESET_EDIT, arguments = listOf(navArgument(Routes.ARG_PRESET) { type = NavType.StringType })) {
+            PresetEditRoute(
+                onFiles = { navController.navigate(Routes.setup(it, newVideo = false)) },
+                onBack = { navController.popBackStack() },
+                onDeleted = { if (!navController.popBackStack(Routes.HOME, inclusive = false)) navController.navigate(Routes.HOME) },
             )
         }
         composable(Routes.SETTINGS) {

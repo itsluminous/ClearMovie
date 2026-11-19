@@ -19,7 +19,9 @@ enum class CaptionPlace {
  *
  * The safe area is the frame's window (or the whole canvas without a
  * frame) less a small margin, so a caption never touches the frame's
- * border. The place choices keep the preset box's width, height and left
+ * border, widened to take in the preset's own box: a preset may put its
+ * caption on the frame itself (the reference frame's blue strip, under the
+ * window), and the caption must be able to go back there. The place choices keep the preset box's width, height and left
  * edge (which keep it clear of the frame's logo) and move it to the top,
  * middle or bottom of the safe area. A drag moves the box inside the safe
  * area and snaps to the preset's box when it comes near it.
@@ -33,11 +35,24 @@ object CaptionPlaces {
 
     private const val CANVAS_ASPECT = 16.0 / 9.0
 
-    /** [window] less [MARGIN] on every side (the horizontal margin is as many pixels as the vertical one). */
-    fun safeArea(window: NormRect): NormRect {
+    /**
+     * [window] less [MARGIN] on every side (the horizontal margin is as many
+     * pixels as the vertical one), and, given the preset's [usual] box, the
+     * smallest rectangle that holds both.
+     */
+    fun safeArea(
+        window: NormRect,
+        usual: NormRect? = null,
+    ): NormRect {
         val mx = minOf(MARGIN / CANVAS_ASPECT, window.w / 4)
         val my = minOf(MARGIN, window.h / 4)
-        return NormRect(window.x + mx, window.y + my, window.w - 2 * mx, window.h - 2 * my)
+        val inner = NormRect(window.x + mx, window.y + my, window.w - 2 * mx, window.h - 2 * my)
+        if (usual == null || !usual.isValid) return inner
+        val x0 = minOf(inner.x, usual.x)
+        val y0 = minOf(inner.y, usual.y)
+        val x1 = minOf(1.0, maxOf(inner.x + inner.w, usual.x + usual.w))
+        val y1 = minOf(1.0, maxOf(inner.y + inner.h, usual.y + usual.h))
+        return NormRect(x0, y0, x1 - x0, y1 - y0)
     }
 
     /** The box for [place]: the preset's [usual] box itself, or that box moved into [safe]. */
@@ -59,12 +74,13 @@ object CaptionPlaces {
         return NormRect(x, y, w, h).rounded()
     }
 
-    /** The place [box] is at, or null when it was dragged somewhere else. */
+    /** The place among [places] that [box] is at, or null when it was dragged somewhere else. */
     fun placeOf(
         box: NormRect,
         usual: NormRect,
         safe: NormRect,
-    ): CaptionPlace? = CaptionPlace.entries.firstOrNull { same(box(it, usual, safe), box) }
+        places: List<CaptionPlace> = CaptionPlace.entries,
+    ): CaptionPlace? = places.firstOrNull { same(box(it, usual, safe), box) }
 
     /**
      * [start] moved by ([dx], [dy]) and kept inside [safe] (a box larger than

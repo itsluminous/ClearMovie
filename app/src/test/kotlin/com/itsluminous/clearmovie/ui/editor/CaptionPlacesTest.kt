@@ -82,4 +82,31 @@ class CaptionPlacesTest {
         assertThat(snapped).isTrue()
         assertThat(CaptionPlaces.placeOf(back, fine, safe)).isEqualTo(CaptionPlace.USUAL)
     }
+
+    @Test
+    fun `a preset box on the frame below its window widens the safe area, and a drag can go back there`() {
+        // cm-preset-manager: the built-in preset's caption sits on the frame's blue strip, under the window.
+        val strip = NormRect(0.155, 0.7981, 0.825, 0.1222)
+        val wide = CaptionPlaces.safeArea(window, strip)
+        assertThat(strip.inside(wide)).isTrue()
+        assertThat(safe.inside(wide)).isTrue()
+        assertThat(wide.y + wide.h).isWithin(1e-9).of(strip.y + strip.h)
+        // Bottom is the strip itself; Top and Middle stay in the window.
+        assertThat(CaptionPlaces.box(CaptionPlace.BOTTOM, strip, wide)).isEqualTo(strip)
+        assertThat(CaptionPlaces.box(CaptionPlace.TOP, strip, wide).y).isWithin(1e-4).of(safe.y)
+        // Dragged up into the window and back down, it snaps onto the strip.
+        val (up, _) = CaptionPlaces.dragged(strip, 0.0, -0.4, wide, strip)
+        val (back, snapped) = CaptionPlaces.dragged(up, 0.0, 0.395, wide, strip)
+        assertThat(snapped).isTrue()
+        assertThat(back).isEqualTo(strip)
+        // Without the preset's box it is the window's safe area, as before.
+        assertThat(CaptionPlaces.safeArea(window, null)).isEqualTo(safe)
+    }
+
+    @Test
+    fun `the preset editor's places leave out the preset's own place`() {
+        val places = listOf(CaptionPlace.TOP, CaptionPlace.MIDDLE, CaptionPlace.BOTTOM)
+        assertThat(CaptionPlaces.placeOf(usual, usual, safe, places)).isNull()
+        assertThat(CaptionPlaces.placeOf(CaptionPlaces.box(CaptionPlace.TOP, usual, safe), usual, safe, places)).isEqualTo(CaptionPlace.TOP)
+    }
 }

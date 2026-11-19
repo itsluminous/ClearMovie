@@ -328,7 +328,7 @@ class CaptionAttachmentTest {
 
     @Test
     fun `the preset style is applied, overridden minimally, and reset`() {
-        val defaults = CaptionStyle()
+        val defaults = CaptionStyle.STANDARD
         var p = abc().addCaptionFor(ClipId("a"), "on a", ids)
         val id = p.caption("on a").id
         assertThat(p.caption("on a").style.resolve(p.captionDefaults)).isEqualTo(p.captionDefaults)

@@ -82,6 +82,11 @@ fun Project.validate(): List<Violation> =
 
         name?.let { if (!TextRules.isValidName(it)) fail(Violation.Rule.TEXT, "project name") }
         captionDefaults.problems().forEach { fail(Violation.Rule.TEXT, it) }
+        captionDefaultText?.all?.forEach {
+            if (it.length > Limits.MAX_TEXT_LENGTH || !TextRules.isAllowed(it, allowNewlines = true)) {
+                fail(Violation.Rule.TEXT, "caption default text")
+            }
+        }
         if (photoDurationMs !in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS) fail(Violation.Rule.RANGE, "photo duration")
         transitionForAll?.let {
             if (it.kind == TransitionKind.NONE || it.durationMs !in Transition.MIN_MS..Transition.MAX_MS) {

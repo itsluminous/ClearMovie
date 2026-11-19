@@ -48,6 +48,38 @@ class StorageDeviceTest {
     }
 
     @Test
+    fun version1PresetRowsMigrateToVersion2NotDeletedAndUnordered() {
+        // cm-preset-manager: 1 to 2 adds createdAt and retiredAt to preset_definitions, keeping every row.
+        migrations.createDatabase(DB2, 1).apply {
+            execSQL(
+                "INSERT INTO preset_definitions (presetId, fileName, sha256, sizeBytes, originalName, boundAt) " +
+                    "VALUES ('event-frame', 'preset-abc.json', '00', 10, 'preset.json', 42)",
+            )
+            execSQL(
+                "INSERT INTO preset_bindings (presetId, slot, fileName, sha256, sizeBytes, originalName, mime, durationUs, " +
+                    "loudnessLufs, keyColor, measuredKeyColor, keyDeltaE, boundAt) " +
+                    "VALUES ('event-frame', 'frame', 'frame-x.mp4', '00', 5, null, 'video/mp4', 4000000, null, null, null, null, 42)",
+            )
+            close()
+        }
+        val db = migrations.runMigrationsAndValidate(DB2, 2, true, ClearMovieDatabase.MIGRATION_1_2)
+        db.query("SELECT presetId, fileName, boundAt, createdAt, retiredAt FROM preset_definitions").use { c ->
+            assertThat(c.count).isEqualTo(1)
+            c.moveToFirst()
+            assertThat(c.getString(0)).isEqualTo("event-frame")
+            assertThat(c.getString(1)).isEqualTo("preset-abc.json")
+            assertThat(c.getLong(2)).isEqualTo(42)
+            assertThat(c.getLong(3)).isEqualTo(0)
+            assertThat(c.isNull(4)).isTrue()
+        }
+        db.query("SELECT COUNT(*) FROM preset_bindings").use { c ->
+            c.moveToFirst()
+            assertThat(c.getInt(0)).isEqualTo(1)
+        }
+        db.close()
+    }
+
+    @Test
     fun theReEncodedFrameDecodedOnThePhoneGetsItsKeyColourAdjusted() =
         runBlocking<Unit> {
             val probe = AndroidMediaProbe()
@@ -88,6 +120,7 @@ class StorageDeviceTest {
 
     private companion object {
         const val DB = "migration-test.db"
+        const val DB2 = "migration-1-2-test.db"
         const val TAG = "StorageDeviceTest"
     }
 }

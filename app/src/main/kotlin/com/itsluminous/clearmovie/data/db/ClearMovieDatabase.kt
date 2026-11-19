@@ -6,6 +6,7 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
 import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /** A row of "My videos", without the model JSON. */
@@ -88,6 +89,22 @@ interface PresetDao {
 
     @Query("SELECT DISTINCT presetId FROM preset_bindings ORDER BY presetId")
     suspend fun boundPresetIds(): List<String>
+
+    @Query("DELETE FROM preset_definitions WHERE presetId = :presetId")
+    suspend fun deleteDefinition(presetId: String)
+
+    @Query("DELETE FROM preset_bindings WHERE presetId = :presetId")
+    suspend fun deleteBindings(presetId: String)
+
+    @Query("UPDATE preset_definitions SET retiredAt = :at WHERE presetId = :presetId")
+    suspend fun retire(
+        presetId: String,
+        at: Long,
+    )
+
+    /** How many videos were made from [presetId]. */
+    @Query("SELECT COUNT(*) FROM projects WHERE presetId = :presetId")
+    suspend fun projectsUsing(presetId: String): Int
 }
 
 @Dao
@@ -144,10 +161,23 @@ abstract class ClearMovieDatabase : RoomDatabase() {
     abstract fun grants(): MediaGrantDao
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
         const val FILE_NAME = "clearmovie.db"
 
+        /**
+         * 1 to 2 (cm-preset-manager): presets the user makes, edits and deletes.
+         * `preset_definitions` gains `createdAt` (0 for the rows already there)
+         * and `retiredAt` (null: none is deleted).
+         */
+        val MIGRATION_1_2 =
+            object : Migration(1, 2) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `preset_definitions` ADD COLUMN `createdAt` INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE `preset_definitions` ADD COLUMN `retiredAt` INTEGER")
+                }
+            }
+
         /** Version n to n + 1, for every n from 1 to [VERSION] - 1. Version 1 is the first. */
-        val MIGRATIONS: Array<Migration> = emptyArray()
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
     }
 }

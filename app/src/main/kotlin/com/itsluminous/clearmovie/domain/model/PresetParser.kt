@@ -77,7 +77,7 @@ object PresetParser {
         val ending = obj("ending")?.readEnding()
         val frame = obj("frame")?.readFrame()
         val captionFields = obj("caption")
-        val caption = captionFields?.readCaption() ?: CaptionStyle()
+        val caption = captionFields?.readCaption() ?: CaptionStyle.STANDARD
         val defaultText = captionFields?.localized("defaultText", Limits.MAX_TEXT_LENGTH)
         captionFields?.finish()
         val photoMs = long("photoDurationMs", range = 500L..60_000L) ?: Project.DEFAULT_PHOTO_MS
@@ -181,7 +181,7 @@ object PresetParser {
     }
 
     private fun Fields.readCaption(): CaptionStyle {
-        val d = CaptionStyle()
+        val d = CaptionStyle.STANDARD
         val box = obj("box")?.readRect() ?: d.box
         val align = enum("align", TextAlign.serializer()) ?: d.align
         val font = string("font", pattern = CaptionStyle.FONT_PATTERN, maxLength = 64) ?: d.font

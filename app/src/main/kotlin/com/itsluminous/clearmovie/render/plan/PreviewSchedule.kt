@@ -540,6 +540,6 @@ data class PreviewSchedule(
         }
 
         private val BLACK = ArgbColor.BLACK
-        private val DEFAULT_STYLE = CaptionStyle()
+        private val DEFAULT_STYLE = CaptionStyle.STANDARD
     }
 }

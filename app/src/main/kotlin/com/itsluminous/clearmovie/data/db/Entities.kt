@@ -66,7 +66,17 @@ data class PresetBindingEntity(
     val boundAt: Long,
 )
 
-/** The user's own `preset.json`, copied in at setup; it overrides the bundled preset with the same id. */
+/**
+ * A preset definition (`preset.json`) in app storage: the user's own file
+ * chosen at setup, or one the app wrote when the user made or edited a
+ * preset. With a bundled preset's id it overrides that preset (and deleting
+ * the row puts the bundled one back); any other id is a preset the user made.
+ *
+ * [createdAt] orders the user's presets (0 for rows from before it existed).
+ * [retiredAt] is set when the user deleted a preset that videos still use:
+ * it is no longer offered, but its definition and files stay until no video
+ * uses it, so those videos keep working.
+ */
 @Entity(tableName = "preset_definitions")
 data class PresetDefinitionEntity(
     @PrimaryKey val presetId: String,
@@ -75,6 +85,8 @@ data class PresetDefinitionEntity(
     val sizeBytes: Long,
     val originalName: String?,
     val boundAt: Long,
+    @ColumnInfo(defaultValue = "0") val createdAt: Long = 0,
+    val retiredAt: Long? = null,
 )
 
 /**

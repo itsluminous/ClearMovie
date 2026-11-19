@@ -120,6 +120,11 @@ data class TextBackground(
  * project; a text clip stores only what the user changed, as a
  * [CaptionStyleOverride], so **Reset to preset** is simply clearing it.
  * [font] is a bundled font id; the renderer falls back if it does not know it.
+ *
+ * [outline] and [background] default to none, so that a style without them
+ * (plain text) reads back as written: project JSON leaves null values out,
+ * and an absent field takes its default. The app's usual style, with both,
+ * is [STANDARD].
  */
 @Serializable
 data class CaptionStyle(
@@ -128,8 +133,8 @@ data class CaptionStyle(
     val font: String = DEFAULT_FONT,
     val sizePx: Int = DEFAULT_SIZE_PX,
     val color: ArgbColor = ArgbColor.WHITE,
-    val outline: TextOutline? = TextOutline(ArgbColor.BLACK, 4),
-    val background: TextBackground? = TextBackground(ArgbColor(0x99000000L), 12),
+    val outline: TextOutline? = null,
+    val background: TextBackground? = null,
 ) {
     companion object {
         /** Above the reference frame's caption strip and clear of its logo (ARCHITECTURE section 3). */
@@ -141,6 +146,16 @@ data class CaptionStyle(
         const val MAX_OUTLINE_PX = 64
         const val MAX_CORNER_PX = 200
         val FONT_PATTERN = Regex("^[a-z0-9_]{1,64}$")
+
+        /**
+         * The style a project or preset has when it names none: white text with a black outline on a dark
+         * band. Declared after [DEFAULT_BOX], which it uses.
+         */
+        val STANDARD =
+            CaptionStyle(
+                outline = TextOutline(ArgbColor.BLACK, 4),
+                background = TextBackground(ArgbColor(0x99000000L), 12),
+            )
     }
 }
 

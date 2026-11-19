@@ -30,9 +30,10 @@ data class EffectDefaults(
  * A video being edited. [tracks] is the SCREEN order, top row first;
  * [stacking] is the DRAWING order of the visual rows, bottom first. They
  * are independent (section 6.2): moving a row on screen never changes the
- * video. The preset's caption style, photo duration, fit, effects and
- * ducking are copied in when the project is created, so a project renders
- * the same even if its preset changes later.
+ * video. The preset's caption style (and [captionDefaultText], the words a
+ * new caption starts with), photo duration, fit, effects and ducking are
+ * copied in when the project is created, so a project renders the same even
+ * if its preset changes later.
  *
  * [name] is null for an unnamed draft. It is for display only
  * (`TextRules.isValidName`); code that makes a file name from it must make it
@@ -50,7 +51,8 @@ data class Project(
     val stacking: List<TrackId>,
     val name: String? = null,
     val presetId: PresetId? = null,
-    val captionDefaults: CaptionStyle = CaptionStyle(),
+    val captionDefaults: CaptionStyle = CaptionStyle.STANDARD,
+    val captionDefaultText: LocalizedText? = null,
     val photoDurationMs: Long = DEFAULT_PHOTO_MS,
     val defaultFit: Fit = Fit.FILL_CROP,
     val effectDefaults: EffectDefaults = EffectDefaults(),

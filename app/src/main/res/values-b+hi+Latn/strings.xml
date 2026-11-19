@@ -555,4 +555,39 @@
     <string name="caption_reset">Preset jaisa karein</string>
     <string name="caption_box_description">Caption ka box. Caption khiskane ke liye ise kheenchein, ya Jagah chunein.</string>
     <string name="caption_colour_choice">%1$s akshar</string>
+
+    <!-- cm-preset-manager: making, editing and deleting presets. -->
+    <string name="preset_new">Naya preset</string>
+    <string name="preset_new_body">Aapka apna intro, frame, ending aur caption ka style</string>
+    <string name="preset_edit">Preset badlein</string>
+    <string name="preset_edit_for">%1$s badlein</string>
+    <string name="preset_name_label">Naam</string>
+    <string name="preset_parts_title">Isme kya hoga</string>
+    <string name="preset_parts_body">Files aap agle step me chunenge. Preset banne ke baad ye hisse nahi badalte, kyunki isse bane videos inhi ka istemaal karte hain.</string>
+    <string name="preset_ending_voice">Bola gaya sandesh</string>
+    <string name="preset_ending_video">Video</string>
+    <string name="preset_ending_none">Koi ending nahi</string>
+    <string name="preset_create">Banayein</string>
+    <string name="preset_create_failed">Preset nahi ban saka. Phone me thodi jagah khaali karein aur phir se koshish karein.</string>
+    <string name="preset_files_title">Files</string>
+    <string name="preset_files_change">Files badlein</string>
+    <string name="preset_files_choose">Files chunein</string>
+    <string name="preset_caption_title">Captions</string>
+    <string name="preset_caption_body">Naya caption inhi shabdon ke saath, isi jagah aur isi style me shuru hoga.</string>
+    <string name="preset_caption_change">Caption ka style badlein</string>
+    <string name="preset_caption_no_words">Koi shabd nahi</string>
+    <string name="preset_caption_words_label">Naya caption in shabdon se shuru hoga</string>
+    <string name="preset_save">Save karein</string>
+    <string name="preset_delete">Preset delete karein</string>
+    <string name="preset_delete_title">Ye preset delete karein?</string>
+    <string name="preset_delete_body">%1$s ab nahi dikhega. Isse pehle banaye gaye videos pehle ki tarah chalte rahenge.</string>
+    <string name="preset_reset">Preset pehle jaisa karein</string>
+    <string name="preset_reset_title">Ye preset pehle jaisa karein?</string>
+    <string name="preset_reset_body">Iska naam, shabd aur caption ka style waise ho jayenge jaise ClearMovie me aate hain. Iski files rahengi.</string>
+    <string name="preset_reset_done">Preset waisa ho gaya hai jaisa ClearMovie me aata hai.</string>
+    <string name="preset_not_saved">Preset save nahi ho saka. Phone me thodi jagah khaali karein aur phir se koshish karein.</string>
+    <string name="preset_discard_title">Badlav chhod dein?</string>
+    <string name="preset_discard_body">Is preset me kiye gaye badlav abhi save nahi hue hain.</string>
+    <string name="preset_discard">Chhod dein</string>
+    <string name="preset_keep_editing">Badalte rahein</string>
 </resources>

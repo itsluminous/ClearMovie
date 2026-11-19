@@ -143,6 +143,7 @@ object ProjectFactory {
             stacking = stacking,
             presetId = preset.id,
             captionDefaults = preset.caption,
+            captionDefaultText = preset.defaultText,
             photoDurationMs = preset.photoDurationMs,
             defaultFit = preset.defaultFit,
             effectDefaults = preset.effects,

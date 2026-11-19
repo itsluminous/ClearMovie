@@ -79,7 +79,7 @@ class ProjectCodecTest {
         assertThat(p.name).isNull()
         assertThat(p.presetId).isNull()
         assertThat(p.ducking).isEqualTo(DuckingSpec())
-        assertThat(p.captionDefaults).isEqualTo(CaptionStyle())
+        assertThat(p.captionDefaults).isEqualTo(CaptionStyle.STANDARD)
         assertThat(p.transitionForAll).isNull()
         val video = p.requireClip(ClipId("v")) as VideoClip
         assertThat(video.trimStartMs to video.trimEndMs).isEqualTo(0L to 5000L)

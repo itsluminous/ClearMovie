@@ -16,14 +16,14 @@
     "music": { "enabled": true, "gainDb": -8, "role": "MUSIC" }
   },
   "caption": {
-    "box": { "x": 0.16, "y": 0.62, "w": 0.81, "h": 0.14 },
+    "box": { "x": 0.155, "y": 0.7981, "w": 0.825, "h": 0.1222 },
     "align": "center",
     "font": "noto_sans_devanagari_bold",
-    "sizePx": 64,
+    "sizePx": 60,
     "color": "#FFFFFF",
-    "outline": { "color": "#000000", "widthPx": 4 },
-    "background": { "color": "#99000000", "cornerPx": 12 },
-    "defaultText": null
+    "outline": null,
+    "background": null,
+    "defaultText": { "hi": "सुंदर प्रकृति" }
   },
   "photoDurationMs": 3000,
   "defaultFit": "fillCrop",

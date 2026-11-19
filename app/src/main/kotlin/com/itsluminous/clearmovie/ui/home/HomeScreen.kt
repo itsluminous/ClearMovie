@@ -109,6 +109,8 @@ fun HomeScreen(
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     share: ShareHeader? = null,
     onCancelShare: () -> Unit = {},
+    onEditPreset: ((PresetId) -> Unit)? = null,
+    onNewPreset: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
@@ -160,12 +162,33 @@ fun HomeScreen(
                         Heading(stringResource(if (share != null) R.string.share_choose_preset else R.string.home_new_video))
                     }
                     items(presets.orEmpty(), key = { "preset-" + it.preset.id.value }) { card ->
-                        PresetCardView(card, enabled = enabled, minHeight = cardHeight, onClick = { onPreset(card.preset.id) })
+                        // Editing is offered from the launcher's pick only, never while choosing a preset for shared items.
+                        val edit = onEditPreset?.takeIf { share == null }
+                        PresetCardView(
+                            card,
+                            enabled = enabled,
+                            minHeight = cardHeight,
+                            onClick = { onPreset(card.preset.id) },
+                            onEdit = edit?.let { { it(card.preset.id) } },
+                        )
                     }
                     // Never waits for the presets: Start without a preset is there at once (the moving bar says
                     // the presets are still being read).
                     item(key = "blank") { BlankCard(enabled = enabled, minHeight = cardHeight, onClick = onStartBlank) }
                     if (share != null) return@LazyVerticalGrid
+                    if (onNewPreset != null) {
+                        item(key = "new-preset") {
+                            ActionCard(
+                                title = stringResource(R.string.preset_new),
+                                body = stringResource(R.string.preset_new_body),
+                                icon = R.drawable.ic_add,
+                                enabled = !busy,
+                                minHeight = cardHeight,
+                                tag = NEW_PRESET_TAG,
+                                onClick = onNewPreset,
+                            )
+                        }
+                    }
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Heading(stringResource(R.string.home_my_videos), Modifier.padding(top = 8.dp))
                     }
@@ -254,6 +277,7 @@ private fun PresetCardView(
     enabled: Boolean,
     minHeight: Dp,
     onClick: () -> Unit,
+    onEdit: (() -> Unit)?,
 ) {
     Card(
         onClick = onClick,
@@ -264,33 +288,53 @@ private fun PresetCardView(
         val name = presetName(card.preset)
         CardBody(name, {
             Thumb(card.thumbnail?.let { { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } })
-        }) {
-            Column {
-                Text(name, style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(4.dp))
-                val (line, warn) =
-                    when (val s = card.state) {
-                        PresetCard.State.Ready -> stringResource(R.string.home_preset_ready) to false
-                        PresetCard.State.NeedsSetup -> stringResource(R.string.home_preset_needs_setup) to false
-                        is PresetCard.State.Missing -> pluralStringResource(R.plurals.home_preset_missing, s.count, s.count) to true
-                    }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (warn) {
+        }, trailing = if (onEdit != null) EDIT_BUTTON else 0.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PresetWords(card, name, Modifier.weight(1f))
+                if (onEdit != null) {
+                    IconButton(onClick = onEdit, enabled = enabled, modifier = Modifier.testTag(presetEditTag(card.preset.id))) {
                         Icon(
-                            painterResource(R.drawable.ic_warning),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp),
+                            painterResource(R.drawable.ic_edit),
+                            contentDescription = stringResource(R.string.preset_edit_for, name),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
                         )
-                        Spacer(Modifier.width(6.dp))
                     }
-                    Text(
-                        line,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PresetWords(
+    card: PresetCard,
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Text(name, style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(4.dp))
+        val (line, warn) =
+            when (val s = card.state) {
+                PresetCard.State.Ready -> stringResource(R.string.home_preset_ready) to false
+                PresetCard.State.NeedsSetup -> stringResource(R.string.home_preset_needs_setup) to false
+                is PresetCard.State.Missing -> pluralStringResource(R.plurals.home_preset_missing, s.count, s.count) to true
+            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (warn) {
+                Icon(
+                    painterResource(R.drawable.ic_warning),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                line,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSecondaryContainer,
+            )
         }
     }
 }
@@ -301,19 +345,40 @@ private fun BlankCard(
     minHeight: Dp,
     onClick: () -> Unit,
 ) {
+    ActionCard(
+        title = stringResource(R.string.home_start_blank),
+        body = stringResource(R.string.home_start_blank_body),
+        icon = R.drawable.ic_photo_library,
+        enabled = enabled,
+        minHeight = minHeight,
+        tag = null,
+        onClick = onClick,
+    )
+}
+
+/** A card with an icon instead of a picture: Start without a preset, New preset. */
+@Composable
+private fun ActionCard(
+    title: String,
+    body: String,
+    icon: Int,
+    enabled: Boolean,
+    minHeight: Dp,
+    tag: String?,
+    onClick: () -> Unit,
+) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight),
+        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).then(if (tag != null) Modifier.testTag(tag) else Modifier),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        val name = stringResource(R.string.home_start_blank)
-        CardBody(name, { Thumb(null, icon = R.drawable.ic_photo_library) }) {
+        CardBody(title, { Thumb(null, icon = icon) }) {
             Column {
-                Text(name, style = MaterialTheme.typography.titleLarge)
+                Text(title, style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    stringResource(R.string.home_start_blank_body),
+                    body,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -361,6 +426,7 @@ private fun VideoCard(
 private fun CardBody(
     title: String,
     picture: @Composable () -> Unit,
+    trailing: Dp = 0.dp,
     words: @Composable () -> Unit,
 ) {
     val measurer = rememberTextMeasurer()
@@ -374,7 +440,7 @@ private fun CardBody(
                     .size.width
                     .toDp()
             }
-        if (THUMB_WIDTH + 16.dp + titleDp <= maxWidth) {
+        if (THUMB_WIDTH + 16.dp + titleDp + trailing <= maxWidth) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 picture()
                 Spacer(Modifier.width(16.dp))
@@ -390,6 +456,15 @@ private fun CardBody(
 }
 
 private val THUMB_WIDTH = 112.dp
+
+/** The room a preset card's Edit button takes beside its name. */
+private val EDIT_BUTTON = 48.dp
+
+/** Test tag of the New preset card. */
+const val NEW_PRESET_TAG = "new_preset"
+
+/** Test tag of a preset card's Edit button. */
+fun presetEditTag(id: PresetId) = "preset_edit_${id.value}"
 
 /** The height of preset cards shown two or three to a row. */
 private val SIDE_BY_SIDE_CARD = 168.dp

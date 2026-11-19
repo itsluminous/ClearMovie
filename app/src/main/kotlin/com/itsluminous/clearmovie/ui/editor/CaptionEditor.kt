@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.ui.editor
 
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -100,6 +101,8 @@ import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
 import com.itsluminous.clearmovie.ui.components.MoreBelow
 import com.itsluminous.clearmovie.ui.components.labelFits
 import com.itsluminous.clearmovie.ui.components.rememberLabelLines
+import com.itsluminous.clearmovie.ui.preset.PresetNames
+import java.util.Locale
 import kotlin.math.roundToInt
 
 // The caption editor (cm-captions, ARCHITECTURE section 11.1): the panel and
@@ -196,7 +199,7 @@ private const val BAND_SHOWS = 0x40
 
 /**
  * "Add caption" on photo or video [itemId]: a new caption attached to it,
- * empty and in the preset's style, with the preset's start animation, then
+ * with the preset's default words (or none) and in the preset's style, with the preset's start animation, then
  * the editor on it. The caption is part of the editor visit's undo step.
  * When the item already has a caption covering it whole, the editor opens on
  * that one instead: a second would cover the same time in the same place,
@@ -216,9 +219,21 @@ fun startCaption(
         ?.firstOrNull { it.attachedTo?.clip == itemId && it.attachedTo.whole }
         ?.let { return openCaption(it.id, state) }
     val id = RandomIds.clipId()
-    val made = actions.editMerged(captionMergeKey(id)) { addCaptionFor(itemId, "", captionId = id).withEffectDefaultsFor(listOf(id)) }
+    val words = project?.newCaptionWords().orEmpty()
+    val made = actions.editMerged(captionMergeKey(id)) { addCaptionFor(itemId, words, captionId = id).withEffectDefaultsFor(listOf(id)) }
     if (made) openCaption(id, state)
 }
+
+/**
+ * The words a new caption starts with: the preset's default words
+ * ([Project.captionDefaultText]) in the app's language, or the nearest
+ * language there is; none when the preset has none.
+ */
+fun Project.newCaptionWords(locale: Locale = appLocale()): String =
+    captionDefaultText?.let { PresetNames.pick(it, locale) }?.let(::usableCaptionText).orEmpty()
+
+/** The language the app shows: the one chosen in Settings, else the phone's. */
+private fun appLocale(): Locale = AppCompatDelegate.getApplicationLocales()[0] ?: Locale.getDefault()
 
 /** Selects caption [id] and opens the editor on it. */
 fun openCaption(
@@ -296,9 +311,43 @@ internal fun ColumnScope.CaptionPanel(
     var ownTab by rememberSaveable(caption.id.value) { mutableStateOf(CaptionTab.WORDS.name) }
     val tabName = visit?.captionTab ?: ownTab
     val tab = CaptionTab.entries.firstOrNull { it.name == tabName } ?: CaptionTab.WORDS
-    // Icon over label in the bar's sizes (24 dp, labelMedium). A long label is drawn smaller to fit its tab,
-    // then on two lines (AutoSizeLabel), every tab as tall. When a single word would not fit even at the
-    // smallest size (a narrow phone, large text) the tabs keep their names and scroll sideways instead.
+    CaptionTabBar(tab) { if (visit != null) visit.captionTab = it.name else ownTab = it.name }
+    // Below the title and the tabs, which stay put, the tab's content and Reset scroll when the room is short.
+    val scroll = rememberScrollState()
+    Box(Modifier.weight(1f, fill = false)) {
+        Column(Modifier.verticalScroll(scroll)) {
+            Spacer(Modifier.height(8.dp))
+            // Every tab takes the same room, so changing tabs never makes the panel, and the rows above it, jump;
+            // in a short panel (a phone held sideways) Reset stays in sight instead.
+            Column(Modifier.fillMaxWidth().heightIn(min = if (roomy) TAB_CONTENT_MIN else 0.dp)) {
+                when (tab) {
+                    CaptionTab.WORDS -> WordsTab(caption, callbacks, key)
+                    CaptionTab.PLACE -> PlaceTab(style, defaults.box, CaptionPlaces.safeArea(window, defaults.box), ::restyle)
+                    CaptionTab.SIZE -> SizeTab(caption.id, caption.text, style, defaults, ::restyle)
+                    CaptionTab.FONT -> FontTab(style, ::restyle)
+                    CaptionTab.COLOUR -> ColourTab(style, ::restyle)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            ResetButton(caption, callbacks, key)
+            Spacer(Modifier.height(8.dp))
+        }
+        MoreBelow(scroll)
+    }
+}
+
+/**
+ * The caption editor's tab bar, sized to the room it has: icon over label in the bar's sizes (24 dp,
+ * labelMedium). A long label is drawn smaller to fit its tab, then on two lines (AutoSizeLabel), every
+ * tab as tall. When a single word would not fit even at the smallest size (a narrow phone, large text)
+ * the tabs keep their names and scroll sideways instead. The editor of a caption and the editor of a
+ * preset's caption style both use it.
+ */
+@Composable
+internal fun CaptionTabBar(
+    tab: CaptionTab,
+    onTab: (CaptionTab) -> Unit,
+) {
     val labels = CaptionTab.entries.map { stringResource(tabLabel(it)) }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium
@@ -311,31 +360,7 @@ internal fun ColumnScope.CaptionPanel(
                 !labelFits(measurer, word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), roomPx)
             }
         val lines = if (scrolls) 1 else rememberLabelLines(labels, labelStyle, room, density)
-        CaptionTabs(tab, labels, scrolls, lines, scrollTabWidth = maxWidth / SCROLLING_TABS_SHOWN) {
-            if (visit != null) visit.captionTab = it.name else ownTab = it.name
-        }
-    }
-    // Below the title and the tabs, which stay put, the tab's content and Reset scroll when the room is short.
-    val scroll = rememberScrollState()
-    Box(Modifier.weight(1f, fill = false)) {
-        Column(Modifier.verticalScroll(scroll)) {
-            Spacer(Modifier.height(8.dp))
-            // Every tab takes the same room, so changing tabs never makes the panel, and the rows above it, jump;
-            // in a short panel (a phone held sideways) Reset stays in sight instead.
-            Column(Modifier.fillMaxWidth().heightIn(min = if (roomy) TAB_CONTENT_MIN else 0.dp)) {
-                when (tab) {
-                    CaptionTab.WORDS -> WordsTab(caption, callbacks, key)
-                    CaptionTab.PLACE -> PlaceTab(style, defaults.box, CaptionPlaces.safeArea(window), ::restyle)
-                    CaptionTab.SIZE -> SizeTab(caption, style, defaults, ::restyle)
-                    CaptionTab.FONT -> FontTab(style, ::restyle)
-                    CaptionTab.COLOUR -> ColourTab(style, ::restyle)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            ResetButton(caption, callbacks, key)
-            Spacer(Modifier.height(8.dp))
-        }
-        MoreBelow(scroll)
+        CaptionTabs(tab, labels, scrolls, lines, scrollTabWidth = maxWidth / SCROLLING_TABS_SHOWN, onTab = onTab)
     }
 }
 
@@ -499,32 +524,37 @@ private fun WordsTab(
     )
 }
 
+/**
+ * The place chips ([places], the preset's own place first) and the hint to drag the box. [usual] is the
+ * preset's box, [safe] where a caption may go.
+ */
 @Composable
-private fun PlaceTab(
+internal fun PlaceTab(
     style: CaptionStyle,
     usual: NormRect,
     safe: NormRect,
     restyle: (CaptionStyle) -> Unit,
+    places: List<CaptionPlace> = CaptionPlace.entries,
 ) {
-    val current = CaptionPlaces.placeOf(style.box, usual, safe)
-    // Four across when every name fits its chip; two by two otherwise, so no name is ever cut short.
-    val labels = CaptionPlace.entries.map { stringResource(placeLabel(it)) }
+    val current = CaptionPlaces.placeOf(style.box, usual, safe, places)
+    // Across when every name fits its chip; two by two otherwise, so no name is ever cut short.
+    val labels = places.map { stringResource(placeLabel(it)) }
     val measurer = rememberTextMeasurer()
     val chipStyle = MaterialTheme.typography.labelLarge
     val density = LocalDensity.current
     // The width is known before the first frame is drawn, so the chips never jump from two rows to one.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val perChip = (maxWidth - 8.dp * (CaptionPlace.entries.size - 1)) / CaptionPlace.entries.size
+        val perChip = (maxWidth - 8.dp * (places.size - 1)) / places.size
         val chipRoomPx = with(density) { (perChip - CHIP_LABEL_ROOM).roundToPx() }
         val fitsInOneRow = labels.all { label -> labelFits(measurer, label, chipStyle, chipRoomPx) }
-        val columns = if (fitsInOneRow) CaptionPlace.entries.size else 2
+        val columns = if (fitsInOneRow) places.size else 2
         // Two by two a name may still need a smaller size or two lines: then every chip takes two, all as tall.
         val lines = rememberLabelLines(labels, chipStyle, (maxWidth - 8.dp * (columns - 1)) / columns - CHIP_LABEL_ROOM, density)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (row in CaptionPlace.entries.chunked(columns)) {
+            for (row in places.chunked(columns)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (place in row) {
-                        val label = labels[place.ordinal]
+                        val label = labels[places.indexOf(place)]
                         FilterChip(
                             selected = place == current,
                             onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe))) },
@@ -559,9 +589,15 @@ private fun placeLabel(place: CaptionPlace): Int =
         CaptionPlace.BOTTOM -> R.string.caption_place_bottom
     }
 
+/**
+ * The size slider, in steps of 4 from [defaults]' size (shown as 100%), and a large sample of the
+ * caption ([words], or a sample when blank). [key] is what the tab is editing: the slider's range is
+ * worked out again only for another one.
+ */
 @Composable
-private fun SizeTab(
-    caption: TextClip,
+internal fun SizeTab(
+    key: Any,
+    words: String,
     style: CaptionStyle,
     defaults: CaptionStyle,
     restyle: (CaptionStyle) -> Unit,
@@ -569,7 +605,7 @@ private fun SizeTab(
     val percent = style.sizePx * 100 / defaults.sizePx.coerceAtLeast(1)
     // The range always holds the preset's own size and the size the tab opened with, and stays put while
     // the thumb moves.
-    val opened = remember(caption.id) { style.sizePx }
+    val opened = remember(key) { style.sizePx }
     val low = minOf(CAPTION_MIN_SIZE, defaults.sizePx, opened).toFloat()
     val high = maxOf(CAPTION_MAX_SIZE, defaults.sizePx, opened).toFloat()
     val shown = stringResource(R.string.caption_size_value, percent)
@@ -598,7 +634,7 @@ private fun SizeTab(
     }
     Spacer(Modifier.height(8.dp))
     // The caption as the video will show it, as wide as the panel (larger than in the preview), on the checkerboard.
-    val sampleText = caption.text.ifBlank { stringResource(R.string.caption_font_sample) }
+    val sampleText = words.ifBlank { stringResource(R.string.caption_font_sample) }
     Box(
         Modifier
             .fillMaxWidth()
@@ -612,7 +648,7 @@ private fun SizeTab(
 }
 
 @Composable
-private fun FontTab(
+internal fun FontTab(
     style: CaptionStyle,
     restyle: (CaptionStyle) -> Unit,
 ) {
@@ -678,7 +714,7 @@ private fun fontLabel(font: CaptionFont): Int =
     }
 
 @Composable
-private fun ColourTab(
+internal fun ColourTab(
     style: CaptionStyle,
     restyle: (CaptionStyle) -> Unit,
 ) {
@@ -809,8 +845,41 @@ internal fun CaptionBoxOverlay(
 ) {
     val defaults = project.captionDefaults
     val style = caption.style.resolve(defaults)
-    val safe = CaptionPlaces.safeArea(window)
     val latest by rememberUpdatedState(style)
+    CaptionBoxDrag(
+        style = style,
+        usual = defaults.box,
+        safe = CaptionPlaces.safeArea(window, defaults.box),
+        showSample = caption.text.isBlank(),
+        dragKey = caption.id,
+        modifier = modifier,
+        draggable = draggable,
+    ) { next ->
+        callbacks.editMerged(captionMergeKey(caption.id)) {
+            setCaptionStyle(caption.id, CaptionStyleOverride.between(defaults, latest.copy(box = next)))
+        }
+    }
+}
+
+/**
+ * A caption box drawn over a picture of the canvas, and dragged: the box of
+ * [style], kept inside [safe] and snapping to [usual], each move handed to
+ * [onBox]. With [showSample] (no words yet) a faint sample shows the style.
+ * The caption editor and the preset's caption style editor both use it.
+ */
+@Composable
+internal fun CaptionBoxDrag(
+    style: CaptionStyle,
+    usual: NormRect,
+    safe: NormRect,
+    showSample: Boolean,
+    dragKey: Any,
+    modifier: Modifier = Modifier,
+    draggable: Boolean = true,
+    onBox: (NormRect) -> Unit,
+) {
+    val latest by rememberUpdatedState(style)
+    val move by rememberUpdatedState(onBox)
     var start by remember { mutableStateOf<NormRect?>(null) }
     var moved by remember { mutableStateOf(Offset.Zero) }
     var snapped by remember { mutableStateOf(false) }
@@ -835,7 +904,7 @@ internal fun CaptionBoxOverlay(
                     style = Stroke(1.dp.toPx(), pathEffect = dash),
                 )
                 if (snapped) {
-                    val u = defaults.box
+                    val u = usual
                     drawRect(
                         Color.White,
                         Offset((u.x * size.width).toFloat(), (u.y * size.height).toFloat()),
@@ -853,7 +922,7 @@ internal fun CaptionBoxOverlay(
                 .offset(w * box.x.toFloat(), h * box.y.toFloat() - extra)
                 .size(w * box.w.toFloat(), boxH + extra * 2)
                 .then(if (draggable) Modifier.semantics { contentDescription = description }.testTag(CAPTION_BOX_TAG) else Modifier)
-                .pointerInput(caption.id, safe, defaults.box, draggable) {
+                .pointerInput(dragKey, safe, usual, draggable) {
                     if (!draggable) return@pointerInput
                     detectDragGestures(
                         onDragStart = {
@@ -873,25 +942,14 @@ internal fun CaptionBoxOverlay(
                         val from = start ?: return@detectDragGestures
                         // Each move is turned into canvas units at the preview's size then, so a resize part way never jumps.
                         moved += Offset(amount.x / widthPx, amount.y / heightPx)
-                        val (next, snap) =
-                            CaptionPlaces.dragged(
-                                from,
-                                moved.x.toDouble(),
-                                moved.y.toDouble(),
-                                safe,
-                                defaults.box,
-                            )
+                        val (next, snap) = CaptionPlaces.dragged(from, moved.x.toDouble(), moved.y.toDouble(), safe, usual)
                         snapped = snap
-                        if (next != latest.box) {
-                            callbacks.editMerged(captionMergeKey(caption.id)) {
-                                setCaptionStyle(caption.id, CaptionStyleOverride.between(defaults, latest.copy(box = next)))
-                            }
-                        }
+                        if (next != latest.box) move(next)
                     }
                 },
         ) {
             // A caption with no words yet shows a faint sample, so its place, size, font and colour show at once.
-            if (caption.text.isBlank()) {
+            if (showSample) {
                 Box(
                     Modifier
                         .fillMaxWidth()

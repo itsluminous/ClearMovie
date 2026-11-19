@@ -598,4 +598,39 @@
     <string name="caption_reset">Reset to preset style</string>
     <string name="caption_box_description">Caption box. Drag it to move the caption, or use Place.</string>
     <string name="caption_colour_choice">%1$s text</string>
+
+    <!-- cm-preset-manager: making, editing and deleting presets. -->
+    <string name="preset_new">New preset</string>
+    <string name="preset_new_body">Your own intro, frame, ending and caption style</string>
+    <string name="preset_edit">Edit preset</string>
+    <string name="preset_edit_for">Edit %1$s</string>
+    <string name="preset_name_label">Name</string>
+    <string name="preset_parts_title">What it has</string>
+    <string name="preset_parts_body">You choose the files next. The parts stay the same once the preset is made, because videos made from it use them.</string>
+    <string name="preset_ending_voice">Spoken message</string>
+    <string name="preset_ending_video">Video</string>
+    <string name="preset_ending_none">No ending</string>
+    <string name="preset_create">Create</string>
+    <string name="preset_create_failed">The preset couldn\'t be made. Free up some space on the phone and try again.</string>
+    <string name="preset_files_title">Files</string>
+    <string name="preset_files_change">Change files</string>
+    <string name="preset_files_choose">Choose files</string>
+    <string name="preset_caption_title">Captions</string>
+    <string name="preset_caption_body">A new caption starts with these words, in this place and style.</string>
+    <string name="preset_caption_change">Change caption style</string>
+    <string name="preset_caption_no_words">No words</string>
+    <string name="preset_caption_words_label">Words a new caption starts with</string>
+    <string name="preset_save">Save</string>
+    <string name="preset_delete">Delete preset</string>
+    <string name="preset_delete_title">Delete this preset?</string>
+    <string name="preset_delete_body">%1$s will no longer be offered. Videos you already made with it keep working.</string>
+    <string name="preset_reset">Reset preset</string>
+    <string name="preset_reset_title">Reset this preset?</string>
+    <string name="preset_reset_body">Its name, words and caption style go back to how ClearMovie ships them. Its files stay.</string>
+    <string name="preset_reset_done">The preset is back to how ClearMovie ships it.</string>
+    <string name="preset_not_saved">The preset couldn\'t be saved. Free up some space on the phone and try again.</string>
+    <string name="preset_discard_title">Discard your changes?</string>
+    <string name="preset_discard_body">Your changes to this preset haven\'t been saved.</string>
+    <string name="preset_discard">Discard</string>
+    <string name="preset_keep_editing">Keep editing</string>
 </resources>

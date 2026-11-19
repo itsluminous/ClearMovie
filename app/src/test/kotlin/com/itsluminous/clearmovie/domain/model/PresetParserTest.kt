@@ -39,7 +39,8 @@ class PresetParserTest {
             if (keys.size == 1) {
                 return if (value == null) JsonObject(obj - key) else JsonObject(obj + (key to Json.parseToJsonElement(value)))
             }
-            return JsonObject(obj + (key to edit(obj.getValue(key).jsonObject, keys.drop(1))))
+            // A part the bundled file leaves out or switches off (null) is edited as an empty object.
+            return JsonObject(obj + (key to edit((obj[key] as? JsonObject) ?: JsonObject(emptyMap()), keys.drop(1))))
         }
         return edit(Json.parseToJsonElement(bundled).jsonObject, path.split('.')).toString()
     }
@@ -57,28 +58,44 @@ class PresetParserTest {
         assertThat(frame.contentRect).isEqualTo(NormRect(0.0094, 0.0222, 0.9813, 0.7741))
         assertThat(frame.coverEnding).isEqualTo(CoverEnding.AUTO)
         assertThat(frame.music).isEqualTo(FrameMusic(true, -8.0))
-        assertThat(p.caption).isEqualTo(CaptionStyle())
+        // cm-preset-manager: the caption sits on the reference frame's blue strip (rows 862-993 and columns
+        // 272-1901 of Frame-White.mp4 at 1920 x 1080), clear of the logo, as plain white text with no band.
+        assertThat(p.caption).isEqualTo(
+            CaptionStyle(
+                box = NormRect(0.155, 0.7981, 0.825, 0.1222),
+                sizePx = 60,
+                color = ArgbColor.WHITE,
+                outline = null,
+                background = null,
+            ),
+        )
+        assertThat(p.caption.box.y * 1080).isWithin(1.0).of(862.0)
+        assertThat((p.caption.box.y + p.caption.box.h) * 1080).isWithin(1.0).of(994.0)
+        assertThat(p.caption.box.x * 1920).isGreaterThan(272.0)
+        assertThat((p.caption.box.x + p.caption.box.w) * 1920).isLessThan(1902.0)
         assertThat(p.effects).isEqualTo(EffectDefaults(AnimKind.KEN_BURNS_IN, Transition(TransitionKind.CROSSFADE, 600), AnimKind.FADE_IN))
         assertThat(p.ducking).isEqualTo(DuckingSpec())
         assertThat(p.export).isEqualTo(ExportSpec())
-        // The project built from it is valid and matches the code-built fixture preset.
-        assertThat(p).isEqualTo(Fixtures.preset)
+        // The project built from it is valid and, its caption aside, matches the code-built fixture preset.
+        assertThat(p.copy(caption = CaptionStyle.STANDARD, defaultText = null)).isEqualTo(Fixtures.preset)
         assertThat(ProjectFactory.fromPreset(Fixtures.PROJECT_ID, p, Fixtures.presetMedia, SequentialIds()).validate()).isEmpty()
     }
 
     @Test
     fun `the bundled preset contains no personal text`() {
         val p = ok(bundled).preset
-        // Its name is a string resource, present in all three languages; it has no literal name or default caption.
+        // Its name is a string resource, present in all three languages; it has no literal name. Its only words
+        // are its default caption (cm-preset-manager): "beautiful nature", nothing personal.
         assertThat(p.displayName).isNull()
-        assertThat(p.defaultText).isNull()
+        assertThat(p.defaultText).isEqualTo(LocalizedText(hi = "सुंदर प्रकृति"))
         assertThat(p.displayNameRes).isEqualTo("preset_event_frame_name")
         for (dir in SourceTree.shippedValuesDirs) {
             val names = StringXml.entries(File(dir, "strings.xml")).map { it.name }
             assertThat(names).contains("preset_event_frame_name")
         }
         // Every string value in the file is an identifier, a colour or a fixed keyword: no words for a person to read.
-        val strings = Regex("\"([^\"]*)\"\\s*[,}\\]\\n]").findAll(bundled).map { it.groupValues[1] }.toList()
+        val strings =
+            Regex("\"([^\"]*)\"\\s*[,}\\]\\n]").findAll(bundled).map { it.groupValues[1] }.toList() - "सुंदर प्रकृति"
         assertThat(strings).isNotEmpty()
         for (s in strings) assertThat(s).matches("[A-Za-z0-9_#-]+")
     }
@@ -90,7 +107,7 @@ class PresetParserTest {
         assertThat(p.intro).isNull()
         assertThat(p.ending).isNull()
         assertThat(p.frame).isNull()
-        assertThat(p.caption).isEqualTo(CaptionStyle())
+        assertThat(p.caption).isEqualTo(CaptionStyle.STANDARD)
         assertThat(p.photoDurationMs).isEqualTo(3000)
         assertThat(p.defaultFit).isEqualTo(Fit.FILL_CROP)
         assertThat(p.effects).isEqualTo(EffectDefaults())
@@ -190,7 +207,7 @@ class PresetParserTest {
 
     @Test
     fun `each bad field is reported with its path`() {
-        val errs = errors(bundledWith("frame.contentRect.w", "2").let { t -> t.replace("\"sizePx\":64", "\"sizePx\":1") })
+        val errs = errors(bundledWith("frame.contentRect.w", "2").let { t -> t.replace("\"sizePx\":60", "\"sizePx\":1") })
         assertThat(errs).containsAtLeast("frame.contentRect.w: must be between 0.0 and 1.0", "caption.sizePx: must be between 8 and 400")
         // A rectangle whose parts are in range but which runs off the picture.
         assertThat(

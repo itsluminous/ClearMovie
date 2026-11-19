@@ -424,7 +424,7 @@ class PresetStoreTest {
         }
     }
 
-    private companion object {
+    internal companion object {
         const val DOCS = "com.android.externalstorage.documents"
     }
 }

@@ -16,13 +16,17 @@ import com.itsluminous.clearmovie.data.media.MediaCopier
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.EndingKind
+import com.itsluminous.clearmovie.domain.model.EndingSpec
+import com.itsluminous.clearmovie.domain.model.IntroSpec
 import com.itsluminous.clearmovie.domain.model.Limits
+import com.itsluminous.clearmovie.domain.model.LocalizedText
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetMedia
 import com.itsluminous.clearmovie.domain.model.PresetParseResult
 import com.itsluminous.clearmovie.domain.model.PresetParser
 import com.itsluminous.clearmovie.domain.model.PresetSlot
+import com.itsluminous.clearmovie.domain.model.PresetWriter
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -38,12 +42,58 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.util.UUID
 
-/** A preset the app can offer. [source] says whether it ships in the app or came from the user's own `preset.json`. */
+/**
+ * A preset the app can offer. [source] says whether this definition ships in
+ * the app or is the user's (a `preset.json` they chose, or one the app wrote
+ * when they made or edited a preset). [builtIn] is true for a preset the app
+ * ships, edited or not: it can be reset, never deleted. [retired] is true for
+ * a preset the user deleted that videos still use.
+ */
 data class PresetDefinition(
     val preset: Preset,
     val source: Source,
+    val builtIn: Boolean = source == Source.BUNDLED,
+    val retired: Boolean = false,
 ) {
     enum class Source { BUNDLED, USER }
+
+    /** A built-in preset the user changed: Reset puts the app's own back. */
+    val edited: Boolean get() = builtIn && source == Source.USER
+}
+
+/** The parts a new preset has. Fixed once it is made: videos made from it play these parts. */
+data class PresetParts(
+    val intro: Boolean = true,
+    val frame: Boolean = true,
+    /** Null for no ending. */
+    val ending: EndingKind? = EndingKind.AUDIO,
+)
+
+sealed interface PresetSaveResult {
+    data class Saved(
+        val preset: Preset,
+    ) : PresetSaveResult
+
+    /** Not a preset the app can store (a value out of range, a name that shows nothing). */
+    data object Invalid : PresetSaveResult
+
+    /** The phone is full, or the preset is unknown. */
+    data object NotSaved : PresetSaveResult
+}
+
+sealed interface PresetDeleteResult {
+    /** Gone, with its files: no video used it. */
+    data object Deleted : PresetDeleteResult
+
+    /** No longer offered; its files stay for the [videos] videos made from it, until they are deleted. */
+    data class Retired(
+        val videos: Int,
+    ) : PresetDeleteResult
+
+    /** A preset the app ships is reset, never deleted. */
+    data object BuiltIn : PresetDeleteResult
+
+    data object Unknown : PresetDeleteResult
 }
 
 /** A preset file copied into app storage. */
@@ -153,7 +203,11 @@ sealed interface DefinitionBindResult {
  * plus, optionally, the user's own `preset.json` chosen at setup. The user's
  * file is untrusted: it is read with a size limit, must be UTF-8, goes
  * through the strict `PresetParser`, and is copied into app storage only when
- * valid. It overrides the bundled preset with the same id.
+ * valid. It overrides the bundled preset with the same id. Presets the user
+ * makes or edits in the app ([create], [save]) are stored the same way, as a
+ * `preset.json` that `PresetWriter` writes and the parser reads back; an
+ * edited built-in preset is an override that [reset] removes, so a later app
+ * version's built-in preset reaches everyone who did not edit theirs.
  *
  * Bindings: each slot's file (intro, frame, ending) is copied into
  * `filesDir/presets/<id>/` once, with progress, its SHA-256 and size, its
@@ -184,21 +238,186 @@ class PresetStore(
     },
     private val hash: (File) -> String = MediaCopier::sha256,
 ) {
-    /** Every preset, the user's own overriding a bundled one with the same id, by id. */
-    suspend fun definitions(): List<PresetDefinition> =
-        withContext(dispatcher) {
-            val byId = linkedMapOf<PresetId, PresetDefinition>()
-            bundled().forEach { byId[it.id] = PresetDefinition(it, PresetDefinition.Source.BUNDLED) }
-            db.presets().definitions().forEach { row ->
-                userDefinition(row)?.let {
-                    byId[it.id] =
-                        PresetDefinition(it, PresetDefinition.Source.USER)
-                }
+    /**
+     * Every preset that is offered: those the app ships first (by id, an
+     * edited one in its edited form), then the user's own in the order they
+     * were made. A deleted preset that videos still use is left out.
+     */
+    suspend fun definitions(): List<PresetDefinition> = withContext(dispatcher) { all().filterNot { it.retired } }
+
+    /** Preset [id], including one the user deleted that videos still use, so those videos keep working. */
+    suspend fun definition(id: PresetId): PresetDefinition? = withContext(dispatcher) { all().firstOrNull { it.preset.id == id } }
+
+    private suspend fun all(): List<PresetDefinition> {
+        val shipped = bundled()
+        val shippedIds = shipped.map { it.id }.toSet()
+        val rows = db.presets().definitions()
+        val byId = linkedMapOf<PresetId, PresetDefinition>()
+        shipped.forEach { byId[it.id] = PresetDefinition(it, PresetDefinition.Source.BUNDLED) }
+        val own = mutableListOf<Pair<PresetDefinitionEntity, PresetDefinition>>()
+        for (row in rows) {
+            val preset = userDefinition(row) ?: continue
+            if (preset.id in shippedIds) {
+                byId[preset.id] = PresetDefinition(preset, PresetDefinition.Source.USER, builtIn = true)
+            } else {
+                own += row to PresetDefinition(preset, PresetDefinition.Source.USER, builtIn = false, retired = row.retiredAt != null)
             }
-            byId.values.sortedBy { it.preset.id.value }
+        }
+        return byId.values.sortedBy { it.preset.id.value } +
+            own.sortedWith(compareBy({ it.first.createdAt }, { it.first.presetId })).map { it.second }
+    }
+
+    /**
+     * Makes a new preset called [name] with [parts], and the frame layout and
+     * caption style of [from] (or the first preset the app ships). It has no
+     * files yet: setup chooses them. Null when it could not be stored.
+     */
+    suspend fun create(
+        name: String,
+        parts: PresetParts,
+        from: PresetId? = null,
+    ): PresetId? =
+        withContext(dispatcher) {
+            val template = (from?.let { definition(it) } ?: all().firstOrNull { it.builtIn })?.preset ?: return@withContext null
+            val frame = template.frame ?: bundled().firstNotNullOfOrNull { it.frame }
+            if (parts.frame && frame == null) return@withContext null
+            var id: PresetId
+            do {
+                id = PresetId("$OWN_PREFIX${randomToken()}")
+            } while (definition(id) != null)
+            val preset =
+                template.copy(
+                    id = id,
+                    displayNameRes = null,
+                    displayName = LocalizedText.same(name.trim()),
+                    intro = IntroSpec.takeIf { parts.intro },
+                    frame = frame.takeIf { parts.frame },
+                    ending = parts.ending?.let(::EndingSpec),
+                )
+            (write(preset, createdAt = clock()) as? PresetSaveResult.Saved)?.preset?.id
         }
 
-    suspend fun definition(id: PresetId): PresetDefinition? = definitions().firstOrNull { it.preset.id == id }
+    /**
+     * Stores [preset] in place of the preset with its id: its name, caption
+     * style and words, and anything else a preset holds. For a preset the
+     * app ships this is an edited copy, which Reset removes. The parts (intro,
+     * frame, ending) must stay as they are: videos made from it play them.
+     */
+    suspend fun save(preset: Preset): PresetSaveResult =
+        withContext(dispatcher) {
+            val old = definition(preset.id) ?: return@withContext PresetSaveResult.NotSaved
+            val same = old.preset
+            if ((same.intro == null) != (preset.intro == null) ||
+                (same.frame == null) != (preset.frame == null) ||
+                same.ending?.kind != preset.ending?.kind
+            ) {
+                return@withContext PresetSaveResult.Invalid
+            }
+            val row = db.presets().definition(preset.id.value)
+            write(preset, createdAt = row?.createdAt ?: 0L, retiredAt = row?.retiredAt)
+        }
+
+    /** Takes a built-in preset back to the app's own: the edit (or the user's preset.json) goes, its files stay. */
+    suspend fun reset(id: PresetId): Boolean =
+        withContext(dispatcher) {
+            if (bundled().none { it.id == id }) return@withContext false
+            val row = db.presets().definition(id.value) ?: return@withContext false
+            db.presets().deleteDefinition(id.value)
+            runCatching { files.presetFile(id, row.fileName).delete() }
+            true
+        }
+
+    /**
+     * Deletes a preset the user made. A video made from it keeps working:
+     * while any video uses it, it is only taken off the list (its definition
+     * and files stay, and [sweepRetired] removes them once no video does).
+     */
+    suspend fun delete(id: PresetId): PresetDeleteResult =
+        withContext(dispatcher) {
+            if (bundled().any { it.id == id }) return@withContext PresetDeleteResult.BuiltIn
+            db.presets().definition(id.value) ?: return@withContext PresetDeleteResult.Unknown
+            val outcome =
+                db.withTransaction {
+                    val videos = db.presets().projectsUsing(id.value)
+                    if (videos > 0) {
+                        db.presets().retire(id.value, clock())
+                        PresetDeleteResult.Retired(videos)
+                    } else {
+                        db.presets().deleteBindings(id.value)
+                        db.presets().deleteDefinition(id.value)
+                        PresetDeleteResult.Deleted
+                    }
+                }
+            if (outcome == PresetDeleteResult.Deleted) runCatching { files.presetDir(id).deleteRecursively() }
+            outcome
+        }
+
+    /** Removes deleted presets that no video uses any more, with their files. Run at launch. */
+    suspend fun sweepRetired(): Int =
+        withContext(dispatcher) {
+            var removed = 0
+            for (row in db.presets().definitions().filter { it.retiredAt != null }) {
+                val id = runCatching { PresetId(row.presetId) }.getOrNull() ?: continue
+                val gone =
+                    db.withTransaction {
+                        if (db.presets().projectsUsing(row.presetId) > 0) return@withTransaction false
+                        db.presets().deleteBindings(row.presetId)
+                        db.presets().deleteDefinition(row.presetId)
+                        true
+                    }
+                if (gone) {
+                    runCatching { files.presetDir(id).deleteRecursively() }
+                    removed++
+                }
+            }
+            removed
+        }
+
+    /** Writes [preset] as its definition file and row, replacing the old ones. */
+    private suspend fun write(
+        preset: Preset,
+        createdAt: Long,
+        retiredAt: Long? = null,
+    ): PresetSaveResult {
+        val text = PresetWriter.write(preset)
+        val parsed = PresetParser.parse(text) as? PresetParseResult.Ok ?: return PresetSaveResult.Invalid
+        // What is stored is what the parser reads back, so the preset in use is exactly the file.
+        if (parsed.preset != preset) return PresetSaveResult.Invalid
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        if (bytes.size + CopyBudget.RESERVE_BYTES > freeBytes()) return PresetSaveResult.NotSaved
+        val id = preset.id
+        val name = SafeFileName.build("preset-${randomToken()}", "preset", "application/json")
+        val copied =
+            try {
+                copier.copy({ bytes.inputStream() }, files.presetFile(id, name), bytes.size.toLong(), bytes.size.toLong())
+            } catch (e: CopyFailedException) {
+                return PresetSaveResult.NotSaved
+            }
+        val previous =
+            try {
+                db.withTransaction {
+                    val old = db.presets().definition(id.value)
+                    db.presets().upsertDefinition(
+                        PresetDefinitionEntity(
+                            presetId = id.value,
+                            fileName = name,
+                            sha256 = copied.sha256,
+                            sizeBytes = copied.sizeBytes,
+                            originalName = null,
+                            boundAt = clock(),
+                            createdAt = createdAt,
+                            retiredAt = retiredAt,
+                        ),
+                    )
+                    old
+                }
+            } catch (e: SQLException) {
+                copied.file.delete()
+                return PresetSaveResult.NotSaved
+            }
+        if (previous != null && previous.fileName != name) runCatching { files.presetFile(id, previous.fileName).delete() }
+        return PresetSaveResult.Saved(parsed.preset)
+    }
 
     /**
      * The preset as a project should use it: with the frame's key colour
@@ -410,6 +629,8 @@ class PresetStore(
                             copied.sizeBytes,
                             description?.displayName?.take(MAX_ORIGINAL_NAME),
                             clock(),
+                            createdAt = old?.createdAt ?: 0L,
+                            retiredAt = old?.retiredAt,
                         ),
                     )
                     old
@@ -521,6 +742,9 @@ class PresetStore(
 
     companion object {
         const val ASSET_DIR = "presets"
+
+        /** The start of every id the app gives a preset the user makes, so it never takes a bundled preset's id. */
+        const val OWN_PREFIX = "my-"
         const val MAX_ORIGINAL_NAME = 255
 
         /** Where the key-colour check samples the frame: three points across its length. */

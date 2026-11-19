@@ -92,6 +92,10 @@ object Routes {
     const val SHARE = "share"
 
     const val SETUP = "setup/{$ARG_PRESET}?$ARG_NEW_VIDEO={$ARG_NEW_VIDEO}&$ARG_SHARE_DRAFT={$ARG_SHARE_DRAFT}"
+
+    /** A new preset (cm-preset-manager), then its editor. */
+    const val PRESET_NEW = "presetNew"
+    const val PRESET_EDIT = "presetEdit/{$ARG_PRESET}"
     const val REVIEW = "review/{$ARG_PROJECT}"
     const val PICK = "pick/{$ARG_PROJECT}"
     const val EDITOR = "editor/{$ARG_PROJECT}?$ARG_SKIPPED={$ARG_SKIPPED}&$ARG_BROUGHT_BACK={$ARG_BROUGHT_BACK}"
@@ -102,6 +106,8 @@ object Routes {
         newVideo: Boolean,
         shareDraft: ProjectId? = null,
     ) = "setup/${presetId.value}?$ARG_NEW_VIDEO=$newVideo" + (shareDraft?.let { "&$ARG_SHARE_DRAFT=${it.value}" } ?: "")
+
+    fun presetEdit(presetId: PresetId) = "presetEdit/${presetId.value}"
 
     fun review(projectId: ProjectId) = "review/${projectId.value}"
 
