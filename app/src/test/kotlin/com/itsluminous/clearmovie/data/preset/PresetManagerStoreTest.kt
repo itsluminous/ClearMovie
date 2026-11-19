@@ -318,4 +318,84 @@ class PresetManagerStoreTest {
             assertThat(store.create("Mine", PresetParts())).isNull()
             assertThat(store.definitions()).hasSize(1)
         }
+
+    @Test
+    fun `binding a frame to a preset the user made measures its own green window`() =
+        runBlocking<Unit> {
+            val id = store.create("Mine", PresetParts())!!
+            val copied =
+                store
+                    .definition(id)!!
+                    .preset.frame!!
+                    .contentRect
+            // A frame whose window is the left half: green on the left, grey on the right.
+            probe.frames =
+                List(3) {
+                    FrameSample(
+                        200,
+                        100,
+                        IntArray(200 * 100) { i ->
+                            if (i % 200 <
+                                100
+                            ) {
+                                0xFF00D922.toInt()
+                            } else {
+                                0xFF808080.toInt()
+                            }
+                        },
+                    )
+                }
+            assertThat(
+                store.bindSlot(
+                    id,
+                    PresetSlot.FRAME,
+                    file(
+                        "half.mp4",
+                        ByteArray(700) {
+                            2
+                        },
+                        "video/mp4",
+                    ),
+                ),
+            ).isInstanceOf(SlotBindResult.Bound::class.java)
+            val window =
+                store
+                    .definition(id)!!
+                    .preset.frame!!
+                    .contentRect
+            assertThat(window).isEqualTo(NormRect(0.0, 0.0, 0.5, 1.0))
+            assertThat(window).isNotEqualTo(copied)
+            // The built-in preset keeps the window its file names, whatever its frame measures.
+            assertThat(
+                store.bindSlot(
+                    builtIn,
+                    PresetSlot.FRAME,
+                    file(
+                        "half2.mp4",
+                        ByteArray(700) {
+                            2
+                        },
+                        "video/mp4",
+                    ),
+                ),
+            ).isInstanceOf(SlotBindResult.Bound::class.java)
+            assertThat(
+                store
+                    .definition(builtIn)!!
+                    .preset.frame!!
+                    .contentRect,
+            ).isEqualTo(copied)
+            assertThat(store.definition(builtIn)!!.edited).isFalse()
+        }
+
+    @Test
+    fun `the reference frame's window is measured as the window the built-in preset names`() {
+        val measured = KeyColorCheck.window(frames())!!
+        val named = NormRect(0.0094, 0.0222, 0.9813, 0.7741)
+        for ((a, b) in listOf(measured.x to named.x, measured.y to named.y, measured.w to named.w, measured.h to named.h)) {
+            assertThat(a).isWithin(0.005).of(b)
+        }
+        // No green: no window.
+        assertThat(KeyColorCheck.window(listOf(FrameSample(10, 10, IntArray(100) { 0xFF808080.toInt() })))).isNull()
+    }
 }

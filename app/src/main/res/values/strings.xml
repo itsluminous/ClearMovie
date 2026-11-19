@@ -212,7 +212,6 @@
     <string name="editor_fix_preset">Fix it</string>
     <string name="editor_not_saved">Your latest changes could not be saved because the phone is full. Free up some space; nothing is lost while ClearMovie is open.</string>
     <string name="settings_section_presets">Presets</string>
-    <string name="settings_preset_files">Files</string>
     <string name="settings_section_storage">Storage</string>
     <!-- %1$s is a size such as 180 MB. -->
     <string name="settings_storage_presets">Preset files: %1$s</string>
@@ -604,6 +603,7 @@
     <string name="preset_new_body">Your own intro, frame, ending and caption style</string>
     <string name="preset_edit">Edit preset</string>
     <string name="preset_edit_for">Edit %1$s</string>
+    <string name="preset_name_needed">Type a name for this preset</string>
     <string name="preset_name_label">Name</string>
     <string name="preset_parts_title">What it has</string>
     <string name="preset_parts_body">You choose the files next. The parts stay the same once the preset is made, because videos made from it use them.</string>

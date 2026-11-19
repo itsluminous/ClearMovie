@@ -221,7 +221,7 @@ private fun ThemeMode.labelRes(): Int =
         ThemeMode.DARK -> R.string.theme_dark
     }
 
-/** A preset with its state; the whole row opens its setup screen. */
+/** A preset with its state; the whole row opens its editor. */
 @Composable
 private fun PresetRow(
     card: PresetCard,
@@ -248,7 +248,7 @@ private fun PresetRow(
             Text(text = state, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(
-            text = stringResource(R.string.settings_preset_files),
+            text = stringResource(R.string.preset_edit),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
         )

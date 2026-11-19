@@ -19,9 +19,10 @@ enum class CaptionPlace {
  *
  * The safe area is the frame's window (or the whole canvas without a
  * frame) less a small margin, so a caption never touches the frame's
- * border, widened to take in the preset's own box: a preset may put its
- * caption on the frame itself (the reference frame's blue strip, under the
- * window), and the caption must be able to go back there. The place choices keep the preset box's width, height and left
+ * border. A preset may put its caption on the frame itself (the reference
+ * frame's blue strip, under the window): then the safe area reaches down to
+ * that box, across the box's own width only (beside the strip is the
+ * frame's logo), so the caption can always go back there. The place choices keep the preset box's width, height and left
  * edge (which keep it clear of the frame's logo) and move it to the top,
  * middle or bottom of the safe area. A drag moves the box inside the safe
  * area and snaps to the preset's box when it comes near it.
@@ -37,8 +38,8 @@ object CaptionPlaces {
 
     /**
      * [window] less [MARGIN] on every side (the horizontal margin is as many
-     * pixels as the vertical one), and, given the preset's [usual] box, the
-     * smallest rectangle that holds both.
+     * pixels as the vertical one); with the preset's [usual] box outside it,
+     * the band from the window's top to that box, as wide as the box.
      */
     fun safeArea(
         window: NormRect,
@@ -48,11 +49,15 @@ object CaptionPlaces {
         val my = minOf(MARGIN, window.h / 4)
         val inner = NormRect(window.x + mx, window.y + my, window.w - 2 * mx, window.h - 2 * my)
         if (usual == null || !usual.isValid) return inner
-        val x0 = minOf(inner.x, usual.x)
+        val inside =
+            usual.x >= inner.x - EPS && usual.y >= inner.y - EPS &&
+                usual.x + usual.w <= inner.x + inner.w + EPS && usual.y + usual.h <= inner.y + inner.h + EPS
+        if (inside) return inner
+        // Outside the window (on the frame's strip): up and down from the window's top to the box's bottom,
+        // but only across the box's own width, which keeps it clear of the frame's logo beside the strip.
         val y0 = minOf(inner.y, usual.y)
-        val x1 = minOf(1.0, maxOf(inner.x + inner.w, usual.x + usual.w))
         val y1 = minOf(1.0, maxOf(inner.y + inner.h, usual.y + usual.h))
-        return NormRect(x0, y0, x1 - x0, y1 - y0)
+        return NormRect(usual.x, y0, usual.w, y1 - y0)
     }
 
     /** The box for [place]: the preset's [usual] box itself, or that box moved into [safe]. */

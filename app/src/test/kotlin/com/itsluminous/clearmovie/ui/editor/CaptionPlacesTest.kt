@@ -89,8 +89,11 @@ class CaptionPlacesTest {
         val strip = NormRect(0.155, 0.7981, 0.825, 0.1222)
         val wide = CaptionPlaces.safeArea(window, strip)
         assertThat(strip.inside(wide)).isTrue()
-        assertThat(safe.inside(wide)).isTrue()
         assertThat(wide.y + wide.h).isWithin(1e-9).of(strip.y + strip.h)
+        // Only across the strip box's width: never over the logo beside the strip (columns 0-269 of 1920).
+        assertThat(wide.x).isEqualTo(strip.x)
+        assertThat(wide.w).isEqualTo(strip.w)
+        assertThat(wide.x * 1920).isGreaterThan(269.0)
         // Bottom is the strip itself; Top and Middle stay in the window.
         assertThat(CaptionPlaces.box(CaptionPlace.BOTTOM, strip, wide)).isEqualTo(strip)
         assertThat(CaptionPlaces.box(CaptionPlace.TOP, strip, wide).y).isWithin(1e-4).of(safe.y)

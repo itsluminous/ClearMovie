@@ -121,6 +121,51 @@ data class KeyColorCheck(
             return KeyColorCheck(measured, Lab.of(keyColor.argb.toInt()).deltaE(medianLab))
         }
 
+        /**
+         * The green window of a frame file (cm-preset-manager): the box of the rows and columns that are
+         * mostly clearly green in every sampled frame, in normalised units, or null when there is no
+         * such window (under [MIN_WINDOW_AREA] of the picture, or not filled with green). A preset the user
+         * makes copies the built-in frame's window; this lets their own frame's window replace it.
+         */
+        fun window(frames: List<FrameSample>): NormRect? {
+            if (frames.isEmpty()) return null
+            var x0 = 0.0
+            var y0 = 0.0
+            var x1 = 1.0
+            var y1 = 1.0
+            for (f in frames) {
+                val green = BooleanArray(f.argb.size) { isClearlyGreen(f.argb[it]) }
+                val rows = (0 until f.height).filter { y -> (0 until f.width).count { green[y * f.width + it] } >= f.width * LINE_SHARE }
+                val cols = (0 until f.width).filter { x -> (0 until f.height).count { green[it * f.width + x] } >= f.height * LINE_SHARE }
+                if (rows.isEmpty() || cols.isEmpty()) return null
+                val fill =
+                    rows.sumOf { y -> (cols.first()..cols.last()).count { green[y * f.width + it] } }.toDouble() /
+                        ((rows.last() - rows.first() + 1) * (cols.last() - cols.first() + 1))
+                if (fill < MIN_FILL) return null
+                // Every frame's window holds the green: the overlap is the window.
+                x0 = maxOf(x0, cols.first().toDouble() / f.width)
+                y0 = maxOf(y0, rows.first().toDouble() / f.height)
+                x1 = minOf(x1, (cols.last() + 1).toDouble() / f.width)
+                y1 = minOf(y1, (rows.last() + 1).toDouble() / f.height)
+            }
+
+            fun r(v: Double) = Math.round(v * 10000) / 10000.0
+            val rect = NormRect(r(x0), r(y0), r(x1 - x0), r(y1 - y0))
+            return rect.takeIf { it.isValid && it.w * it.h >= MIN_WINDOW_AREA }
+        }
+
+        private fun isClearlyGreen(p: Int): Boolean {
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            return g >= 64 && g > r + 40 && g > b + 40
+        }
+
+        /** A row or column is part of the window when at least this share of it is green. */
+        private const val LINE_SHARE = 0.2
+        private const val MIN_FILL = 0.6
+        const val MIN_WINDOW_AREA = 0.1
+
         private const val FLAT_DELTA_E = 10.0
         private const val FLAT_SHARE = 0.8
 

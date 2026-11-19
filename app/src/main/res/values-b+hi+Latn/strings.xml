@@ -192,7 +192,6 @@
     <string name="editor_fix_preset">Theek karein</string>
     <string name="editor_not_saved">Phone bhar jaane ki wajah se aapke naye badlaav save nahi ho sake. Thodi jagah khaali karein; ClearMovie khula rehne tak kuch nahi khoyega.</string>
     <string name="settings_section_presets">Presets</string>
-    <string name="settings_preset_files">Files</string>
     <string name="settings_section_storage">Storage</string>
     <string name="settings_storage_presets">Preset ki files: %1$s</string>
     <string name="settings_storage_copied">Copy ki gayi photos aur videos: %1$s</string>
@@ -561,6 +560,7 @@
     <string name="preset_new_body">Aapka apna intro, frame, ending aur caption ka style</string>
     <string name="preset_edit">Preset badlein</string>
     <string name="preset_edit_for">%1$s badlein</string>
+    <string name="preset_name_needed">Is preset ka naam likhein</string>
     <string name="preset_name_label">Naam</string>
     <string name="preset_parts_title">Isme kya hoga</string>
     <string name="preset_parts_body">Files aap agle step me chunenge. Preset banne ke baad ye hisse nahi badalte, kyunki isse bane videos inhi ka istemaal karte hain.</string>

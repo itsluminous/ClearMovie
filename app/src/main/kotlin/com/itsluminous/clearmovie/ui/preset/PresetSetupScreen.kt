@@ -48,6 +48,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.ui.components.WorkDialog
 import com.itsluminous.clearmovie.ui.components.sizeText
@@ -150,7 +151,14 @@ fun PresetSetupScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (withGuide && ui.firstTime) Guide()
                     ui.message?.let { MessageCard(it, onDismissMessage) }
-                    DefinitionCard(userFile = ui.preset?.displayName != null, onChoose = onChooseDefinition)
+                    // A preset.json adjusts a preset the app ships; one the user made is edited in the app instead.
+                    if (ui.preset
+                            ?.id
+                            ?.value
+                            ?.startsWith(PresetStore.OWN_PREFIX) == false
+                    ) {
+                        DefinitionCard(userFile = ui.preset.displayName != null, onChoose = onChooseDefinition)
+                    }
                     Button(
                         onClick = onDone,
                         enabled = ready && ui.work == null,

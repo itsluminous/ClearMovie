@@ -268,8 +268,9 @@ fun PresetEditScreen(
             }
             val style = ui.style ?: preset.caption
             val frameWindow = preset.frame?.contentRect ?: NormRect.FULL
-            val preview: @Composable (editing: Boolean) -> Unit = { editing ->
+            val preview: @Composable (editing: Boolean, modifier: Modifier) -> Unit = { editing, modifier ->
                 PresetCaptionPreview(
+                    modifier = modifier,
                     still = ui.frameStill,
                     style = style,
                     words = words,
@@ -297,12 +298,21 @@ fun PresetEditScreen(
                 }
                 if (window.twoPane) {
                     Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Box(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.Center) { preview(true) }
+                        Box(
+                            Modifier.weight(1f).fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) { preview(true, Modifier.fillMaxWidth()) }
                         Column(Modifier.weight(1f).fillMaxSize()) { editor() }
                     }
                 } else {
-                    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        preview(true)
+                    // The picture takes at most a third of the height (less while the keyboard is up), so the
+                    // tabs and the words field always have room, at any text size.
+                    val pictureWidth = minOf(maxWidth - 32.dp, maxHeight * PREVIEW_SHARE * 16f / 9f)
+                    Column(
+                        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        preview(true, Modifier.width(pictureWidth))
                         Spacer(Modifier.height(8.dp))
                         editor()
                     }
@@ -316,13 +326,14 @@ fun PresetEditScreen(
                     label = { Text(stringResource(R.string.preset_name_label)) },
                     singleLine = true,
                     isError = !nameOk,
+                    supportingText = if (nameOk) null else ({ Text(stringResource(R.string.preset_name_needed)) }),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     textStyle = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.fillMaxWidth().testTag(PRESET_NAME_TAG),
                 )
             }
             val captions: @Composable () -> Unit = {
-                CaptionsCard(preview = { preview(false) }, onChange = {
+                CaptionsCard(preview = { preview(false, Modifier.fillMaxWidth()) }, onChange = {
                     openedStyle = ui.draftStyle?.let { ProjectCodec.json.encodeToString(CaptionStyle.serializer(), it) }
                     openedWords = ui.draftWords
                     tab = CaptionTab.WORDS.name
@@ -538,6 +549,7 @@ private fun FilesCard(
  */
 @Composable
 private fun PresetCaptionPreview(
+    modifier: Modifier,
     still: Bitmap?,
     style: CaptionStyle,
     words: String,
@@ -550,8 +562,7 @@ private fun PresetCaptionPreview(
     val media = LocalMediaColors.current
     val sample = stringResource(R.string.caption_font_sample)
     BoxWithConstraints(
-        Modifier
-            .fillMaxWidth()
+        modifier
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(8.dp))
             .background(media.previewBackground)
@@ -581,6 +592,9 @@ private fun PresetCaptionPreview(
 
 private const val SAMPLE_ALPHA = 0.6f
 
+/** The share of the screen's height the picture takes while the caption style is edited on a phone held upright. */
+private const val PREVIEW_SHARE = 0.3f
+
 /** The caption editor's tabs for a preset: the words a new caption starts with, its place, size, font and colour. */
 @Composable
 private fun ColumnScope.CaptionStyleEditor(
@@ -603,8 +617,9 @@ private fun ColumnScope.CaptionStyleEditor(
                 OutlinedTextField(
                     value = words,
                     onValueChange = { onWords(usableCaptionText(it)) },
-                    label = { Text(stringResource(R.string.preset_caption_words_label)) },
+                    label = { Text(stringResource(R.string.caption_text_hint)) },
                     placeholder = { Text(stringResource(R.string.preset_caption_no_words)) },
+                    supportingText = { Text(stringResource(R.string.preset_caption_words_label)) },
                     minLines = 2,
                     maxLines = 4,
                     textStyle = MaterialTheme.typography.bodyLarge,
@@ -617,7 +632,8 @@ private fun ColumnScope.CaptionStyleEditor(
             }
 
             CaptionTab.SIZE -> {
-                SizeTab(preset.id.value, words, style, preset.caption, onStyle)
+                // 100% is the app's usual caption size, so a size chosen here reads the same when opened again.
+                SizeTab(preset.id.value, words, style, CaptionStyle.STANDARD, onStyle)
             }
 
             CaptionTab.FONT -> {

@@ -20,6 +20,7 @@ import com.itsluminous.clearmovie.domain.model.EndingSpec
 import com.itsluminous.clearmovie.domain.model.IntroSpec
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.LocalizedText
+import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetMedia
@@ -533,7 +534,13 @@ class PresetStore(
                 }
                 // A Cancel while the file was being checked must not record it.
                 currentCoroutineContext().ensureActive()
-                val check = frame?.let { KeyColorCheck.measure(facts.frames, it.contentRect, it.key.color) }
+                // A preset the user made has the built-in frame's window until its own frame is measured.
+                val ownWindow =
+                    frame
+                        ?.takeIf { bundled().none { b -> b.id == id } }
+                        ?.let { KeyColorCheck.window(facts.frames) }
+                        ?.takeIf { w -> !w.sameAs(frame.contentRect) }
+                val check = frame?.let { KeyColorCheck.measure(facts.frames, ownWindow ?: it.contentRect, it.key.color) }
                 val entity =
                     PresetBindingEntity(
                         presetId = id.value,
@@ -570,6 +577,13 @@ class PresetStore(
                 if (!committed) {
                     copied.file.delete()
                     return@withContext SlotBindResult.NotEnoughSpace(size + CopyBudget.RESERVE_BYTES, freeBytes())
+                }
+                if (ownWindow != null) {
+                    // The frame plays either way; a window that could not be stored keeps the copied one.
+                    withContext(NonCancellable) {
+                        val row = db.presets().definition(id.value)
+                        write(preset.copy(frame = frame.copy(contentRect = ownWindow)), row?.createdAt ?: 0L, row?.retiredAt)
+                    }
                 }
                 SlotBindResult.Bound(toBinding(id, entity)!!)
             } catch (e: Throwable) {
@@ -733,6 +747,10 @@ class PresetStore(
         }
     }
 
+    /** Within half a percent on every edge: the same window, give or take how the file was made. */
+    private fun NormRect.sameAs(other: NormRect): Boolean =
+        listOf(x - other.x, y - other.y, w - other.w, h - other.h).all { kotlin.math.abs(it) < WINDOW_TOLERANCE }
+
     private fun Preset.needs(slot: PresetSlot): Boolean =
         when (slot) {
             PresetSlot.INTRO -> intro != null
@@ -745,6 +763,7 @@ class PresetStore(
 
         /** The start of every id the app gives a preset the user makes, so it never takes a bundled preset's id. */
         const val OWN_PREFIX = "my-"
+        private const val WINDOW_TOLERANCE = 0.005
         const val MAX_ORIGINAL_NAME = 255
 
         /** Where the key-colour check samples the frame: three points across its length. */

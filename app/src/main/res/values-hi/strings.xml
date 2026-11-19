@@ -184,7 +184,6 @@
     <string name="editor_fix_preset">ठीक करें</string>
     <string name="editor_not_saved">फ़ोन भर जाने की वजह से आपके नए बदलाव सेव नहीं हो सके। थोड़ी जगह खाली करें; ClearMovie खुला रहने तक कुछ नहीं खोएगा।</string>
     <string name="settings_section_presets">प्रीसेट</string>
-    <string name="settings_preset_files">फ़ाइलें</string>
     <string name="settings_section_storage">स्टोरेज</string>
     <string name="settings_storage_presets">प्रीसेट की फ़ाइलें: %1$s</string>
     <string name="settings_storage_copied">कॉपी की गई फ़ोटो और वीडियो: %1$s</string>
@@ -553,6 +552,7 @@
     <string name="preset_new_body">आपका अपना इंट्रो, फ़्रेम, अंत और कैप्शन का स्टाइल</string>
     <string name="preset_edit">प्रीसेट बदलें</string>
     <string name="preset_edit_for">%1$s बदलें</string>
+    <string name="preset_name_needed">इस प्रीसेट का नाम लिखें</string>
     <string name="preset_name_label">नाम</string>
     <string name="preset_parts_title">इसमें क्या होगा</string>
     <string name="preset_parts_body">फ़ाइलें आप अगले कदम में चुनेंगे। प्रीसेट बनने के बाद ये हिस्से नहीं बदलते, क्योंकि इससे बने वीडियो इन्हीं का इस्तेमाल करते हैं।</string>

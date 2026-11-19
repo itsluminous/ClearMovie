@@ -536,6 +536,9 @@ internal fun PlaceTab(
     restyle: (CaptionStyle) -> Unit,
     places: List<CaptionPlace> = CaptionPlace.entries,
 ) {
+    // A place that gives the same box as an earlier one (Bottom when the preset's own place is at the bottom)
+    // is left out, so no two chips do the same thing.
+    val places = places.distinctBy { CaptionPlaces.box(it, usual, safe) }
     val current = CaptionPlaces.placeOf(style.box, usual, safe, places)
     // Across when every name fits its chip; two by two otherwise, so no name is ever cut short.
     val labels = places.map { stringResource(placeLabel(it)) }
