@@ -62,34 +62,20 @@ h1 em{font-style:normal;background:linear-gradient(135deg,var(--brand),var(--bra
 
 /* phone mockup */
 .phone-col{display:flex;flex-direction:column;align-items:center;gap:10px}
-.phone{width:min(330px,82vw);aspect-ratio:9/19;border-radius:42px;background:#0a0d18;padding:12px;
+.phone{width:min(330px,82vw);border-radius:42px;background:#0a0d18;padding:12px;
   box-shadow:var(--shadow),0 0 0 2px #2a3150 inset;position:relative}
-.screen{height:100%;border-radius:32px;background:#121729;overflow:hidden;display:flex;flex-direction:column;color:#e8ebf7;font-size:12px}
-.topbar{display:flex;align-items:center;gap:8px;padding:14px 14px 8px}
-.topbar b{flex:1;font-size:13px}
-.pill-btn{background:linear-gradient(135deg,#22d3ee,#a78bfa);color:#0b1020;font-weight:800;border-radius:999px;padding:5px 10px;font-size:11px}
-.ic{width:22px;height:22px;border-radius:7px;background:#1e2540;display:grid;place-items:center}
-.ic svg{width:14px;height:14px}
-.preview{margin:4px 10px;aspect-ratio:16/9;border-radius:10px;position:relative;overflow:hidden;
-  background:linear-gradient(135deg,#ef4444,#f97316 60%,#fb923c)}
-.preview .win{position:absolute;left:6%;top:7%;width:88%;height:86%;border-radius:10px;overflow:hidden;
-  background:linear-gradient(160deg,#7dd3fc,#38bdf8 35%,#a3e635 36%,#65a30d)}
-.preview .win:after{content:"";position:absolute;left:58%;top:18%;width:22%;aspect-ratio:1;border-radius:50%;background:#fde047;box-shadow:0 0 18px #fde047}
-.preview .cap{position:absolute;left:10%;right:10%;bottom:14%;text-align:center;font-weight:800;font-size:11px;
-  color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;z-index:2}
-.playrow{display:flex;justify-content:center;align-items:center;gap:14px;padding:8px 0;color:#a9b1cf}
-.playrow .pp{width:30px;height:30px;border-radius:50%;background:#22d3ee;display:grid;place-items:center}
-.timeline{flex:1;margin:4px 10px;border-radius:12px;background:#0e1324;padding:10px 8px;display:flex;flex-direction:column;gap:8px}
-.track{display:flex;gap:5px;overflow:hidden}
-.clip{height:44px;border-radius:7px;flex:0 0 auto;position:relative}
-.clip.sel{outline:2px solid #22d3ee;outline-offset:1px}
-.clip small{position:absolute;bottom:2px;right:4px;font-size:9px;color:#fff;text-shadow:0 1px 1px #000}
-.row{height:16px;border-radius:5px;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:700;color:#0b1020}
-.expand{align-self:center;color:#a9b1cf;font-size:10px}
-.menu{display:flex;justify-content:space-around;padding:10px 6px 16px;background:#161d36}
-.menu div{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9.5px;color:#cfd5ee}
-.menu svg{width:18px;height:18px}
+.screen{aspect-ratio:9/20;border-radius:32px;background:#121729;overflow:hidden}
 .label{font-size:13px;color:var(--muted)}
+.screen img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+
+/* screenshots */
+.shots{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;align-items:start}
+@media (max-width:900px){.shots{grid-template-columns:repeat(2,1fr)}}
+.shots figure{margin:0;text-align:center}
+.shots img{width:100%;height:auto;border-radius:22px;border:1px solid var(--line);box-shadow:var(--shadow);background:var(--bg2)}
+.shots figcaption{margin-top:10px;font-weight:700;font-size:15px}
+.shots figcaption small{display:block;color:var(--muted);font-weight:500;font-size:13.5px}
+.shots .wide{grid-column:span 2;align-self:center}
 
 /* marquee */
 .marquee{border-block:1px solid var(--line);background:var(--bg2);overflow:hidden;padding:14px 0;margin-top:28px}
@@ -157,10 +143,6 @@ footer a{color:var(--muted)}
     <symbol id="i-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></g></symbol>
     <symbol id="i-rotate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 14a8 8 0 0 0 5 6M22 10a8 8 0 0 0-5-6"/></g></symbol>
     <symbol id="i-save" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3M8 21v-7h8v7"/></g></symbol>
-    <symbol id="i-scissors" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></g></symbol>
-    <symbol id="i-speed" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></g></symbol>
-    <symbol id="i-undo" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
-    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></symbol>
   </defs>
 </svg>
 
@@ -171,6 +153,7 @@ footer a{color:var(--muted)}
       ClearMovie
     </a>
     <ul>
+      <li><a href="#screenshots">Screenshots</a></li>
       <li><a href="#features">Features</a></li>
       <li><a href="#how">How it works</a></li>
       <li><a href="#translations">Translations</a></li>
@@ -183,54 +166,23 @@ footer a{color:var(--muted)}
 <div id="top" class="hero">
   <div class="wrap">
     <div>
-      <span class="chip"><i></i>In development &middot; free &amp; open source</span>
+      <span class="chip"><i></i>Version 0.0.1 is out &middot; free &amp; open source</span>
       <h1>Event videos, <em>made simple.</em></h1>
       <p class="lead">ClearMovie turns the photos and videos from a family event into a finished video, with your intro, a frame overlay, background music, captions, transitions and a closing message. It is designed for people who have never used a video editor.</p>
       <div class="ctas">
-        <a class="btn primary" href="https://github.com/itsluminous/ClearMovie"><svg aria-hidden="true"><use href="#i-gh"/></svg>View on GitHub</a>
-        <a class="btn ghost" href="https://github.com/itsluminous/ClearMovie/releases"><svg aria-hidden="true"><use href="#i-dl"/></svg>Releases</a>
+        <a class="btn primary" href="https://github.com/itsluminous/ClearMovie/releases/latest"><svg aria-hidden="true"><use href="#i-dl"/></svg>Download ClearMovie</a>
+        <a class="btn ghost" href="https://github.com/itsluminous/ClearMovie"><svg aria-hidden="true"><use href="#i-gh"/></svg>View on GitHub</a>
       </div>
-      <p class="also">Android 10 and newer &middot; APK from GitHub Releases, also via Obtainium</p>
+      <p class="also">Android 10 and newer &middot; free APK from GitHub Releases</p>
     </div>
     <div class="phone-col">
-      <div class="phone" role="img" aria-label="Design preview of the ClearMovie editor: a preview with a frame overlay and caption, a timeline of photos and videos, and a bottom menu with labelled buttons">
-        <div class="screen" aria-hidden="true">
-          <div class="topbar">
-            <span class="ic"><svg><use href="#i-undo"/></svg></span>
-            <b>Wedding day</b>
-            <span class="ic"><svg><use href="#i-save"/></svg></span>
-            <span class="pill-btn">Export</span>
-          </div>
-          <div class="preview">
-            <div class="win"></div>
-            <div class="cap">Happy Anniversary!</div>
-          </div>
-          <div class="playrow"><span>0:42</span><span class="pp"><svg width="14" height="14" style="color:#0b1020"><use href="#i-play"/></svg></span><span>3:10</span></div>
-          <div class="timeline">
-            <div class="track">
-              <div class="clip" style="width:46px;background:linear-gradient(135deg,#f472b6,#fb7185)"><small>3s</small></div>
-              <div class="clip sel" style="width:70px;background:linear-gradient(135deg,#38bdf8,#818cf8)"><small>0:12</small></div>
-              <div class="clip" style="width:46px;background:linear-gradient(135deg,#facc15,#fb923c)"><small>3s</small></div>
-              <div class="clip" style="width:58px;background:linear-gradient(135deg,#34d399,#22d3ee)"><small>0:08</small></div>
-              <div class="clip" style="width:46px;background:linear-gradient(135deg,#c084fc,#f472b6)"><small>3s</small></div>
-            </div>
-            <div class="row" style="background:#22d3ee">Frame overlay &middot; music</div>
-            <div class="row" style="background:#a78bfa;width:70%">Closing message</div>
-            <div class="expand">&#9650; Hide rows</div>
-          </div>
-          <div class="menu">
-            <div><svg><use href="#i-scissors"/></svg>Trim</div>
-            <div><svg><use href="#i-text"/></svg>Caption</div>
-            <div><svg><use href="#i-speed"/></svg>Speed</div>
-            <div><svg><use href="#i-music"/></svg>Volume</div>
-            <div><svg><use href="#i-layers"/></svg>Split</div>
-          </div>
-        </div>
+      <div class="phone">
+        <div class="screen"><img src="screenshots/editor.webp" width="720" height="1600" alt="The ClearMovie editor: a video inside the event frame with the caption Happy Birthday, Papa!, and the timeline below with text, frame, photos and videos, music and voice rows"></div>
       </div>
-      <span class="label">Design preview, not a screenshot</span>
+      <span class="label">The editor in ClearMovie 0.0.1</span>
     </div>
   </div>
-  <div class="marquee" aria-label="Highlights">
+  <div class="marquee" role="region" aria-label="Highlights">
     <div class="track2">
       <span><svg aria-hidden="true"><use href="#i-lock"/></svg>100% offline</span>
       <span><svg aria-hidden="true"><use href="#i-chip"/></svg>Hardware-accelerated export</span>
@@ -248,21 +200,41 @@ footer a{color:var(--muted)}
   </div>
 </div>
 
+<section id="screenshots" class="alt">
+  <div class="wrap">
+    <h2>See it in action</h2>
+    <p class="sub">Real screens from ClearMovie 0.0.1, making a birthday video from three short clips with the Event frame preset.</p>
+    <div class="shots">
+      <figure><img src="screenshots/home.webp" width="720" height="1600" loading="lazy" alt="The home screen: Make a new video with the Event frame preset ready, or Start without a preset"><figcaption>Pick a preset<small>or start without one</small></figcaption></figure>
+      <figure><img src="screenshots/preset-review.webp" width="720" height="1600" loading="lazy" alt="What this preset adds: the intro and frame cards, each with Play, Replace and Skip for this video, and a Next button"><figcaption>Check the preset<small>replace or skip any part</small></figcaption></figure>
+      <figure><img src="screenshots/media-pick.webp" width="720" height="1600" loading="lazy" alt="The Android photo picker with three videos selected and an Add (3) button"><figcaption>Add photos and videos<small>with Android's own picker</small></figcaption></figure>
+      <figure><img src="screenshots/editor.webp" width="720" height="1600" loading="lazy" alt="The editor: the preview inside the frame and a timeline with text, frame, photos and videos, music and voice rows"><figcaption>Arrange the timeline<small>every row in view</small></figcaption></figure>
+      <figure><img src="screenshots/caption.webp" width="720" height="1600" loading="lazy" alt="The caption editor on the Font tab: Plain, Bold, Classic and Classic bold, each showing English and Hindi letters"><figcaption>Add a caption<small>Hindi and English fonts</small></figcaption></figure>
+      <figure><img src="screenshots/transitions.webp" width="720" height="1600" loading="lazy" alt="The transition picker with small moving previews for crossfade, fades and wipes"><figcaption>Choose a transition<small>each with a preview</small></figcaption></figure>
+      <figure><img src="screenshots/export.webp" width="720" height="1600" loading="lazy" alt="Save your video: Best, Good (suggested) or Small, each with its size"><figcaption>Choose a size<small>Best, Good or Small</small></figcaption></figure>
+      <figure><img src="screenshots/export-done.webp" width="720" height="1600" loading="lazy" alt="Your video is ready: saved in the ClearMovie album, with Share and Play buttons"><figcaption>Share it<small>saved to your gallery</small></figcaption></figure>
+      <figure><img src="screenshots/editor-dark.webp" width="720" height="1600" loading="lazy" alt="The editor in the dark theme"><figcaption>Dark theme<small>follows your phone</small></figcaption></figure>
+      <figure><img src="screenshots/editor-hindi.webp" width="720" height="1600" loading="lazy" alt="The editor in Hindi"><figcaption>In Hindi<small>also English and Hinglish</small></figcaption></figure>
+      <figure class="wide"><img src="screenshots/editor-landscape.webp" width="1600" height="720" loading="lazy" alt="The editor held sideways: the preview on the left and the timeline on the right"><figcaption>Sideways too<small>the preview sits beside the timeline</small></figcaption></figure>
+    </div>
+  </div>
+</section>
+
 <section id="features">
   <div class="wrap">
     <h2>Everything an event video needs</h2>
     <p class="sub">The features are chosen for one job: turning the photos and videos from a day into a video you can share. Every button has a label, and nothing is hidden behind jargon.</p>
     <div class="grid">
-      <div class="card"><div class="icon"><svg><use href="#i-layers"/></svg></div><h3>Presets</h3><p>An intro, a green-screen frame overlay that runs across the whole video, and an ending, set up once and reused with one tap. You can replace or skip any part for a single video.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-share"/></svg></div><h3>Share from your gallery</h3><p>Select photos and videos in your gallery, tap Share, then choose ClearMovie. They land on the timeline in the order they were taken.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-timeline"/></svg></div><h3>A timeline that stays simple</h3><p>Photos and videos on one row, plus as many text, music and picture-in-picture rows as you need. Pinch to zoom, tap “+” to add something exactly where you want it, and edit from a toolbar of big, labelled buttons.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-text"/></svg></div><h3>Captions in Hindi &amp; English</h3><p>Captions start in the preset's spot, font and size. Drag them, resize them, recolour them, or tap Reset. Devanagari fonts are built in.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-music"/></svg></div><h3>Music &amp; automatic ducking</h3><p>Background music plays under the whole video and is lowered automatically while people in your videos talk, and everything is lowered for the closing message.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-layers"/></svg></div><h3>Transitions &amp; animations</h3><p>Crossfades, fades, wipes, slides and zooms between items, and gentle zooms or fade-ins on single photos and captions. Each one shows a live preview before you choose it.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-rotate"/></svg></div><h3>Works in portrait and landscape</h3><p>Turn the phone sideways and the preview moves to the left with the timeline beside it. It also works on tablets, foldables and split-screen, follows your phone's light or dark mode, and uses your wallpaper colours on Android 12+.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-save"/></svg></div><h3>Autosave</h3><p>Every change is saved as you go, and your work comes back after a crash. Give a video a name to keep it in "My videos".</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-chip"/></svg></div><h3>Fast, hardware export</h3><p>Choose High (1080p), Standard (720p) or Small (480p). Export uses your phone's video hardware and keeps going if you leave the app.</p></div>
-      <div class="card"><div class="icon"><svg><use href="#i-lock"/></svg></div><h3>Private by design</h3><p>No internet permission, no accounts, no analytics. Your photos and videos never leave your phone.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-layers"/></svg></div><h3>Presets</h3><p>An intro, a green-screen frame overlay that runs across the whole video, and an ending, set up once and reused with one tap. You can replace or skip any part for a single video.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-share"/></svg></div><h3>Share from your gallery</h3><p>Select photos and videos in your gallery, tap Share, then choose ClearMovie. They land on the timeline in the order they were taken.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-timeline"/></svg></div><h3>A timeline that stays simple</h3><p>Photos and videos on one row, plus as many text, music, voice, picture-in-picture and frame rows as you need. Pinch to zoom, tap “+” to add something exactly where you want it, and edit from a toolbar of big, labelled buttons.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-text"/></svg></div><h3>Captions in Hindi &amp; English</h3><p>Captions start in the preset's spot, font and size. Drag them, resize them, recolour them, or tap Reset. Devanagari fonts are built in.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-music"/></svg></div><h3>Music that steps aside</h3><p>The frame's music plays under the whole video. It is turned down automatically while your videos play with their own sound, and everything is turned down for the closing message.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-layers"/></svg></div><h3>Transitions &amp; animations</h3><p>Crossfades, fades, wipes, slides and zooms between items, and gentle zooms or fade-ins on single photos and captions. Each one shows a live preview before you choose it.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-rotate"/></svg></div><h3>Works in portrait and landscape</h3><p>Turn the phone sideways and the editor puts the preview on the left with the timeline beside it. A wide window on a tablet, foldable or in split-screen gets the same layout. The app follows your phone's light or dark mode, and uses your wallpaper colours on Android 12+.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-save"/></svg></div><h3>Autosave</h3><p>Every change is saved as you go, and your work comes back if the app closes unexpectedly. Your videos wait for you under "My videos".</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-chip"/></svg></div><h3>Fast, hardware export</h3><p>Choose Best (1080p), Good (720p) or Small (480p). Saving uses your phone's video hardware and keeps going if you turn the phone or leave the app.</p></div>
+      <div class="card"><div class="icon"><svg aria-hidden="true"><use href="#i-lock"/></svg></div><h3>Private by design</h3><p>No internet permission, no accounts, no analytics. Your photos and videos never leave your phone.</p></div>
     </div>
   </div>
 </section>
@@ -274,7 +246,7 @@ footer a{color:var(--muted)}
     <div class="steps">
       <div class="step"><h3>Pick a preset</h3><p>Choose your preset, or start without one. Check the intro, frame and ending, then tap Next.</p></div>
       <div class="step"><h3>Add photos &amp; videos</h3><p>Pick them in the app, or share them straight from the gallery. Drag to reorder, tap to trim or add a caption.</p></div>
-      <div class="step"><h3>Export &amp; share</h3><p>Tap Export, choose a quality, and the finished video is saved to your gallery, ready to send.</p></div>
+      <div class="step"><h3>Export &amp; share</h3><p>Tap Export, choose a size, and the finished video is saved to your gallery, ready to send.</p></div>
     </div>
   </div>
 </section>
@@ -295,10 +267,10 @@ footer a{color:var(--muted)}
 <section id="download">
   <div class="wrap">
     <div class="cta-box">
-      <h2>Follow along</h2>
-      <p class="sub">ClearMovie is being built in the open. The first APK will appear on GitHub Releases. Watch the repository to be notified.</p>
+      <h2>Get ClearMovie</h2>
+      <p class="sub">ClearMovie is free on GitHub Releases. Download the APK from the latest release and open it on your phone to install; the release page says which file to pick. Android 10 or newer.</p>
       <div class="ctas">
-        <a class="btn primary" href="https://github.com/itsluminous/ClearMovie/releases"><svg aria-hidden="true"><use href="#i-dl"/></svg>GitHub Releases</a>
+        <a class="btn primary" href="https://github.com/itsluminous/ClearMovie/releases/latest"><svg aria-hidden="true"><use href="#i-dl"/></svg>Download the latest release</a>
         <a class="btn ghost" href="https://github.com/itsluminous/ClearMovie"><svg aria-hidden="true"><use href="#i-gh"/></svg>Source code</a>
       </div>
     </div>

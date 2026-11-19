@@ -13,10 +13,12 @@
 just want to turn the photos and videos from an event into a finished video. Pick a
 preset (an intro, a green-screen frame overlay that runs across the whole video, and
 an ending), add your photos and videos, drop in a few captions, and export. Encoding
-will use your phone's hardware, and everything stays on your device.
+uses your phone's hardware, and everything stays on your device.
 
-> **Status: in development.** There is no release yet. The feature list below is the
-> plan, and items get ticked off as they ship.
+> **Status: first release, [0.0.1](https://github.com/itsluminous/ClearMovie/releases/tag/v0.0.1).**
+> What it does and what to know is in the
+> [release notes](docs/release-notes/v0.0.1.md). The checklist below shows what has
+> shipped and what is still to come.
 
 <a href="https://github.com/itsluminous/ClearMovie/releases/latest">
   <img alt="Get it on GitHub" height="80"
@@ -34,38 +36,46 @@ will use your phone's hardware, and everything stays on your device.
 
 Website: [itsluminous.github.io/ClearMovie](https://itsluminous.github.io/ClearMovie/)
 
-### Which APK to download
+### Download
 
-Each release has one APK per processor type, plus a universal one:
-
-| File | Use it for |
-| --- | --- |
-| `ClearMovie-<version>-arm64-v8a.apk` | **Almost every phone from the last several years. Choose this if you're unsure.** |
-| `ClearMovie-<version>-armeabi-v7a.apk` | Older 32-bit phones |
-| `ClearMovie-<version>-x86_64.apk`, `-x86.apk` | Emulators and a few tablets |
-| `ClearMovie-<version>-universal.apk` | Any of the above (a larger download) |
-
-Obtainium (the button above) picks the `arm64-v8a` APK automatically. ClearMovie needs Android 10 or newer.
+Get the APK from the [latest release](https://github.com/itsluminous/ClearMovie/releases/latest)
+and open it on your phone to install. The release page says which file to pick.
+Obtainium (the button above) installs it and keeps it up to date. ClearMovie needs
+Android 10 or newer.
 
 ## Screenshots
 
-Screenshots arrive with the first release.
+ClearMovie 0.0.1 on an Android 16 emulator, making a birthday video from three short
+clips with the Event frame preset.
 
-| Pick a preset | Editor (portrait) | Editor (landscape) | Captions | Export |
-| :---: | :---: | :---: | :---: | :---: |
-| _coming soon_ | _coming soon_ | _coming soon_ | _coming soon_ | _coming soon_ |
+| Pick a preset | Check the preset | Add photos and videos | Arrange the timeline |
+| :---: | :---: | :---: | :---: |
+| ![Home screen with the Event frame preset ready](site/screenshots/home.webp) | ![What this preset adds: the intro and frame, each with Play, Replace and Skip](site/screenshots/preset-review.webp) | ![The Android photo picker with three videos selected](site/screenshots/media-pick.webp) | ![The editor with the preview and every row of the timeline](site/screenshots/editor.webp) |
+
+| Add a caption | Choose a transition | Choose a size | Share it |
+| :---: | :---: | :---: | :---: |
+| ![Caption editor, Font tab with English and Hindi letters](site/screenshots/caption.webp) | ![Transition picker with previews](site/screenshots/transitions.webp) | ![Save your video: Best, Good or Small](site/screenshots/export.webp) | ![Your video is ready, with Share and Play](site/screenshots/export-done.webp) |
+
+<table>
+  <tr><th>Dark theme</th><th>In Hindi</th><th colspan="2">Sideways too</th></tr>
+  <tr>
+    <td width="25%"><img src="site/screenshots/editor-dark.webp" alt="The editor in the dark theme"></td>
+    <td width="25%"><img src="site/screenshots/editor-hindi.webp" alt="The editor in Hindi"></td>
+    <td colspan="2" width="50%"><img src="site/screenshots/editor-landscape.webp" alt="The editor held sideways: preview on the left, timeline on the right"></td>
+  </tr>
+</table>
 
 ## Features
 
-Planned for the first release:
+In ClearMovie 0.0.1:
 
-- **Presets** - one tap will set up the intro, the frame overlay (with its green window
+- **Presets** - one tap sets up the intro, the frame overlay (with its green window
   keyed out so your photos and videos show through) and the ending, which can be a
   video or a closing voice clip. You can replace any part for a single video, or skip it.
 - **Share from your gallery** - select photos and videos in the gallery, tap Share, and
   choose ClearMovie. They open on the timeline in the order they were taken.
 - **A timeline that stays simple** - photos and videos on one row you reorder by dragging,
-  plus as many text, music, picture-in-picture and frame rows as you want. Each row has an
+  plus as many text, music, voice, picture-in-picture and frame rows as you want. Each row has an
   icon, rows can be rearranged, and you choose which one shows on top. Pinch to zoom, or
   use the zoom buttons. A "+" before and after each item adds something right there.
 - **Big, labelled buttons** - tap any item for a toolbar of icons with names under them
@@ -76,19 +86,21 @@ Planned for the first release:
 - **Transitions and animations** - crossfades, fades, wipes, slides and zooms between
   items, and gentle zooms or fade-ins on single items, each with a live preview.
 - **Background music and ducking** - the frame's music plays under the whole video and
-  is lowered automatically while people talk in your videos, and everything is lowered
-  for the closing voice.
+  is lowered automatically while your videos play with their own sound, and everything
+  is lowered for the closing voice.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its
   colours from your wallpaper on Android 12+, and has a themed icon.
-- **Portrait and landscape** - in landscape, the preview sits on the left and the timeline on the right.
-  This also works on tablets, foldables and split-screen.
-- **Autosave** - work is saved as you go and recovered after a crash. Name a video to keep it.
+- **Portrait and landscape** - in the editor, landscape puts the preview on the left and the
+  timeline on the right. The home and preset screens use the extra width too. A wide window
+  on a tablet, foldable or in split-screen gets the same layout.
+- **Autosave** - work is saved as you go and recovered after a crash. Your videos are
+  listed under "My videos" (naming them comes later).
 - **Hardware-accelerated export** - Best (1080p), Good (720p) or Small (480p), saved
   to your gallery and ready to play or share.
 
 ## Feature checklist
 
-What's planned, and what has shipped:
+What has shipped, and what is still to come:
 
 **Making a video**
 - [x] Preset picker, with "Start without a preset"
@@ -99,22 +111,22 @@ What's planned, and what has shipped:
 
 **Editing**
 - [x] Drag-to-reorder main row, with Move left and Move right buttons as well
-- [ ] Several rows of each kind (text, music, picture in picture, frame), with type icons, rearranging, and "Show on top" / "Send backward"
-- [ ] "+" before and after each item to insert photos, videos, text cards or music (photos, videos and cards on the main row are in; music arrives with more rows)
+- [x] Several rows of each kind (text, music, picture in picture, frame), with type icons, rearranging, and "Show on top" / "Send backward"
+- [x] "+" before and after each item to insert photos, videos, text cards or music
 - [x] Pinch to zoom the timeline, plus zoom buttons and Fit all
 - [x] Transitions between items and animations on items
 - [x] Trim, split, join, speed (0.25x-4x), loop
 - [x] Photo duration
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
-- [ ] Audio overlay with volume, fade and automatic ducking
+- [x] Audio overlay with volume, fade and automatic ducking
 - [x] Captions with preset defaults, drag-to-place, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
 - [x] Preview that shrinks, or floats as a small window, when all rows need room
 
 **Saving and export**
-- [ ] Autosave and crash recovery
+- [x] Autosave and crash recovery
 - [ ] Named projects in "My videos"
-- [x] Export in Best, Good or Small quality with hardware encoding; keeps running if you rotate or leave the app
+- [x] Export at Best, Good or Small size with hardware encoding; keeps running if you rotate or leave the app
 - [x] Saved to Movies/ClearMovie, then Play and Share buttons
 
 **Everywhere**
@@ -124,7 +136,7 @@ What's planned, and what has shipped:
 
 ## Privacy Principles
 
-- **Offline by design.** The app is planned with no INTERNET permission: no servers, no
+- **Offline by design.** The app has no INTERNET permission: no servers, no
   telemetry, no analytics, no ads.
 - **Your media stays put.** Photos and videos are read from your gallery where they are.
   The only files copied into the app are your preset files, and items the gallery can't
