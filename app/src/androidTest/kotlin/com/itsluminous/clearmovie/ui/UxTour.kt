@@ -209,10 +209,11 @@ class UxTour {
         what: String,
         reach: () -> Unit,
     ) {
-        if (only != null && only.none { name.startsWith(it) }) return
+        // A state left out by -e uxonly is still reached (later states start from it), only not pictured.
+        val pictured = only == null || only.any { name.startsWith(it) }
         runCatching {
             reach()
-            shot(name, what)
+            if (pictured) shot(name, what)
         }.onFailure {
             Log.w(TAG, "state $name failed", it)
             manifest += "$name.png\tFAILED: ${it.javaClass.simpleName}: ${it.message?.lineSequence()?.firstOrNull()}"
