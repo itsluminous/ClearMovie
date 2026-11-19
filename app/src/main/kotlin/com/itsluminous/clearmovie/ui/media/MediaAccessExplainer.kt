@@ -66,11 +66,11 @@ fun MediaAccessExplainer(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val scroll = rememberScrollState()
-                Box(Modifier.weight(1f).widthIn(max = 560.dp).fillMaxWidth()) {
+                // The words in the middle of the room above the buttons, scrolling when they are taller than it.
+                Box(Modifier.weight(1f).widthIn(max = 560.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(
-                        Modifier.fillMaxSize().verticalScroll(scroll),
+                        Modifier.fillMaxWidth().verticalScroll(scroll),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
                     ) {
                         if (!short) {
                             Icon(

@@ -39,7 +39,7 @@ const val MORE_BELOW_TAG = "more_below"
 fun ScrollingBody(
     modifier: Modifier = Modifier,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
-    surface: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    surface: Color = MaterialTheme.colorScheme.surfaceContainer,
     actions: @Composable ColumnScope.() -> Unit,
     body: @Composable ColumnScope.() -> Unit,
 ) {

@@ -198,8 +198,9 @@ private const val BAND_SHOWS = 0x40
  * "Add caption" on photo or video [itemId]: a new caption attached to it,
  * empty and in the preset's style, with the preset's start animation, then
  * the editor on it. The caption is part of the editor visit's undo step.
- * When the item already has a caption of its own, the editor opens on that
- * one instead (two captions in one place would be drawn over each other).
+ * When the item already has a caption covering it whole, the editor opens on
+ * that one instead: a second would cover the same time in the same place,
+ * drawn over the first. (A caption moved to a part of the item leaves room.)
  */
 fun startCaption(
     itemId: ClipId,
@@ -212,7 +213,7 @@ fun startCaption(
         ?.tracks
         ?.flatMap { it.clips }
         ?.filterIsInstance<TextClip>()
-        ?.firstOrNull { it.attachedTo?.clip == itemId }
+        ?.firstOrNull { it.attachedTo?.clip == itemId && it.attachedTo.whole }
         ?.let { return openCaption(it.id, state) }
     val id = RandomIds.clipId()
     val made = actions.editMerged(captionMergeKey(id)) { addCaptionFor(itemId, "", captionId = id).withEffectDefaultsFor(listOf(id)) }

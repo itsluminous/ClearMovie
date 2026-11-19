@@ -938,8 +938,8 @@ private fun TopBar(
                     .measure(text, style)
                     .size.width
                     .toDp()
-                val undoDp = maxOf(ICON, w(undoWord, labelStyle)) + 16.dp
-                val redoDp = maxOf(ICON, w(redoWord, labelStyle)) + 16.dp
+                val undoDp = maxOf(TEXT_BUTTON_MIN, w(undoWord, labelStyle) + 16.dp)
+                val redoDp = maxOf(TEXT_BUTTON_MIN, w(redoWord, labelStyle) + 16.dp)
                 val exportDp = ICON + 8.dp + w(exportWord, exportStyle) + 32.dp
                 val titleRoom = maxWidth - 16.dp - TOUCH - exportDp - undoDp - redoDp - 8.dp * 4
                 titleRoom >= MIN_TITLE
@@ -981,6 +981,9 @@ private fun TopBar(
 
 /** The least room the editor's title keeps before Undo and Redo give up their words. */
 private val MIN_TITLE = 96.dp
+
+/** A TextButton is never narrower than this (Material's ButtonDefaults.MinWidth). */
+private val TEXT_BUTTON_MIN = 58.dp
 
 /** An icon with its name under it (ARCHITECTURE section 11: every control has a label), 48 dp to touch. */
 @Composable

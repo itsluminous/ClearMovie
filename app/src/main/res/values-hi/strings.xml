@@ -517,8 +517,8 @@
     <string name="bar_mute_row">आवाज़ बंद</string>
     <string name="bar_add_here">यहाँ जोड़ें</string>
     <string name="bar_duplicate">कॉपी बनाएँ</string>
-    <string name="bar_move_left">बाएँ खिसकाएँ</string>
-    <string name="bar_move_right">दाएँ खिसकाएँ</string>
+    <string name="bar_move_left">बाएँ</string>
+    <string name="bar_move_right">दाएँ</string>
     <string name="bar_frame_on">फ़्रेम दिखाएँ</string>
     <string name="bar_delete">हटाएँ</string>
     <!-- cm-captions: the caption editor. -->

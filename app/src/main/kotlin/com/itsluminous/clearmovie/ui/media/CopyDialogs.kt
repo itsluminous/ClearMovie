@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -54,7 +55,7 @@ fun CopyBudgetDialog(
             // The words scroll in a short window (a phone held sideways); the three answers stay in sight.
             ScrollingBody(
                 modifier = Modifier.padding(24.dp),
-                surface = MaterialTheme.colorScheme.surfaceContainerHigh,
+                surface = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
                 actions = {
                     Spacer(Modifier.height(16.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

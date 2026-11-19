@@ -527,7 +527,7 @@
     <string name="bar_duplicate">Copy karein</string>
     <string name="bar_move_left">Baayein</string>
     <string name="bar_move_right">Daayein</string>
-    <string name="bar_frame_on">Frame dikhe</string>
+    <string name="bar_frame_on">Frame dikhayein</string>
     <string name="bar_delete">Hatayein</string>
     <!-- cm-captions: the caption editor. -->
     <string name="action_add_caption">Caption jodein</string>

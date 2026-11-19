@@ -197,6 +197,23 @@ class CaptionEditorTest {
     }
 
     @Test
+    fun `Add caption on a photo that has one opens it, so a second is never drawn over the first`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(TEXT_FIELD_TAG).performTextInput("Hello")
+        panel(PANEL_DONE_TAG).performClick()
+        compose.waitForIdle()
+        val first = h.caption().id
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(TEXT_FIELD_TAG).performTextInput(" there")
+        assertThat(h.project.captions()).hasSize(1)
+        assertThat(h.caption().id).isEqualTo(first)
+        assertThat(h.caption().text).isEqualTo("Hello there")
+    }
+
+    @Test
     fun `words show as they are typed, and characters a caption can't hold are left out`() {
         val h = show()
         h.select("p1")

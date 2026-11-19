@@ -89,8 +89,9 @@ class UxLayoutDeviceTest {
     @Test
     fun aPanelTitleIsNeverCutAndItsDoneNeverWraps() {
         for (tag in listOf("en", "hi", "hi-Latn")) {
-            at(tag) { Column { PanelTitle("How long it shows", onDone = {}, onCancel = {}) } }
-            val title = compose.onNodeWithText("How long it shows", useUnmergedTree = true).layout()
+            val words = localized(tag, R.string.duration_title)
+            at(tag) { Column { PanelTitle(words, onDone = {}, onCancel = {}) } }
+            val title = compose.onNodeWithText(words, useUnmergedTree = true).layout()
             assertWithMessage("$tag: title cut").that(title.isLineEllipsized(title.lineCount - 1)).isFalse()
             val done = compose.onNodeWithText(localized(tag, R.string.action_done), useUnmergedTree = true).layout()
             assertWithMessage("$tag: Done on one line").that(done.lineCount).isEqualTo(1)

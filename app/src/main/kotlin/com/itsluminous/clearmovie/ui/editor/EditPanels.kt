@@ -456,8 +456,8 @@ internal fun PanelTitle(
                     ) { buttons() }
                 } else {
                     Column(
-                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalAlignment = Alignment.End,
                     ) { buttons() }
                 }
@@ -484,7 +484,7 @@ private fun PreviewBeside(
         val wordsDp = with(density) { lines.maxOf { measurer.measure(it, style).size.width }.toDp() }
         val words: @Composable () -> Unit = {
             Column {
-                for (line in lines) Text(line, style = style, maxLines = 1, softWrap = false)
+                for (line in lines) AutoSizeLabel(line, style = style)
             }
         }
         if (PREVIEW_MAX + 12.dp + wordsDp <= maxWidth) {
@@ -717,11 +717,10 @@ private fun SpeedPanel(
                 selected = clip.speed == speed,
                 onClick = { callbacks.edit { setSpeed(clip.id, speed) } },
                 label = {
-                    Text(
+                    // Shrinks to fit a third of the width (large text on a narrow phone) instead of being cut.
+                    AutoSizeLabel(
                         text,
                         style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        softWrap = false,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )

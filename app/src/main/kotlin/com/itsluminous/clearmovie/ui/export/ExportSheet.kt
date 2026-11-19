@@ -37,6 +37,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -448,7 +449,7 @@ private fun ColumnScope.Blocked(
         }
     }) {
         Problem(
-            title = stringResource(R.string.export_title),
+            title = stringResource(R.string.export_blocked_title),
             body =
                 when (block) {
                     ExportBlock.NOTHING -> stringResource(R.string.export_failed_nothing)
@@ -510,6 +511,8 @@ private fun Sheet(
     body: @Composable ColumnScope.() -> Unit,
 ) {
     ScrollingBody(
+        // The sheet's own colour (a surface raised 6 dp), so the fade at the foot of the words matches it.
+        surface = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
         actions = {
             Spacer(Modifier.height(16.dp))
             FlowRow(
