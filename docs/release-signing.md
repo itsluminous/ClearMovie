@@ -70,13 +70,15 @@ Locally, the same four values go in environment variables
 ## Releasing
 
 1. Raise `baseVersionCode` and `versionName` in `app/build.gradle.kts`.
-2. Add the user-facing notes at
-   `fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt`. This file
-   is read only by CI for the GitHub Release text. (F-Droid looks changelogs up
-   by an APK's own versionCode, `base × 10 + abiCode`, so an F-Droid listing
-   would need its own files.)
-3. Push a tag matching `versionName`, such as `v0.1.0`. The release job builds
+2. Add the user-facing notes: a short summary (under 500 characters, the
+   fastlane convention) at
+   `fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt`, and,
+   for a longer GitHub Release text, `docs/release-notes/v<versionName>.md`.
+   (F-Droid looks changelogs up by an APK's own versionCode,
+   `base × 10 + abiCode`, so an F-Droid listing would need its own files.)
+3. Push a tag matching `versionName`, such as `v0.0.1`. The release job builds
    and signs the five APKs and verifies them; once the instrumented tests have
    also passed, the publish job attaches all five to a GitHub Release. Its text
-   is that changelog (or a one-line stand-in if the file is missing) plus
-   GitHub's generated commit list.
+   is `docs/release-notes/<tag>.md` if it exists, otherwise the changelog (or a
+   one-line stand-in if that is missing too), plus GitHub's generated commit
+   list.
