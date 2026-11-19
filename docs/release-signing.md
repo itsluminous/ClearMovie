@@ -1,8 +1,8 @@
-# Release signing and APKs
+# Release signing and the APK
 
-CI builds release APKs on every push to `main`, every `v*` tag and every pull
+CI builds the release APK on every push to `main`, every `v*` tag and every pull
 request to `main`. Only a `v*` tag is signed: pushes to `main`, pull requests
-and forks build unsigned APKs, so the checks below always run and no signed
+and forks build an unsigned APK, so the checks below always run and no signed
 build of an unreleased commit leaves CI. A `v*` tag refuses to publish unless the APK is
 signed and the tag matches `versionName`.
 
@@ -22,9 +22,9 @@ from base 2 on, every code (20, 30, ...) is above all of them, so a phone with
 any 0.0.1 APK installs the next release as an update.
 
 `scripts/verify-release-apks.sh` (run by the release job) checks that there is
-exactly one APK, named after the versionName inside it; that if it ships any
-`.so`, all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64) carry the same
-libraries; that the versionCode is `base × 10` and, for any version after
+exactly one APK, named after the versionName inside it; that it ships `.so`
+files and all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64) carry the same
+libraries (an APK with no native code fails, so losing them is noticed); that the versionCode is `base × 10` and, for any version after
 0.0.1, above 14; and, when signed, a v2 and a v3 signature.
 
 ## One-time keystore setup
@@ -59,7 +59,7 @@ gh secret set SIGNING_KEY_PASSWORD
 
 Locally, the same four values go in environment variables
 (`SIGNING_KEYSTORE_FILE` is the path to the `.jks`); with none set,
-`./gradlew assembleRelease` builds unsigned APKs.
+`./gradlew assembleRelease` builds an unsigned APK.
 
 ## Releasing
 

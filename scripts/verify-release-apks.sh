@@ -7,9 +7,11 @@
 # APK for every processor type (docs/release-signing.md). It checks:
 #   1. Exactly one APK, named ClearMovie-<versionName>.apk, where versionName is
 #      read from the APK itself, and no stale APKs from an earlier build.
-#   2. Native code: if the APK ships any lib/<abi>/*.so, it ships the same
-#      libraries for all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64), so
-#      no processor type is left without them.
+#   2. Native code: the APK ships lib/<abi>/*.so, and the same libraries for
+#      all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64), so no processor
+#      type is left without them. An APK with no native code at all fails too:
+#      AndroidX's libraries are expected, so losing them must be noticed and
+#      this check changed on purpose.
 #   3. versionCode is base*10. Any versionName other than 0.0.1 needs a code
 #      above 14, the highest code 0.0.1's per-ABI APKs used, so every 0.0.1
 #      install accepts it as an update.
@@ -59,7 +61,8 @@ for apk in ${all[@]+"${all[@]}"}; do
 done
 
 # 1. Exactly one APK, from the last build, with the right name.
-[ "${#all[@]}" -eq 1 ] || fail "expected exactly one APK (ClearMovie-<version>.apk), found ${#all[@]}"
+[ "${#all[@]}" -gt 0 ] || fail "expected exactly one APK (ClearMovie-<version>.apk), found none"
+[ "${#all[@]}" -eq 1 ] || fail "expected exactly one APK (ClearMovie-<version>.apk), found ${#all[@]} (stale files from an earlier build? ./gradlew clean assembleRelease)"
 apk="${all[0]}"
 name="$(basename "$apk")"
 
@@ -83,6 +86,7 @@ libs="$(native_libs "$apk")" || exit 1
 echo
 echo "Native libraries in $name:"
 if [ -n "$libs" ]; then echo "$libs" | sed 's/^/  /'; else echo "  (none)"; fi
+[ -n "$libs" ] || fail "$name ships no native libraries; expected AndroidX's .so files for ${abis[*]}. If they are gone on purpose, change this check and docs/release-signing.md."
 if [ -n "$libs" ]; then
   # The union of library file names, which every ABI must carry.
   names="$(printf '%s\n' "$libs" | awk -F/ '{print $NF}' | sort -u)"

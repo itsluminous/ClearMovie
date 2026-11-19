@@ -8,8 +8,8 @@ plugins {
 }
 
 // Release signing is driven entirely by environment variables (as in ClearSMS):
-// with all four set, release APKs come out signed; local builds, forks and PRs
-// without the secrets fall back to unsigned release APKs instead of failing.
+// with all four set, the release APK comes out signed; local builds, forks and PRs
+// without the secrets fall back to an unsigned release APK instead of failing.
 // See docs/release-signing.md.
 val signingKeystoreFile: String? = System.getenv("SIGNING_KEYSTORE_FILE")
 val signingKeystorePassword: String? = System.getenv("SIGNING_KEYSTORE_PASSWORD")

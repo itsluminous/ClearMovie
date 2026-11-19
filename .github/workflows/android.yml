@@ -124,7 +124,7 @@ jobs:
     timeout-minutes: 45
     env:
       # True only on a v* tag with all four signing secrets: pushes to main and
-      # pull requests build (and verify) unsigned APKs, so no signed build of an
+      # pull requests build (and verify) an unsigned APK, so no signed build of an
       # unreleased commit ever leaves CI and PR code never runs with the key.
       HAS_SIGNING_SECRETS: >-
         ${{
@@ -153,7 +153,7 @@ jobs:
       - name: Refuse to publish an unsigned release
         if: startsWith(github.ref, 'refs/tags/v') && env.HAS_SIGNING_SECRETS != 'true'
         run: |
-          echo "::error::A v* tag needs the four SIGNING_* secrets (docs/release-signing.md); refusing to publish unsigned APKs."
+          echo "::error::A v* tag needs the four SIGNING_* secrets (docs/release-signing.md); refusing to publish an unsigned APK."
           exit 1
 
       # The secret reaches the shell only through an environment variable,
