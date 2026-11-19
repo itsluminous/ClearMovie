@@ -24,7 +24,7 @@ uses your phone's hardware, and everything stays on your device.
   <img alt="Get it on GitHub" height="80"
        src="docs/badges/get-it-on-github.png" />
 </a>
-<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.itsluminous.ClearMovie%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fitsluminous%2FClearMovie%22%2C%22author%22%3A%22itsluminous%22%2C%22name%22%3A%22ClearMovie%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22arm64-v8a%5C%22%7D%22%7D">
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.itsluminous.ClearMovie%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fitsluminous%2FClearMovie%22%2C%22author%22%3A%22itsluminous%22%2C%22name%22%3A%22ClearMovie%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5EClearMovie-%5B0-9.%5D%2B%28-arm64-v8a%29%3F%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D">
   <img alt="Get it on Obtainium" height="80"
        src="docs/badges/get-it-on-obtainium.png" />
 </a>
@@ -39,7 +39,9 @@ Website: [itsluminous.github.io/ClearMovie](https://itsluminous.github.io/ClearM
 ### Download
 
 Get the APK from the [latest release](https://github.com/itsluminous/ClearMovie/releases/latest)
-and open it on your phone to install. The release page says which file to pick.
+and open it on your phone to install. From 0.0.2 on, each release has a single
+`ClearMovie-<version>.apk` that works on every phone. (0.0.1 has one file per
+processor type; most phones need the one ending in `arm64-v8a.apk`.)
 Obtainium (the button above) installs it and keeps it up to date. ClearMovie needs
 Android 10 or newer.
 
