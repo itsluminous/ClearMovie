@@ -26,6 +26,11 @@
 set -euo pipefail
 
 : "${ANDROID_SERIAL:?set ANDROID_SERIAL to the device to use}"
+# It clears the app's data (pm clear) on that device: an emulator only, unless asked otherwise.
+case "$ANDROID_SERIAL" in
+  emulator-*) ;;
+  *) [ "${UX_ANY_DEVICE:-}" = 1 ] || { echo "Refusing: $ANDROID_SERIAL is not an emulator and this clears ClearMovie's data (set UX_ANY_DEVICE=1 to allow)"; exit 2; } ;;
+esac
 out="${1:?usage: scripts/ux-screens.sh <out-dir> [config ...]}"
 shift
 adb="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"

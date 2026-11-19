@@ -158,6 +158,7 @@ class UxTour {
     private val testAssets = InstrumentationRegistry.getInstrumentation().context.assets
     private val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
     private val inserted = mutableListOf<Uri>()
+    private val startedAt = System.currentTimeMillis()
     private val manifest = mutableListOf<String>()
     private lateinit var out: File
 
@@ -171,6 +172,14 @@ class UxTour {
         File(out, "manifest.txt").appendText(manifest.joinToString("\n", postfix = "\n"))
         runCatching { Intents.release() }
         inserted.forEach { runCatching { context.contentResolver.delete(it, null, null) } }
+        // The video a real export saved during the tour: only ones added since it started.
+        runCatching {
+            context.contentResolver.delete(
+                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.DATE_ADDED} >= ?",
+                arrayOf("Movies/ClearMovie%", (startedAt / 1000).toString()),
+            )
+        }
     }
 
     private fun prepare(): Boolean {

@@ -143,7 +143,7 @@ fun HomeScreen(
             // Cards side by side are given one height (a grid row cannot match them), enough for a three-line text.
             val cardHeight = if (columns > 1) SIDE_BY_SIDE_CARD else 96.dp
             Column(Modifier.fillMaxSize()) {
-                // Busy, the shared items not ready, or the presets still being read (so the cards never jump into place).
+                // Busy, the shared items not ready, or the presets still being read.
                 if (busy || share?.ready == false || presets == null) LinearProgressIndicator(Modifier.fillMaxWidth())
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
@@ -162,11 +162,9 @@ fun HomeScreen(
                     items(presets.orEmpty(), key = { "preset-" + it.preset.id.value }) { card ->
                         PresetCardView(card, enabled = enabled, minHeight = cardHeight, onClick = { onPreset(card.preset.id) })
                     }
-                    if (presets !=
-                        null
-                    ) {
-                        item(key = "blank") { BlankCard(enabled = enabled, minHeight = cardHeight, onClick = onStartBlank) }
-                    }
+                    // Never waits for the presets: Start without a preset is there at once (the moving bar says
+                    // the presets are still being read).
+                    item(key = "blank") { BlankCard(enabled = enabled, minHeight = cardHeight, onClick = onStartBlank) }
                     if (share != null) return@LazyVerticalGrid
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Heading(stringResource(R.string.home_my_videos), Modifier.padding(top = 8.dp))

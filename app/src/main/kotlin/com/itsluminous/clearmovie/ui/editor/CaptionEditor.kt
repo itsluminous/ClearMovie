@@ -311,7 +311,7 @@ internal fun ColumnScope.CaptionPanel(
                 !labelFits(measurer, word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), roomPx)
             }
         val lines = if (scrolls) 1 else rememberLabelLines(labels, labelStyle, room, density)
-        CaptionTabs(tab, labels, scrolls, lines) {
+        CaptionTabs(tab, labels, scrolls, lines, scrollTabWidth = maxWidth / SCROLLING_TABS_SHOWN) {
             if (visit != null) visit.captionTab = it.name else ownTab = it.name
         }
     }
@@ -339,12 +339,18 @@ internal fun ColumnScope.CaptionPanel(
     }
 }
 
+/**
+ * The caption editor's tabs: five equal tabs across the width; or, when a name cannot fit a fifth of it,
+ * a scrolling row of equal tabs, [scrollTabWidth] each, three and a half in sight so the cut one says there
+ * are more, every name kept (drawn smaller to fit when it must).
+ */
 @Composable
-private fun CaptionTabs(
+internal fun CaptionTabs(
     tab: CaptionTab,
     labels: List<String>,
     scrolls: Boolean,
     lines: Int,
+    scrollTabWidth: Dp = 96.dp,
     onTab: (CaptionTab) -> Unit,
 ) {
     val tabs: @Composable () -> Unit = {
@@ -353,7 +359,11 @@ private fun CaptionTabs(
             Tab(
                 selected = t == tab,
                 onClick = { onTab(t) },
-                modifier = Modifier.heightIn(min = 64.dp).testTag(captionTabTag(t)),
+                modifier =
+                    Modifier
+                        .heightIn(min = 64.dp)
+                        .then(if (scrolls) Modifier.width(scrollTabWidth) else Modifier)
+                        .testTag(captionTabTag(t)),
             ) {
                 Column(
                     Modifier.padding(horizontal = TAB_LABEL_ROOM / 2, vertical = 8.dp),
@@ -361,17 +371,12 @@ private fun CaptionTabs(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(painterResource(tabIcon(t)), contentDescription = null, modifier = Modifier.size(24.dp))
-                    if (scrolls) {
-                        // Each tab as wide as its name: the row scrolls, the last tab partly in sight.
-                        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
-                    } else {
-                        AutoSizeLabel(
-                            label,
-                            style = MaterialTheme.typography.labelMedium,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            lines = lines,
-                        )
-                    }
+                    AutoSizeLabel(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        lines = lines,
+                    )
                 }
             }
         }
@@ -406,6 +411,9 @@ private fun ResetButton(
         AutoSizeLabel(stringResource(R.string.caption_reset))
     }
 }
+
+/** Tabs in sight when they scroll: the half one shows there are more. */
+private const val SCROLLING_TABS_SHOWN = 3.5f
 
 private fun tabLabel(tab: CaptionTab): Int =
     when (tab) {

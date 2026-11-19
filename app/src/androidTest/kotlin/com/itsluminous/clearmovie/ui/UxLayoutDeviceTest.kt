@@ -28,8 +28,11 @@ import com.google.common.truth.Truth.assertWithMessage
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.export.ExportQuality
 import com.itsluminous.clearmovie.render.RenderHarness
+import com.itsluminous.clearmovie.ui.editor.CaptionTab
+import com.itsluminous.clearmovie.ui.editor.CaptionTabs
 import com.itsluminous.clearmovie.ui.editor.PANEL_DONE_TAG
 import com.itsluminous.clearmovie.ui.editor.PanelTitle
+import com.itsluminous.clearmovie.ui.editor.captionTabTag
 import com.itsluminous.clearmovie.ui.export.EXPORT_SAVE_TAG
 import com.itsluminous.clearmovie.ui.export.ExportSheetActions
 import com.itsluminous.clearmovie.ui.export.ExportSheetContent
@@ -46,8 +49,9 @@ import org.junit.runner.RunWith
  * The UX review's layout rules with the device's real text shaping, on the
  * hardest window: a 320 dp phone at the largest text size (2.0), in English
  * and Hindi. A panel's title is never cut to a few letters and its Done
- * never wraps; a home card's name takes at most two lines; the export
- * sheet's Save button stays on screen. Three short compositions each, so the
+ * never wraps; caption tabs keep their names and show there are more; a
+ * home card's name takes at most two lines; the export sheet's Save button
+ * stays on screen. Three short compositions each, so the
  * slow API 29 job stays inside its limit.
  */
 @RunWith(AndroidJUnit4::class)
@@ -99,6 +103,20 @@ class UxLayoutDeviceTest {
                 .that(compose.onNodeWithTag(PANEL_DONE_TAG).getUnclippedBoundsInRoot().right)
                 .isAtMost(compose.onRoot().getUnclippedBoundsInRoot().right)
         }
+    }
+
+    @Test
+    fun captionTabsKeepTheirNamesAndShowThereAreMore() {
+        val labels = listOf("शब्द", "जगह", "आकार", "फ़ॉन्ट", "रंग")
+        at("hi") {
+            CaptionTabs(CaptionTab.WORDS, labels, scrolls = true, lines = 1, scrollTabWidth = 320.dp / 3.5f) {}
+        }
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        // Every name is drawn (none is icon-only), and the fourth tab is cut by the edge: the row reads as one that scrolls.
+        for (label in labels.take(3)) compose.onNodeWithText(label, useUnmergedTree = true).assertExists()
+        val fourth = compose.onNodeWithTag(captionTabTag(CaptionTab.FONT)).getUnclippedBoundsInRoot()
+        assertWithMessage("fourth tab starts in sight").that(fourth.left).isLessThan(root.right)
+        assertWithMessage("fourth tab is cut").that(fourth.right).isGreaterThan(root.right)
     }
 
     @Test
