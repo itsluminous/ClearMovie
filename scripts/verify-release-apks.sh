@@ -6,7 +6,8 @@
 # CI's release job runs it on every push and pull request. ClearMovie ships one
 # APK for every processor type (docs/release-signing.md). It checks:
 #   1. Exactly one APK, named ClearMovie-<versionName>.apk, where versionName is
-#      read from the APK itself, and no stale APKs from an earlier build.
+#      read from the APK itself and is digits and dots only (the README's
+#      Obtainium filter expects that), and no stale APKs from an earlier build.
 #   2. Native code: the APK ships lib/<abi>/*.so, and the same libraries for
 #      all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64), so no processor
 #      type is left without them. An APK with no native code at all fails too:
@@ -80,6 +81,9 @@ version_code="$(printf '%s\n' "$badging" | sed -nE "s/^package:.* versionCode='(
 [ -n "$version_name" ] || fail "could not read the versionName of $name"
 [ -n "$version_code" ] || fail "could not read the versionCode of $name"
 [ "$name" = "ClearMovie-$version_name.apk" ] || fail "unexpected APK name $name (expected ClearMovie-$version_name.apk)"
+# Only digits and dots: the README's Obtainium filter, ClearMovie-[0-9.]+...,
+# would not see any other release.
+[[ "$version_name" =~ ^[0-9]+(\.[0-9]+)*$ ]] || fail "versionName $version_name is not digits and dots (such as 0.0.2); the README's Obtainium filter would not match it"
 
 # 2. Native code for every ABI.
 libs="$(native_libs "$apk")" || exit 1
@@ -87,16 +91,14 @@ echo
 echo "Native libraries in $name:"
 if [ -n "$libs" ]; then echo "$libs" | sed 's/^/  /'; else echo "  (none)"; fi
 [ -n "$libs" ] || fail "$name ships no native libraries; expected AndroidX's .so files for ${abis[*]}. If they are gone on purpose, change this check and docs/release-signing.md."
-if [ -n "$libs" ]; then
-  # The union of library file names, which every ABI must carry.
-  names="$(printf '%s\n' "$libs" | awk -F/ '{print $NF}' | sort -u)"
-  for abi in "${abis[@]}"; do
-    have="$(printf '%s\n' "$libs" | awk -F/ -v abi="$abi" '$2 == abi {print $NF}' | sort -u)"
-    [ "$have" = "$names" ] || fail "lib/$abi/ in $name has [$(echo $have)], expected [$(echo $names)]"
-  done
-  extra="$(printf '%s\n' "$libs" | cut -d/ -f2 | sort -u | grep -vxF -e armeabi-v7a -e arm64-v8a -e x86 -e x86_64 || true)"
-  [ -z "$extra" ] || echo "Note: other ABI folders too: $(echo $extra)"
-fi
+# The union of library file names, which every ABI must carry.
+names="$(printf '%s\n' "$libs" | awk -F/ '{print $NF}' | sort -u)"
+for abi in "${abis[@]}"; do
+  have="$(printf '%s\n' "$libs" | awk -F/ -v abi="$abi" '$2 == abi {print $NF}' | sort -u)"
+  [ "$have" = "$names" ] || fail "lib/$abi/ in $name has [$(echo $have)], expected [$(echo $names)]"
+done
+extra="$(printf '%s\n' "$libs" | cut -d/ -f2 | sort -u | grep -vxF -e armeabi-v7a -e arm64-v8a -e x86 -e x86_64 || true)"
+[ -z "$extra" ] || echo "Note: other ABI folders too: $(echo $extra)"
 
 # 3. versionCode.
 echo

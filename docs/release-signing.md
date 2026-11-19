@@ -11,9 +11,9 @@ signed and the tag matches `versionName`.
 Each release is one APK, `ClearMovie-<version>.apk`, that works on every
 processor type. ClearMovie bundles small native libraries from AndroidX
 (Compose's `libandroidx.graphics.path.so` and DataStore's
-`libdatastore_shared_counter.so`), but they are so small that per-ABI APKs came
-out the same size as the universal one, so 0.0.1 was the last release split by
-ABI.
+`libdatastore_shared_counter.so`), but they are only a few KB each: 0.0.1's
+per-ABI APKs and its universal one were all 8.65-8.75 MB. So 0.0.1 was the last
+release split by ABI.
 
 Its versionCode is `base × 10`, where `base` is `baseVersionCode` in
 `app/build.gradle.kts`. Raise `baseVersionCode` by one for each release. 0.0.1's
@@ -22,10 +22,12 @@ from base 2 on, every code (20, 30, ...) is above all of them, so a phone with
 any 0.0.1 APK installs the next release as an update.
 
 `scripts/verify-release-apks.sh` (run by the release job) checks that there is
-exactly one APK, named after the versionName inside it; that it ships `.so`
-files and all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64) carry the same
-libraries (an APK with no native code fails, so losing them is noticed); that the versionCode is `base × 10` and, for any version after
-0.0.1, above 14; and, when signed, a v2 and a v3 signature.
+exactly one APK, named after the versionName inside it, which must be digits
+and dots (the README's Obtainium filter expects that); that it ships `.so` files
+and all four ABIs (armeabi-v7a, arm64-v8a, x86, x86_64) carry the same libraries
+(an APK with no native code fails, so losing them is noticed); that the
+versionCode is `base × 10` and, for any version after 0.0.1, above 14; and,
+when signed, a v2 and a v3 signature.
 
 ## One-time keystore setup
 

@@ -55,8 +55,9 @@ scripts/verify-release-apks.sh     # one APK, its name, native libraries, versio
 GitHub Actions builds a signed APK on `v*` tags, using a key held in repository
 secrets, and attaches it to the GitHub Release (see
 [release-signing.md](release-signing.md)). CI fails if there is not exactly one
-APK, if its name does not match its versionName, or if an ABI is missing native
-libraries the others have. Keystores are never committed
+APK, if its name does not match its versionName, if it has no native libraries
+or an ABI lacks ones the others have, or if its versionCode is not `base × 10`
+(above 14 after 0.0.1). Keystores are never committed
 (`*.jks` and `*.keystore` are gitignored).
 
 ## Instrumented tests
