@@ -279,13 +279,22 @@ jobs:
       actions: write
     steps:
       # The REST call needs only `actions: write` (the job has nothing else).
+      # It passes the tag, so the deploy waits for GitHub to list this release
+      # as the latest. curl retries only transient failures (timeouts, 408,
+      # 429, 5xx); a refused call fails the job, which leaves the release as
+      # published: run "Deploy website" by hand then (the daily run also
+      # catches up).
       - name: Start the Deploy website workflow on main
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          curl -fsS --retry 3 --retry-all-errors -X POST \
+          set -euo pipefail
+          jq -n --arg tag "$TAG" '{ref: "main", inputs: {tag: $tag}}' > dispatch.json
+          curl -sS --fail-with-body --retry 3 -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/pages.yml/dispatches" \
-            -d '{"ref":"main"}'
+            --data-binary @dispatch.json
+          echo "Started Deploy website on main for $TAG." >> "$GITHUB_STEP_SUMMARY"

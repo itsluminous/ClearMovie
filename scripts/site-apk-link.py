@@ -21,9 +21,14 @@ Usage:
     site-apk-link.py HTML_FILE [--release-json FILE] [--no-check]
 
 GITHUB_REPOSITORY (owner/repo) defaults to itsluminous/ClearMovie, and
-GITHUB_TOKEN, when set, authenticates the API call. --release-json reads the
-release from a file instead of the API (for testing), and --no-check skips the
-request that confirms the asset answers.
+GITHUB_TOKEN, when set, authenticates the API call. EXPECTED_TAG, when set (the
+release workflow passes the tag it just published), makes the script wait up to
+about a minute for GitHub to report that tag as the latest release, in case the
+API lags just after publishing; if it never does, the script goes on with the
+release GitHub calls latest. "Latest" is GitHub's own choice: the newest
+non-draft, non-prerelease release, which the release page link also opens.
+--release-json reads the release from a file instead of the API (for testing),
+and --no-check skips the request that confirms the asset answers.
 """
 
 import argparse
@@ -32,18 +37,56 @@ import os
 import re
 import sys
 import tempfile
+import time
 import urllib.error
-import urllib.parse
 import urllib.request
 
 MARKER = "data-latest-apk"
 SAFE = re.compile(r"[A-Za-z0-9._+-]+")
+# An <a> start tag; the marker attribute in one; its double-quoted href.
+A_TAG = re.compile(r"<a\b[^>]*>")
+MARKED = re.compile(r"\s" + MARKER + r"(?=[\s/>=])")
+HREF = re.compile(r'\shref="([^"]*)"')
 TIMEOUT = 20
+ATTEMPTS = 3          # per request, for transient failures
+EXPECTED_WAITS = 6    # times 10 s, waiting for EXPECTED_TAG to be the latest
+reasons = []          # why the page kept its committed links, for the run summary
 
 
 def warn(message):
-    # A GitHub Actions annotation; plain text anywhere else.
-    print(f"::warning title=Download link::{message}", flush=True)
+    """A GitHub Actions warning annotation (plain text anywhere else)."""
+    reasons.append(message)
+    # Workflow-command escaping, so text from the API cannot end the annotation
+    # early or start another command.
+    text = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::warning title=Download link::{text}", flush=True)
+
+
+def transient(error):
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == 429 or error.code >= 500
+    return isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError))
+
+
+def with_retries(call):
+    """call(), retried with backoff on timeouts, resets, 429 and 5xx."""
+    for attempt in range(1, ATTEMPTS + 1):
+        try:
+            return call()
+        except Exception as error:  # noqa: BLE001 - re-raised unless transient
+            if attempt == ATTEMPTS or not transient(error):
+                raise
+            time.sleep(2 ** attempt)
+    raise AssertionError("unreachable")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+# Never follows a redirect, so the token sent to the API goes nowhere else.
+OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def fetch_release(repo, token):
@@ -57,8 +100,26 @@ def fetch_release(repo, token):
     )
     if token:
         request.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-        return json.load(response)
+
+    def get():
+        with OPENER.open(request, timeout=TIMEOUT) as response:
+            return json.load(response)
+    return with_retries(get)
+
+
+def latest_release(repo, token, expected):
+    """The latest release; when expected is set, wait a little for it to be that tag."""
+    release = fetch_release(repo, token)
+    waits = 0
+    while expected and isinstance(release, dict) and release.get("tag_name") != expected:
+        if waits == EXPECTED_WAITS:
+            warn(f"GitHub still reports {release.get('tag_name')!r} as the latest release, "
+                 f"not {expected!r}; using what it reports.")
+            break
+        waits += 1
+        time.sleep(10)
+        release = fetch_release(repo, token)
+    return release
 
 
 def pick_apk_url(release, repo):
@@ -79,14 +140,15 @@ def pick_apk_url(release, repo):
         if isinstance(a, dict) and str(a.get("name", "")).lower().endswith(".apk")
     ]
     if len(apks) != 1:
-        names = ", ".join(str(a.get("name")) for a in apks) or "none"
+        names = ", ".join(repr(a.get("name")) for a in apks) or "none"
         warn(f"Release {tag} has {len(apks)} .apk assets ({names}); expected exactly one.")
         return None
     apk = apks[0]
     name = apk.get("name")
     url = apk.get("browser_download_url")
-    if apk.get("state") != "uploaded":
-        warn(f"Asset {name} of {tag} is not fully uploaded.")
+    size = apk.get("size")
+    if apk.get("state") != "uploaded" or not isinstance(size, int) or size <= 0:
+        warn(f"Asset {name!r} of {tag!r} is not fully uploaded (state {apk.get('state')!r}, size {size!r}).")
         return None
     if not SAFE.fullmatch(tag) or not SAFE.fullmatch(name):
         warn(f"Release tag or asset name has unexpected characters: {tag!r} {name!r}.")
@@ -100,18 +162,22 @@ def pick_apk_url(release, repo):
     return url
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args, **kwargs):
-        return None
-
-
 def asset_answers(url):
-    """True when GitHub serves the asset: 200, or a redirect to its storage."""
-    opener = urllib.request.build_opener(_NoRedirect)
+    """True when GitHub serves the asset: 200, or a redirect to its storage.
+
+    Sent without the token, and redirects are not followed."""
     request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "clearmovie-pages"})
+
+    def head():
+        try:
+            with OPENER.open(request, timeout=TIMEOUT) as response:
+                return response.status
+        except urllib.error.HTTPError as error:
+            if error.code == 429 or error.code >= 500:
+                raise
+            return error.code
     try:
-        with opener.open(request, timeout=TIMEOUT) as response:
-            status = response.status
+        status = with_retries(head)
     except urllib.error.HTTPError as error:
         status = error.code
     except (urllib.error.URLError, OSError) as error:
@@ -124,26 +190,38 @@ def asset_answers(url):
 
 
 def rewrite(html_path, repo, url):
-    """Swap the marked fallback hrefs for url. Returns how many were swapped."""
-    with open(html_path, encoding="utf-8") as f:
+    """Swap the release-page href of every marked <a> for url. Returns how many."""
+    with open(html_path, encoding="utf-8", newline="") as f:
         html = f.read()
-    fallback = f'href="https://github.com/{repo}/releases/latest" {MARKER}'
-    count = html.count(fallback)
-    marked = html.count(MARKER)
+    fallback = f"https://github.com/{repo}/releases/latest"
+    count = 0
+    skipped = 0
+
+    def swap(match):
+        nonlocal count, skipped
+        tag = match.group(0)
+        if not MARKED.search(tag):
+            return tag
+        href = HREF.search(tag)
+        if not href or href.group(1) != fallback:
+            skipped += 1
+            return tag
+        count += 1
+        return tag[:href.start(1)] + url + tag[href.end(1):]
+
+    html = A_TAG.sub(swap, html)
+    if skipped:
+        warn(f"{skipped} {MARKER} link(s) in {html_path} do not have the href {fallback}; left as they are.")
     if count == 0:
-        warn(f"No Download button in {html_path} carries {MARKER} with the release-page href.")
+        warn(f"No {MARKER} link in {html_path} has the href {fallback}, so nothing was changed.")
         return 0
-    if count != marked:
-        warn(f"{marked} {MARKER} markers but only {count} with the release-page href; "
-             "rewriting the ones that match.")
-    html = html.replace(fallback, f'href="{url}" {MARKER}')
     directory = os.path.dirname(os.path.abspath(html_path))
     # Write beside the page, then swap it in, so a failed write never leaves a
     # half-written page (or a stray temporary file in the deployed folder).
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=directory, delete=False) as f:
         temp = f.name
     try:
-        with open(temp, "w", encoding="utf-8") as f:
+        with open(temp, "w", encoding="utf-8", newline="") as f:
             f.write(html)
         os.chmod(temp, os.stat(html_path).st_mode & 0o777)
         os.replace(temp, html_path)
@@ -168,28 +246,40 @@ def main():
         print(f"error: unexpected GITHUB_REPOSITORY {repo!r}", file=sys.stderr)
         return 2
 
+    expected = os.environ.get("EXPECTED_TAG") or None
+    if expected and not SAFE.fullmatch(expected):
+        warn(f"Ignoring EXPECTED_TAG {expected!r}: unexpected characters.")
+        expected = None
+
+    url = None
+    count = 0
     try:
         if args.release_json:
             with open(args.release_json, encoding="utf-8") as f:
                 release = json.load(f)
         else:
-            release = fetch_release(repo, os.environ.get("GITHUB_TOKEN"))
+            release = latest_release(repo, os.environ.get("GITHUB_TOKEN"), expected)
         url = pick_apk_url(release, repo)
         if url and not args.no_check and not asset_answers(url):
             url = None
-        if not url:
-            print("Download buttons keep the release-page link.")
-            return 0
-        count = rewrite(args.html, repo, url)
-    except Exception as error:  # Fail soft: the committed page still works.
+        if url:
+            count = rewrite(args.html, repo, url)
+    except Exception as error:  # noqa: BLE001 - fail soft: the committed page still works
         warn(f"Lookup failed ({type(error).__name__}: {error}); keeping the release-page link.")
-        return 0
+        count = 0
+
     if count:
-        print(f"Pointed {count} Download button(s) at {url}")
-        summary = os.environ.get("GITHUB_STEP_SUMMARY")
-        if summary:
+        result = f"Pointed {count} Download button(s) at {url}"
+    else:
+        result = "Download buttons keep the release-page link: " + (" ".join(reasons) or "no reason given.")
+    print(result)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        try:
             with open(summary, "a", encoding="utf-8") as f:
-                f.write(f"Download buttons point at {url}\n")
+                f.write(result + "\n")
+        except OSError:
+            pass
     return 0
 
 
