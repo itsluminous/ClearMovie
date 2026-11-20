@@ -1,0 +1,1 @@
+The frame around your photos and videos no longer disappears for a moment in saved videos. Before, it could disappear just after a photo, a video, a transition or a caption started or ended. Videos saved with an older version may still have the problem. To save one again without the problem, open it from My videos, tap Export, then tap Save video. Nothing else has changed.

@@ -28,7 +28,7 @@ val hasReleaseSigning =
 // any 0.0.1 APK accepts the next single APK as an update. Raise this by one for
 // each release. The release job reads this line to find
 // fastlane/metadata/android/en-US/changelogs/<baseVersionCode>.txt.
-val baseVersionCode = 2
+val baseVersionCode = 3
 
 android {
     namespace = "com.itsluminous.clearmovie"
@@ -39,7 +39,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = baseVersionCode * 10
-        versionName = "0.0.2"
+        versionName = "0.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
