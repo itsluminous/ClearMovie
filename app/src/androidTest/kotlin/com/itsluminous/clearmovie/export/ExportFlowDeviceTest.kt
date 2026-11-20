@@ -29,6 +29,7 @@ import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.MainActivity
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.export.ExportQuality
+import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.ui.editor.EDITOR_EXPORT_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_CLOSE_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_PLAY_TAG
@@ -37,6 +38,7 @@ import com.itsluminous.clearmovie.ui.export.EXPORT_SAVE_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_SHARE_TAG
 import com.itsluminous.clearmovie.ui.export.exportQualityTag
 import com.itsluminous.clearmovie.ui.home.HOME_LIST_TAG
+import com.itsluminous.clearmovie.ui.home.presetEditTag
 import com.itsluminous.clearmovie.work.ExportWorker
 import org.junit.After
 import org.junit.Before
@@ -85,6 +87,9 @@ class ExportFlowDeviceTest {
      */
     private fun openFromMyVideos(name: String) {
         waitFor(hasTestTag(HOME_LIST_TAG))
+        // Home reads the presets after the videos, and their cards then go in above My videos. Wait for them,
+        // or the video scrolled to can be pushed off the screen before the click.
+        waitFor(hasTestTag(presetEditTag(PresetId("event-frame"))))
         compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(name))
         compose.onNodeWithText(name).performClick()
         waitFor(hasTestTag(EDITOR_EXPORT_TAG))
