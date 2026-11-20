@@ -37,14 +37,19 @@ import java.io.File
 /**
  * The frame overlay must be on every frame, also right after another row
  * changes item. On the emulator's SwiftShader GL, while a draw left texture
- * unit 1 active, a few frames after any row switched item one frame showed
- * the MAIN clip's picture where the frame layer should be (no frame, no
- * strip). This exports a framed video whose rows switch item at these
- * boundaries: intro to clip, a crossfade, a wipe, cuts from video to photo
- * and back, a clip with a blurred background, the last clip's held frame
- * under the spoken ending, two captions starting and ending, and a picture
- * in picture appearing and going. It checks the frame's blue strip on every
- * frame the frame row covers.
+ * unit 1 active, after most item switches some of the next frames (often
+ * every third frame for up to about 0.8 s) showed the MAIN clip's picture
+ * where the frame layer should be (no frame, no strip). This exports an 11 s
+ * framed video whose rows switch item at these boundaries: intro to clip, a
+ * crossfade, a wipe, cuts from video to photo and back, a clip with a blurred
+ * background, the last clip's held frame under the spoken ending, two
+ * captions starting and ending, and a picture in picture appearing and going.
+ * It checks the frame's blue strip on every frame the frame row covers.
+ * Without the fix it found 28-32 bad frames of 269 in three runs: after the
+ * captions, the picture in picture, the wipe's start, both transitions' ends
+ * and the cut back to video (once, the intro cut). The crossfade's start, the
+ * cut to the photo and the cut to the ending are checked too but did not
+ * trigger it there.
  */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
@@ -54,11 +59,11 @@ class LayerSwitchRenderTest {
         val ids = SequentialIds("ls")
         val main =
             listOf(
-                VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 3000),
-                VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 3000),
-                VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 3000, fit = Fit.FIT_BLUR),
-                PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 2000),
-                VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 3000),
+                VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 3000, trimEndMs = CLIP_MS),
+                VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 3000, trimEndMs = CLIP_MS),
+                VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 3000, trimEndMs = CLIP_MS, fit = Fit.FIT_BLUR),
+                PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 800),
+                VideoClip(ids.clipId(), fixture("clip_light.mp4"), sourceDurationMs = 3000, trimEndMs = CLIP_MS),
             )
         var project =
             ProjectFactory
@@ -70,14 +75,18 @@ class LayerSwitchRenderTest {
                 ).addToMain(main, ids = ids)
                 .applyTransitionToAll(null)
                 // Clip 1 to 2 a crossfade, 2 to 3 a wipe; the rest are cuts.
-                .setTransition(main[0].id, Transition(TransitionKind.CROSSFADE, 600))
-                .setTransition(main[1].id, Transition(TransitionKind.WIPE_LEFT, 600))
-        for (startMs in listOf(3_000L, 9_500L)) {
-            project = project.addTimedClip(TextClip(ids.clipId(), startMs = startMs, durationMs = 1_000, text = "Hi"), ids = ids)
+                .setTransition(main[0].id, Transition(TransitionKind.CROSSFADE, TRANSITION_MS))
+                .setTransition(main[1].id, Transition(TransitionKind.WIPE_LEFT, TRANSITION_MS))
+        // MAIN: intro 0-2.0 s, clips 2.0-3.5, 3.1-4.6 (crossfade 3.1-3.5) and 4.2-5.7 s
+        // (wipe 4.2-4.6), the photo 5.7-6.5 s, the last clip 6.5-8.0 s, then the spoken
+        // ending to 11.0 s under that clip's held frame. Each caption and the picture in
+        // picture starts 0.2 s after a MAIN switch and ends 0.4 s or more before the next.
+        for (startMs in listOf(2_200L, 6_700L)) {
+            project = project.addTimedClip(TextClip(ids.clipId(), startMs = startMs, durationMs = 500, text = "Hi"), ids = ids)
         }
         project =
             project.addTimedClip(
-                PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 1_500, startMs = 6_000, pip = PipPlacement(Corner.TOP_LEFT, 0.3)),
+                PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 500, startMs = 4_800, pip = PipPlacement(Corner.TOP_LEFT, 0.3)),
                 ids = ids,
             )
         val plan = RenderPlanBuilder(RenderHarness.preset).build(project, height = 360)
@@ -163,6 +172,11 @@ class LayerSwitchRenderTest {
     }
 
     private companion object {
+        /** Each video clip's trimmed length, short so the export is 11 s (17.8 s before) on slow CI emulators. */
+        const val CLIP_MS = 1_500L
+
+        /** At most half of [CLIP_MS] (Timeline.maxTransitionMs); the second clip has a transition at each end. */
+        const val TRANSITION_MS = 400L
         const val STRIP_X = 0.92
         const val STRIP_Y = 0.9
         const val TOLERANCE = 40
