@@ -181,7 +181,11 @@ Rendering has two layers, both under `render`:
   Android's premultiplied alpha for bitmaps; `ChromaKeyEffect` keys the
   frame's green; `MotionEffect` draws each frame's `MotionMath` result
   (scale, move, fade, tint, wipe or circle mask; GLSL ES 1.0, so it runs on
-  SwiftShader as on a phone);
+  SwiftShader as on a phone). Every effect leaves texture unit 0 active after
+  it draws (`SinglePassShaderProgram`): all layers share one GL context, and
+  while placements left unit 1 active, exports on the emulator's SwiftShader
+  GL had single frames whose frame layer showed a clip's picture
+  (`ActiveTextureRenderTest`, `LayerSwitchRenderTest`);
   `GainEnvelopeAudioProcessor` applies the sound envelope. Captions and cards
   are drawn as bitmaps by `CaptionBitmapRenderer` and kept in
   `noBackupFilesDir/render/` by a hash of their content (and the renderer's

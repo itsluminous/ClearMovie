@@ -16,6 +16,12 @@ import androidx.media3.effect.BaseGlShaderProgram
  *
  * Subclasses set their uniforms in [setUniforms]. [release] deletes the GL
  * program as well as the texture pool, so no GL object outlives the effect.
+ * Every draw leaves texture unit 0 active, however many units its samplers
+ * used: Media3's pipelines for all layers share one GL context, and code
+ * after a draw (texture uploads, a video's next frame) binds on the active
+ * unit. While draws left unit 1 active, exports on the emulator's SwiftShader
+ * GL had, a few frames after any row changed item, a frame whose frame layer
+ * showed a clip's picture (observed; not traced inside the emulator's GL).
  * A subclass that needs passes of its own before the final one (the
  * fit-with-blur background) draws them in [beforeDraw] and frees what they
  * use in [releaseResources]; every other subclass leaves both alone.
@@ -74,6 +80,8 @@ internal abstract class SinglePassShaderProgram(
             GlUtil.checkGlError()
         } catch (e: GlUtil.GlException) {
             throw VideoFrameProcessingException(e, presentationTimeUs)
+        } finally {
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         }
     }
 
