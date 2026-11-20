@@ -49,16 +49,20 @@ later will not match it. ClearMovie needs Android 10 or newer.
 
 ## Screenshots
 
-ClearMovie 0.0.1 on an Android 16 emulator, making a birthday video from three short
-clips with the Event frame preset.
+ClearMovie from `main` (what will become 0.0.2) on an Android 16 emulator, making a
+short video from three clips with the Event frame preset and its caption.
 
 | Pick a preset | Check the preset | Add photos and videos | Arrange the timeline |
 | :---: | :---: | :---: | :---: |
-| ![Home screen with the Event frame preset ready](site/screenshots/home.webp) | ![What this preset adds: the intro and frame, each with Play, Replace and Skip](site/screenshots/preset-review.webp) | ![The Android photo picker with three videos selected](site/screenshots/media-pick.webp) | ![The editor with the preview and every row of the timeline](site/screenshots/editor.webp) |
+| ![Home screen: the Event frame preset ready with an Edit button, Start without a preset, New preset, and the video under My videos](site/screenshots/home.webp) | ![What this preset adds: the intro and frame, each with Play, Replace and Skip](site/screenshots/preset-review.webp) | ![The Android photo picker with three videos selected](site/screenshots/media-pick.webp) | ![The editor: the caption on the frame's blue strip, and every row of the timeline](site/screenshots/editor.webp) |
 
 | Add a caption | Choose a transition | Choose a size | Share it |
 | :---: | :---: | :---: | :---: |
-| ![Caption editor, Font tab with English and Hindi letters](site/screenshots/caption.webp) | ![Transition picker with previews](site/screenshots/transitions.webp) | ![Save your video: Best, Good or Small](site/screenshots/export.webp) | ![Your video is ready, with Share and Play](site/screenshots/export-done.webp) |
+| ![Caption editor, Font tab with English and Hindi letters](site/screenshots/caption.webp) | ![Transition picker with previews, Wipe Left chosen](site/screenshots/transitions.webp) | ![Save your video: Best, Good or Small](site/screenshots/export.webp) | ![Your video is ready, with Share and Play](site/screenshots/export-done.webp) |
+
+| Make a preset | Edit a preset | Set its caption style | The caption, selected |
+| :---: | :---: | :---: | :---: |
+| ![New preset: a name, intro and frame switches, and the kind of ending](site/screenshots/preset-create.webp) | ![Edit preset, scrolled down: a preview of its caption, its files and Save](site/screenshots/preset-edit.webp) | ![Change caption style, Colour tab: white words, no outline, no band](site/screenshots/preset-caption-style.webp) | ![The caption selected in the editor: white on the frame's blue strip, with Edit text, Animation, Earlier, Later, Other row and Delete below](site/screenshots/editor-caption.webp) |
 
 <table>
   <tr><th>Dark theme</th><th>In Hindi</th><th colspan="2">Sideways too</th></tr>
@@ -71,11 +75,15 @@ clips with the Event frame preset.
 
 ## Features
 
-In ClearMovie 0.0.1:
+In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
 
 - **Presets** - one tap sets up the intro, the frame overlay (with its green window
   keyed out so your photos and videos show through) and the ending, which can be a
   video or a closing voice clip. You can replace any part for a single video, or skip it.
+- **Your own presets** (new on `main`, coming in 0.0.2) - make a new preset from Home, edit
+  any preset from Home or Settings, delete the ones you made, or reset a built-in one. Each
+  preset keeps a caption style (words, place, size, font, colour, outline and band) that new
+  captions start from, with a live preview.
 - **Share from your gallery** - select photos and videos in the gallery, tap Share, and
   choose ClearMovie. They open on the timeline in the order they were taken.
 - **A timeline that stays simple** - photos and videos on one row you reorder by dragging,
@@ -110,6 +118,7 @@ What has shipped, and what is still to come:
 - [x] Preset picker, with "Start without a preset"
 - [x] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
 - [x] Preset review: replace or skip the intro, frame or ending for this video
+- [x] Make your own presets, edit any preset and delete the ones you made, each with its own caption style (done on `main`, ships in 0.0.2)
 - [x] Add photos and videos with the system photo picker
 - [x] Share photos and videos from the gallery straight into a new video
 
