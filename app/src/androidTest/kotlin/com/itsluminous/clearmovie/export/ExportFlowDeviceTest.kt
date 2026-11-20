@@ -4,9 +4,11 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -55,6 +57,14 @@ import org.junit.runner.RunWith
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class ExportFlowDeviceTest {
+    private companion object {
+        /** How long [openFromMyVideos] keeps trying a click that found no card. */
+        const val OPEN_TIMEOUT_MS = 10_000L
+
+        /** What Compose's test API says when a node it looks up for an action is not there. */
+        const val NO_NODE = "could not find any node"
+    }
+
     @get:Rule
     val compose = createEmptyComposeRule()
 
@@ -87,11 +97,28 @@ class ExportFlowDeviceTest {
      */
     private fun openFromMyVideos(name: String) {
         waitFor(hasTestTag(HOME_LIST_TAG))
-        // Home reads the presets after the videos, and their cards then go in above My videos. Wait for them,
-        // or the video scrolled to can be pushed off the screen before the click.
+        // Home reads the presets after the videos, and their cards then go in above My videos, so wait for them.
+        // setUp binds the Event frame preset, so once the presets are read its card, with an Edit button, is there.
         waitFor(hasTestTag(presetEditTag(PresetId("event-frame"))))
-        compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(name))
-        compose.onNodeWithText(name).performClick()
+        // Home can still be settling after that: on the slow API 29 emulator the card scrolled to was gone by the
+        // time of the click. A click that found no card opened nothing, so only that miss is tried again, for a while.
+        val card = hasText(name) and hasClickAction()
+        var missed: AssertionError? = null
+        try {
+            compose.waitUntil(OPEN_TIMEOUT_MS) {
+                try {
+                    compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(card)
+                    compose.onNode(card).performClick()
+                    true
+                } catch (e: AssertionError) {
+                    if (e.message?.contains(NO_NODE) != true) throw e
+                    missed = e
+                    false
+                }
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw missed ?: e
+        }
         waitFor(hasTestTag(EDITOR_EXPORT_TAG))
     }
 
