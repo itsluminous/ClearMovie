@@ -525,6 +525,28 @@
     <string name="insert_pip_body">From your gallery, shown small in a corner</string>
     <string name="insert_sound">Music or sound</string>
     <string name="insert_sound_body">From your files</string>
+    <!-- Record voice (cm-record-voice). "Permissions" and "Microphone" are the names Android's own settings screen shows. -->
+    <string name="record_voice">Record voice</string>
+    <string name="record_voice_body">Speak while the video plays from %1$s</string>
+    <string name="record_get_ready">Get ready</string>
+    <plurals name="record_starts_in">
+        <item quantity="one">Recording starts in %1$d second</item>
+        <item quantity="other">Recording starts in %1$d seconds</item>
+    </plurals>
+    <string name="record_countdown_body">Recording starts at %1$s. The video plays without its own sound while you speak.</string>
+    <string name="record_recording">Recording</string>
+    <string name="record_progress">Started at %1$s. %2$s of video left.</string>
+    <string name="record_stop">Stop</string>
+    <string name="record_saving">Saving your recording</string>
+    <string name="mic_title">Use the microphone?</string>
+    <string name="mic_body">ClearMovie records your voice only while this screen says Recording. The recording stays on this phone, inside ClearMovie.</string>
+    <string name="mic_off_title">The microphone is off for ClearMovie</string>
+    <string name="mic_off_body">To record your voice, open Settings, tap Permissions, then Microphone, and choose Allow.</string>
+    <string name="record_kept">Recording stopped. What you said is kept.</string>
+    <string name="record_too_short">That recording was too short to keep.</string>
+    <string name="record_no_mic">Another app is using the microphone. Close it and try again.</string>
+    <string name="record_failed">The recording could not be saved.</string>
+    <string name="record_no_room">Move the timeline back a little: there is no video left to speak over.</string>
     <string name="insert_overlay">Frame video</string>
     <string name="insert_overlay_body">From your files. Its green parts show the video under it.</string>
     <string name="fade_title">Fade</string>

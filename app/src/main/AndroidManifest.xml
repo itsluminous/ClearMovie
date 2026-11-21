@@ -3,8 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ClearMovie is offline by design: there is no INTERNET permission.
-         The only permissions read the phone's photos and videos, asked for
-         once on a plain-language screen (data/media/MediaPermissions.kt).
+         The permissions read the phone's photos and videos, asked for once
+         on a plain-language screen (data/media/MediaPermissions.kt), and use
+         the microphone for Record voice (below).
          Android 13+: images and videos; 14+ also lets the user choose
          "Select photos" (partial access). Android 10-12: READ_EXTERNAL_STORAGE. -->
     <uses-permission
@@ -13,6 +14,12 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
+    <!-- Record voice (cm-record-voice): the microphone, asked for only when
+         Record voice is tapped, after a plain-language explanation
+         (ui/editor/RecordVoice.kt). It is used only while the editor shows
+         the recording panel; the recording stays in the app's own storage. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Export (ARCHITECTURE section 12): a foreground worker keeps saving the
          video while the screen turns or the app is in the background, with a

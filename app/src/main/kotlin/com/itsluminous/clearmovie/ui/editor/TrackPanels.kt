@@ -59,6 +59,7 @@ import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTrackMuted
 import com.itsluminous.clearmovie.domain.model.trimAudio
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
+import com.itsluminous.clearmovie.ui.components.durationText
 import com.itsluminous.clearmovie.ui.components.preciseDurationText
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.RowType
@@ -79,6 +80,9 @@ fun moveTargetTag(key: String) = "move_target_$key"
 const val MOVE_NEW_ROW_TAG = "move_target_new"
 const val TEXT_FIELD_TAG = "text_field"
 const val REMOVE_ROW_CONFIRM_TAG = "remove_row_confirm"
+
+/** The "Record voice" option's name in [insertOptionTag]. */
+const val RECORD_OPTION = "record"
 
 fun pipCornerTag(corner: Corner) = "pip_corner_${corner.name}"
 
@@ -173,6 +177,19 @@ internal fun TimedInsertPanel(
                 insertOptionTag("sound"),
             ) {
                 pick()
+            }
+            // A voice row can also record one (cm-record-voice), from the playhead, where the video will play from.
+            if (track.audioRole == AudioRole.VOICE && track.presetRole == null) {
+                Choice(
+                    stringResource(R.string.record_voice),
+                    stringResource(R.string.record_voice_body, durationText(playheadMs * 1000)),
+                    null,
+                    R.drawable.ic_record_voice,
+                    insertOptionTag(RECORD_OPTION),
+                ) {
+                    onPanel(null)
+                    callbacks.recordVoice(track.id, playheadMs)
+                }
             }
         }
 

@@ -215,8 +215,11 @@ fun EditorScreen(
     actions: EditorActions,
     state: EditorScreenState = rememberEditorScreenState(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    recording: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val project = ui.project
+    // While a voice is recorded (cm-record-voice) its panel takes the bar's place, and the rest stays in sight but takes no touches.
+    val lock = if (recording != null) Modifier.lockedForRecording() else Modifier
     val slots = ui.slots
     // The preview's shape follows the video's (cm-aspect-ratio).
     val canvasAspect = (project?.shape ?: CanvasShape.LANDSCAPE).aspect.toFloat()
@@ -638,7 +641,7 @@ fun EditorScreen(
             val hidden = rows.filter { it.key in layout?.hiddenRows.orEmpty() }
 
             val timeline: @Composable (Modifier) -> Unit = { m ->
-                Column(m.testTag(EDITOR_TIMELINE_TAG)) {
+                Column(m.testTag(EDITOR_TIMELINE_TAG).then(lock)) {
                     Banners(ui, actions::fixPreset)
                     if (!ui.hasContent) EmptyHint(actions::pickToAdd)
                     TimelineView(
@@ -666,7 +669,9 @@ fun EditorScreen(
                 Box(m.onSizeChanged { bottomDp = with(density) { it.height.toDp().value } }) {
                     CompositionLocalProvider(LocalShownRows provides visible) {
                         val open = state.panel
-                        if (open != null && project != null) {
+                        if (recording != null) {
+                            recording(Modifier)
+                        } else if (open != null && project != null) {
                             EditPanel(
                                 open,
                                 project,
@@ -748,7 +753,7 @@ fun EditorScreen(
                     playhead = playhead,
                     enabled = ui.schedule?.main?.isNotEmpty() == true,
                     actions = actions,
-                    modifier = m.onSizeChanged { controlsDp = with(density) { it.height.toDp().value } },
+                    modifier = m.onSizeChanged { controlsDp = with(density) { it.height.toDp().value } }.then(lock),
                 )
             }
 
@@ -772,7 +777,12 @@ fun EditorScreen(
                             .fillMaxHeight()
                             .windowInsetsPadding(WindowInsets.safeDrawing.pane(left = false)),
                     ) {
-                        TopBar(title, ui, topActions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
+                        TopBar(
+                            title,
+                            ui,
+                            topActions,
+                            Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } }.then(lock),
+                        )
                         timeline(Modifier.weight(1f).fillMaxWidth())
                         bottom(Modifier)
                     }
@@ -780,7 +790,12 @@ fun EditorScreen(
             } else {
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     Column(Modifier.fillMaxSize()) {
-                        TopBar(title, ui, topActions, Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } })
+                        TopBar(
+                            title,
+                            ui,
+                            topActions,
+                            Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } }.then(lock),
+                        )
                         val previewDp =
                             when (layout) {
                                 is PreviewLayout.Full -> layout.previewDp

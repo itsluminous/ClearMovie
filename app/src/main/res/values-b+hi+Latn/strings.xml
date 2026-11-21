@@ -482,6 +482,27 @@
     <string name="insert_pip_body">Aapki gallery se, kone me chhota dikhega</string>
     <string name="insert_sound">Music ya sound</string>
     <string name="insert_sound_body">Aapki files se</string>
+    <string name="record_voice">Voice record karein</string>
+    <string name="record_voice_body">Video %1$s se chalega, saath me bolein</string>
+    <string name="record_get_ready">Taiyaar ho jaiye</string>
+    <plurals name="record_starts_in">
+        <item quantity="one">Recording %1$d second me shuru hogi</item>
+        <item quantity="other">Recording %1$d second me shuru hogi</item>
+    </plurals>
+    <string name="record_countdown_body">Recording %1$s se shuru hogi. Aapke bolte samay video ki apni awaaz band rahegi.</string>
+    <string name="record_recording">Recording ho rahi hai</string>
+    <string name="record_progress">%1$s se shuru. Video ka %2$s baaki.</string>
+    <string name="record_stop">Stop karein</string>
+    <string name="record_saving">Recording save ho rahi hai</string>
+    <string name="mic_title">Microphone use karein?</string>
+    <string name="mic_body">ClearMovie aapki awaaz tabhi record karta hai jab is screen par \"Recording ho rahi hai\" likha ho. Recording isi phone par, ClearMovie ke andar rehti hai.</string>
+    <string name="mic_off_title">ClearMovie ke liye microphone band hai</string>
+    <string name="mic_off_body">Apni awaaz record karne ke liye Settings kholein, Permissions par tap karein, phir Microphone me Allow chunein.</string>
+    <string name="record_kept">Recording ruk gayi. Aapne jo bola, woh rakh liya gaya hai.</string>
+    <string name="record_too_short">Yeh recording rakhne ke liye bahut chhoti thi.</string>
+    <string name="record_no_mic">Microphone kisi doosre app me chal raha hai. Use band karke phir koshish karein.</string>
+    <string name="record_failed">Recording save nahi ho saki.</string>
+    <string name="record_no_room">Timeline ko thoda peeche le jaayein: aage bolne ke liye video nahi bacha hai.</string>
     <string name="insert_overlay">Frame video</string>
     <string name="insert_overlay_body">Aapki files se. Iske green hisson me neeche ka video dikhega.</string>
     <string name="fade_title">Fade</string>

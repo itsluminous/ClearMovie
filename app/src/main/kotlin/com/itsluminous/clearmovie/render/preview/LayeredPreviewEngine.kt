@@ -362,10 +362,29 @@ class LayeredPreviewEngine(
         val s = schedule ?: return
         val t = mainTimeUs()
         if (force) followTo(t) else keepInStep(t)
-        main?.volume = gainOf(s.mainGainDbAt(t))
-        tail?.volume = gainOf(s.tailGainDbAt(t))
-        s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.volume = gainOf(lane.gainDbAt(t)) }
+        applyVolumes(s, t)
     }
+
+    private fun applyVolumes(
+        s: PreviewSchedule,
+        t: Long,
+    ) {
+        main?.volume = gainOf(s.mainGainDbAt(t)) * monitorGain
+        tail?.volume = gainOf(s.tailGainDbAt(t)) * monitorGain
+        s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.volume = gainOf(lane.gainDbAt(t)) * monitorGain }
+    }
+
+    /**
+     * How loud the preview plays, 0 to 1, on top of the plan's own levels:
+     * 0 while a voice is recorded, so the video's sound never goes back into
+     * the microphone (cm-record-voice). The export is never affected.
+     */
+    var monitorGain: Float = 1f
+        set(value) {
+            checkMainThread()
+            field = value.coerceIn(0f, 1f)
+            schedule?.let { applyVolumes(it, mainTimeUs()) }
+        }
 
     private fun followTo(t: Long) {
         val s = schedule ?: return

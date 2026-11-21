@@ -474,6 +474,27 @@
     <string name="insert_pip_body">आपकी गैलरी से, कोने में छोटा दिखेगा</string>
     <string name="insert_sound">संगीत या ध्वनि</string>
     <string name="insert_sound_body">आपकी फ़ाइलों से</string>
+    <string name="record_voice">आवाज़ रिकॉर्ड करें</string>
+    <string name="record_voice_body">वीडियो %1$s से चलेगा, साथ में बोलें</string>
+    <string name="record_get_ready">तैयार हो जाइए</string>
+    <plurals name="record_starts_in">
+        <item quantity="one">रिकॉर्डिंग %1$d सेकंड में शुरू होगी</item>
+        <item quantity="other">रिकॉर्डिंग %1$d सेकंड में शुरू होगी</item>
+    </plurals>
+    <string name="record_countdown_body">रिकॉर्डिंग %1$s से शुरू होगी। आपके बोलते समय वीडियो की अपनी आवाज़ बंद रहेगी।</string>
+    <string name="record_recording">रिकॉर्ड हो रहा है</string>
+    <string name="record_progress">%1$s से शुरू। वीडियो का %2$s बाकी।</string>
+    <string name="record_stop">रोकें</string>
+    <string name="record_saving">रिकॉर्डिंग सेव हो रही है</string>
+    <string name="mic_title">माइक्रोफ़ोन इस्तेमाल करें?</string>
+    <string name="mic_body">ClearMovie आपकी आवाज़ तभी रिकॉर्ड करता है जब इस स्क्रीन पर \"रिकॉर्ड हो रहा है\" लिखा हो। रिकॉर्डिंग इसी फ़ोन पर, ClearMovie के अंदर रहती है।</string>
+    <string name="mic_off_title">ClearMovie के लिए माइक्रोफ़ोन बंद है</string>
+    <string name="mic_off_body">अपनी आवाज़ रिकॉर्ड करने के लिए सेटिंग्स खोलें, अनुमतियाँ पर टैप करें, फिर माइक्रोफ़ोन में अनुमति दें।</string>
+    <string name="record_kept">रिकॉर्डिंग रुक गई। आपने जो बोला, वह रखा गया है।</string>
+    <string name="record_too_short">यह रिकॉर्डिंग रखने के लिए बहुत छोटी थी।</string>
+    <string name="record_no_mic">माइक्रोफ़ोन किसी दूसरे ऐप में चल रहा है। उसे बंद करके फिर कोशिश करें।</string>
+    <string name="record_failed">रिकॉर्डिंग सेव नहीं हो सकी।</string>
+    <string name="record_no_room">टाइमलाइन को थोड़ा पीछे ले जाएँ: आगे बोलने के लिए वीडियो नहीं बचा है।</string>
     <string name="insert_overlay">फ़्रेम वीडियो</string>
     <string name="insert_overlay_body">आपकी फ़ाइलों से। इसके हरे हिस्सों में नीचे का वीडियो दिखेगा।</string>
     <string name="fade_title">फ़ेड</string>

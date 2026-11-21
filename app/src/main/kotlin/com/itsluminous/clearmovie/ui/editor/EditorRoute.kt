@@ -28,16 +28,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -93,6 +96,7 @@ fun EditorRoute(
     val preview by viewModel.engine.state.collectAsStateWithLifecycle()
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val intake by viewModel.intake.state.collectAsStateWithLifecycle()
+    val recording by viewModel.recording.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val screen = rememberEditorScreenState()
     var exportInfo by rememberSaveable { mutableStateOf(false) }
@@ -184,6 +188,20 @@ fun EditorRoute(
                 EditorEvent.CantDoThat -> {
                     snackbar.showSnackbar(resources.getString(R.string.editor_cant_do_that))
                 }
+
+                is EditorEvent.Recorded -> {
+                    snackbar.showSnackbar(
+                        resources.getString(
+                            when (it.note) {
+                                RecordingNote.KEPT_AFTER_INTERRUPTION -> R.string.record_kept
+                                RecordingNote.TOO_SHORT -> R.string.record_too_short
+                                RecordingNote.NO_MICROPHONE -> R.string.record_no_mic
+                                RecordingNote.FAILED -> R.string.record_failed
+                                RecordingNote.NO_ROOM -> R.string.record_no_room
+                            },
+                        ),
+                    )
+                }
             }
         }
     }
@@ -205,6 +223,17 @@ fun EditorRoute(
     }
     BackHandler(enabled = screen.panel == null, onBack = viewModel::close)
     BackHandler(enabled = screen.panel != null) { screen.panel = null }
+    // While a voice is recorded, Back is Stop: what was said is kept (cm-record-voice).
+    BackHandler(enabled = recording != null, onBack = viewModel::stopRecording)
+    // A long commentary must not be cut off by the screen going dark.
+    val view = LocalView.current
+    DisposableEffect(recording != null) {
+        val on = recording != null
+        if (on) view.keepScreenOn = true
+        onDispose { if (on) view.keepScreenOn = false }
+    }
+    val askToRecord = rememberRecordVoice { row, atMs -> viewModel.recordVoice(row, atMs) }
+    val latestAskToRecord by rememberUpdatedState(askToRecord)
 
     if (ui.failed) {
         CannotOpen(onBack = onClosed)
@@ -317,6 +346,14 @@ fun EditorRoute(
                     viewModel.pause()
                     playingPart = clipId.value
                 }
+
+                override fun recordVoice(
+                    trackId: TrackId,
+                    atMs: Long,
+                ) {
+                    viewModel.pause()
+                    latestAskToRecord(trackId, atMs)
+                }
             }
         }
     // The shape the preview and its caption images are drawn for (cm-aspect-ratio).
@@ -335,6 +372,10 @@ fun EditorRoute(
             actions = actions,
             state = screen,
             snackbar = snackbar,
+            recording =
+                recording?.let { now ->
+                    { m -> RecordingPanel(now, onStop = viewModel::stopRecording, onCancel = viewModel::cancelRecording, modifier = m) }
+                },
         )
     }
     val project = ui.project

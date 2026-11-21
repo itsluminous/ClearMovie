@@ -212,6 +212,17 @@ interface EditorCallbacks {
         trackId: TrackId,
         atMs: Long,
     )
+
+    /**
+     * "Record voice" on a voice row (cm-record-voice): asks for the
+     * microphone if need be, then records while the video plays from [atMs];
+     * the recording goes on row [trackId] at [atMs] (or, where that is
+     * taken, on the first free voice row or a new one).
+     */
+    fun recordVoice(
+        trackId: TrackId,
+        atMs: Long,
+    ) = Unit
 }
 
 /**

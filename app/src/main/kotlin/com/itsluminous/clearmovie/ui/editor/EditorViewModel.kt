@@ -20,6 +20,7 @@ import com.itsluminous.clearmovie.data.project.OpenResult
 import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.data.project.ProjectMediaSet
 import com.itsluminous.clearmovie.data.project.ProjectRepository
+import com.itsluminous.clearmovie.data.record.VoiceRecordings
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.CanvasShape
@@ -49,6 +50,7 @@ import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.addRecording
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.domain.model.chooseShape
@@ -70,6 +72,7 @@ import com.itsluminous.clearmovie.ui.media.MediaIntake
 import com.itsluminous.clearmovie.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -151,6 +154,11 @@ sealed interface EditorEvent {
 
     /** An edit could not be made (an item too short for that speed, say). */
     data object CantDoThat : EditorEvent
+
+    /** Something to say about a voice recording (cm-record-voice). */
+    data class Recorded(
+        val note: RecordingNote,
+    ) : EditorEvent
 }
 
 /** What a chosen file had to be. */
@@ -231,6 +239,7 @@ class EditorViewModel
         private val projectMedia: ProjectMedia,
         private val mediaAccess: MediaAccess,
         private val probe: MediaFactsProbe,
+        private val recordings: VoiceRecordings,
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -254,6 +263,33 @@ class EditorViewModel
 
         private val eventChannel = Channel<EditorEvent>(Channel.BUFFERED)
         val events: Flow<EditorEvent> = eventChannel.receiveAsFlow()
+
+        /** "Record voice" (cm-record-voice): lives here, so a rotation keeps recording. */
+        private val voice =
+            VoiceRecordingController(
+                viewModelScope,
+                engine,
+                recordings,
+                projectId,
+                place = { clip, row -> if (edit { addRecording(clip, row) }) clip.id else null },
+                onPlaced = { id -> viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(id)) } },
+                onNote = { note -> viewModelScope.launch { eventChannel.send(EditorEvent.Recorded(note)) } },
+            )
+
+        /** The recording in progress, or null. */
+        val recording: StateFlow<RecordingUi?> = voice.state
+
+        /** Records a voice from [atMs] onto voice row [row] (or the first free one). The microphone permission is granted. */
+        fun recordVoice(
+            row: TrackId?,
+            atMs: Long,
+        ) = voice.start(row, atMs)
+
+        /** Stop: what was recorded goes on the timeline. */
+        fun stopRecording() = voice.stop()
+
+        /** Cancel: nothing is kept. */
+        fun cancelRecording() = voice.cancel()
 
         /** The notes the editor shows once on arrival: items that could not be added, "We brought back your last video". */
         var arrivalNotes: ArrivalNotes? =
@@ -301,6 +337,9 @@ class EditorViewModel
                     uiState.update { it.copy(failed = true) }
                     return@launch
                 }
+                // Recordings an earlier visit took off the timeline go now: no undo can bring them back.
+                val first = opened.project
+                launch(Dispatchers.IO) { runCatching { recordings.sweepUnused(first) } }
                 repository.open
                     .filterNotNull()
                     .filter { it.id == projectId }
@@ -336,6 +375,8 @@ class EditorViewModel
                 }
             }
             val project = uiState.value.project ?: return
+            // A reload while a voice is recorded would restart the picture under it.
+            if (voice.active) return
             viewModelScope.launch { load(project) }
         }
 
@@ -789,7 +830,9 @@ class EditorViewModel
             engine.load(schedule, set.resolver, start, play)
         }
 
-        fun togglePlay() = engine.togglePlay()
+        fun togglePlay() {
+            if (!voice.active) engine.togglePlay()
+        }
 
         /**
          * Plays the preview from [us] as soon as it has the edit just made (a
@@ -811,12 +854,18 @@ class EditorViewModel
                 }
         }
 
-        fun pause() = engine.pause()
+        /** Pauses; a voice being recorded is stopped and kept (the app went to the background). */
+        fun pause() {
+            if (voice.active) voice.stop(interrupted = true) else engine.pause()
+        }
 
-        fun seekTo(us: Long) = engine.seekTo(us)
+        fun seekTo(us: Long) {
+            if (!voice.active) engine.seekTo(us)
+        }
 
         /** Drops any intake in flight and its saved links (the screen is leaving). */
         override fun onCleared() {
+            voice.release()
             intake.cancel()
             draftJob?.cancel()
             engine.release()
@@ -867,9 +916,17 @@ class EditorViewModel
 
         /** Back: writes the project and leaves the editor. */
         fun close() {
+            // Back while recording stops the recording first; the next Back leaves.
+            if (voice.active) {
+                voice.stop()
+                return
+            }
             engine.pause()
             viewModelScope.launch {
-                eventChannel.send(if (repository.close()) EditorEvent.Closed else EditorEvent.NotSaved)
+                val last = session.current
+                val closed = repository.close()
+                if (closed && last != null) launch(Dispatchers.IO) { runCatching { recordings.sweepUnused(last) } }
+                eventChannel.send(if (closed) EditorEvent.Closed else EditorEvent.NotSaved)
             }
         }
 
