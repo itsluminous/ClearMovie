@@ -51,12 +51,12 @@ sealed interface TimedHit {
 /**
  * The "+" points and hits of a row whose items have their own times (text,
  * picture in picture, frame, music, voice), in dp on the time span (the
- * owner's rule, the same as MAIN's): one "+" at the end of the row, after
- * its last item; on the selected item only, one on each side, just outside
- * it (beyond its trim handles, as on MAIN, when it has them); none between
- * unselected items. An empty row's single "+" is drawn by the timeline
- * itself. The selected item's trim handles take its inner edges, 24 dp
- * drawn and 48 dp to touch. Pure, so the rules are tested on the JVM.
+ * owner's rule, the same as MAIN's): on the selected item only, one on each
+ * side, just outside it (beyond its trim handles, as on MAIN, when it has
+ * them); none between unselected items. The row's own "+" is in the column
+ * at its right end, drawn by the timeline itself ([RowEndPlus],
+ * cm-plus-position). The selected item's trim handles take its inner edges,
+ * 24 dp drawn and 48 dp to touch. Pure, so the rules are tested on the JVM.
  */
 object TimedRowGeometry {
     fun plusPoints(
@@ -68,9 +68,9 @@ object TimedRowGeometry {
         val sorted = clips.filter { it.endMs > it.startMs }.sortedBy { it.startMs }
         if (sorted.isEmpty()) return emptyList()
         val half = TimelineGeometry.PLUS_HIT_DP / 2
-        // Kept whole inside the span's padding at either end, so its full 48 dp is always on screen.
+        // Kept whole inside the span's padding at its start or the "+" column at its end, so its full 48 dp is on screen.
         val lo = -TimelineGeometry.EDGE_ROOM_DP + half
-        val hi = widthDp + TimelineGeometry.EDGE_ROOM_DP - half
+        val hi = widthDp + TimelineGeometry.END_DP - half
 
         fun TimedPlus.kept() = copy(xDp = xDp.coerceIn(lo, maxOf(lo, hi)))
         val out = mutableListOf<TimedPlus>()
@@ -93,10 +93,6 @@ object TimedRowGeometry {
                     TimedPlus(c.id, InsertSide.AFTER, zoom.xOf(c.endMs.toDouble()) + outward).kept(),
                 ).filter(::clear)
         }
-        // One "+" at the end of the row, after its last item, never on a handle.
-        val last = sorted.maxBy { it.endMs }
-        val end = TimedPlus(last.id, InsertSide.AFTER, zoom.xOf(last.endMs.toDouble()) + half).kept()
-        if (clear(end) && out.none { abs(it.xDp - end.xDp) < TimelineGeometry.PLUS_HIT_DP }) out += end
         return out.sortedBy { it.xDp }
     }
 

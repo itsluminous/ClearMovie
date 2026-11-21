@@ -78,8 +78,9 @@ sealed interface HitTarget {
  * top of the ruler. It decides where the clips, the trim handles and the "+"
  * points go, and what a touch hits. Pure, so the rules are tested on the JVM:
  *
- * - One "+" at the end of the row, and one on each side of the selected item
- *   only (see [plusPoints]). Never before the intro or after the ending.
+ * - One "+" on each side of the selected item only (see [plusPoints]); the
+ *   row's own "+" sits in the column at its right end ([RowEndPlus]). Never
+ *   before the intro or after the ending.
  * - On the selected item the trim handles take its inner edges, so its "+"
  *   points move outside it, [HANDLE_GAP_DP] clear of the handles' hit area.
  * - No two "+" hit areas overlap, and none overlaps a trim handle's.
@@ -89,7 +90,9 @@ sealed interface HitTarget {
  *   the two never share a spot and both keep a 48 dp hit area. A "+" that
  *   would come within a marker's hit area moves up the same way. A marker
  *   gives way to the selected item's trim handles (the bar's Transition
- *   opens it then) and to an earlier marker closer than its hit area.
+ *   opens it then), to an earlier marker closer than its hit area, and to
+ *   the "+" column at the row's right end (it is left out while any of its
+ *   hit area would reach in there).
  */
 class TimelineGeometry(
     val spans: List<SlotSpan>,
@@ -150,6 +153,7 @@ class TimelineGeometry(
                         x - MARKER_HIT_DP / 2 - HANDLE_GAP_DP >= h.endInclusive
                 }
             if (!clear) continue
+            if (x + MARKER_HIT_DP / 2 > widthDp + EPS) continue
             if (kept.any { abs(it.xDp - x) < MARKER_HIT_DP }) continue
             kept += MarkerPoint(b, b - 1, x)
         }
@@ -164,11 +168,11 @@ class TimelineGeometry(
 
     /**
      * The "+" points to draw (the owner's rule, replacing cm-timeline's):
-     * - one at the end of the row: after the last photo, video or card, or
-     *   after the intro when there are none yet;
      * - on the selected item only, one on each side, placed beyond its trim
      *   handles so neither touch area overlaps a handle's;
-     * - none between unselected items.
+     * - none between unselected items, and none at the end of the row: the
+     *   row's own "+" is in the column at its right end (cm-plus-position,
+     *   [RowEndPlus]), and hidden while an item on this row is selected.
      * A "+" whose hit area would touch a transition marker's moves up to the
      * row's top edge at the same x (section 11.6). A side "+" past the end of
      * the view is left out: selecting moves the view so it shows (TimelineView),
@@ -179,13 +183,9 @@ class TimelineGeometry(
         if (spans.isEmpty()) return emptyList()
         val sel = selected?.takeIf { it in spans.indices }
         val out = mutableListOf<PlusPoint>()
-        val handles = handleHitAreas()?.toList().orEmpty()
         val half = PLUS_HIT_DP / 2
 
-        fun clearOfHandles(x: Double) =
-            handles.all { h -> x + half + HANDLE_GAP_DP <= h.start || x - half - HANDLE_GAP_DP >= h.endInclusive }
-
-        fun onScreen(x: Double) = x - half >= -EDGE_ROOM_DP - EPS && x + half <= widthDp + EDGE_ROOM_DP + EPS
+        fun onScreen(x: Double) = x - half >= -EDGE_ROOM_DP - EPS && x + half <= widthDp + END_DP + EPS
         if (sel != null) {
             val outward = if (selectedTrimmable) DISPLACE_DP else 0.0
             val before = left(sel) - outward
@@ -196,18 +196,6 @@ class TimelineGeometry(
             ) {
                 out += PlusPoint(sel + 1, sel, InsertSide.AFTER, after, displaced = selectedTrimmable)
             }
-        }
-        val lastContent = spans.indexOfLast { it.content }
-        val end =
-            when {
-                lastContent >= 0 -> PlusPoint(lastContent + 1, lastContent, InsertSide.AFTER, right(lastContent), displaced = false)
-                insertAllowed(1) -> PlusPoint(1, 0, InsertSide.AFTER, right(0), displaced = false)
-                insertAllowed(0) -> PlusPoint(0, 0, InsertSide.BEFORE, left(0), displaced = false)
-                else -> null
-            }
-        // The selected item's own "+" already covers the end when it is the last one.
-        if (end != null && out.none { it.boundary == end.boundary || abs(it.xDp - end.xDp) < PLUS_HIT_DP } && clearOfHandles(end.xDp)) {
-            out += end
         }
         // Never on a transition marker: a "+" that would touch one goes up to the row's top edge.
         return out
@@ -230,8 +218,9 @@ class TimelineGeometry(
         y: Double,
     ): HitTarget {
         // The "+" points and markers come first, over whatever is under them (a lifted "+" reaches above the row).
-        // The end "+" sits on an item's edge. Over a narrow item (under two "+" wide) it takes only taps on
-        // its circle, so that item can still be selected; everywhere else it has its full 48 dp.
+        // A "+" left on an item's edge (beside a selected intro or ending, which have no handles). Over a narrow
+        // item (under two "+" wide) it takes only taps on its circle, so that item can still be selected;
+        // everywhere else it has its full 48 dp.
         val under = spans.indices.firstOrNull { x >= left(it) && x < right(it) }
         val plus =
             plusPoints()
@@ -284,10 +273,18 @@ class TimelineGeometry(
 
         private const val OFFSCREEN_DP = 64.0
 
-        /** How far past the time span a "+" may sit: the span's padding at each end (TimelineView's PAD_DP). */
+        /** How far before the time span a "+" may sit: the span's padding at its start (TimelineView's PAD_DP). */
         const val EDGE_ROOM_DP = 28.0
 
-        /** Over a narrow item, how close to the end "+" a tap must be: its drawn circle. */
+        /**
+         * The column at every row's right end that holds the row's "+"
+         * (cm-plus-position): a 48 dp touch target, right after the time
+         * span. On the selected item's row it is empty, and that item's own
+         * "+" after it may sit in it.
+         */
+        const val END_DP = 48.0
+
+        /** Over a narrow item, how close to a "+" on its edge a tap must be: its drawn circle. */
         const val PLUS_CORE_DP = 12.0
 
         private const val EPS = 1e-6

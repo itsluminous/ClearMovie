@@ -24,10 +24,9 @@ class RowGeometryTest {
     ) = TimedRowGeometry.plusPoints(clips, z, selected?.let(::ClipId))
 
     @Test
-    fun `nothing selected, one plus at the end of the row, just after the last item`() {
-        val plus = plus(listOf(clip("a", 0, 1000), clip("b", 3000, 4000)))
-        assertThat(plus.map { it.anchor.value to it.side }).containsExactly("b" to InsertSide.AFTER)
-        assertThat(plus.single().xDp).isWithin(1e-9).of(400.0 + TimelineGeometry.PLUS_HIT_DP / 2)
+    fun `nothing selected, no plus on the row itself, its plus is in the column at its end`() {
+        // cm-plus-position: the row's own "+" is drawn in the column at its right end (RowEndPlus), not after its last item.
+        assertThat(plus(listOf(clip("a", 0, 1000), clip("b", 3000, 4000)))).isEmpty()
         assertThat(plus(emptyList())).isEmpty()
     }
 
@@ -36,7 +35,7 @@ class RowGeometryTest {
         val clips = listOf(clip("a", 1000, 2000), clip("b", 2000, 3000), clip("c", 3500, 3800))
         val sel = plus(clips, selected = "a")
         assertThat(sel.map { it.anchor.value to it.side })
-            .containsExactly("a" to InsertSide.BEFORE, "a" to InsertSide.AFTER, "c" to InsertSide.AFTER)
+            .containsExactly("a" to InsertSide.BEFORE, "a" to InsertSide.AFTER)
             .inOrder()
         // Just outside the item: its own area stays the item's.
         assertThat(sel[0].xDp + TimelineGeometry.PLUS_HIT_DP / 2).isWithin(1e-9).of(100.0)
@@ -58,7 +57,11 @@ class RowGeometryTest {
         // Kept whole on screen: an item at the very start has its "+" pulled in to the padding's edge.
         val atStart = TimedRowGeometry.plusPoints(listOf(clip("s", 0, 1000)), zoom, ClipId("s"), 300.0)
         assertThat(atStart.first().xDp - TimelineGeometry.PLUS_HIT_DP / 2).isAtLeast(-TimelineGeometry.EDGE_ROOM_DP - 1e-9)
-        assertThat(atStart.last().xDp + TimelineGeometry.PLUS_HIT_DP / 2).isAtMost(300.0 + TimelineGeometry.EDGE_ROOM_DP + 1e-9)
+        assertThat(atStart.last().xDp + TimelineGeometry.PLUS_HIT_DP / 2).isAtMost(300.0 + TimelineGeometry.END_DP + 1e-9)
+        // At the end, its "+" after it may sit in the "+" column (empty on the selected item's row), never past it.
+        val atEnd = TimedRowGeometry.plusPoints(listOf(clip("e", 2000, 2950)), zoom, ClipId("e"), 300.0)
+        assertThat(atEnd.last().side).isEqualTo(InsertSide.AFTER)
+        assertThat(atEnd.last().xDp + TimelineGeometry.PLUS_HIT_DP / 2).isAtMost(300.0 + TimelineGeometry.END_DP + 1e-9)
         assertThat(TimedRowGeometry.hitTest(clips, points, zoom, 200.0)).isEqualTo(TimedHit.Clip(ClipId("a")))
         // Inside the item, past the "+" next to it: the item.
         assertThat(TimedRowGeometry.hitTest(clips, points, zoom, 104.0)).isEqualTo(TimedHit.Clip(ClipId("a")))

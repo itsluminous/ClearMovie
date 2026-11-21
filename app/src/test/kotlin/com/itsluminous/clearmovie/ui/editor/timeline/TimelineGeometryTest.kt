@@ -34,18 +34,15 @@ class TimelineGeometryTest {
     )
 
     @Test
-    fun `nothing selected, one plus at the end of the row and none between items`() {
-        // 10 ms per dp: every item is at least 200 dp wide; at 100 ms per dp, 30 dp.
+    fun `nothing selected, no plus on the row itself and none between items`() {
+        // cm-plus-position: MAIN's own "+" is in the column at its right end (RowEndPlus), not after its last item.
         for (scale in listOf(10.0, 100.0)) {
-            val plus = geometry(scale, playheadMs = 5000.0).plusPoints()
-            // After the last item (c), never after the ending.
-            assertThat(plus.map { it.anchorIndex to it.side }).containsExactly(3 to InsertSide.AFTER)
-            assertThat(plus.single().xDp).isWithin(1e-9).of(11_000 / scale)
+            assertThat(geometry(scale, playheadMs = 5000.0).plusPoints()).isEmpty()
         }
     }
 
     @Test
-    fun `an empty MAIN, only the intro and ending, has one plus after the intro`() {
+    fun `an empty MAIN, only the intro and ending, has its end plus after the intro`() {
         val g =
             TimelineGeometry(
                 listOf(SlotSpan("intro", 0, 2000, content = false), SlotSpan("end", 2000, 4000, content = false)),
@@ -57,21 +54,23 @@ class TimelineGeometryTest {
                 playheadMs = 0.0,
                 selectedTrimmable = false,
             )
-        assertThat(g.plusPoints().map { it.anchorIndex to it.side }).containsExactly(0 to InsertSide.AFTER)
+        assertThat(g.plusPoints()).isEmpty()
+        // The row's own "+" in the end column adds between the intro and the ending, wherever the cursor is
+        // (on the ending it says "before this Ending", the same place).
+        for (cursor in listOf(0L, 1000L, 2000L, 3000L, 4000L)) {
+            val t = requireNotNull(RowEndPlus.main(g.spans, cursor))
+            assertThat(t.anchorIndex + if (t.side == InsertSide.AFTER) 1 else 0).isEqualTo(1)
+        }
     }
 
     @Test
     fun `selecting an item shows a plus on its two sides only, and moving the selection moves them`() {
-        // Zoomed out further, the selected item's "+" can sit where the end one would, which then gives way.
         for (scale in listOf(10.0, 20.0)) {
             for (sel in listOf(1, 2)) {
                 val plus = geometry(scale, selected = sel, playheadMs = -1e6).plusPoints()
-                val sides = plus.filter { it.anchorIndex == sel }.map { it.side }
-                assertThat(sides).containsExactly(InsertSide.BEFORE, InsertSide.AFTER)
-                // Besides those, only the row's end "+" (after c).
-                assertThat(plus.filter { it.anchorIndex != sel }.map { it.anchorIndex to it.side }).containsExactly(3 to InsertSide.AFTER)
+                // Only those two: the row's own "+" in the end column hides on the selected item's row.
+                assertThat(plus.map { it.anchorIndex to it.side }).containsExactly(sel to InsertSide.BEFORE, sel to InsertSide.AFTER)
             }
-            // The last item selected: its right "+" is also the end one.
             val last = geometry(scale, selected = 3, playheadMs = -1e6).plusPoints()
             assertThat(last.map { it.anchorIndex to it.side }).containsExactly(3 to InsertSide.BEFORE, 3 to InsertSide.AFTER)
         }

@@ -51,11 +51,20 @@ class TransitionMarkerGeometryTest {
         assertThat(markers[0].leadIndex).isEqualTo(1)
         assertThat(markers[0].xDp).isWithin(1e-9).of(g.zoom.xOf(4500.0))
         assertThat(markers[1].xDp).isWithin(1e-9).of(g.zoom.xOf(6750.0))
-        // Nothing selected: only the row's end "+", after c, on the centre line (no marker there).
-        val plus = g.plusPoints()
-        assertThat(plus.map { it.boundary }).containsExactly(4)
-        assertThat(plus.single().top).isFalse()
+        // Nothing selected: no "+" on the row itself (its own "+" is in the column at its right end).
+        assertThat(g.plusPoints()).isEmpty()
         assertThat(g.markerCentre + TimelineGeometry.MARKER_HIT_DP / 2).isAtMost(g.mainBottom)
+    }
+
+    @Test
+    fun `a marker never reaches into the plus column at the row's right end`() {
+        // 10 ms per dp: the a->b marker is at 450 dp and the b->c one at 675 dp.
+        for (width in listOf(474.0, 476.0, 700.0, 2000.0)) {
+            val g = TimelineGeometry(spans, ZoomState(10.0, 0.0, false), width, 28.0, 72.0, null, -1e4, selectedTrimmable = false)
+            for (m in g.markers()) assertThat(m.xDp + TimelineGeometry.MARKER_HIT_DP / 2).isAtMost(width)
+            // A marker that is kept is still tapped; one left out is opened from the bar's Transition.
+            assertThat(g.markers().size).isEqualTo(listOf(450.0, 675.0).count { it + TimelineGeometry.MARKER_HIT_DP / 2 <= width })
+        }
     }
 
     @Test

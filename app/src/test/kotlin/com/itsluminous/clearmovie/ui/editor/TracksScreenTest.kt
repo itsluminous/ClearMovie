@@ -65,6 +65,8 @@ import com.itsluminous.clearmovie.ui.editor.timeline.TRIM_END_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.ZoomState
 import com.itsluminous.clearmovie.ui.editor.timeline.clipTag
 import com.itsluminous.clearmovie.ui.editor.timeline.plusTag
+import com.itsluminous.clearmovie.ui.editor.timeline.rowAddTag
+import com.itsluminous.clearmovie.ui.editor.timeline.rowEndPlusTag
 import com.itsluminous.clearmovie.ui.editor.timeline.rowHeaderTag
 import com.itsluminous.clearmovie.ui.editor.timeline.rowTag
 import com.itsluminous.clearmovie.ui.editor.timeline.timedPlusTag
@@ -185,8 +187,9 @@ class TracksScreenTest {
         val tag = androidx.compose.ui.semantics.SemanticsProperties.TestTag
         val isPlus =
             androidx.compose.ui.test.SemanticsMatcher("a plus") { n ->
-                n.config.getOrElseNullable(tag) { null }?.let { it.startsWith("timeline_plus_") || it.startsWith("timeline_row_add_") } ==
-                    true
+                n.config.getOrElseNullable(tag) { null }?.let {
+                    it.startsWith("timeline_plus_") || it.startsWith("timeline_row_add_") || it.startsWith("timeline_row_end_plus_")
+                } == true
             }
         return compose.onAllNodes(isPlus, useUnmergedTree = true).fetchSemanticsNodes().map { it.config[tag] }
     }
@@ -494,59 +497,50 @@ class TracksScreenTest {
     // ---------------------------------------------------------------- where the "+" buttons are
 
     @Test
-    fun `one plus at the end of each row, one in an empty row, and side plus only on the selected item`() {
+    fun `every row's own plus is in one column at its right end, and the selected item's row has its side plus instead`() {
         val withEmpty = project.addRow(TrackType.TEXT, id = TrackId("emptyText"))
         val h = show(withEmpty, ScreenSize.EXPANDED)
-        // Fit all (the start): every row's end is on screen.
         val p = h.project
         val hello = p.idOf("hello")
-        val next = p.idOf("next")
-        // Nothing selected: per non-empty row only its end "+"; none between "hello" and "next".
+        val mainKey = p.main.id.value
+        val shown =
+            h.project.tracks.filter { t -> compose.onAllNodesWithTag(rowTag(t.id.value)).fetchSemanticsNodes().isNotEmpty() }
+        val withItems = shown.filter { it.clips.isNotEmpty() }
+        assertThat(withItems.size).isAtLeast(3)
+        // Nothing selected: one "+" per row, in its end column (cm-plus-position); none beside or between items.
         var tags = plusTags()
-        assertThat(tags).contains(timedPlusTag(next, InsertSide.AFTER))
         assertThat(
-            tags,
-        ).containsNoneOf(
-            timedPlusTag(hello, InsertSide.BEFORE),
-            timedPlusTag(hello, InsertSide.AFTER),
-            timedPlusTag(next, InsertSide.BEFORE),
-        )
-        // One end "+" per shown non-empty row other than MAIN (the preset's own rows included): after its last item.
-        val timedRows =
-            h.project.tracks.filter { t ->
-                t.type != TrackType.MAIN && t.clips.isNotEmpty() &&
-                    compose.onAllNodesWithTag(rowTag(t.id.value)).fetchSemanticsNodes().isNotEmpty()
-            }
-        assertThat(timedRows).isNotEmpty()
-        for (t in timedRows) assertThat(tags).contains(timedPlusTag(t.clips.maxBy { it.endMs }.id, InsertSide.AFTER))
-        assertThat(tags.count { it.endsWith("_AFTER") || it.endsWith("_BEFORE") }).isEqualTo(timedRows.size)
-        // MAIN: one "+", after its last photo or video (boundary 6: intro, five items).
-        assertThat(tags.filter { it.matches(Regex("timeline_plus_\\d+")) }).containsExactly(plusTag(6))
-        // The empty row: exactly one.
-        assertThat(
-            tags.filter {
-                it.startsWith("timeline_row_add_")
-            },
-        ).containsExactly(
-            com.itsluminous.clearmovie.ui.editor.timeline
-                .rowAddTag("emptyText"),
-        )
-        // Select "hello": its two sides, and still no "+" between other items.
+            tags.filter { it.startsWith("timeline_row_end_plus_") },
+        ).containsExactlyElementsIn(withItems.map { rowEndPlusTag(it.id.value) })
+        assertThat(tags.filter { it.startsWith("timeline_row_add_") }).containsExactly(rowAddTag("emptyText"))
+        assertThat(tags.filter { it.startsWith("timeline_plus_") }).isEmpty()
+        // All in one column, flush with the timeline's right edge, 48 dp wide.
+        val t = timeline()
+        val boxes = withItems.map { bounds(rowEndPlusTag(it.id.value)) } + bounds(rowAddTag("emptyText"))
+        for (b in boxes) {
+            assertThat(b.left).isWithin(1f).of(boxes.first().left)
+            assertThat(b.right).isWithin(1f).of(t.right)
+            assertThat((b.right - b.left) / density).isWithin(0.5f).of(48f)
+        }
+        // Select "hello": its two sides, and its row's end "+" gives way; every other row keeps its own.
         compose.runOnIdle { h.state!!.selected = hello }
         compose.waitForIdle()
         tags = plusTags()
         assertThat(tags).containsAtLeast(timedPlusTag(hello, InsertSide.BEFORE), timedPlusTag(hello, InsertSide.AFTER))
-        assertThat(tags).doesNotContain(timedPlusTag(next, InsertSide.BEFORE))
-        // The selection moves: the side "+" go with it.
+        assertThat(tags).doesNotContain(rowEndPlusTag(p.rowOf("hello").value))
+        assertThat(tags).contains(rowEndPlusTag(mainKey))
+        // The selection moves to MAIN: the side "+" go with it, and MAIN's end "+" gives way instead.
         compose.runOnIdle { h.state!!.selected = ClipId("v2") }
         compose.waitForIdle()
         tags = plusTags()
         assertThat(tags).containsNoneOf(timedPlusTag(hello, InsertSide.BEFORE), timedPlusTag(hello, InsertSide.AFTER))
-        assertThat(tags).containsAtLeast(plusTag(2), plusTag(3))
-        // Cleared: back to the end ones only.
+        assertThat(tags).containsAtLeast(plusTag(2), plusTag(3), rowEndPlusTag(p.rowOf("hello").value))
+        assertThat(tags).doesNotContain(rowEndPlusTag(mainKey))
+        // Cleared: back to the end column only.
         compose.runOnIdle { h.state!!.selected = null }
         compose.waitForIdle()
         assertThat(plusTags()).containsNoneOf(plusTag(2), plusTag(3))
+        assertThat(plusTags()).contains(rowEndPlusTag(mainKey))
     }
 
     /** Both side "+" of [clip] exist and lie wholly inside the timeline. */
@@ -784,9 +778,8 @@ class TracksScreenTest {
         zoomTo(h, 9_000.0)
         val music = h.project.idOf("m1")
         val first = h.project.tracks.first()
-        // The row's one "+" is after its last item.
-        val anchor = first.clips.maxBy { it.startMs }.id
-        compose.onNodeWithTag(timedPlusTag(anchor, InsertSide.AFTER)).assertExists()
+        // The row's one "+" is in its end column.
+        compose.onNodeWithTag(rowEndPlusTag(first.id.value)).assertExists()
         // Scroll to the bottom with a swipe at the right-hand end of the rows.
         compose.onNodeWithTag(TIMELINE_ROWS_TAG).performTouchInput {
             swipe(Offset(width - 12f, height - 10f), Offset(width - 14f, 10f), 400)
@@ -798,8 +791,8 @@ class TracksScreenTest {
         compose.onNodeWithTag(TIMELINE_TAG).performTouchInput { click(centreIn(chip)) }
         compose.waitForIdle()
         assertThat(h.state!!.selected).isEqualTo(music)
-        // The first row is now under the ruler: its "+" points are gone, so TalkBack cannot land on them.
-        compose.onNodeWithTag(timedPlusTag(anchor, InsertSide.AFTER)).assertDoesNotExist()
+        // The first row is now under the ruler: its "+" is gone, so TalkBack cannot land on it.
+        compose.onNodeWithTag(rowEndPlusTag(first.id.value)).assertDoesNotExist()
     }
 
     @Test

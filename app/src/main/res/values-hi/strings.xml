@@ -341,6 +341,7 @@
     <string name="split_at">%1$s पर काटें</string>
     <string name="timeline_add_before">इस %1$s से पहले जोड़ें</string>
     <string name="timeline_add_after">इस %1$s के बाद जोड़ें</string>
+    <string name="timeline_add_at">%2$s पर %1$s में जोड़ें</string>
     <string name="timeline_colour_card">रंग वाला कार्ड</string>
     <string name="timeline_text_card">लिखावट वाला कार्ड</string>
     <string name="timeline_item_description">%1$s, %3$d में से %2$d, अवधि %4$s</string>

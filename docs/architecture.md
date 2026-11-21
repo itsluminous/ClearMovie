@@ -473,11 +473,14 @@ the screen; the playhead is saved by `EditorViewModel`.
 - **Timeline.** A ruler, the playhead and the rows in screen order, each with
   its type icon and name. MAIN shows each item with a thumbnail strip
   (re-planned per zoom step by `ThumbPlan`, the old pictures drawn until the
-  new ones load), its type and length, trim handles on the selected item and
-  the "+" insert points that `TimelineGeometry` places: one per boundary, all
-  of them once items are 64 dp wide, otherwise around the selected item and
-  under the playhead, moved clear of the trim handles and never overlapping.
-  The other rows are drawn read-only until cm-tracks.
+  new ones load), its type and length, and trim handles on the selected item.
+  Every row has its own "+" in a 48 dp column at its right end, the same
+  place on every row; items stop at that column, so none is hidden under it.
+  It adds to the right of the cursor (`RowEndPlus`): at the cursor in a gap,
+  else right after the item under it (on rows other than MAIN, past any items
+  that touch it; on MAIN later items move later). On the row of the selected
+  item it gives way to that item's own "+" on each side, which
+  `TimelineGeometry` and `TimedRowGeometry` place clear of its trim handles.
 - **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
   finger before a long-press is a pinch (zoom around the fingers, clamped
   between Fit all and 1 s per 240 dp, `TimelineZoom`), movement is a scroll
