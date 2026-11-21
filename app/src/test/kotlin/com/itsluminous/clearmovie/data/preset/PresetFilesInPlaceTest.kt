@@ -260,6 +260,18 @@ class PresetFilesInPlaceTest {
             assertThat(grants.held).isEmpty()
         }
 
+    @Test
+    fun `a stored link that is not a safe content uri shows as missing, never read`() =
+        runBlocking<Unit> {
+            val id = make(copy = false)
+            store.bindSlot(id, PresetSlot.FRAME, file("Frame-White.mp4"))
+            val row = db.presets().binding(id.value, "frame")!!
+            db.presets().upsertBinding(row.copy(sourceUri = "file:///data/data/other/secret.mp4"))
+            val s = store.status(id).slots[PresetSlot.FRAME]
+            assertThat(s).isInstanceOf(SlotStatus.Missing::class.java)
+            assertThat((s as SlotStatus.Missing).binding.linkedUri).isNull()
+        }
+
     /** Answers for links as `AndroidMediaProbe` would; files (copies) too. */
     class UriProbe : MediaProbe {
         val probedUris = mutableListOf<Uri>()

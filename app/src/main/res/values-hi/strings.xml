@@ -662,4 +662,10 @@
     <string name="preset_guide_step_done_linked">ClearMovie हर फ़ाइल को वहीं से इस्तेमाल करता है, इसलिए फ़ाइलें फ़ोन पर ही रहने दें।</string>
     <string name="bar_key_colour">रंग</string>
     <string name="bar_picture_area">जगह</string>
+    <string name="area_bigger">जगह बड़ी करें</string>
+    <string name="area_smaller">जगह छोटी करें</string>
+    <string name="area_left">जगह बाईं ओर ले जाएँ</string>
+    <string name="area_right">जगह दाईं ओर ले जाएँ</string>
+    <string name="area_up">जगह ऊपर ले जाएँ</string>
+    <string name="area_down">जगह नीचे ले जाएँ</string>
 </resources>

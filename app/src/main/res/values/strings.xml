@@ -714,4 +714,10 @@
     <string name="preset_guide_step_done_linked">ClearMovie uses each file where it is, so leave the files on the phone.</string>
     <string name="bar_key_colour">Colour</string>
     <string name="bar_picture_area">Area</string>
+    <string name="area_bigger">Make the area bigger</string>
+    <string name="area_smaller">Make the area smaller</string>
+    <string name="area_left">Move the area left</string>
+    <string name="area_right">Move the area right</string>
+    <string name="area_up">Move the area up</string>
+    <string name="area_down">Move the area down</string>
 </resources>

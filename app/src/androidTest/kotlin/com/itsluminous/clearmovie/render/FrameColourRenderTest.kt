@@ -79,9 +79,9 @@ class FrameColourRenderTest {
             // decode of a BT.709 file lift green to about 37 here (observed on the Android 16 emulator), so the
             // check is by kind, not by an exact value.
             val c = rgb(f, x, y)
-            val magentaLeft = c[0] > 200 && c[2] > 200 && c[1] < 80
+            val magentaLeft = c[0] > 220 && c[2] > 220 && c[1] < 50
             report("frame-colour before: window left magenta = ${c.toList()} ${if (magentaLeft) "ok" else "FAIL"}")
-            if (!magentaLeft) failures += "before: window was ${c.toList()}, want magenta (R,B > 200, G < 80)"
+            if (!magentaLeft) failures += "before: window was ${c.toList()}, want magenta (R,B > 220, G < 50)"
         }
 
         // After: the picked magenta and the window as the picture area.

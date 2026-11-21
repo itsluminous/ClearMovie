@@ -580,6 +580,7 @@ class PresetStore(
                         preset == null || !preset.needs(slot) -> SlotStatus.NotNeeded
                         binding == null -> SlotStatus.NotSet
                         binding.isLinked -> linkStatus(binding)
+                        binding.file == null -> SlotStatus.Missing(binding)
                         binding.file?.isFile != true -> SlotStatus.Missing(binding)
                         binding.file.length() != binding.sizeBytes -> SlotStatus.Changed(binding)
                         else -> SlotStatus.Ready(binding)
@@ -838,8 +839,9 @@ class PresetStore(
     ): PresetBinding? {
         val slot = PresetSlot.entries.firstOrNull { it.fileStem == row.slot } ?: return null
         val link = row.sourceUri?.takeIf(MediaRef::isSafeContentUri)
-        if (row.sourceUri != null && link == null) return null
-        val file = if (link != null) null else runCatching { files.presetFile(id, row.fileName) }.getOrNull() ?: return null
+        // A stored link that is not a safe content uri is neither read nor dropped: it shows as missing, to choose again.
+        val file =
+            if (row.sourceUri != null) null else runCatching { files.presetFile(id, row.fileName) }.getOrNull() ?: return null
         return PresetBinding(
             slot = slot,
             file = file,

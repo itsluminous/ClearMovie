@@ -83,6 +83,7 @@ import com.itsluminous.clearmovie.domain.model.KeyMath
 import com.itsluminous.clearmovie.domain.model.KeySpec
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.RectActionLabels
 import com.itsluminous.clearmovie.ui.components.ResizableRect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -335,6 +336,15 @@ private fun FramePicture(
                     minWidth = KeyMath.MIN_AREA_SIDE,
                     minHeight = KeyMath.MIN_AREA_SIDE,
                     description = boxDescription,
+                    actionLabels =
+                        RectActionLabels(
+                            stringResource(R.string.area_bigger),
+                            stringResource(R.string.area_smaller),
+                            stringResource(R.string.area_left),
+                            stringResource(R.string.area_right),
+                            stringResource(R.string.area_up),
+                            stringResource(R.string.area_down),
+                        ),
                 )
             }
         }

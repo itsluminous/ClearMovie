@@ -670,4 +670,10 @@
     <string name="preset_guide_step_done_linked">ClearMovie har file ko wahin se use karta hai, isliye files phone par hi rehne dein.</string>
     <string name="bar_key_colour">Rang</string>
     <string name="bar_picture_area">Jagah</string>
+    <string name="area_bigger">Jagah badi karein</string>
+    <string name="area_smaller">Jagah chhoti karein</string>
+    <string name="area_left">Jagah left le jaayein</string>
+    <string name="area_right">Jagah right le jaayein</string>
+    <string name="area_up">Jagah upar le jaayein</string>
+    <string name="area_down">Jagah neeche le jaayein</string>
 </resources>

@@ -181,23 +181,26 @@ class FrameAreaPlanTest {
 
     @Test
     fun `a spoken ending holds the last picture where it was drawn, not where the ending's own time would put it`() {
+        // No preset frame: a frame the user added covers the photo only, and ends where the spoken ending starts.
         val ids = SequentialIds("k")
-        val p0 =
+        val preset = Fixtures.preset.copy(intro = null, frame = null)
+        val p =
             ProjectFactory
-                .fromPreset(Fixtures.PROJECT_ID, Fixtures.preset.copy(intro = null), PresetMedia(frameMs = 4000, endingMs = 3000), ids)
+                .fromPreset(Fixtures.PROJECT_ID, preset, PresetMedia(endingMs = 3000), ids)
                 .addToMain(listOf(photo("p")), ids = ids)
-        val frame = p0.byRole(PresetRole.FRAME).clips.single() as OverlayClip
-        val p1 = p0.setFrameLook(frame.id, magenta, area)
+                .addTimedClip(Fixtures.overlay("o", 0, 3000), ids = ids)
+                .setFrameLook(ClipId("o"), magenta, area)
         val held =
-            RenderPlanBuilder(Fixtures.preset.copy(intro = null))
-                .build(p1)
+            RenderPlanBuilder(preset)
+                .build(p)
                 .visual
                 .filter { it.role == LayerRole.MAIN || it.role == LayerRole.MAIN_B }
                 .flatMap { it.segments }
                 .filterIsInstance<VisualSegment.Picture>()
                 .filter { it.source is Source.Photo }
                 .map { (it.placement as Placement.Window).rect }
-        assertThat(held).hasSize(2)
-        assertThat(held.toSet()).containsExactly(area)
+        // The photo and its held copy under the spoken ending: both in the frame's area (before the fix the
+        // held copy took the ending's own time, where no frame is, and filled the canvas).
+        assertThat(held).containsExactly(area, area)
     }
 }
