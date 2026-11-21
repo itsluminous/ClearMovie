@@ -209,7 +209,6 @@ class PresetEditScreenTest {
                 PresetDefinition(
                     own.copy(effects = EffectDefaults(textStart = AnimKind.FADE_IN)),
                     PresetDefinition.Source.USER,
-                    builtIn = false,
                 ),
             )
         compose.onNodeWithTag(PRESET_CAPTION_CHANGE_TAG).performScrollTo().performClick()
@@ -237,7 +236,7 @@ class PresetEditScreenTest {
 
     @Test
     fun `the Animation tab fits at font scale 2 on a phone`() {
-        show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false), ScreenSize.COMPACT, 2f)
+        show(PresetDefinition(own, PresetDefinition.Source.USER), ScreenSize.COMPACT, 2f)
         compose.onNodeWithTag(PRESET_CAPTION_CHANGE_TAG).performScrollTo().performClick()
         inSight(captionTabTag(CaptionTab.ANIMATION)).assertHeightIsAtLeast(48.dp).performClick()
         inSight(animationTileTag(AnimSlot.START, AnimKind.BOUNCE)).assertIsDisplayed()
