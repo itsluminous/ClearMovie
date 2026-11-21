@@ -31,8 +31,8 @@ const val SHAPE_CHANGE_CONFIRM_TAG = "shape_change_confirm"
 /**
  * The first time the editor opens a video made without a preset
  * (cm-aspect-ratio): which shape it should be. [suggested] (from the first
- * photo or video) is chosen already, so Continue is the one tap needed; Back
- * or a tap outside keeps the choice shown too, so the question is never left
+ * photo or video, null until known) is chosen already, so Continue is the one
+ * tap needed; Back keeps the choice shown too, so the question is never left
  * unanswered. The choice survives a rotation.
  */
 @Composable
@@ -42,9 +42,10 @@ fun FirstShapeDialog(
 ) {
     // The user's own pick, once made; until then the suggestion, which may arrive a moment late.
     var picked by rememberSaveable { mutableStateOf<CanvasShape?>(null) }
-    val shown = picked ?: suggested ?: CanvasShape.LANDSCAPE
+    // Until the first item's shape is known (a moment), nothing is chosen, so a quick tap cannot take a wrong guess.
+    val shown = picked ?: suggested
     AlertDialog(
-        onDismissRequest = { onChoose(shown) },
+        onDismissRequest = { shown?.let(onChoose) },
         title = { Text(stringResource(R.string.shape_first_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -57,7 +58,11 @@ fun FirstShapeDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onChoose(shown) }, modifier = Modifier.heightIn(min = 48.dp).testTag(SHAPE_FIRST_CONTINUE_TAG)) {
+            TextButton(
+                onClick = { shown?.let(onChoose) },
+                enabled = shown != null,
+                modifier = Modifier.heightIn(min = 48.dp).testTag(SHAPE_FIRST_CONTINUE_TAG),
+            ) {
                 Text(stringResource(R.string.action_continue))
             }
         },
@@ -78,6 +83,7 @@ fun ChangeShapeDialog(
     frameShape: CanvasShape?,
     onChange: (CanvasShape) -> Unit,
     onDismiss: () -> Unit,
+    frameOn: Boolean = true,
 ) {
     var picked by rememberSaveable(current) { mutableStateOf(current) }
     AlertDialog(
@@ -89,7 +95,7 @@ fun ChangeShapeDialog(
                 val frameNote =
                     when {
                         frameShape == null || picked == current -> null
-                        picked != frameShape && current == frameShape -> R.string.shape_change_frame_off
+                        picked != frameShape && current == frameShape && frameOn -> R.string.shape_change_frame_off
                         picked == frameShape -> R.string.shape_change_frame_on
                         else -> null
                     }

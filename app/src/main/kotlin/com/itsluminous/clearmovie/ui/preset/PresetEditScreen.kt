@@ -386,7 +386,16 @@ private fun PresetEditContent(
                 CaptionsCard(preview = { preview(false, Modifier.fillMaxWidth(minOf(1f, aspect))) }, onChange = openCaption)
             }
             val shapeCard: @Composable () -> Unit = {
-                if (definition?.builtIn == false) PresetShapeCard(ui.shape, enabled = ui.canChangeShape, onShape = onShape)
+                if (definition?.builtIn == false) {
+                    // Its intro and frame, once chosen, were made for the shape it had.
+                    val filesChosen = listOf(PresetSlot.INTRO, PresetSlot.FRAME).any { ui.status?.slots?.get(it) is SlotStatus.Ready }
+                    PresetShapeCard(
+                        ui.shape,
+                        enabled = ui.canChangeShape,
+                        onShape = onShape,
+                        filesNote = filesChosen && ui.shape != preset.shape,
+                    )
+                }
             }
             val files: @Composable () -> Unit = { FilesCard(ui.status, onFiles) }
             val save: @Composable () -> Unit = {

@@ -86,6 +86,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import javax.inject.Inject
 
@@ -406,7 +407,13 @@ class EditorViewModel
             val first = project.mainClips.firstOrNull { it is PhotoClip || it is VideoClip } as? MediaClip
             suggesting =
                 viewModelScope.launch {
-                    val size = first?.let { probe.shownSize(projectId, it.media, isPhoto = it is PhotoClip) }
+                    // A provider that hangs costs only the suggestion: the question then starts on landscape.
+                    val size =
+                        first?.let {
+                            withTimeoutOrNull(
+                                SUGGEST_TIMEOUT_MS,
+                            ) { probe.shownSize(projectId, it.media, isPhoto = it is PhotoClip) }
+                        }
                     // A quarter turn the user gave the item counts too.
                     val shown = size?.let { (w, h) -> if (first.rotation.degrees % 180 != 0) h to w else w to h }
                     suggestion.value = shown?.let { (w, h) -> CanvasShape.suiting(w, h) } ?: CanvasShape.LANDSCAPE
@@ -421,8 +428,7 @@ class EditorViewModel
 
         /** "Video shape": the video becomes [shape], as one undo step (cm-aspect-ratio). */
         fun changeShape(shape: CanvasShape): Boolean {
-            val preset = uiState.value.preset
-            val frameShape = preset?.shape?.takeIf { preset.frame != null }
+            val frameShape = uiState.value.project?.let { frameShapeOf(it, uiState.value.preset) }
             return edit { setShape(shape, frameShape) }
         }
 
@@ -875,6 +881,9 @@ class EditorViewModel
         companion object {
             /** The preview's plan height; only bitmaps depend on it, the players play the files as they are. */
             const val PREVIEW_HEIGHT = 720
+
+            /** How long the first-time shape question waits for the first item's size. */
+            const val SUGGEST_TIMEOUT_MS = 3_000L
 
             /** How long [previewFrom] waits for the edited video before it plays what it has. */
             const val PREVIEW_FALLBACK_MS = 1_500L

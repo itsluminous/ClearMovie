@@ -23,6 +23,7 @@ import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.Fixtures
+import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.SequentialIds
@@ -98,11 +99,12 @@ class ShapeDialogsTest {
     }
 
     @Test
-    fun `the suggestion that arrives late is shown, unless the user already picked`() {
+    fun `until the suggestion arrives nothing is chosen and Continue waits, unless the user picks`() {
         var suggested by mutableStateOf<CanvasShape?>(null)
         var chosen: CanvasShape? = null
         compose.setContent { ClearMovieTheme(dynamicColor = false) { FirstShapeDialog(suggested) { chosen = it } } }
-        compose.onNodeWithTag(shapeOptionTag(CanvasShape.LANDSCAPE)).assertIsSelected()
+        for (shape in CanvasShape.entries) compose.onNodeWithTag(shapeOptionTag(shape)).assertIsNotSelected()
+        compose.onNodeWithTag(SHAPE_FIRST_CONTINUE_TAG).assertIsNotEnabled()
         suggested = CanvasShape.PORTRAIT
         compose.waitForIdle()
         compose.onNodeWithTag(shapeOptionTag(CanvasShape.PORTRAIT)).assertIsSelected()
@@ -187,5 +189,34 @@ class ShapeDialogsTest {
         frame = null
         compose.waitForIdle()
         compose.onNodeWithText(s(R.string.shape_change_captions)).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a frame the user already switched off is not said to be switched off`() {
+        compose.setContent {
+            ClearMovieTheme(dynamicColor = false) {
+                ChangeShapeDialog(CanvasShape.LANDSCAPE, CanvasShape.LANDSCAPE, onChange = {}, onDismiss = {}, frameOn = false)
+            }
+        }
+        compose.onNodeWithTag(shapeOptionTag(CanvasShape.SQUARE)).performClick()
+        compose.onNodeWithText(s(R.string.shape_change_frame_off)).assertDoesNotExist()
+        compose.onNodeWithText(s(R.string.shape_change_captions)).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the frame's shape is the preset's only while the video plays the preset's own frame file`() {
+        val project =
+            ProjectFactory.fromPreset(Fixtures.PROJECT_ID, Fixtures.preset, Fixtures.presetMedia, SequentialIds("f"))
+        assertThat(frameShapeOf(project, Fixtures.preset)).isEqualTo(CanvasShape.LANDSCAPE)
+        assertThat(frameShapeOf(project, null)).isNull()
+        // A frame replaced for this video only: the preset does not know its shape, so it is left as it is.
+        val replaced =
+            ProjectFactory.fromPreset(
+                Fixtures.PROJECT_ID,
+                Fixtures.preset,
+                Fixtures.presetMedia.copy(frame = MediaRef.Copied("own-frame.mp4")),
+                SequentialIds("g"),
+            )
+        assertThat(frameShapeOf(replaced, Fixtures.preset)).isNull()
     }
 }

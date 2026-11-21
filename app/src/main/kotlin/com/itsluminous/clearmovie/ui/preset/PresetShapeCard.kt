@@ -30,6 +30,8 @@ internal fun PresetShapeCard(
     enabled: Boolean,
     onShape: (CanvasShape) -> Unit,
     modifier: Modifier = Modifier,
+    /** Shown under the shapes when the preset's chosen files were made for its old shape. */
+    filesNote: Boolean = false,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -52,6 +54,14 @@ internal fun PresetShapeCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             ShapeOptions(shape, onSelect = onShape, enabled = enabled)
+            if (filesNote) {
+                Text(
+                    stringResource(R.string.preset_shape_files_note),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
         }
     }
 }

@@ -55,6 +55,8 @@ import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.IntroClip
+import com.itsluminous.clearmovie.domain.model.MediaRef
+import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetRole
@@ -343,6 +345,7 @@ fun EditorRoute(
         ChangeShapeDialog(
             current = project.shape,
             frameShape = frameShapeOf(project, ui.preset),
+            frameOn = project.tracks.any { it.presetRole == PresetRole.FRAME && it.enabled },
             onChange = {
                 shapeDialog = false
                 viewModel.changeShape(it)
@@ -413,14 +416,22 @@ fun EditorRoute(
     }
 }
 
-/** The shape the video's preset frame is made for, while the video has that frame; else null. */
+/**
+ * The shape the video's preset frame is made for, while the video has the
+ * preset's own frame file; else null (no frame, or one replaced for this
+ * video only, whose shape the preset does not know).
+ */
 internal fun frameShapeOf(
     project: Project,
     preset: Preset?,
 ): CanvasShape? {
     if (preset?.frame == null) return null
-    val hasFrame = project.tracks.any { it.presetRole == PresetRole.FRAME && it.clips.isNotEmpty() }
-    return preset.shape.takeIf { hasFrame }
+    val frame =
+        project.tracks
+            .firstOrNull { it.presetRole == PresetRole.FRAME }
+            ?.clips
+            ?.firstOrNull() as? OverlayClip
+    return preset.shape.takeIf { frame?.media is MediaRef.Preset }
 }
 
 /** What the editor already knows stops an export: nothing to save, a missing preset file, a missing photo or video. */

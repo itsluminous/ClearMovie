@@ -161,12 +161,13 @@ data class PresetStatus(
 
 sealed interface SlotBindResult {
     /**
-     * [frameShape] is set when a frame was chosen whose own shape is not the
-     * preset's (cm-aspect-ratio): it is kept, and setup says it will look stretched.
+     * [fileShape] is set when a video was chosen (the intro, the frame or a
+     * video ending) whose own shape is not the preset's (cm-aspect-ratio): it
+     * is kept, and setup says it will look stretched.
      */
     data class Bound(
         val binding: PresetBinding,
-        val frameShape: CanvasShape? = null,
+        val fileShape: CanvasShape? = null,
     ) : SlotBindResult
 
     data object UnknownPreset : SlotBindResult
@@ -604,9 +605,9 @@ class PresetStore(
                         write(preset.copy(frame = frame.copy(contentRect = ownWindow)), row?.createdAt ?: 0L, row?.retiredAt)
                     }
                 }
-                val frameShape =
-                    CanvasShape.suiting(facts.shownWidth, facts.shownHeight)?.takeIf { frame != null && it != preset.shape }
-                SlotBindResult.Bound(toBinding(id, entity)!!, frameShape)
+                val fileShape =
+                    CanvasShape.suiting(facts.shownWidth, facts.shownHeight)?.takeIf { facts.hasVideo && it != preset.shape }
+                SlotBindResult.Bound(toBinding(id, entity)!!, fileShape)
             } catch (e: Throwable) {
                 copied.file.delete()
                 throw e

@@ -227,20 +227,23 @@ class PresetManagerStoreTest {
         }
 
     @Test
-    fun `a frame of another shape than the preset's is kept, and setup is told`() =
+    fun `a frame or intro of another shape than the preset's is kept, and setup is told`() =
         runBlocking<Unit> {
             val id = store.create("Upright", PresetParts(shape = CanvasShape.PORTRAIT))!!
             probe.shown = 1920 to 1080
             val wide = store.bindSlot(id, PresetSlot.FRAME, file("wide.mp4", ByteArray(700) { 2 }, "video/mp4"))
-            assertThat((wide as SlotBindResult.Bound).frameShape).isEqualTo(CanvasShape.LANDSCAPE)
+            assertThat((wide as SlotBindResult.Bound).fileShape).isEqualTo(CanvasShape.LANDSCAPE)
             assertThat(store.status(id).slots[PresetSlot.FRAME]).isInstanceOf(SlotStatus.Ready::class.java)
             probe.shown = 1080 to 1920
             val tall = store.bindSlot(id, PresetSlot.FRAME, file("tall.mp4", ByteArray(700) { 4 }, "video/mp4"))
-            assertThat((tall as SlotBindResult.Bound).frameShape).isNull()
-            // An intro of any shape says nothing: it is fitted whole.
+            assertThat((tall as SlotBindResult.Bound).fileShape).isNull()
+            // An intro of another shape is told too: on the preset's own shape it is drawn over the whole picture.
             probe.shown = 1920 to 1080
             val intro = store.bindSlot(id, PresetSlot.INTRO, file("intro.mp4", ByteArray(500) { 1 }, "video/mp4"))
-            assertThat((intro as SlotBindResult.Bound).frameShape).isNull()
+            assertThat((intro as SlotBindResult.Bound).fileShape).isEqualTo(CanvasShape.LANDSCAPE)
+            // A sound says nothing about a shape.
+            val ending = store.bindSlot(id, PresetSlot.ENDING, file("e.mp3", ByteArray(90) { 3 }, "audio/mpeg"))
+            assertThat((ending as SlotBindResult.Bound).fileShape).isNull()
         }
 
     @Test

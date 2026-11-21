@@ -320,8 +320,8 @@ private fun MessageCard(
                 stringResource(R.string.new_video_not_saved)
             }
 
-            SetupMessage.FrameShapeDiffers -> {
-                stringResource(R.string.setup_frame_shape_mismatch, stringResource(shapeName(presetShape)))
+            SetupMessage.ShapeDiffers -> {
+                stringResource(R.string.setup_file_shape_mismatch, stringResource(shapeName(presetShape)))
             }
         }
     Card(

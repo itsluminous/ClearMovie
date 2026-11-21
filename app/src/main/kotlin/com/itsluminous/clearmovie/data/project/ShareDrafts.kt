@@ -48,7 +48,8 @@ class ShareDrafts
     ) {
         /** A new empty draft for a share, open but not in the editor; null when it could not be written. */
         suspend fun create(): ProjectId? {
-            val project = ProjectFactory.blank(ProjectId(RandomIds.next()))
+            // Asks for its shape too if it is ever opened without choosing a preset (a draft left in My videos).
+            val project = ProjectFactory.blank(ProjectId(RandomIds.next()), askShape = true)
             return if (projects.createDraft(project, inEditor = false)) project.id else null
         }
 
