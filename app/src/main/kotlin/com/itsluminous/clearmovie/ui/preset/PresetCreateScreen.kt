@@ -73,6 +73,7 @@ fun PresetCreateRoute(
         onFrame = viewModel::setFrame,
         onEnding = viewModel::setEnding,
         onShape = viewModel::setShape,
+        onCopyFiles = viewModel::setCopyFiles,
         onCreate = viewModel::create,
         onBack = onBack,
     )
@@ -94,6 +95,7 @@ fun PresetCreateScreen(
     onCreate: () -> Unit,
     onBack: () -> Unit,
     onShape: (CanvasShape) -> Unit = {},
+    onCopyFiles: (Boolean) -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -155,6 +157,17 @@ fun PresetCreateScreen(
                     }
                 }
                 PresetShapeCard(ui.shape, enabled = true, onShape = onShape)
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                    Column(Modifier.padding(vertical = 8.dp).fillMaxWidth()) {
+                        PartSwitch(stringResource(R.string.preset_copy_title), ui.copyFiles, "copy", onCopyFiles)
+                        Text(
+                            stringResource(R.string.preset_copy_body),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
+                        )
+                    }
+                }
                 if (ui.failed) {
                     Text(
                         stringResource(R.string.preset_create_failed),

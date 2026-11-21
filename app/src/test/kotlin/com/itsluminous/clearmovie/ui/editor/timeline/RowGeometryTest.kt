@@ -141,8 +141,15 @@ class RowGeometryTest {
         assertThat(ClipActions.forTimed(SelectionKind.SOUND, facts.copy(fixed = true, isMusic = true)).map { it.action })
             .containsExactly(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE, EditAction.LOWER_MUSIC, EditAction.DELETE)
             .inOrder()
-        assertThat(ClipActions.forTimed(SelectionKind.FRAME, facts.copy(frameOn = false)).single().checked).isFalse()
-        assertThat(ClipActions.forTimed(SelectionKind.OVERLAY, facts).map { it.action }).contains(EditAction.MOVE_TO_ROW)
+        // cm-frame-area: a frame's Screen colour and Picture area follow Show frame, and lead an added frame's bar.
+        val frame = ClipActions.forTimed(SelectionKind.FRAME, facts.copy(frameOn = false))
+        assertThat(frame.map { it.action })
+            .containsExactly(EditAction.FRAME_ON, EditAction.KEY_COLOUR, EditAction.PICTURE_AREA)
+            .inOrder()
+        assertThat(frame.first().checked).isFalse()
+        val overlay = ClipActions.forTimed(SelectionKind.OVERLAY, facts).map { it.action }
+        assertThat(overlay.take(2)).containsExactly(EditAction.KEY_COLOUR, EditAction.PICTURE_AREA).inOrder()
+        assertThat(overlay).contains(EditAction.MOVE_TO_ROW)
     }
 
     // ---------------------------------------------------------------- handles (cm-timeline-handles)

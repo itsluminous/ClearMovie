@@ -74,6 +74,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.data.preset.FrameSample
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.AudioRole
@@ -82,11 +83,14 @@ import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.Fit
+import com.itsluminous.clearmovie.domain.model.FrameSpec
 import com.itsluminous.clearmovie.domain.model.IntroClip
+import com.itsluminous.clearmovie.domain.model.KeySpec
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MediaClip
 import com.itsluminous.clearmovie.domain.model.NormRect
+import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Speed
@@ -100,6 +104,7 @@ import com.itsluminous.clearmovie.domain.model.duplicateClip
 import com.itsluminous.clearmovie.domain.model.mainSlot
 import com.itsluminous.clearmovie.domain.model.setCardColor
 import com.itsluminous.clearmovie.domain.model.setFit
+import com.itsluminous.clearmovie.domain.model.setFrameLook
 import com.itsluminous.clearmovie.domain.model.setLoops
 import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.setSpeed
@@ -110,11 +115,14 @@ import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.MoreBelow
 import com.itsluminous.clearmovie.ui.components.preciseDurationText
+import com.itsluminous.clearmovie.ui.editor.EditorViewModel.Companion.DEFAULT_KEY_GREEN
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
 import com.itsluminous.clearmovie.ui.editor.timeline.TimelineRow
 import com.itsluminous.clearmovie.ui.editor.timeline.TrimMath
 import com.itsluminous.clearmovie.ui.editor.timeline.itemName
+import com.itsluminous.clearmovie.ui.frame.FrameLookDialog
+import com.itsluminous.clearmovie.ui.frame.FrameLookTab
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -223,6 +231,12 @@ interface EditorCallbacks {
         trackId: TrackId,
         atMs: Long,
     ) = Unit
+
+    /** A picture of frame [clip]'s video at [atUs], for its look (cm-frame-area); null when it can't be read. */
+    suspend fun frameStill(
+        clip: OverlayClip,
+        atUs: Long,
+    ): FrameSample? = null
 }
 
 /**
@@ -377,6 +391,24 @@ fun EditPanel(
 
                     Panel.REMOVE_ROW -> {
                         RemoveRowPanel(track, rows, callbacks, close)
+                    }
+
+                    Panel.FRAME_COLOUR, Panel.FRAME_AREA -> {
+                        (clip as? OverlayClip)?.let { frame ->
+                            FrameLookDialog(
+                                durationMs = frame.sourceDurationMs,
+                                initialKey =
+                                    frame.key ?: KeySpec(DEFAULT_KEY_GREEN, FrameSpec.DEFAULT_TOLERANCE, FrameSpec.DEFAULT_SOFTNESS),
+                                initialArea = frame.area,
+                                startTab = if (open.panel == Panel.FRAME_AREA) FrameLookTab.AREA else FrameLookTab.COLOUR,
+                                loadStill = { callbacks.frameStill(frame, it) },
+                                onDone = { key, area ->
+                                    callbacks.edit { setFrameLook(frame.id, key, area) }
+                                    close()
+                                },
+                                onCancel = close,
+                            )
+                        }
                     }
 
                     Panel.TRANSITION -> {

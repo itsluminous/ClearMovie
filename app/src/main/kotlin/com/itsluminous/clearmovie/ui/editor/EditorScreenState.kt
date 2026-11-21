@@ -73,6 +73,10 @@ enum class Panel {
 
     /** "Remove row" on a row that still has items: asks first. */
     REMOVE_ROW,
+
+    /** A frame's look (cm-frame-area), on its Screen colour or its Picture area tab. */
+    FRAME_COLOUR,
+    FRAME_AREA,
 }
 
 /**

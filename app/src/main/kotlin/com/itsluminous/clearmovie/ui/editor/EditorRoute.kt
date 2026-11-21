@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.data.preset.FrameSample
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -162,7 +163,8 @@ fun EditorRoute(
                 is EditorEvent.Inserted -> {
                     screen.selectedRow = null
                     screen.selected = it.first
-                    screen.panel = null
+                    // A frame just added asks once which colour to remove and where photos go (cm-frame-area).
+                    screen.panel = if (viewModel.isFrame(it.first)) OpenPanel(Panel.FRAME_COLOUR, it.first) else null
                 }
 
                 is EditorEvent.Skipped -> {
@@ -364,6 +366,11 @@ fun EditorRoute(
                     viewModel.pause()
                     latestAskToRecord(trackId, atMs)
                 }
+
+                override suspend fun frameStill(
+                    clip: OverlayClip,
+                    atUs: Long,
+                ): FrameSample? = viewModel.frameStill(clip, atUs)
             }
         }
     // The shape the preview and its caption images are drawn for (cm-aspect-ratio).

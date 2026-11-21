@@ -15,6 +15,8 @@ import com.itsluminous.clearmovie.data.media.MediaAccessState
 import com.itsluminous.clearmovie.data.media.MediaFactsProbe
 import com.itsluminous.clearmovie.data.media.MediaStatus
 import com.itsluminous.clearmovie.data.media.newMainItems
+import com.itsluminous.clearmovie.data.preset.FrameSample
+import com.itsluminous.clearmovie.data.preset.FrameStills
 import com.itsluminous.clearmovie.data.preset.SlotStatus
 import com.itsluminous.clearmovie.data.project.OpenResult
 import com.itsluminous.clearmovie.data.project.ProjectMedia
@@ -67,6 +69,7 @@ import com.itsluminous.clearmovie.render.plan.Source
 import com.itsluminous.clearmovie.render.preview.ExactDraft
 import com.itsluminous.clearmovie.render.preview.LayeredPreviewEngine
 import com.itsluminous.clearmovie.render.preview.StillLoader
+import com.itsluminous.clearmovie.ui.frame.FRAME_LOOK_STILL_WIDTH
 import com.itsluminous.clearmovie.ui.media.IntakeState
 import com.itsluminous.clearmovie.ui.media.MediaIntake
 import com.itsluminous.clearmovie.ui.navigation.Routes
@@ -240,6 +243,7 @@ class EditorViewModel
         private val mediaAccess: MediaAccess,
         private val probe: MediaFactsProbe,
         private val recordings: VoiceRecordings,
+        private val frameStills: FrameStills = FrameStills { _, _, _ -> null },
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -734,6 +738,18 @@ class EditorViewModel
                 }
             return runCatching { resolver?.resolve(ref) }.getOrNull()
         }
+
+        /** A picture of frame [clip]'s video at [atUs] (cm-frame-area), decoded with its own colour matrix. */
+        suspend fun frameStill(
+            clip: OverlayClip,
+            atUs: Long,
+        ): FrameSample? {
+            val uri = runCatching { resolver?.resolve(clip.media) }.getOrNull() ?: return null
+            return frameStills.still(uri, atUs.coerceIn(0, clip.sourceDurationMs * 1000), FRAME_LOOK_STILL_WIDTH)
+        }
+
+        /** Whether [clipId] is a frame on a frame row: one just added asks for its look. */
+        fun isFrame(clipId: ClipId): Boolean = session.current?.clip(clipId) is OverlayClip
 
         /** Whether Play for [clipId] plays sound only (a spoken ending). */
         fun isSoundPart(clipId: ClipId): Boolean =

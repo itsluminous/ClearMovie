@@ -57,6 +57,9 @@ enum class EditAction {
 
     /** cm-timeline-handles: a caption with a side detached covers its photo or video whole again. */
     FOLLOW_ITEM,
+    /** cm-frame-area: the colour keyed out of a frame, and where photos and videos go while it shows. */
+    KEY_COLOUR,
+    PICTURE_AREA,
 }
 
 /** What is selected, as far as the bar is concerned. */
@@ -237,6 +240,7 @@ object ClipActions {
                 )
             }
         val delete = listOf(BarAction(EditAction.DELETE))
+        val frameLook = listOf(BarAction(EditAction.KEY_COLOUR), BarAction(EditAction.PICTURE_AREA))
         return when (kind) {
             SelectionKind.TEXT -> {
                 listOf(BarAction(EditAction.EDIT_TEXT)) +
@@ -267,11 +271,11 @@ object ClipActions {
             }
 
             SelectionKind.FRAME -> {
-                listOf(BarAction(EditAction.FRAME_ON, checked = facts.frameOn))
+                listOf(BarAction(EditAction.FRAME_ON, checked = facts.frameOn)) + frameLook
             }
 
             SelectionKind.OVERLAY -> {
-                moves + delete
+                frameLook + moves + delete
             }
 
             else -> {

@@ -5,18 +5,26 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.itsluminous.clearmovie.data.preset.DefinitionBindResult
+import com.itsluminous.clearmovie.data.preset.FrameSample
+import com.itsluminous.clearmovie.data.preset.FrameStills
+import com.itsluminous.clearmovie.data.preset.PresetBinding
+import com.itsluminous.clearmovie.data.preset.PresetSaveResult
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SlotBindResult
+import com.itsluminous.clearmovie.data.preset.SlotStatus
 import com.itsluminous.clearmovie.data.project.NewVideoResult
 import com.itsluminous.clearmovie.data.project.NewVideos
 import com.itsluminous.clearmovie.data.project.ShareChoice
 import com.itsluminous.clearmovie.data.project.ShareDrafts
 import com.itsluminous.clearmovie.domain.model.EndingKind
+import com.itsluminous.clearmovie.domain.model.KeySpec
+import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectId
+import com.itsluminous.clearmovie.ui.frame.FRAME_LOOK_STILL_WIDTH
 import com.itsluminous.clearmovie.ui.navigation.EntryMode
 import com.itsluminous.clearmovie.ui.navigation.FlowStep
 import com.itsluminous.clearmovie.ui.navigation.NewVideoFlow
@@ -79,7 +87,21 @@ data class SetupUi(
     val status: PresetStatus? = null,
     val work: SetupWork? = null,
     val message: SetupMessage? = null,
+    /** The frame's look is being set (cm-frame-area): asked when the frame is chosen, and from its row. */
+    val frameLook: Boolean = false,
+    /** Whether the files chosen are copied into the app (else used where they are). */
+    val copiesFiles: Boolean = true,
 ) {
+    /** The frame file, when it is chosen and ready. */
+    val frameBinding: PresetBinding? get() = (status?.slots?.get(PresetSlot.FRAME) as? SlotStatus.Ready)?.binding
+
+    /** The colour the frame keys out now: the one it was set to, or the green measured in its file. */
+    val frameKey: KeySpec?
+        get() {
+            val key = preset?.frame?.key ?: return null
+            return frameBinding?.keyColor?.let { key.copy(color = it) } ?: key
+        }
+
     /** Setting up (a part not chosen yet, nothing to repair): the short guide shows until every part is chosen. */
     val firstTime: Boolean
         get() = status != null && status.needsRepair.isEmpty() && status.needsSetup.isNotEmpty()
@@ -102,10 +124,11 @@ sealed interface SetupEvent {
 class PresetSetupViewModel
     @Inject
     constructor(
-        savedState: SavedStateHandle,
+        private val savedState: SavedStateHandle,
         private val presetStore: PresetStore,
         private val newVideos: NewVideos,
         private val shareDrafts: ShareDrafts,
+        private val frameStills: FrameStills,
     ) : ViewModel() {
         val presetId: PresetId = PresetId(requireNotNull(savedState.get<String>(Routes.ARG_PRESET)))
         val forNewVideo: Boolean = savedState.get<Boolean>(Routes.ARG_NEW_VIDEO) ?: false
@@ -117,7 +140,7 @@ class PresetSetupViewModel
                     Routes.ARG_SHARE_DRAFT,
                 )?.let { runCatching { ProjectId(it) }.getOrNull() }
 
-        private val uiState = MutableStateFlow(SetupUi())
+        private val uiState = MutableStateFlow(SetupUi(frameLook = savedState[KEY_FRAME_LOOK] ?: false))
         val ui: StateFlow<SetupUi> = uiState.asStateFlow()
 
         private val eventChannel = Channel<SetupEvent>(Channel.BUFFERED)
@@ -132,7 +155,39 @@ class PresetSetupViewModel
         fun refresh() {
             viewModelScope.launch {
                 val preset = presetStore.definition(presetId)?.preset
-                uiState.update { it.copy(preset = preset, status = presetStore.status(presetId)) }
+                val copies = presetStore.copiesFiles(presetId)
+                uiState.update { it.copy(preset = preset, status = presetStore.status(presetId), copiesFiles = copies) }
+            }
+        }
+
+        /** Opens the frame's look (its colour and picture area), once its file is ready. */
+        fun openFrameLook() = setFrameLook(true)
+
+        fun closeFrameLook() = setFrameLook(false)
+
+        private fun setFrameLook(open: Boolean) {
+            savedState[KEY_FRAME_LOOK] = open
+            uiState.update { it.copy(frameLook = open) }
+        }
+
+        /** A picture of the frame file at [atUs], for its look. */
+        suspend fun frameStill(atUs: Long): FrameSample? {
+            val binding = uiState.value.frameBinding ?: return null
+            return frameStills.still(binding.uri, atUs.coerceIn(0, binding.durationUs), FRAME_LOOK_STILL_WIDTH)
+        }
+
+        /** Keeps the frame's look for this preset: every new video from it starts with it. */
+        fun saveFrameLook(
+            key: KeySpec,
+            area: NormRect,
+        ) {
+            if (job?.isActive == true) return
+            closeFrameLook()
+            run {
+                when (presetStore.setFrameLook(presetId, key, area)) {
+                    is PresetSaveResult.Saved -> null
+                    PresetSaveResult.Invalid, PresetSaveResult.NotSaved -> SetupMessage.NotSaved
+                }
             }
         }
 
@@ -160,6 +215,8 @@ class PresetSetupViewModel
                 }
             when (result) {
                 is SlotBindResult.Bound -> {
+                    // A frame just chosen asks once which colour to remove and where photos go (cm-frame-area).
+                    if (slot == PresetSlot.FRAME) setFrameLook(true)
                     if (result.fileShape != null) SetupMessage.ShapeDiffers else null
                 }
 
@@ -271,6 +328,7 @@ class PresetSetupViewModel
         }
 
         companion object {
+            private const val KEY_FRAME_LOOK = "frameLook"
             val VIDEO = arrayOf("video/*")
             val AUDIO = arrayOf("audio/*")
 

@@ -35,6 +35,8 @@ data class PresetCreateUi(
     val frame: Boolean = true,
     val ending: EndingChoice = EndingChoice.VOICE,
     val shape: CanvasShape = CanvasShape.LANDSCAPE,
+    /** Keep copies of its files (cm-frame-area); off uses them where they are. */
+    val copyFiles: Boolean = false,
     val busy: Boolean = false,
     val failed: Boolean = false,
 ) {
@@ -66,6 +68,7 @@ class PresetCreateViewModel
                     shape =
                         savedState.get<String>(KEY_SHAPE)?.let { n -> CanvasShape.entries.firstOrNull { it.name == n } }
                             ?: CanvasShape.LANDSCAPE,
+                    copyFiles = savedState[KEY_COPY] ?: false,
                 ),
             )
         val ui: StateFlow<PresetCreateUi> = uiState.asStateFlow()
@@ -101,6 +104,11 @@ class PresetCreateViewModel
             uiState.update { it.copy(shape = shape) }
         }
 
+        fun setCopyFiles(on: Boolean) {
+            savedState[KEY_COPY] = on
+            uiState.update { it.copy(copyFiles = on) }
+        }
+
         fun create() {
             val ui = uiState.value
             if (!ui.canCreate) return
@@ -109,7 +117,13 @@ class PresetCreateViewModel
                 val id =
                     presetStore.create(
                         ui.name,
-                        PresetParts(intro = ui.intro, frame = ui.frame, ending = ui.ending.kind, shape = ui.shape),
+                        PresetParts(
+                            intro = ui.intro,
+                            frame = ui.frame,
+                            ending = ui.ending.kind,
+                            shape = ui.shape,
+                            copyFiles = ui.copyFiles,
+                        ),
                     )
                 if (id != null) created.send(id)
                 uiState.update { it.copy(busy = false, failed = id == null) }
@@ -122,5 +136,6 @@ class PresetCreateViewModel
             const val KEY_FRAME = "frame"
             const val KEY_ENDING = "ending"
             const val KEY_SHAPE = "shape"
+            const val KEY_COPY = "copyFiles"
         }
     }

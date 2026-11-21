@@ -54,6 +54,8 @@ import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.ui.components.WorkDialog
 import com.itsluminous.clearmovie.ui.components.shapeName
 import com.itsluminous.clearmovie.ui.components.sizeText
+import com.itsluminous.clearmovie.ui.frame.FrameLookDialog
+import com.itsluminous.clearmovie.ui.frame.FrameLookTab
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
 import com.itsluminous.clearmovie.ui.navigation.FlowStep
 
@@ -106,7 +108,21 @@ fun PresetSetupRoute(
         onDone = viewModel::done,
         onCancelWork = viewModel::cancel,
         onDismissMessage = viewModel::dismissMessage,
+        onFrameLook = viewModel::openFrameLook,
     )
+    val frame = ui.frameBinding
+    val key = ui.frameKey
+    if (ui.frameLook && frame != null && key != null && ui.work == null) {
+        FrameLookDialog(
+            durationMs = frame.durationMs,
+            initialKey = key,
+            initialArea = ui.preset?.frame?.contentRect,
+            startTab = FrameLookTab.COLOUR,
+            loadStill = viewModel::frameStill,
+            onDone = viewModel::saveFrameLook,
+            onCancel = viewModel::closeFrameLook,
+        )
+    }
 }
 
 /**
@@ -127,6 +143,7 @@ fun PresetSetupScreen(
     onDone: () -> Unit,
     onCancelWork: () -> Unit,
     onDismissMessage: () -> Unit,
+    onFrameLook: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -180,7 +197,7 @@ fun PresetSetupScreen(
                             .padding(vertical = 16.dp)
                             .testTag(SETUP_LIST_TAG),
                     ) {
-                        PresetSlotList(status, onChoose = onChoose)
+                        PresetSlotList(status, onChoose = onChoose, onFrameLook = onFrameLook, linked = !ui.copiesFiles)
                     }
                 }
             } else {
@@ -195,7 +212,7 @@ fun PresetSetupScreen(
                     Column(Modifier.widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         // The guide comes first, before the files it explains.
                         if (ui.firstTime) Guide()
-                        PresetSlotList(status, onChoose = onChoose)
+                        PresetSlotList(status, onChoose = onChoose, onFrameLook = onFrameLook, linked = !ui.copiesFiles)
                         side(false)
                     }
                 }

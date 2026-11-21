@@ -293,6 +293,8 @@ internal fun onTimedAction(
         EditAction.MOVE_EARLIER -> actions.edit { nudgeClip(id, -NUDGE_MS) }
         EditAction.MOVE_LATER -> actions.edit { nudgeClip(id, NUDGE_MS) }
         EditAction.MOVE_TO_ROW -> state.panel = OpenPanel(Panel.MOVE_TO_ROW, id)
+        EditAction.KEY_COLOUR -> state.panel = OpenPanel(Panel.FRAME_COLOUR, id)
+        EditAction.PICTURE_AREA -> state.panel = OpenPanel(Panel.FRAME_AREA, id)
         else -> Unit
     }
 }

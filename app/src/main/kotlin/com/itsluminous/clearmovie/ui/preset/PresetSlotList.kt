@@ -2,6 +2,8 @@ package com.itsluminous.clearmovie.ui.preset
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -30,6 +33,9 @@ import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.SlotStatus
 import com.itsluminous.clearmovie.domain.model.PresetSlot
+
+/** The frame row's "Colour and area" button (cm-frame-area). */
+const val FRAME_LOOK_BUTTON_TAG = "preset_frame_look"
 
 /** The name of a preset part, as the user sees it. */
 fun PresetSlot.labelRes(): Int =
@@ -51,6 +57,10 @@ fun PresetSlotList(
     status: PresetStatus,
     onChoose: (PresetSlot) -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens the frame's colour and picture area (cm-frame-area); null leaves the button out. */
+    onFrameLook: (() -> Unit)? = null,
+    /** The preset uses its files where they are, rather than copies. */
+    linked: Boolean = false,
 ) {
     val repair = status.needsRepair.isNotEmpty()
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -75,7 +85,7 @@ fun PresetSlotList(
         } else {
             Text(stringResource(R.string.preset_setup_title), style = MaterialTheme.typography.headlineSmall)
             Text(
-                stringResource(R.string.preset_setup_body),
+                stringResource(if (linked) R.string.preset_setup_body_linked else R.string.preset_setup_body),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -83,16 +93,18 @@ fun PresetSlotList(
         for (slot in PresetSlot.entries) {
             val slotStatus = status.slots[slot] ?: continue
             if (slotStatus is SlotStatus.NotNeeded) continue
-            SlotRow(slot, slotStatus, onChoose = { onChoose(slot) })
+            SlotRow(slot, slotStatus, onChoose = { onChoose(slot) }, onFrameLook = onFrameLook.takeIf { slot == PresetSlot.FRAME })
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SlotRow(
     slot: PresetSlot,
     status: SlotStatus,
     onChoose: () -> Unit,
+    onFrameLook: (() -> Unit)? = null,
 ) {
     val broken = status is SlotStatus.Missing || status is SlotStatus.Changed
     val ready = status as? SlotStatus.Ready
@@ -149,8 +161,25 @@ private fun SlotRow(
                     .semantics { contentDescription = chooseDescription }
             if (ready == null) {
                 Button(onClick = onChoose, modifier = buttonModifier) { ChooseLabel() }
-            } else {
+            } else if (onFrameLook == null) {
                 OutlinedButton(onClick = onChoose, modifier = buttonModifier) { ChooseLabel() }
+            } else {
+                // The frame's colour and picture area, then Choose file: side by side when they fit, else stacked.
+                FlowRow(
+                    Modifier.align(Alignment.End),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(onClick = onFrameLook, modifier = Modifier.heightIn(min = 56.dp).testTag(FRAME_LOOK_BUTTON_TAG)) {
+                        Icon(painterResource(R.drawable.ic_colorize), contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.preset_slot_frame_look))
+                    }
+                    OutlinedButton(
+                        onClick = onChoose,
+                        modifier = Modifier.heightIn(min = 56.dp).semantics { contentDescription = chooseDescription },
+                    ) { ChooseLabel() }
+                }
             }
         }
     }
