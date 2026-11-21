@@ -346,8 +346,8 @@ private fun Project.placedByHand(
 /** The clip with its span anchor removed: the user has taken control of its timing. */
 private fun Clip.detached(): Clip =
     when (this) {
-        is OverlayClip -> copy(anchor = null)
-        is AudioClip -> copy(anchor = null)
+        is OverlayClip -> copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
+        is AudioClip -> copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
         else -> this
     }
 
@@ -413,6 +413,24 @@ fun Project.setLowerWhenTalking(
         require(it.audioRole == AudioRole.MUSIC) { "Only music rows are lowered" }
         it.copy(lowerWhenTalking = lower)
     }
+
+/**
+ * The "Lower for talk" popup on a MUSIC row: whether the music is lowered
+ * while people talk, and to what level ([levelDb], from
+ * [Limits.MIN_VOLUME_DB], silent, to 0 dB, not lowered). A null level keeps
+ * the project's own levels.
+ */
+fun Project.setTalkLowering(
+    trackId: TrackId,
+    lower: Boolean,
+    levelDb: Double?,
+): Project {
+    require(levelDb == null || (levelDb.isFinite() && levelDb in Limits.MIN_VOLUME_DB..0.0)) { "Level out of range" }
+    return updateTrack(trackId) {
+        require(it.audioRole == AudioRole.MUSIC) { "Only music rows are lowered" }
+        it.copy(lowerWhenTalking = lower, lowerToDb = levelDb)
+    }
+}
 
 private fun Project.updateTrack(
     trackId: TrackId,
@@ -498,7 +516,7 @@ fun Project.trimAudio(
     updateTyped<AudioClip>(clipId, "sounds") {
         requireTrim(startMs, endMs, it.sourceDurationMs)
         val length = if (it.repeat) it.durationMs else endMs - startMs
-        it.copy(trimStartMs = startMs, trimEndMs = endMs, durationMs = length, anchor = null)
+        it.copy(trimStartMs = startMs, trimEndMs = endMs, durationMs = length, anchor = null, detachedStartMs = null, detachedEndMs = null)
     }
 
 private fun requireTrim(

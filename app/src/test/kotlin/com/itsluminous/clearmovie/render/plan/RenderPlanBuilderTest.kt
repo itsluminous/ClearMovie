@@ -33,6 +33,7 @@ import com.itsluminous.clearmovie.domain.model.isValid
 import com.itsluminous.clearmovie.domain.model.moveRow
 import com.itsluminous.clearmovie.domain.model.sendBackward
 import com.itsluminous.clearmovie.domain.model.setLowerWhenTalking
+import com.itsluminous.clearmovie.domain.model.setTalkLowering
 import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTrackMuted
 import com.itsluminous.clearmovie.domain.model.setTransition
@@ -476,6 +477,35 @@ class RenderPlanBuilderTest {
         val base = preset.frame!!.music.gainDb
         assertThat(plan.musicGainAt(6_500_000)).isWithin(1e-6).of(base)
         assertThat(plan.musicGainAt(12_500_000)).isWithin(1e-6).of(base - 20)
+    }
+
+    @Test
+    fun `the Lower for talk level lowers music to that level under voices and videos alike`() {
+        // cm-timeline-handles: the popup's level replaces both project levels for that row; the closing message keeps its own.
+        val ids = SequentialIds("vv")
+        val project =
+            duckingProject().addTimedClip(
+                AudioClip(ClipId("voice"), media("voice"), startMs = 9000, durationMs = 1500, sourceDurationMs = 1500),
+                role = AudioRole.VOICE,
+                ids = ids,
+            )
+        val music = project.tracks.single { it.presetRole == PresetRole.FRAME_MUSIC }.id
+        val base = preset.frame!!.music.gainDb
+        for (level in listOf(-6.0, -30.0)) {
+            val plan = RenderPlanBuilder(preset).build(project.setTalkLowering(music, lower = true, levelDb = level))
+            assertThat(plan.musicGainAt(3_500_000)).isWithin(1e-6).of(base)
+            assertThat(plan.musicGainAt(6_500_000)).isWithin(1e-6).of(base + level)
+            assertThat(plan.musicGainAt(9_700_000)).isWithin(1e-6).of(base + level)
+            // The closing message lowers to its own -20 dB, or to the row's level when that is lower.
+            assertThat(plan.musicGainAt(12_500_000)).isWithin(1e-6).of(base + minOf(level, -20.0))
+        }
+        // Off still turns the talk lowering off, whatever the level.
+        val off = RenderPlanBuilder(preset).build(project.setTalkLowering(music, lower = false, levelDb = -30.0))
+        assertThat(off.musicGainAt(6_500_000)).isWithin(1e-6).of(base)
+        // No level of its own: the project's levels, exactly as before.
+        val before = RenderPlanBuilder(preset).build(project)
+        assertThat(before.musicGainAt(6_500_000)).isWithin(1e-6).of(base - 12)
+        assertThat(before.musicGainAt(9_700_000)).isWithin(1e-6).of(base - 20)
     }
 
     @Test

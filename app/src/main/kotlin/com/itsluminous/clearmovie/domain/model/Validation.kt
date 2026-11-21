@@ -112,6 +112,8 @@ private fun Project.checkAttachments(fail: (Violation.Rule, String) -> Unit) {
 
                 a.offsetMs !in 0..Limits.MAX_MEDIA_MS ||
                     a.lengthMs?.let { it !in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS } == true ||
+                    (a.partlyDetached && (!a.whole || (a.detachedStartMs != null && a.detachedEndMs != null))) ||
+                    listOfNotNull(a.detachedStartMs, a.detachedEndMs).any { it !in 0..Limits.MAX_MEDIA_MS } ||
                     clip.following(span) != clip -> {
                     fail(Violation.Rule.ANCHOR, "${clip.id.value} is not where its item puts it")
                 }
@@ -153,7 +155,7 @@ private fun Project.checkAnchors(fail: (Violation.Rule, String) -> Unit) {
             val span = spans[anchor]
             when {
                 span == null -> fail(Violation.Rule.ANCHOR, "${clip.id.value} follows an ending that is not there")
-                clip.respanned(span.first, span.second) != clip -> fail(Violation.Rule.ANCHOR, "${clip.id.value} does not follow its span")
+                clip.following(span) != clip -> fail(Violation.Rule.ANCHOR, "${clip.id.value} does not follow its span")
             }
         }
     }
@@ -183,6 +185,12 @@ private fun Project.checkTrack(
     }
     if ((track.type == TrackType.AUDIO) != (track.audioRole != null)) {
         fail(Violation.Rule.TRACK_ROLE, "$where: only sound rows have a role, and they need one")
+    }
+
+    track.lowerToDb?.let {
+        if (track.audioRole != AudioRole.MUSIC || !it.isFinite() || it !in Limits.MIN_VOLUME_DB..0.0) {
+            fail(Violation.Rule.SETTINGS, "$where: talk level")
+        }
     }
 
     track.clips.filterNot { track.accepts(it) }.forEach { fail(Violation.Rule.CLIP_KIND, "$where: ${it.id.value} does not belong here") }
@@ -268,6 +276,9 @@ private fun Project.checkClipRanges(
     fun bad(what: String) = fail(Violation.Rule.RANGE, "$id: $what")
 
     val anchored = (clip is OverlayClip && clip.anchor != null) || (clip is AudioClip && clip.anchor != null)
+    val (ds, de) = clip.detachedSides
+    if ((ds != null || de != null) && (!anchored || (ds != null && de != null))) bad("detached side")
+    if (listOfNotNull(ds, de).any { it !in 0..Limits.MAX_MEDIA_MS }) bad("detached side")
     if (!anchored && !inRange(clip.durationMs)) bad("length")
     if (anchored && clip.durationMs !in 0..Limits.MAX_MEDIA_MS) bad("length")
     when (clip) {

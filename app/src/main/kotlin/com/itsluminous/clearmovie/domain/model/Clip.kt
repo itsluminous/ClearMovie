@@ -358,6 +358,12 @@ data class EndingClip(
  * middles of the transitions into and out of it (see `attachSpan`), so the
  * captions of two items joined by a crossfade meet, without overlapping,
  * halfway through it.
+ *
+ * A [whole] caption's two sides follow the item separately (cm-timeline-
+ * handles): dragging its start handle detaches the start, which then stays
+ * at [detachedStartMs] whatever the item does, while the end still follows
+ * the item's end; [detachedEndMs] is the same for the end. Both detached is a
+ * free caption (no attachment). Neither set is the caption as it always was.
  */
 @Serializable
 data class CaptionAttachment(
@@ -365,7 +371,12 @@ data class CaptionAttachment(
     val offsetMs: Long = 0,
     val whole: Boolean = true,
     val lengthMs: Long? = null,
-)
+    val detachedStartMs: Long? = null,
+    val detachedEndMs: Long? = null,
+) {
+    /** True when one side no longer follows the item. */
+    val partlyDetached: Boolean get() = detachedStartMs != null || detachedEndMs != null
+}
 
 /**
  * A caption on a TEXT row. [style] holds only the user's changes to the
@@ -394,7 +405,9 @@ data class TextClip(
 /**
  * A frame or overlay video on an OVERLAY row. With [repeat] the source is
  * repeated to fill [durationMs] and the last copy is cut; [key] keys out its
- * green window (null draws it as it is).
+ * green window (null draws it as it is). While it has an [anchor], a side
+ * dragged by its handle stays at [detachedStartMs] or [detachedEndMs] and the
+ * other side keeps following the span (see [CaptionAttachment]).
  */
 @Serializable
 @SerialName("overlay")
@@ -408,6 +421,8 @@ data class OverlayClip(
     val repeat: Boolean = true,
     val anchor: SpanAnchor? = null,
     override val animations: Animations = Animations.NONE,
+    val detachedStartMs: Long? = null,
+    val detachedEndMs: Long? = null,
 ) : Clip {
     override fun withStartMs(ms: Long) = copy(startMs = ms)
 
@@ -420,6 +435,8 @@ data class OverlayClip(
  * Sound on an AUDIO row. It plays [trimStartMs]..[trimEndMs] of the source;
  * with [repeat] that range repeats to fill [durationMs], otherwise
  * [durationMs] is at most the range. Audio clips have no animations, only fades.
+ * [detachedStartMs] and [detachedEndMs] are an anchored clip's sides held at
+ * their own time, as on [OverlayClip].
  */
 @Serializable
 @SerialName("audio")
@@ -436,6 +453,8 @@ data class AudioClip(
     val fadeInMs: Long = 0,
     val fadeOutMs: Long = 0,
     val anchor: SpanAnchor? = null,
+    val detachedStartMs: Long? = null,
+    val detachedEndMs: Long? = null,
 ) : Clip {
     override val animations: Animations get() = Animations.NONE
 

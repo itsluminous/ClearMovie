@@ -68,7 +68,10 @@ enum class PresetRole {
  * drawing position is its index in `Project.stacking`. [enabled] is the
  * row's On/Off switch (the preset frame is switched off rather than
  * removed); [muted] silences an audio row. [lowerWhenTalking] is a MUSIC
- * row's "Lower music when people talk".
+ * row's "Lower music when people talk", and [lowerToDb] how far it is
+ * lowered then, under voices and under videos' own sound alike; null keeps
+ * the project's levels (`DuckingSpec`: -20 dB under a voice, -12 dB under a
+ * video), as every row made before cm-timeline-handles does.
  */
 @Serializable
 data class Track(
@@ -80,6 +83,7 @@ data class Track(
     val audioRole: AudioRole? = null,
     val presetRole: PresetRole? = null,
     val lowerWhenTalking: Boolean = true,
+    val lowerToDb: Double? = null,
 ) {
     /** MAIN and the preset frame row can't be removed. */
     val isRemovable: Boolean get() = type != TrackType.MAIN && presetRole != PresetRole.FRAME

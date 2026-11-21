@@ -37,9 +37,11 @@ class ProjectMigrations(
         /**
          * 2 (cm-captions): a caption may be attached to a photo or video
          * (`TextClip.attachedTo`). 3 (cm-aspect-ratio): the video's `shape`,
-         * and `askShape`.
+         * and `askShape`. 4 (cm-timeline-handles): a caption's or a
+         * preset item's side detached by its handle (`detachedStartMs`,
+         * `detachedEndMs`), and a music row's `lowerToDb`.
          */
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
 
         /**
          * 1 to 2: nothing to rewrite. A version 1 caption has no `attachedTo`,
@@ -49,11 +51,17 @@ class ProjectMigrations(
          * 2 to 3: every older video was 16:9, so it is written as landscape
          * (and never asks for a shape). An older app refuses a version 3
          * file rather than show an upright video sideways.
+         *
+         * 3 to 4: nothing to rewrite. No older side is detached and no older
+         * row has its own talk level, so every item follows and every row
+         * ducks exactly as before. An older app refuses a version 4 file
+         * rather than drop a detached side without a word.
          */
         val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> =
             mapOf(
                 1 to { old -> old },
                 2 to { old -> JsonObject(old + mapOf("shape" to JsonPrimitive("landscape"), "askShape" to JsonPrimitive(false))) },
+                3 to { old -> old },
             )
     }
 }

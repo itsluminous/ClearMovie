@@ -555,8 +555,8 @@ class ProjectRepositoryTest {
             val opened = upgraded.open(ProjectId("p1")) as OpenResult.Opened
             assertThat(opened.migratedFrom).isEqualTo(1)
             val row = db.projects().get("p1")!!
-            assertThat(row.schemaVersion).isEqualTo(3)
-            assertThat(row.modelJson).startsWith("{\n    \"schemaVersion\": 3")
+            assertThat(row.schemaVersion).isEqualTo(ProjectMigrations.CURRENT_VERSION)
+            assertThat(row.modelJson).startsWith("{\n    \"schemaVersion\": ${ProjectMigrations.CURRENT_VERSION}")
             // Opening again is not a migration any more.
             assertThat((upgraded.open(ProjectId("p1")) as OpenResult.Opened).migratedFrom).isNull()
         }
@@ -573,7 +573,7 @@ class ProjectRepositoryTest {
             assertThat(opened.project.shape).isEqualTo(CanvasShape.LANDSCAPE)
             assertThat(opened.project.askShape).isFalse()
             val row = db.projects().get("blank")!!
-            assertThat(row.schemaVersion).isEqualTo(3)
+            assertThat(row.schemaVersion).isEqualTo(ProjectMigrations.CURRENT_VERSION)
             assertThat(row.modelJson).contains("\"shape\": \"landscape\"")
         }
 

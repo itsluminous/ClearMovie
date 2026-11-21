@@ -71,7 +71,7 @@ private fun Project.normalizeMain(): Project {
     return withTrackClips(main.id, main.clips.map { byId[it.id] ?: it }).copy(transitionForAll = forAll)
 }
 
-private val Clip.anchor: SpanAnchor?
+internal val Clip.anchor: SpanAnchor?
     get() =
         when (this) {
             is OverlayClip -> anchor
@@ -91,7 +91,7 @@ private fun Project.normalizeAnchors(relocate: Boolean): Project {
                 track.clips.mapNotNull { clip ->
                     val anchor = clip.anchor ?: return@mapNotNull clip
                     val span = spans[anchor] ?: return@mapNotNull null
-                    clip.respanned(span.first, span.second).also { anchored += track.id to it }
+                    clip.following(span).also { anchored += track.id to it }
                 }
             // Like any delete, a row left empty by a dropped clip goes too.
             if (kept.isEmpty() && track.isRemovable) null else track.copy(clips = kept.sortedBy { it.startMs })
@@ -114,6 +114,23 @@ internal class SpanCache(
 
     operator fun get(anchor: SpanAnchor): Pair<Long, Long>? =
         if (spans.containsKey(anchor)) spans[anchor] else project.anchorSpan(anchor).also { spans[anchor] = it }
+}
+
+/** The sides of an anchored clip held at their own time (cm-timeline-handles), start then end. */
+internal val Clip.detachedSides: Pair<Long?, Long?>
+    get() =
+        when (this) {
+            is OverlayClip -> detachedStartMs to detachedEndMs
+            is AudioClip -> detachedStartMs to detachedEndMs
+            else -> null to null
+        }
+
+/** An anchored clip placed on [span], each detached side kept at its own time. */
+internal fun Clip.following(span: Pair<Long, Long>): Clip {
+    val (ds, de) = detachedSides
+    if (ds == null && de == null) return respanned(span.first, span.second)
+    val (start, end) = heldApart(ds ?: span.first, de ?: span.second, startHeld = ds != null)
+    return respanned(start, end)
 }
 
 /** The clip moved to [start] and stretched to [end] (capped at its media when it does not repeat). */

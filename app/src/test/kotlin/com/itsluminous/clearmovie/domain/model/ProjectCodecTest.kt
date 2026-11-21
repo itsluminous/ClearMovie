@@ -33,14 +33,14 @@ class ProjectCodecTest {
 
     @Test
     fun `golden fixtures round-trip byte for byte`() {
-        for (name in listOf("rich-v3.json", "blank-v3.json")) {
+        for (name in listOf("rich-v4.json", "blank-v4.json")) {
             val text = fixture(name)
             assertThat(codec.encode(ok(text).project)).isEqualTo(text)
         }
     }
 
     @Test
-    fun `a schema 2 project reads as landscape, never asks for a shape, and saves as schema 3`() {
+    fun `a schema 2 project reads as landscape, never asks for a shape, and saves at the current schema`() {
         // cm-aspect-ratio: schema 3 adds the video's shape. Every older video was 16:9.
         for (name in listOf("rich", "blank")) {
             val result = ok(fixture("$name-v2.json"))
@@ -48,8 +48,38 @@ class ProjectCodecTest {
             assertThat(result.repaired).isFalse()
             assertThat(result.project.shape).isEqualTo(CanvasShape.LANDSCAPE)
             assertThat(result.project.askShape).isFalse()
-            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v3.json"))
+            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v4.json"))
         }
+    }
+
+    @Test
+    fun `a schema 3 project reads exactly as before and saves as schema 4`() {
+        // cm-timeline-handles: schema 4 adds detached sides and a music row's talk level; schema 3 has neither.
+        for (name in listOf("rich", "blank")) {
+            val result = ok(fixture("$name-v3.json"))
+            assertThat(result.fromVersion).isEqualTo(3)
+            assertThat(result.repaired).isFalse()
+            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v4.json"))
+            val captions =
+                result.project.tracks
+                    .flatMap { it.clips }
+                    .filterIsInstance<TextClip>()
+            assertThat(captions.mapNotNull { it.attachedTo }.none { it.partlyDetached }).isTrue()
+            assertThat(result.project.tracks.all { it.lowerToDb == null }).isTrue()
+        }
+    }
+
+    @Test
+    fun `detached sides and a talk level survive a save`() {
+        val rich = Fixtures.richProject()
+        val music = rich.tracks.first { it.audioRole == AudioRole.MUSIC }
+        val project = rich.setTalkLowering(music.id, lower = true, levelDb = -9.5)
+        val text = codec.encode(project)
+        assertThat(text).contains("\"lowerToDb\": -9.5")
+        assertThat(ok(text).project).isEqualTo(project)
+        // A default (null) is left out, so a project without one is byte for byte what schema 3 wrote.
+        assertThat(codec.encode(rich)).doesNotContain("lowerToDb")
+        assertThat(codec.encode(rich)).doesNotContain("detached")
     }
 
     @Test
@@ -63,7 +93,7 @@ class ProjectCodecTest {
         }
         assertThat(codec.encode(Fixtures.richProject().setShape(CanvasShape.PORTRAIT))).contains("\"shape\": \"portrait\"")
         // A shape this app does not know is refused, never read as some other shape.
-        val unknown = fixture("blank-v3.json").replace("\"shape\": \"landscape\"", "\"shape\": \"cinema\"")
+        val unknown = fixture("blank-v4.json").replace("\"shape\": \"landscape\"", "\"shape\": \"cinema\"")
         assertThat(failed(unknown)).isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
     }
 
@@ -71,18 +101,18 @@ class ProjectCodecTest {
     fun `the rich fixture is the project the test builds`() {
         // If the model changes shape, this fails before the byte comparison
         // hides why; regenerate the fixture only for an intended change.
-        assertThat(ok(fixture("rich-v3.json")).project).isEqualTo(Fixtures.richProject())
-        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v3.json"))
+        assertThat(ok(fixture("rich-v4.json")).project).isEqualTo(Fixtures.richProject())
+        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v4.json"))
     }
 
     @Test
-    fun `a schema 1 project reads as before, its captions free, and saves as schema 3`() {
+    fun `a schema 1 project reads as before, its captions free, and saves at the current schema`() {
         // cm-captions: schema 2 adds TextClip.attachedTo. A schema 1 caption has none, so it keeps its own times.
         for (name in listOf("rich-v1.json", "blank-v1.json")) {
             val result = ok(fixture(name))
             assertThat(result.fromVersion).isEqualTo(1)
             assertThat(result.repaired).isFalse()
-            assertThat(codec.encode(result.project)).startsWith("{\n    \"schemaVersion\": 3,")
+            assertThat(codec.encode(result.project)).startsWith("{\n    \"schemaVersion\": 4,")
         }
         val rich = ok(fixture("rich-v1.json")).project
         assertThat(rich).isEqualTo(Fixtures.richProjectV1())
@@ -96,7 +126,7 @@ class ProjectCodecTest {
         assertThat(ok(codec.encode(rich)).project).isEqualTo(rich)
         // The app's chain starts at schema 1.
         assertThat(ProjectMigrations().oldestVersion).isEqualTo(1)
-        assertThat(ProjectMigrations.CURRENT_VERSION).isEqualTo(3)
+        assertThat(ProjectMigrations.CURRENT_VERSION).isEqualTo(4)
     }
 
     @Test
@@ -253,7 +283,7 @@ class ProjectCodecTest {
 
     @Test
     fun `a project from a newer app is refused`() {
-        val newer = fixture("blank-v3.json").replace("\"schemaVersion\": 3", "\"schemaVersion\": 4")
+        val newer = fixture("blank-v4.json").replace("\"schemaVersion\": 4", "\"schemaVersion\": 5")
         assertThat(failed(newer)).isEqualTo(ProjectDecodeResult.Reason.NEWER_VERSION)
     }
 
