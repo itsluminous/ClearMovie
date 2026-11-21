@@ -26,8 +26,6 @@ data class LayoutInput(
     val rows: List<RowSpec>,
     /** The "Show all rows" / "Show fewer rows" control (stacked only). */
     val toggleDp: Double,
-    /** The row holding the selected item (the timeline scrolls it into view). */
-    val selectedRow: String? = null,
     /** The width the preview gets when stacked. */
     val previewWidthDp: Double = windowWidthDp,
     /** The video's width over its height (cm-aspect-ratio): 16:9, upright 9:16 or square. */

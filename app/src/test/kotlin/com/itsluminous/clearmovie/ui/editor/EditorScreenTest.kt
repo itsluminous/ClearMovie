@@ -838,10 +838,13 @@ class EditorScreenTest {
         assertThat((sideBar.bottom - sideBar.top).v()).isWithin(0.5f).of((sidePlay.bottom - sidePlay.top).v())
         // The bottom bar and the Play bar beside it line up.
         assertThat(sideBar.bottom.v()).isWithin(0.5f).of(sidePlay.bottom.v())
-        for (tag in listOf(UNDO_TAG, REDO_TAG)) {
-            val b = compose.onNodeWithTag(tag).bounds()
-            assertThat((b.bottom - b.top).v()).isWithin(0.5f).of(28f)
-            assertThat((b.right - b.left).v()).isAtLeast(47.5f)
+        // Undo and Redo side by side in the slimmer bar, 48 dp each way.
+        val undo = compose.onNodeWithTag(UNDO_TAG).bounds()
+        val redo = compose.onNodeWithTag(REDO_TAG).bounds()
+        assertThat(redo.left.v()).isWithin(0.5f).of(undo.right.v())
+        for (b in listOf(undo, redo)) {
+            assertThat((b.bottom - b.top).v()).isWithin(0.5f).of(48f)
+            assertThat((b.right - b.left).v()).isWithin(0.5f).of(48f)
         }
         for (tag in listOf(EDITOR_EXPORT_TAG, PLAY_TAG, EXACT_TAG)) {
             val b = compose.onNodeWithTag(tag).bounds()

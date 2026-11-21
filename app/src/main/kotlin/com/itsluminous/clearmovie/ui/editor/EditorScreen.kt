@@ -251,11 +251,10 @@ fun EditorScreen(
     LaunchedEffect(selectedTrack == null, state.selectedRow) {
         if (selectedTrack == null && state.selectedRow != null) state.selectedRow = null
     }
-    // The selected item's row, or the selected row: kept on screen first after MAIN when rows fold away.
-    val focusRow = selectedClip?.let { project?.trackOf(it.id)?.id } ?: selectedTrack?.id
     val playheadMs = playhead.positionUs / 1000
     val fontScale = LocalDensity.current.fontScale
-    // One scroll for the rows in either layout, so turning the phone keeps it (cm-timeline-scroll).
+    // One scroll for the rows in either layout (cm-timeline-scroll); on a turn the rows change height, and the
+    // timeline brings the selected row (or MAIN) back into view.
     val rowScroll = rememberScrollState()
     // Worked out once per project, not per playhead tick (it holds every item's handle limits).
     val rows = remember(project) { project?.let { timelineRows(it) }.orEmpty() }
@@ -690,7 +689,6 @@ fun EditorScreen(
                     rulerDp = metrics.rulerDp,
                     rows = rows.map { RowSpec(it.key, metrics.heightOf(it.type), it.type == RowType.MAIN) },
                     toggleDp = metrics.toggleDp,
-                    selectedRow = focusRow?.value,
                     canvasAspect = canvasAspect.toDouble(),
                     rowGapDp = metrics.gapDp,
                 )
@@ -1063,7 +1061,7 @@ private fun TopBar(
             }
         },
         actions = {
-            UndoRedo(ui, actions, barHeight / 2)
+            UndoRedo(ui, actions, barHeight)
             IconButton(onClick = actions::export, modifier = Modifier.size(TOUCH).testTag(EDITOR_EXPORT_TAG)) {
                 Icon(
                     painterResource(R.drawable.ic_download),
@@ -1155,20 +1153,28 @@ private fun MoreOptions(
 /**
  * Undo above Redo, one icon each, stacked with no gap so the title has their
  * width (kupraki's call). Two 48 dp buttons cannot stack in the 64 dp bar, so
- * each is 48 dp wide and half the bar tall ([height]: 32 dp, 28 dp sideways):
- * the one place in the editor a touch target is under 48 dp tall. Each is
- * named for TalkBack.
+ * each is 48 dp wide and half the bar tall: the one place in the editor a
+ * touch target is under 48 dp tall. In the 56 dp bar of a phone held sideways
+ * ([barHeight], cm-timeline-scroll) they sit side by side instead, 48 dp each
+ * way, where the wider pane leaves the title room. Each is named for TalkBack.
  */
 @Composable
 private fun UndoRedo(
     ui: EditorUi,
     actions: EditorActions,
-    height: Dp,
+    barHeight: Dp,
 ) {
+    if (barHeight < TOP_BAR_HEIGHT) {
+        Row {
+            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, TOUCH, actions::undo)
+            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, TOUCH, actions::redo)
+        }
+        return
+    }
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
         Column(Modifier.width(TOUCH)) {
-            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, height, actions::undo)
-            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, height, actions::redo)
+            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, barHeight / 2, actions::undo)
+            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, barHeight / 2, actions::redo)
         }
     }
 }

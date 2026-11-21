@@ -15,7 +15,6 @@ class PreviewLayoutReducerTest {
         windowHeight: Double = 891.0,
         twoPane: Boolean = false,
         chrome: Double = 300.0,
-        selected: String? = null,
     ) = LayoutInput(
         twoPane = twoPane,
         windowWidthDp = 411.0,
@@ -24,7 +23,6 @@ class PreviewLayoutReducerTest {
         rulerDp = 28.0,
         rows = rows,
         toggleDp = 48.0,
-        selectedRow = selected,
     )
 
     private fun measured(
@@ -35,10 +33,8 @@ class PreviewLayoutReducerTest {
     // On a 411 dp wide phone the natural preview (231 dp) is below the minimum (28% of 891 = 249.5), so it is
     // either Full or Partial. A wider window (700 dp: preview 393.75 dp) shows Shrunk between the two.
 
-    private fun wide(
-        rows: List<RowSpec>,
-        selected: String? = null,
-    ) = input(rows, windowHeight = 891.0, chrome = 250.0, selected = selected).copy(windowWidthDp = 700.0, previewWidthDp = 700.0)
+    private fun wide(rows: List<RowSpec>) =
+        input(rows, windowHeight = 891.0, chrome = 250.0).copy(windowWidthDp = 700.0, previewWidthDp = 700.0)
 
     @Test
     fun `full when the natural preview and every row fit`() {
@@ -86,10 +82,10 @@ class PreviewLayoutReducerTest {
 
     @Test
     fun `Partial puts every row on the timeline in screen order, and counts the ones below those that fit`() {
-        // MAIN in the middle and a selected row at the bottom: nothing is taken out of order (the timeline
+        // MAIN in the middle: nothing is taken out of order, MAIN and a selected row included (the timeline
         // scrolls to the selected row instead).
         val many = (1..5).map { RowSpec("a$it", 48.0) } + RowSpec("main", 72.0, isMain = true) + (1..6).map { RowSpec("b$it", 48.0) }
-        val s = measured(PreviewLayoutState(), wide(many, selected = "b6"))
+        val s = measured(PreviewLayoutState(), wide(many))
         val layout = s.layout as PreviewLayout.Partial
         assertThat(layout.visibleRows).isEqualTo(many.map { it.key })
         val fits = layout.visibleRows - layout.hiddenRows.toSet()

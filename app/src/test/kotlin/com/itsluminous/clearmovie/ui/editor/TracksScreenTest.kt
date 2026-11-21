@@ -773,6 +773,36 @@ class TracksScreenTest {
     }
 
     @Test
+    fun `after the rows scroll a tap selects the item under the finger, and a row out of view has no plus for TalkBack`() {
+        val h = EditorHarness(project, Fixtures.preset)
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(800.dp, 363.dp))) {
+                ClearMovieTheme(dynamicColor = false) { h.Content() }
+            }
+        }
+        compose.waitForIdle()
+        zoomTo(h, 9_000.0)
+        val music = h.project.idOf("m1")
+        val first = h.project.tracks.first()
+        // The row's one "+" is after its last item.
+        val anchor = first.clips.maxBy { it.startMs }.id
+        compose.onNodeWithTag(timedPlusTag(anchor, InsertSide.AFTER)).assertExists()
+        // Scroll to the bottom with a swipe at the right-hand end of the rows.
+        compose.onNodeWithTag(TIMELINE_ROWS_TAG).performTouchInput {
+            swipe(Offset(width - 12f, height - 10f), Offset(width - 14f, 10f), 400)
+        }
+        compose.waitForIdle()
+        val chip = bounds(clipTag(music))
+        val view = bounds(TIMELINE_ROWS_TAG)
+        assertThat(chip.top).isAtLeast(view.top)
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput { click(centreIn(chip)) }
+        compose.waitForIdle()
+        assertThat(h.state!!.selected).isEqualTo(music)
+        // The first row is now under the ruler: its "+" points are gone, so TalkBack cannot land on them.
+        compose.onNodeWithTag(timedPlusTag(anchor, InsertSide.AFTER)).assertDoesNotExist()
+    }
+
+    @Test
     fun `a phone held sideways shows at least four whole rows, and a smaller one three`() {
         // The editor's room on a 411 dp tall phone held sideways, less its 24 dp status and gesture bars
         // (Robolectric has no insets), then on a 360 dp tall phone.

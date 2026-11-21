@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -51,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -419,10 +421,12 @@ fun TimelineView(
             }
         val haptics = LocalHapticFeedback.current
         val density = LocalDensity.current
+        val scrollbar = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         // What the rows keep in view (cm-timeline-scroll): the selected row, or the row of the selected item,
         // when it changes (a new caption on a new row at the bottom is seen at once), and again when the rows'
-        // room changes (a turn of the phone, a panel opening); with nothing selected, MAIN when the room changes
-        // (the editor opening). Letting go of a selection scrolls nothing.
+        // room changes (a turn of the phone, a panel opening); with nothing selected, MAIN when the editor opens
+        // or the rows change size (a turn of the phone, a text size), never for a banner or a panel. Letting go
+        // of a selection scrolls nothing, and a finger on the timeline stops the scroll at once.
         val mainKey = shown.firstOrNull { it.type == RowType.MAIN }?.key
         val focusKey =
             selectedRow ?: selected?.let { id ->
@@ -431,16 +435,35 @@ fun TimelineView(
         val latestBands by rememberUpdatedState(bands)
         val viewport = rowScroll.viewportSize
         val room = remember { RevealRoom() }
+        var revealing by remember { mutableIntStateOf(0) }
         LaunchedEffect(focusKey, metrics, viewport) {
-            val roomChanged = room.metrics != metrics || room.viewportPx != viewport
+            // The first layout with room for the rows counts as a change of size (the editor opening).
+            val resized = room.metrics != metrics || !room.opened
             room.metrics = metrics
-            room.viewportPx = viewport
-            val key = focusKey ?: mainKey.takeIf { roomChanged } ?: return@LaunchedEffect
+            if (viewport > 0) room.opened = true
+            if (focusKey != null || (resized && viewport > 0)) revealing++
+        }
+        LaunchedEffect(revealing, touching) {
+            if (revealing == 0) return@LaunchedEffect
+            // A finger on the timeline wins: the request is dropped, not kept for when it lifts.
+            if (touching) {
+                revealing = 0
+                return@LaunchedEffect
+            }
+            val key = focusKey ?: mainKey ?: return@LaunchedEffect
             // After the frame that lays the rows out with it (a row just added has no room to scroll to before).
             withFrameNanos { }
             val band = latestBands.firstOrNull { it.key == key } ?: return@LaunchedEffect
-            val target = RowOrder.revealScroll(band, density.density, rowScroll.value, rowScroll.viewportSize)
-            if (target != null) rowScroll.animateScrollTo(target)
+            // With the gap under it, so a row brought up from below does not touch the bar.
+            val target =
+                RowOrder.revealScroll(
+                    band.copy(heightDp = band.heightDp + metrics.gapDp),
+                    density.density,
+                    rowScroll.value,
+                    rowScroll.viewportSize,
+                )
+            if (target != null) rowScroll.animateScrollTo(target.coerceAtMost(rowScroll.maxValue))
+            revealing = 0
         }
         // The handler outlives recompositions: it always calls the latest callbacks.
         val latestOnZoom by rememberUpdatedState(onZoom)
@@ -508,6 +531,22 @@ fun TimelineView(
                                     rowScroll.dispatchRawDelta(y)
                                     true
                                 }
+                            }.drawWithContent {
+                                drawContent()
+                                // A thin bar at the right edge says there are more rows, and where these are among them.
+                                val max = rowScroll.maxValue
+                                if (max > 0 && max != Int.MAX_VALUE) {
+                                    val view = size.height
+                                    val thumb = maxOf(SCROLLBAR_MIN_DP.dp.toPx(), view * view / (view + max))
+                                    val y = (view - thumb) * rowScroll.value / max
+                                    val w = SCROLLBAR_DP.dp.toPx()
+                                    drawRoundRect(
+                                        scrollbar,
+                                        topLeft = Offset(size.width - w - SCROLLBAR_INSET_DP.dp.toPx(), y),
+                                        size = Size(w, thumb),
+                                        cornerRadius = CornerRadius(w / 2),
+                                    )
+                                }
                             }.verticalScroll(rowScroll, enabled = false),
                     ) {
                         for ((i, row) in shown.withIndex()) {
@@ -573,6 +612,11 @@ fun TimelineView(
                     ) {
                         for ((i, row) in shown.withIndex()) {
                             val band = bands[i]
+                            // A row whose middle is scrolled up under the ruler has no "+" (drawn or for TalkBack).
+                            val underRuler by remember(band, density) {
+                                derivedStateOf { band.centreDp * density.density < rowScroll.value }
+                            }
+                            if (underRuler) continue
                             // MAIN's box starts [lift] above its row, so a lifted "+" fits; the others start at their row.
                             val above = if (row.type == RowType.MAIN) 0.0 else lift
                             val isMain = row.type == RowType.MAIN
@@ -637,7 +681,12 @@ fun TimelineView(
                         val d = density.density
                         val top = rowScroll.value
                         val bottom = top + rowScroll.viewportSize
-                        val out = shown.filterIndexed { i, _ -> bands[i].topDp * d < top - 1 || bands[i].bottomDp * d > bottom + 1 }
+                        // Each row and gap above is laid out rounded to whole pixels: up to a pixel each.
+                        val out =
+                            shown.filterIndexed { i, _ ->
+                                val slack = 1 + 2 * i
+                                bands[i].topDp * d < top - slack || bands[i].bottomDp * d > bottom + slack
+                            }
                         if (out.isEmpty() || rowScroll.viewportSize == 0) hiddenRows else out
                     }
                 }
@@ -650,7 +699,7 @@ fun TimelineView(
 /** The room the rows were last kept in view for (not state: changing it recomposes nothing). */
 private class RevealRoom {
     var metrics: RowMetrics? = null
-    var viewportPx: Int = -1
+    var opened = false
 }
 
 /** How far row [index] is drawn from its place while a row is dragged: the dragged one follows the finger, the others make room. */
@@ -1292,6 +1341,11 @@ private fun edgeScroll(
 }
 
 private const val EDGE_DP = 32.0
+
+/** The rows' scroll bar: 4 dp wide, 2 dp in from the edge, never shorter than 24 dp. */
+private const val SCROLLBAR_DP = 4
+private const val SCROLLBAR_INSET_DP = 2
+private const val SCROLLBAR_MIN_DP = 24
 private const val EDGE_STEP_DP = 4.0
 
 /** What a touch landed on, with the details the handler needs. */
@@ -1401,10 +1455,13 @@ private fun hit(
         // rows (as every "+" and marker does over what is under it), but never over the ruler: a
         // touch on the ruler always scrubs, so the playhead can't be lost under a "+".
         val gy = metrics.rulerDp + (yDp - metrics.rulerDp + rowScrollDp - c.mainTopInRows)
-        when (val t = c.geometry.hitTest(xDp - metrics.headerDp - PAD_DP, gy)) {
-            is HitTarget.Plus -> return Hit.OnPlus(t.point)
-            is HitTarget.Marker -> return Hit.OnMarker(t.point)
-            else -> Unit
+        // Never below MAIN: in the slimmer sideways rows a marker's 48 dp hit area would reach the next row.
+        if (gy < c.geometry.mainBottom) {
+            when (val t = c.geometry.hitTest(xDp - metrics.headerDp - PAD_DP, gy)) {
+                is HitTarget.Plus -> return Hit.OnPlus(t.point)
+                is HitTarget.Marker -> return Hit.OnMarker(t.point)
+                else -> Unit
+            }
         }
     }
     if (yDp < metrics.rulerDp) return if (xDp < metrics.headerDp) Hit.Elsewhere else Hit.OnRuler
