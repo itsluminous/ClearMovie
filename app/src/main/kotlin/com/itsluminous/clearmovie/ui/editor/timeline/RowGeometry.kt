@@ -68,10 +68,10 @@ object TimedRowGeometry {
         val sorted = clips.filter { it.endMs > it.startMs }.sortedBy { it.startMs }
         if (sorted.isEmpty()) return emptyList()
         val half = TimelineGeometry.PLUS_HIT_DP / 2
-        // Kept whole on screen: inside the span's padding at its start, or the "+" column at its end, which is empty on
-        // the selected item's row (cm-plus-position).
+        // Kept whole on screen: inside the span's padding at its start, and at its end no further than half into the
+        // "+" column (empty on the selected item's row), so it never sits where the rows' "+" are (cm-plus-position).
         val lo = -TimelineGeometry.EDGE_ROOM_DP + half
-        val hi = widthDp + TimelineGeometry.END_DP - half
+        val hi = widthDp + TimelineGeometry.SIDE_END_DP - half
 
         fun TimedPlus.kept() = copy(xDp = xDp.coerceIn(lo, maxOf(lo, hi)))
         val out = mutableListOf<TimedPlus>()

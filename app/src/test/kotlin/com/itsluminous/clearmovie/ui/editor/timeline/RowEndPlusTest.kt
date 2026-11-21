@@ -21,7 +21,7 @@ class RowEndPlusTest {
     @Test
     fun `cursor in a gap adds at the cursor`() {
         for (cursor in listOf(0L, 1999L, 4000L, 5000L, 9000L, 11_999L)) {
-            assertThat(RowEndPlus.timed(row, cursor)).isEqualTo(EndPlusTarget.AtCursor)
+            assertThat(RowEndPlus.timed(row, cursor)).isEqualTo(EndPlusTarget.At(cursor))
         }
     }
 
@@ -44,11 +44,29 @@ class RowEndPlusTest {
 
     @Test
     fun `cursor past every item on the row, and on an empty row, adds at the cursor`() {
-        assertThat(RowEndPlus.timed(row, 14_000)).isEqualTo(EndPlusTarget.AtCursor)
-        assertThat(RowEndPlus.timed(row, 13_000)).isEqualTo(EndPlusTarget.AtCursor)
-        assertThat(RowEndPlus.timed(emptyList(), 5000)).isEqualTo(EndPlusTarget.AtCursor)
+        assertThat(RowEndPlus.timed(row, 14_000)).isEqualTo(EndPlusTarget.At(14_000))
+        assertThat(RowEndPlus.timed(row, 13_000)).isEqualTo(EndPlusTarget.At(13_000))
+        assertThat(RowEndPlus.timed(emptyList(), 5000)).isEqualTo(EndPlusTarget.At(5000))
         // An item of no length is never under the cursor.
-        assertThat(RowEndPlus.timed(listOf(clip("z", 5000, 5000)), 5000)).isEqualTo(EndPlusTarget.AtCursor)
+        assertThat(RowEndPlus.timed(listOf(clip("z", 5000, 5000)), 5000)).isEqualTo(EndPlusTarget.At(5000))
+    }
+
+    @Test
+    fun `nothing is added where it would not be seen, after the end of the video`() {
+        // A 14 s video; captions 2-4 s and 6-8 s; a new caption is 3 s and must be seen for 3 s.
+        val captions = listOf(clip("a", 2000, 4000), clip("b", 6000, 8000))
+        // At the very end (after playing it through) and 1 s before it: from 11 s, the last moment that keeps 3 s in.
+        assertThat(RowEndPlus.timed(captions, 14_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
+        assertThat(RowEndPlus.timed(captions, 13_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
+        // Further from the end the cursor stands.
+        assertThat(RowEndPlus.timed(captions, 9000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(9000))
+        // A caption running to the end: right after it would be past the end, so at the last moment that is seen.
+        val toEnd = listOf(clip("z", 8000, 14_000))
+        assertThat(RowEndPlus.timed(toEnd, 12_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
+        // A video shorter than that: from the start.
+        assertThat(RowEndPlus.timed(emptyList(), 2000, 3000, videoMs = 2000)).isEqualTo(EndPlusTarget.At(0))
+        // A sound (length unknown) is kept 3 s from the end too.
+        assertThat(RowEndPlus.timed(emptyList(), 14_000, 100, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
     }
 
     @Test
@@ -56,9 +74,9 @@ class RowEndPlusTest {
         // Text, picture in picture (photo or video), frame, music, voice and sound rows all hold RowClips.
         for (kind in RowClipKind.entries) {
             val items = listOf(clip("x", 1000, 3000, kind), clip("y", 3000, 4000, kind))
-            assertThat(RowEndPlus.timed(items, 500)).isEqualTo(EndPlusTarget.AtCursor)
+            assertThat(RowEndPlus.timed(items, 500)).isEqualTo(EndPlusTarget.At(500))
             assertThat(RowEndPlus.timed(items, 1500)).isEqualTo(after("y"))
-            assertThat(RowEndPlus.timed(items, 4500)).isEqualTo(EndPlusTarget.AtCursor)
+            assertThat(RowEndPlus.timed(items, 4500)).isEqualTo(EndPlusTarget.At(4500))
         }
     }
 
@@ -139,7 +157,7 @@ class RowEndPlusTest {
         // 1 s before "a" there is no room for 3 s, nor in the 2 s after "a": after "b".
         assertThat(RowEndPlus.timed(captions, 1000, 3000)).isEqualTo(after("b"))
         // Room at the very start for 2 s.
-        assertThat(RowEndPlus.timed(captions, 0, 2000)).isEqualTo(EndPlusTarget.AtCursor)
+        assertThat(RowEndPlus.timed(captions, 0, 2000)).isEqualTo(EndPlusTarget.At(0))
         // On "a": the gap after it is too short, so after "b".
         assertThat(RowEndPlus.timed(captions, 3000, 3000)).isEqualTo(after("b"))
         // With a short enough item the gap after "a" is used.
@@ -147,9 +165,9 @@ class RowEndPlusTest {
         // In the gap, too short from the cursor: after the next item.
         assertThat(RowEndPlus.timed(captions, 4500, 3000)).isEqualTo(after("b"))
         // Past every item: always room.
-        assertThat(RowEndPlus.timed(captions, 8000, 3000)).isEqualTo(EndPlusTarget.AtCursor)
+        assertThat(RowEndPlus.timed(captions, 8000, 3000)).isEqualTo(EndPlusTarget.At(8000))
         // A length not known yet (a file still to pick) counts one moment: any gap is room.
-        assertThat(RowEndPlus.timed(captions, 4500)).isEqualTo(EndPlusTarget.AtCursor)
+        assertThat(RowEndPlus.timed(captions, 4500)).isEqualTo(EndPlusTarget.At(4500))
         assertThat(RowEndPlus.timed(captions, 3000)).isEqualTo(after("a"))
     }
 }

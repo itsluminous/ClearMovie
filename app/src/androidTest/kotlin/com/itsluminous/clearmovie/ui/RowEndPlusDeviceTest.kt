@@ -175,6 +175,17 @@ class RowEndPlusDeviceTest {
      */
     private fun oneColumn() {
         rowsShown()
+        // Laid out: at least two whole rows in the rows' view (the editor opens, then turns).
+        compose.waitUntil(TIMEOUT_MS) {
+            notYetIfBusy {
+                val v = bounds(TIMELINE_ROWS_TAG)
+                v.bottom - v.top > 40.dp &&
+                    project.tracks.count { t ->
+                        val r = bounds(rowTag(t.id.value))
+                        r.top >= v.top && r.bottom <= v.bottom && r.bottom > r.top
+                    } >= 2
+            }
+        }
         val timeline = read { bounds(TIMELINE_TAG) }
         val view = read { bounds(TIMELINE_ROWS_TAG) }
         val boxes =

@@ -449,6 +449,8 @@ fun EditorScreen(
                 ) {
                     // MAIN's one "+" (nothing on it yet) opens the gallery, as Add photos does.
                     if (key == mainKey.value) return actions.pickToAdd()
+                    // The preview stops where the new item goes, so what is chosen is seen there.
+                    actions.pause()
                     state.selected = null
                     state.selectedRow = TrackId(key)
                     state.panel = OpenPanel(Panel.INSERT, trackId = TrackId(key), atMs = atMs)
@@ -513,6 +515,7 @@ fun EditorScreen(
                     anchor: ClipId,
                     side: InsertSide,
                 ) {
+                    actions.pause()
                     state.panel = OpenPanel(Panel.INSERT, anchor, side)
                 }
 

@@ -181,7 +181,7 @@ class TimelineGeometry(
         val out = mutableListOf<PlusPoint>()
         val half = PLUS_HIT_DP / 2
 
-        fun onScreen(x: Double) = x - half >= -EDGE_ROOM_DP - EPS && x + half <= widthDp + END_DP + EPS
+        fun onScreen(x: Double) = x - half >= -EDGE_ROOM_DP - EPS && x + half <= widthDp + SIDE_END_DP + EPS
         if (sel != null) {
             val outward = if (selectedTrimmable) DISPLACE_DP else 0.0
             val before = left(sel) - outward
@@ -275,11 +275,16 @@ class TimelineGeometry(
         /**
          * The column at every row's right end that holds the row's "+"
          * (cm-plus-position): a 48 dp touch target, right after the time
-         * span. On the selected item's row it is empty, and that item's own
-         * "+" after it may sit in it (so a long item near the right edge
-         * keeps it).
+         * span. On the selected item's row it is empty.
          */
         const val END_DP = 48.0
+
+        /**
+         * How far into that column the selected item's own "+" after it may
+         * reach: half of it, so it straddles the column's edge, reads as the
+         * item's own and is never where the rows' "+" are.
+         */
+        const val SIDE_END_DP = END_DP / 2
 
         /** Over a narrow item, how close to a "+" on its edge a tap must be: its drawn circle. */
         const val PLUS_CORE_DP = 12.0

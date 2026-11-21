@@ -119,6 +119,9 @@ internal fun TimedInsertPanel(
         if (anchor != null) {
             val where = stringResource(timedItemName(null, anchor))
             stringResource(if (side == InsertSide.BEFORE) R.string.insert_title_before else R.string.insert_title_after, where)
+        } else if (open.atMs != null) {
+            // From a row's "+": the time it adds at, fixed when the "+" was tapped.
+            stringResource(R.string.timeline_add_at, nameOf(track, rows), durationText(open.atMs * 1000))
         } else {
             stringResource(R.string.add_here_title, nameOf(track, rows))
         }

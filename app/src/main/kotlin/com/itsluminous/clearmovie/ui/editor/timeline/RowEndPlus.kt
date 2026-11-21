@@ -4,8 +4,10 @@ import com.itsluminous.clearmovie.domain.model.ClipId
 
 /** Where the "+" at a row's right end adds on a row other than MAIN, worked out from the cursor when it is tapped. */
 sealed interface EndPlusTarget {
-    /** At the cursor: nothing is on that row there ("Add here", from that time). */
-    data object AtCursor : EndPlusTarget
+    /** At [atMs] ("Add here" from that time): the cursor, or the last moment that leaves the new item seen. */
+    data class At(
+        val atMs: Long,
+    ) : EndPlusTarget
 
     /** Right after item [anchor]: the first place to the right of the cursor where the row is free. */
     data class After(
@@ -27,13 +29,17 @@ data class MainEndTarget(
  * rules are tested on the JVM.
  *
  * - A row other than MAIN: at the cursor when the row is free there for the
- *   new item's length ([lengthMs]: a caption's 3 s on a text row; one moment
- *   where the length is not known until a file is picked). Otherwise right
- *   after the item under the cursor (or the next one, when the cursor is in a
- *   gap too short), and past every item that still leaves no room: the first
- *   place to the right of the cursor where it fits. A picked file longer than
- *   that room goes, as every insert on these rows does, on the highest free
- *   row of its kind or a new one, at the same time.
+ *   new item's length ([lengthMs]: 3 s for a caption or a photo; one moment
+ *   for a sound or a frame, whose length is known only once it is picked).
+ *   Otherwise right after the item under the cursor (or the next one, when
+ *   the cursor is in a gap too short), and past every item that still leaves
+ *   no room: the first place right of the cursor where it fits. A picked file
+ *   longer than that room goes, as every insert on these rows does, on the
+ *   highest free row of its kind or a new one, at the same time.
+ * - Never where it would not be seen: no later than [SEEN_MS] before the end
+ *   of the video ([videoMs]). From a cursor nearer the end the rule starts at
+ *   that moment, and when the first free place is later still the item goes
+ *   at that moment (on another row of its kind if this one is busy then).
  * - MAIN (one item after another): at the cursor when it is exactly between
  *   two items; on an item, right after it, and every later item moves later.
  *   In a transition two items are under the cursor: after the later one, so
@@ -42,25 +48,31 @@ data class MainEndTarget(
  *   ending.
  */
 object RowEndPlus {
+    /** How much of a new item must be inside the video: as long as a new caption. */
+    const val SEEN_MS = 3000L
+
     fun timed(
         clips: List<RowClip>,
         cursorMs: Long,
         lengthMs: Long = 0,
+        videoMs: Long = Long.MAX_VALUE,
     ): EndPlusTarget {
         val live = clips.filter { it.endMs > it.startMs }
         val length = lengthMs.coerceAtLeast(1)
+        val latest = if (videoMs == Long.MAX_VALUE) Long.MAX_VALUE else (videoMs - maxOf(SEEN_MS, lengthMs)).coerceAtLeast(0)
+        val from = cursorMs.coerceIn(0, latest)
 
         // The items in the way of a new item from [start].
         fun blocking(start: Long) = live.filter { it.startMs < start + length && it.endMs > start }
         var anchor =
-            live.filter { cursorMs >= it.startMs && cursorMs < it.endMs }.maxByOrNull { it.endMs }
-                ?: blocking(cursorMs).minByOrNull { it.startMs }
-                ?: return EndPlusTarget.AtCursor
+            live.filter { from >= it.startMs && from < it.endMs }.maxByOrNull { it.endMs }
+                ?: blocking(from).minByOrNull { it.startMs }
+                ?: return EndPlusTarget.At(from)
         // Each step ends later, so this stops; past the last item the row is always free.
         while (true) {
             anchor = blocking(anchor.endMs).minByOrNull { it.startMs } ?: break
         }
-        return EndPlusTarget.After(anchor.id)
+        return if (anchor.endMs > latest) EndPlusTarget.At(latest) else EndPlusTarget.After(anchor.id)
     }
 
     fun main(

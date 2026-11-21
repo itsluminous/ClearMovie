@@ -2,11 +2,14 @@ package com.itsluminous.clearmovie.ui.editor
 
 import android.content.Context
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.R
@@ -22,11 +25,13 @@ import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.addText
 import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.domain.model.mainSlot
 import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
+import com.itsluminous.clearmovie.ui.editor.timeline.ZoomState
 import com.itsluminous.clearmovie.ui.editor.timeline.plusTag
 import com.itsluminous.clearmovie.ui.editor.timeline.rowEndPlusTag
 import org.junit.Rule
@@ -271,6 +276,128 @@ class RowEndPlusScreenTest {
                 .indexOfFirst { it.id == last }
         val after = compose.onNodeWithTag(plusTag(i + 1), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertThat(after.right).isAtMost(cell.left + 1)
+    }
+
+    @Test
+    fun `after playing to the end a caption still goes where it is seen, and the chooser says when`() {
+        val h = show()
+        val textRow = h.project.rowOf(h.project.captionId("hello"))
+        val total =
+            h.project
+                .mainLayout()
+                .last()
+                .endMs
+        at(h, total)
+        val expected = total - 3000
+        tapEnd(textRow)
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = textRow, atMs = expected))
+        val seconds = (expected + 500) / 1000
+        val time = context.getString(R.string.duration_minutes_seconds, seconds / 60, seconds % 60)
+        val title = context.getString(R.string.timeline_add_at, context.getString(R.string.timeline_row_text), time)
+        compose.onNodeWithText(title).assertExists()
+        val made = newCaption(h)
+        assertThat(made.startMs).isEqualTo(expected)
+        assertThat(made.endMs).isAtMost(total)
+    }
+
+    @Test
+    fun `a selected caption flush with the column keeps the whole of its end handle`() {
+        val h = show()
+        val hello = h.project.captionId("hello")
+        val clip = h.project.clip(hello)!!
+        compose.runOnIdle { h.state!!.selected = hello }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            // Its end exactly at the column's left edge.
+            val span = h.state!!.spanWidth!!
+            h.state!!.zoom = ZoomState(msPerDp = 10.0, scrollMs = clip.endMs - span * 10.0, fitAll = false)
+        }
+        compose.waitForIdle()
+        val cell =
+            compose
+                .onNodeWithTag(
+                    com.itsluminous.clearmovie.ui.editor.timeline
+                        .rowTag(h.project.rowOf(hello).value),
+                    useUnmergedTree = true,
+                ).fetchSemanticsNode()
+                .boundsInRoot
+        val timeline = compose.onNodeWithTag(TIMELINE_TAG).fetchSemanticsNode().boundsInRoot
+        val density = context.resources.displayMetrics.density
+        // 6 dp into the column, on the handle's outer part: a drag left trims the caption's end.
+        val at =
+            androidx.compose.ui.geometry
+                .Offset(timeline.width - 48 * density + 6 * density, cell.center.y - timeline.top)
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
+            down(at)
+            moveTo(
+                at -
+                    androidx.compose.ui.geometry
+                        .Offset(30f * density, 0f),
+            )
+            moveTo(
+                at -
+                    androidx.compose.ui.geometry
+                        .Offset(60f * density, 0f),
+            )
+            up()
+        }
+        compose.waitForIdle()
+        assertThat(h.state!!.selected).isEqualTo(hello)
+        assertThat(h.project.clip(hello)!!.endMs).isLessThan(clip.endMs)
+    }
+
+    @Test
+    fun `on slim rows sideways the plus takes its whole 48 dp, past the row into the gap`() {
+        val h = EditorHarness(project, Fixtures.preset)
+        compose.setContent {
+            androidx.compose.ui.test.DeviceConfigurationOverride(
+                androidx.compose.ui.test.DeviceConfigurationOverride
+                    .ForcedSize(
+                        androidx.compose.ui.unit
+                            .DpSize(800.dp, 363.dp),
+                    ),
+            ) {
+                com.itsluminous.clearmovie.ui.theme
+                    .ClearMovieTheme(dynamicColor = false) { h.Content() }
+            }
+        }
+        compose.waitForIdle()
+        val textRow = h.project.rowOf(h.project.captionId("hello"))
+        at(h, 5000)
+        val cell = compose.onNodeWithTag(rowEndPlusTag(textRow.value), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val timeline = compose.onNodeWithTag(TIMELINE_TAG).fetchSemanticsNode().boundsInRoot
+        val density = context.resources.displayMetrics.density
+        assertThat((cell.bottom - cell.top) / density).isWithin(0.5f).of(40f)
+        // 1 dp below the slim row, in the 4 dp gap, but inside the "+"'s 48 dp.
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
+            click(
+                androidx.compose.ui.geometry
+                    .Offset(cell.center.x - timeline.left, cell.bottom + 1 * density - timeline.top),
+            )
+        }
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = textRow, atMs = 5000))
+    }
+
+    @Test
+    fun `held in the column off the plus, a row opens its menu`() {
+        val h = EditorHarness(project, Fixtures.preset)
+        compose.setContent { h.At(ScreenSize.EXPANDED, 2f) }
+        compose.waitForIdle()
+        val textRow = h.project.rowOf(h.project.captionId("hello"))
+        val cell = compose.onNodeWithTag(rowEndPlusTag(textRow.value), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val timeline = compose.onNodeWithTag(TIMELINE_TAG).fetchSemanticsNode().boundsInRoot
+        val density = context.resources.displayMetrics.density
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
+            val p =
+                androidx.compose.ui.geometry
+                    .Offset(cell.center.x - timeline.left, cell.top + 6 * density - timeline.top)
+            down(p)
+            advanceEventTime(800)
+            up()
+        }
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.ROW_MENU, trackId = textRow))
     }
 
     @Test
