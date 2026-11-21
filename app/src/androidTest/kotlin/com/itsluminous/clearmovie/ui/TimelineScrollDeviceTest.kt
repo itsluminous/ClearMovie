@@ -175,10 +175,13 @@ class TimelineScrollDeviceTest {
         }
     }
 
-    private fun rowsShown() =
+    private fun rowsShown() {
         compose.waitUntil(LAUNCH_TIMEOUT_MS) {
             notYetIfBusy { compose.onAllNodes(hasTestTag(TIMELINE_ROWS_TAG)).fetchSemanticsNodes().isNotEmpty() }
         }
+        // Laid out after the turn: at least one row whole in the rows' view (read too early, none is).
+        compose.waitUntil(TIMEOUT_MS) { notYetIfBusy { wholeRows(project.tracks.map { it.id.value }).isNotEmpty() } }
+    }
 
     private fun window(): DpRect = compose.onRoot().getUnclippedBoundsInRoot()
 
