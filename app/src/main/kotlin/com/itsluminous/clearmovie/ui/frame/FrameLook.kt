@@ -69,6 +69,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -171,7 +173,7 @@ fun FrameLookDialog(
             modifier = Modifier.testTag(FRAME_LOOK_TAG),
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.frame_look_title), maxLines = 1) },
+                    title = { Text(stringResource(R.string.frame_look_title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
                         IconButton(onClick = onCancel) {
                             Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.action_cancel))
@@ -385,17 +387,13 @@ private fun Controls(
                             modifier = Modifier.size(24.dp),
                         )
                     },
+                    // Both tab names in one style, on up to two lines at large text sizes.
                     text = {
-                        AutoSizeLabel(
-                            stringResource(
-                                if (t ==
-                                    FrameLookTab.COLOUR
-                                ) {
-                                    R.string.action_key_colour
-                                } else {
-                                    R.string.action_picture_area
-                                },
-                            ),
+                        Text(
+                            stringResource(if (t == FrameLookTab.COLOUR) R.string.action_key_colour else R.string.action_picture_area),
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center,
                         )
                     },
                 )
