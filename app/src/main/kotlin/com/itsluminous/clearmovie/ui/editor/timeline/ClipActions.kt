@@ -57,6 +57,7 @@ enum class EditAction {
 
     /** cm-timeline-handles: a caption with a side detached covers its photo or video whole again. */
     FOLLOW_ITEM,
+
     /** cm-frame-area: the colour keyed out of a frame, and where photos and videos go while it shows. */
     KEY_COLOUR,
     PICTURE_AREA,

@@ -1007,7 +1007,6 @@ class PresetStore(
         }
     }
 
-
     /** The presets the app ships: templates for a new preset, never offered on their own. */
     private fun bundled(): List<Preset> =
         // A device lists the folder's children ("event-frame"); Robolectric lists
