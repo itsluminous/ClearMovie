@@ -509,10 +509,10 @@ class RenderPlanBuilder(
                 when (role) {
                     AudioLayerRole.MUSIC -> {
                         if (track.lowerWhenTalking) {
-                            // The row's own level from the Lower for talk popup, under voices and videos alike.
+                            // The row's own level from the Lower for talk popup, under voices, videos and the closing message alike.
                             val level = track.lowerToDb
-                            val talk = if (level == null) clipSound + voice else (clipSound + voice).map { it.copy(db = level) }
-                            duckEnvelope(talk + speech, attackUs, releaseUs)
+                            val talk = clipSound + voice + speech
+                            duckEnvelope(if (level == null) talk else talk.map { it.copy(db = level) }, attackUs, releaseUs)
                         } else {
                             speechDuck
                         }

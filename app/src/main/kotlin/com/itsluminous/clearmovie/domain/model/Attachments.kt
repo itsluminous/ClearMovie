@@ -294,7 +294,8 @@ internal fun Project.captionsBeforeJoin(
     }
     for ((trackId, caption) in first) {
         if (caption.attachedTo!!.whole && caption.id !in keptWhole) {
-            val attached = CaptionAttachment(firstId, 0, whole = false, lengthMs = caption.durationMs)
+            // Where it is now (a detached start included), for as long as it is now.
+            val attached = CaptionAttachment(firstId, caption.startMs - firstSpan.first, whole = false, lengthMs = caption.durationMs)
             project = project.replaceCaption(trackId, caption.copy(attachedTo = attached))
         }
     }

@@ -4,6 +4,7 @@ import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
+import com.itsluminous.clearmovie.domain.model.ResizeRules
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import kotlin.math.roundToLong
 
@@ -23,9 +24,9 @@ enum class TrimEdge { START, END }
  * Anything else (the intro and the ending) has no handles and is returned unchanged.
  */
 object TrimMath {
-    const val MIN_VIDEO_MS = 300L
-    const val MIN_STILL_MS = 500L
-    const val MAX_STILL_MS = 10L * 60 * 1000
+    const val MIN_VIDEO_MS = ResizeRules.MIN_MOVING_MS
+    const val MIN_STILL_MS = ResizeRules.MIN_STILL_MS
+    const val MAX_STILL_MS = ResizeRules.MAX_STILL_MS
 
     fun dragged(
         clip: MainClip,

@@ -165,6 +165,77 @@ class HandlesTest {
     }
 
     @Test
+    fun `a join after the second part's copy was changed keeps the first part's detached start`() {
+        var p = captioned()
+        p = p.resizeClip(p.captionId(), ResizeEdge.START, 4000)
+        p = p.splitClip(ClipId("b"), 2000, ClipId("b2")).assertValid()
+        val copy =
+            p.tracks
+                .flatMap { it.clips }
+                .filterIsInstance<TextClip>()
+                .single { it.attachedTo?.clip == ClipId("b2") }
+        p = p.setText(copy.id, "other words").joinClips(ClipId("b"), ClipId("b2")).assertValid()
+        assertThat(p.span("on b")).isEqualTo(4000L to 5000L)
+    }
+
+    @Test
+    fun `a side let go exactly on its item's edge follows it again`() {
+        var p = captioned()
+        p = p.resizeClip(p.captionId(), ResizeEdge.START, 4000)
+        p = p.resizeClip(p.captionId(), ResizeEdge.START, 3000).assertValid()
+        assertThat(p.caption("on b").attachedTo).isEqualTo(CaptionAttachment(ClipId("b")))
+        assertThat(p.canFollowItem(p.captionId())).isFalse()
+    }
+
+    @Test
+    fun `a preset frame that does not repeat keeps where its start was dragged, as an ordinary frame`() {
+        // A frame file shorter than the video: capped at its file, its end can't follow the video, so the drag decides.
+        var p = Fixtures.presetProject(ids).addToMain(listOf(Fixtures.photo("p1", 3000)), ids = ids)
+        val row = p.byRole(PresetRole.FRAME)
+        val f = row.clips.single() as OverlayClip
+        p =
+            p
+                .copy(
+                    tracks =
+                        p.tracks.map {
+                            if (it.id ==
+                                row.id
+                            ) {
+                                it.copy(clips = listOf(f.copy(repeat = false, sourceDurationMs = 2000, durationMs = 2000)))
+                            } else {
+                                it
+                            }
+                        },
+                ).assertValid()
+        val before = p.requireClip(f.id)
+        p = p.resizeClip(f.id, ResizeEdge.START, before.startMs + 500).assertValid()
+        val after = p.requireClip(f.id) as OverlayClip
+        assertThat(after.startMs to after.endMs).isEqualTo(before.startMs + 500 to before.endMs)
+        assertThat(after.anchor).isNull()
+    }
+
+    @Test
+    fun `a slowed picture-in-picture video is never shorter than the least of its file it can play`() {
+        val p =
+            captioned().addTimedClip(
+                VideoClip(
+                    ClipId("v"),
+                    media("v"),
+                    sourceDurationMs = 6000,
+                    trimEndMs = 1000,
+                    speed = Speed.X0_25,
+                    startMs = 1000,
+                    pip = PipPlacement.DEFAULT,
+                ),
+                ids = ids,
+            )
+        val r = p.resizeRange(ClipId("v"))!!
+        // 0.1 s of file at a quarter speed is 0.4 s.
+        assertThat(r.startMax).isEqualTo(5000L - 400)
+        assertThat(p.resizeClip(ClipId("v"), ResizeEdge.START, 99_999).assertValid().spanOf("v")).isEqualTo(4600L to 5000L)
+    }
+
+    @Test
     fun `a duplicate's caption keeps its detached side at the same distance from the copy`() {
         var p = captioned()
         p = p.resizeClip(p.captionId(), ResizeEdge.START, 4000).assertValid()

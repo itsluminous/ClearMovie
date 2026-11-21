@@ -72,7 +72,16 @@ private fun rangeOf(
     val others = track.clips.filter { it.id != clipId && it.durationMs > 0 }
     val floor = others.filter { it.endMs <= clip.startMs }.maxOfOrNull { it.endMs } ?: 0L
     val ceiling = others.filter { it.startMs >= clip.endMs }.minOfOrNull { it.startMs } ?: max(totalMs, clip.endMs)
-    val shortest = min(clip.durationMs, if (clip is VideoClip || clip is AudioClip) ResizeRules.MIN_MOVING_MS else ResizeRules.MIN_STILL_MS)
+    val least =
+        when (clip) {
+            // Never shorter than the least of its file it can play, at its speed and loops.
+            is VideoClip -> max(ResizeRules.MIN_MOVING_MS, clip.speed.timelineMs(Limits.MIN_CLIP_MS * clip.loops))
+
+            is AudioClip -> ResizeRules.MIN_MOVING_MS
+
+            else -> ResizeRules.MIN_STILL_MS
+        }
+    val shortest = min(clip.durationMs, least)
     // The longest the item can get from each side, the other side staying put.
     val (fromStart, fromEnd) =
         when (clip) {
@@ -141,8 +150,8 @@ fun Project.resizeClip(
             is TextClip -> resizedCaption(clip, edge, start, end)
             is PhotoClip -> clip.copy(startMs = start, durationMs = end - start)
             is VideoClip -> resizedVideo(clip, edge, end - start)
-            is AudioClip -> resizedSound(clip, edge, start, end).heldOn(edge, start, end)
-            is OverlayClip -> clip.copy(startMs = start, durationMs = end - start).heldOn(edge, start, end)
+            is AudioClip -> keptWhereDragged(resizedSound(clip, edge, start, end).heldOn(edge, start, end))
+            is OverlayClip -> keptWhereDragged(clip.copy(startMs = start, durationMs = end - start).heldOn(edge, start, end))
             else -> throw IllegalArgumentException("This item has no handles")
         }
     return withTrackClips(track.id, track.clips.map { if (it.id == clipId) changed else it }.sortedBy { it.startMs }).normalized()
@@ -161,7 +170,14 @@ private fun Project.resizedCaption(
         }
 
         a.whole -> {
-            val next = if (edge == ResizeEdge.START) a.copy(detachedStartMs = start) else a.copy(detachedEndMs = end)
+            // Let go exactly on its item's edge, a side follows it again.
+            val span = attachSpan(a.clip)
+            val next =
+                if (edge == ResizeEdge.START) {
+                    a.copy(detachedStartMs = start.takeUnless { it == span?.first })
+                } else {
+                    a.copy(detachedEndMs = end.takeUnless { it == span?.second })
+                }
             val free = next.detachedStartMs != null && next.detachedEndMs != null
             clip.copy(startMs = start, durationMs = end - start, attachedTo = next.takeUnless { free })
         }
@@ -200,6 +216,24 @@ private fun resizedSound(
         clip.copy(startMs = start, durationMs = end - start, trimStartMs = clip.trimStartMs + (start - clip.startMs))
     } else {
         clip.copy(durationMs = end - start, trimEndMs = clip.trimStartMs + (end - start))
+    }
+}
+
+/**
+ * An anchored clip that following its span again would put somewhere else
+ * than it was dragged to (a frame that does not repeat is capped at its file,
+ * so its end can't follow the video): it keeps the dragged times as an
+ * ordinary clip, so what the drag showed is what it gets.
+ */
+private fun Project.keptWhereDragged(clip: Clip): Clip {
+    val anchor = clip.anchor ?: return clip
+    val span = anchorSpan(anchor) ?: return clip
+    val followed = clip.following(span)
+    if (followed.startMs == clip.startMs && followed.durationMs == clip.durationMs) return clip
+    return when (clip) {
+        is OverlayClip -> clip.copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
+        is AudioClip -> clip.copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
+        else -> clip
     }
 }
 

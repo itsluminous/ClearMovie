@@ -57,14 +57,21 @@ internal fun TalkLowerPanel(
 ) {
     val key = track.id.value
     var on by rememberSaveable(key) { mutableStateOf(track.lowerWhenTalking) }
-    var percent by rememberSaveable(key) {
-        mutableFloatStateOf(dbToPercent(track.lowerToDb ?: project.ducking.musicUnderVoiceDb).coerceAtMost(MAX_TALK_PERCENT))
-    }
+    val opening = dbToPercent(track.lowerToDb ?: project.ducking.musicUnderVoiceDb).coerceAtMost(MAX_TALK_PERCENT)
+    var percent by rememberSaveable(key) { mutableFloatStateOf(opening) }
     var moved by rememberSaveable(key) { mutableStateOf(false) }
     PanelTitle(
         stringResource(R.string.bar_lower_music),
         onDone = {
-            val level = if (moved) percentToDb(percent).coerceAtMost(0.0) else track.lowerToDb
+            // Moved and put back where it opened: still the project's own levels.
+            val level =
+                if (moved &&
+                    percent.roundToInt() != opening.roundToInt()
+                ) {
+                    percentToDb(percent).coerceAtMost(0.0)
+                } else {
+                    track.lowerToDb
+                }
             if (on != track.lowerWhenTalking || level != track.lowerToDb) {
                 callbacks.edit { setTalkLowering(track.id, on, level) }
             }

@@ -194,6 +194,20 @@ class HandlesScreenTest {
     }
 
     @Test
+    fun `a slider moved and put back where it opened keeps the project's own levels`() {
+        val h = show()
+        val music = h.project.tracks.single { it.presetRole == PresetRole.FRAME_MUSIC }
+        select(h, music.clips.single().id)
+        barButton(EditAction.LOWER_MUSIC).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(TALK_SLIDER_TAG).performSemanticsAction(SemanticsActions.SetProgress) { it(50f) }
+        compose.onNodeWithTag(TALK_SLIDER_TAG).performSemanticsAction(SemanticsActions.SetProgress) { it(10f) }
+        compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
+        compose.waitForIdle()
+        assertThat(h.project).isEqualTo(project)
+    }
+
+    @Test
     fun `switching Lower for talk off in the popup keeps its level, and Cancel changes nothing`() {
         val h = show()
         val music = h.project.tracks.single { it.presetRole == PresetRole.FRAME_MUSIC }

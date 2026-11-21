@@ -480,8 +480,8 @@ class RenderPlanBuilderTest {
     }
 
     @Test
-    fun `the Lower for talk level lowers music to that level under voices and videos alike`() {
-        // cm-timeline-handles: the popup's level replaces both project levels for that row; the closing message keeps its own.
+    fun `the Lower for talk level lowers music to that level under voices, videos and the closing message alike`() {
+        // cm-timeline-handles: the popup's level replaces the project's levels for that row.
         val ids = SequentialIds("vv")
         val project =
             duckingProject().addTimedClip(
@@ -496,12 +496,13 @@ class RenderPlanBuilderTest {
             assertThat(plan.musicGainAt(3_500_000)).isWithin(1e-6).of(base)
             assertThat(plan.musicGainAt(6_500_000)).isWithin(1e-6).of(base + level)
             assertThat(plan.musicGainAt(9_700_000)).isWithin(1e-6).of(base + level)
-            // The closing message lowers to its own -20 dB, or to the row's level when that is lower.
-            assertThat(plan.musicGainAt(12_500_000)).isWithin(1e-6).of(base + minOf(level, -20.0))
+            assertThat(plan.musicGainAt(12_500_000)).isWithin(1e-6).of(base + level)
         }
         // Off still turns the talk lowering off, whatever the level.
         val off = RenderPlanBuilder(preset).build(project.setTalkLowering(music, lower = false, levelDb = -30.0))
         assertThat(off.musicGainAt(6_500_000)).isWithin(1e-6).of(base)
+        // Off, the closing message still lowers every row to the project's level, as before.
+        assertThat(off.musicGainAt(12_500_000)).isWithin(1e-6).of(base - 20)
         // No level of its own: the project's levels, exactly as before.
         val before = RenderPlanBuilder(preset).build(project)
         assertThat(before.musicGainAt(6_500_000)).isWithin(1e-6).of(base - 12)

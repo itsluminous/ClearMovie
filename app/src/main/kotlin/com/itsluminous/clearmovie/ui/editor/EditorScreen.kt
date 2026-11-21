@@ -234,7 +234,8 @@ fun EditorScreen(
     val focusRow = selectedClip?.let { project?.trackOf(it.id)?.id } ?: selectedTrack?.id
     val playheadMs = playhead.positionUs / 1000
     val metrics = RowMetrics(LocalDensity.current.fontScale)
-    val rows = project?.let { timelineRows(it) }.orEmpty()
+    // Worked out once per project, not per playhead tick (it holds every item's handle limits).
+    val rows = remember(project) { project?.let { timelineRows(it) }.orEmpty() }
     val missing = ui.missing.filterValues { it != MediaStatus.AVAILABLE }.keys
 
     // A delete's "Undo" belongs to that delete only: any later change to the video closes it.

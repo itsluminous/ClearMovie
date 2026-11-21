@@ -73,9 +73,21 @@ class ProjectCodecTest {
     fun `detached sides and a talk level survive a save`() {
         val rich = Fixtures.richProject()
         val music = rich.tracks.first { it.audioRole == AudioRole.MUSIC }
-        val project = rich.setTalkLowering(music.id, lower = true, levelDb = -9.5)
+        var project = rich.setTalkLowering(music.id, lower = true, levelDb = -9.5)
+        // A caption's start dragged, and the preset frame's end.
+        val caption =
+            project.tracks
+                .flatMap { it.clips }
+                .filterIsInstance<TextClip>()
+                .first { it.attachedTo?.whole == true }
+        project = project.resizeClip(caption.id, ResizeEdge.START, caption.startMs + 100)
+        val frame = project.byRole(PresetRole.FRAME).clips.single()
+        project = project.resizeClip(frame.id, ResizeEdge.END, frame.endMs - 100)
+        assertThat(project.validate()).isEmpty()
         val text = codec.encode(project)
         assertThat(text).contains("\"lowerToDb\": -9.5")
+        assertThat(text).contains("\"detachedStartMs\"")
+        assertThat(text).contains("\"detachedEndMs\"")
         assertThat(ok(text).project).isEqualTo(project)
         // A default (null) is left out, so a project without one is byte for byte what schema 3 wrote.
         assertThat(codec.encode(rich)).doesNotContain("lowerToDb")

@@ -1638,7 +1638,8 @@ private fun TimedRowContent(
     trimState: State<TimedTrimPreview?>,
     actions: TimelineActions,
 ) {
-    val trim = trimState.value?.takeIf { it.key == row.key }
+    // Only the row being trimmed sees the preview change, so a handle drag recomposes that row alone.
+    val trim by remember(row.key, trimState) { derivedStateOf { trimState.value?.takeIf { it.key == row.key } } }
     val media = LocalMediaColors.current
     val (fill, on) =
         when (row.type) {
@@ -1654,7 +1655,8 @@ private fun TimedRowContent(
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         for (clip in row.clips) {
             val dragged = drag?.id == clip.id
-            val (shownStart, shownEnd) = if (trim?.id == clip.id) trim.span(clip) else clip.startMs to clip.endMs
+            val preview = trim?.takeIf { it.id == clip.id }
+            val (shownStart, shownEnd) = preview?.span(clip) ?: (clip.startMs to clip.endMs)
             val x = PAD_DP + zoom.xOf(shownStart.toDouble()) + if (dragged) drag.dxDp else 0.0
             val w = (shownEnd - shownStart) / zoom.msPerDp
             if (x + w < -64 || w <= 0) continue
@@ -1702,8 +1704,10 @@ private fun TimedRowContent(
                     .background(if (row.enabled) fill else fill.copy(alpha = 0.4f))
                     .then(if (isSelected) Modifier.border(BorderStroke(3.dp, primary), RoundedCornerShape(6.dp)) else Modifier),
             ) {
+                // On the selected item the handles take its edges: its icon and words sit between them.
+                val inset = if (isSelected && clip.resize != null) TimelineGeometry.HANDLE_DP.dp + 4.dp else 6.dp
                 Row(
-                    Modifier.align(Alignment.CenterStart).padding(horizontal = 6.dp),
+                    Modifier.align(Alignment.CenterStart).padding(horizontal = inset),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
@@ -1712,7 +1716,7 @@ private fun TimedRowContent(
                         tint = on,
                         modifier = Modifier.size(16.dp),
                     )
-                    if (words != null && w >= 48) {
+                    if (words != null && w >= 48 + if (inset > 6.dp) 2 * TimelineGeometry.HANDLE_DP else 0.0) {
                         Spacer(Modifier.width(4.dp))
                         Text(
                             words,
