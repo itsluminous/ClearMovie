@@ -437,7 +437,8 @@ internal fun AnimationPanel(
 /**
  * The animations that may go in [slot] on [clip], as moving tiles: None and
  * the plain ones, then the ones with a direction under their name, the one
- * in use ([current]) outlined. [lengthMs] is how long a tile plays it. The
+ * in use ([current]) outlined. [lengthMs] is how long a tile plays it; an
+ * item without a picture is drawn as a [blockColour] block. The
  * Animation panel uses it, and so does a preset's caption style editor for
  * the animation new captions start with (cm-caption-box).
  */
@@ -449,8 +450,9 @@ internal fun AnimationChoices(
     lengthMs: Long,
     thumbnail: ThumbSource,
     onChoose: (AnimKind?) -> Unit,
+    blockColour: Color = MaterialTheme.colorScheme.primaryContainer,
 ) {
-    val picture = itemPicture(clip, thumbnail, MaterialTheme.colorScheme.primaryContainer)
+    val picture = itemPicture(clip, thumbnail, blockColour)
     val clock = tileClock()
     val choices = clip.animationChoices(slot)
     val plain = listOf<AnimKind?>(null) + choices.filter { animationDirection(it) == null }

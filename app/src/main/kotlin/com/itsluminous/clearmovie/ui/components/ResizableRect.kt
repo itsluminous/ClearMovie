@@ -62,11 +62,12 @@ enum class RectGrip(
  * as it shows. Pure, so the rules are unit-tested.
  *
  * The handles shown are the ones there is room for: a corner handle needs
- * the rectangle [CORNER_ROOM] each way on screen, an edge handle between two
- * corners twice that along the edge, so a touch on the box between the
- * handles always moves it. Without corners (a thin caption box) the side
- * handles stay and the top and bottom ones show once the box is
- * [EDGE_ROOM] wide.
+ * the rectangle [CORNER_ROOM] each way on screen, a handle in the middle of
+ * an edge between two corners [MIDDLE_ROOM] along it (the nearest handle
+ * takes a touch where their reaches meet). Without corners (a thin caption
+ * box) the side handles stay and the top and bottom ones show once the box
+ * is [EDGE_ROOM] wide. A handle is drawn and held at least [EDGE_INSET] in
+ * from the picture's edge, so one on a box at the edge is never cut off.
  */
 object RectDrag {
     /** How far from a handle a touch still holds it: half a 48 dp touch target. */
@@ -78,8 +79,14 @@ object RectDrag {
     /** The size a rectangle must show at, each way, for its corner handles. */
     val CORNER_ROOM: Dp = 72.dp
 
-    /** The length an edge must show at for a handle in its middle besides the corners (or the side ones). */
+    /** The width a box without corners must show at for top and bottom handles besides the side ones. */
     val EDGE_ROOM: Dp = 144.dp
+
+    /** The length an edge between two corner handles must show at for a handle in its middle too. */
+    val MIDDLE_ROOM: Dp = 96.dp
+
+    /** How far in from the picture's edge a handle's centre is kept. */
+    val EDGE_INSET: Dp = 12.dp
 
     /**
      * The handles shown on a rectangle [wPx] x [hPx] pixels on screen, given
@@ -93,15 +100,30 @@ object RectDrag {
         edgeRoomPx: Float,
         corners: Boolean = true,
         edges: Boolean = true,
+        middleRoomPx: Float = edgeRoomPx * 2 / 3,
     ): List<RectGrip> {
         val withCorners = corners && wPx >= cornerRoomPx && hPx >= cornerRoomPx
         return buildList {
             if (withCorners) addAll(listOf(RectGrip.TOP_LEFT, RectGrip.TOP_RIGHT, RectGrip.BOTTOM_RIGHT, RectGrip.BOTTOM_LEFT))
             if (edges) {
-                if (wPx >= edgeRoomPx) addAll(listOf(RectGrip.TOP, RectGrip.BOTTOM))
-                if (!withCorners || hPx >= edgeRoomPx) addAll(listOf(RectGrip.LEFT, RectGrip.RIGHT))
+                if (wPx >= (if (withCorners) middleRoomPx else edgeRoomPx)) addAll(listOf(RectGrip.TOP, RectGrip.BOTTOM))
+                if (!withCorners || hPx >= middleRoomPx) addAll(listOf(RectGrip.LEFT, RectGrip.RIGHT))
             }
         }
+    }
+
+    /** [handlePoint] in pixels on a picture [widthPx] x [heightPx], kept [insetPx] in from its edges. */
+    fun handlePx(
+        r: NormRect,
+        grip: RectGrip,
+        widthPx: Float,
+        heightPx: Float,
+        insetPx: Float,
+    ): Pair<Float, Float> {
+        val (x, y) = handlePoint(r, grip)
+        val ix = minOf(insetPx, widthPx / 2)
+        val iy = minOf(insetPx, heightPx / 2)
+        return (x * widthPx).toFloat().coerceIn(ix, widthPx - ix) to (y * heightPx).toFloat().coerceIn(iy, heightPx - iy)
     }
 
     /** Where [grip]'s handle sits on [r], in normalised units. */
@@ -141,6 +163,7 @@ object RectDrag {
         heightPx: Float,
         reachPx: Float,
         bodyMinPx: Float,
+        insetPx: Float = 0f,
     ): RectGrip? {
         val l = r.x * widthPx
         val t = r.y * heightPx
@@ -151,8 +174,8 @@ object RectDrag {
         if (xPx > l + insetX && xPx < l + w - insetX && yPx > t + insetY && yPx < t + h - insetY) return RectGrip.BODY
         handles
             .map { g ->
-                val (hx, hy) = handlePoint(r, g)
-                g to hypot(hx * widthPx - xPx, hy * heightPx - yPx)
+                val (hx, hy) = handlePx(r, g, widthPx, heightPx, insetPx)
+                g to hypot((hx - xPx).toDouble(), (hy - yPx).toDouble())
             }.filter { it.second <= reachPx }
             .minByOrNull { it.second }
             ?.let { return it.first }
@@ -269,7 +292,10 @@ fun ResizableRect(
         val heightPx = constraints.maxHeight.toFloat()
         val cornerRoom = with(density) { RectDrag.CORNER_ROOM.toPx() }
         val edgeRoom = with(density) { RectDrag.EDGE_ROOM.toPx() }
-        val shown = RectDrag.handles((rect.w * widthPx).toFloat(), (rect.h * heightPx).toFloat(), cornerRoom, edgeRoom, corners, edges)
+        val middleRoom = with(density) { RectDrag.MIDDLE_ROOM.toPx() }
+        val inset = with(density) { RectDrag.EDGE_INSET.toPx() }
+        val shown =
+            RectDrag.handles((rect.w * widthPx).toFloat(), (rect.h * heightPx).toFloat(), cornerRoom, edgeRoom, corners, edges, middleRoom)
         val latestHandles by rememberUpdatedState(shown)
         val latestW by rememberUpdatedState(widthPx)
         val latestH by rememberUpdatedState(heightPx)
@@ -286,8 +312,8 @@ fun ResizableRect(
             if (enabled) {
                 val radius = HANDLE_DOT.toPx() / 2
                 for (g in shown) {
-                    val (hx, hy) = RectDrag.handlePoint(rect, g)
-                    val c = Offset((hx * size.width).toFloat(), (hy * size.height).toFloat())
+                    val (hx, hy) = RectDrag.handlePx(rect, g, size.width, size.height, inset)
+                    val c = Offset(hx, hy)
                     drawCircle(Color.Black.copy(alpha = 0.6f), radius + 1.dp.toPx(), c)
                     drawCircle(handleFill, radius, c)
                     drawCircle(primary, radius, c, style = Stroke(2.dp.toPx()))
@@ -298,10 +324,10 @@ fun ResizableRect(
             // A handle near the screen's edge would start the system's Back swipe instead: each handle's 48 dp is
             // kept out of the system's gestures (Android allows a little of each edge for this).
             for (g in shown) {
-                val (hx, hy) = RectDrag.handlePoint(rect, g)
+                val (hx, hy) = RectDrag.handlePx(rect, g, widthPx, heightPx, inset)
                 Box(
                     Modifier
-                        .offset(maxWidth * hx.toFloat() - RectDrag.REACH, maxHeight * hy.toFloat() - RectDrag.REACH)
+                        .offset(with(density) { hx.toDp() } - RectDrag.REACH, with(density) { hy.toDp() } - RectDrag.REACH)
                         .size(RectDrag.REACH * 2)
                         .systemGestureExclusion(),
                 )
@@ -322,6 +348,7 @@ fun ResizableRect(
                                 latestH,
                                 reach,
                                 bodyMin,
+                                inset,
                             ) ?: return@awaitEachGesture
                         var total = Offset.Zero
                         val first =

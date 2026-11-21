@@ -244,4 +244,46 @@ class CaptionPlacesTest {
         assertThat(moved.w).isWithin(2e-4).of(wide.w)
         assertThat(moved.y + moved.h).isWithin(2e-4).of(inner.y + inner.h)
     }
+
+    @Test
+    fun `a place keeps the size of a box the user resized`() {
+        val resized = NormRect(0.2, 0.3, 0.4, 0.2)
+        val top = CaptionPlaces.box(CaptionPlace.TOP, usual, safe, resized)
+        assertThat(top.w).isWithin(2e-4).of(0.4)
+        assertThat(top.h).isWithin(2e-4).of(0.2)
+        assertThat(top.y).isWithin(2e-4).of(safe.y)
+        assertThat(CaptionPlaces.placeOf(top, usual, safe)).isEqualTo(CaptionPlace.TOP)
+        // The preset's own place is the preset's box, whatever the caption's size.
+        assertThat(CaptionPlaces.box(CaptionPlace.USUAL, usual, safe, resized)).isEqualTo(usual)
+    }
+
+    @Test
+    fun `a box grows from its middle for bigger words, inside its bounds, and never shrinks`() {
+        val b = NormRect(0.2, 0.4, 0.5, 0.1)
+        val g = CaptionPlaces.grown(b, 0.2, safe)
+        assertThat(g.h).isWithin(2e-4).of(0.2)
+        assertThat(g.y + g.h / 2).isWithin(2e-4).of(0.45)
+        assertThat(CaptionPlaces.grown(b, 0.05, safe)).isEqualTo(b)
+        val low = NormRect(0.2, safe.y + safe.h - 0.1, 0.5, 0.1)
+        val up = CaptionPlaces.grown(low, 0.3, safe)
+        assertThat(up.y + up.h).isWithin(2e-4).of(safe.y + safe.h)
+        assertThat(up.h).isWithin(2e-4).of(0.3)
+    }
+
+    @Test
+    fun `a caption on the preset's strip is resized on the strip, never over the picture`() {
+        val strip = NormRect(0.15, 0.7981, 0.83, 0.1222)
+        val band = CaptionPlaces.safeArea(window, strip)
+        val inner = CaptionPlaces.safeArea(window)
+        val bounds = CaptionPlaces.dragBounds(strip, RectGrip.RIGHT, inner, band, strip)
+        assertThat(bounds.y).isWithin(2e-4).of(strip.y)
+        assertThat(bounds.h).isWithin(2e-4).of(strip.h)
+        // Narrower words need three lines, but the box stays as high as the strip.
+        val narrow = CaptionPlaces.resized(strip, RectGrip.RIGHT, -0.5, 0.0, bounds, strip, minW, ::needed).first
+        assertThat(narrow.w).isWithin(2e-4).of(0.33)
+        assertThat(narrow.y).isWithin(2e-4).of(strip.y)
+        assertThat(narrow.h).isWithin(2e-4).of(strip.h)
+        // Moving it is still free to go up into the picture.
+        assertThat(CaptionPlaces.dragBounds(narrow, RectGrip.BODY, inner, band, strip)).isEqualTo(band)
+    }
 }

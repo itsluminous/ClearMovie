@@ -101,6 +101,7 @@ import com.itsluminous.clearmovie.ui.editor.LocalCanvasShape
 import com.itsluminous.clearmovie.ui.editor.PanelTitle
 import com.itsluminous.clearmovie.ui.editor.PlaceTab
 import com.itsluminous.clearmovie.ui.editor.SizeTab
+import com.itsluminous.clearmovie.ui.editor.rememberCaptionFit
 import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
 import com.itsluminous.clearmovie.ui.editor.usableCaptionText
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
@@ -680,6 +681,16 @@ private fun ColumnScope.CaptionStyleEditor(
 ) {
     PanelTitle(stringResource(R.string.preset_caption_change), onDone = onDone, onCancel = onCancel)
     CaptionTabBar(tab, CaptionTab.PRESET, onTab)
+    val shape = LocalCanvasShape.current
+    val usual = refitBox(preset.caption.box, preset.shape, shape)
+    val fit =
+        rememberCaptionFit(
+            words.ifBlank { stringResource(R.string.caption_font_sample) },
+            usual,
+            CaptionPlaces.safeArea(frameWindow, usual, shape.aspect),
+            CaptionPlaces.safeArea(frameWindow, null, shape.aspect),
+        )
+    val restyle: (CaptionStyle) -> Unit = { onStyle(fit(style, it)) }
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         when (tab) {
             CaptionTab.WORDS -> {
@@ -712,15 +723,15 @@ private fun ColumnScope.CaptionStyleEditor(
 
             CaptionTab.SIZE -> {
                 // 100% is the app's usual caption size, so a size chosen here reads the same when opened again.
-                SizeTab(preset.id.value, words, style, CaptionStyle.STANDARD, onStyle)
+                SizeTab(preset.id.value, words, style, CaptionStyle.STANDARD, restyle)
             }
 
             CaptionTab.FONT -> {
-                FontTab(style, onStyle)
+                FontTab(style, restyle)
             }
 
             CaptionTab.COLOUR -> {
-                ColourTab(style, onStyle)
+                ColourTab(style, restyle)
             }
 
             CaptionTab.ANIMATION -> {
@@ -731,7 +742,16 @@ private fun ColumnScope.CaptionStyleEditor(
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
                 // The editor's own Start choices, on a caption: what a new caption of this preset gets.
-                AnimationChoices(SAMPLE_CAPTION, AnimSlot.START, animation, Anim.DEFAULT_MS, NO_THUMBNAILS, onAnimation)
+                AnimationChoices(
+                    SAMPLE_CAPTION,
+                    AnimSlot.START,
+                    animation,
+                    Anim.DEFAULT_MS,
+                    NO_THUMBNAILS,
+                    onAnimation,
+                    // A clear block on the tile in both themes (the tile itself is surfaceVariant).
+                    blockColour = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }

@@ -387,8 +387,9 @@ fun EditorScreen(
     val floatingPreview: @Composable (Modifier) -> Unit = { m ->
         Box(m.clipToBounds()) {
             preview(Modifier.fillMaxSize())
-            if (editingCaption != null && project != null) {
-                CaptionBoxOverlay(editingCaption, project, captionWindow, actions, draggable = false)
+            if (project != null) {
+                val shown = editingCaption ?: selectedCaption
+                if (shown != null) CaptionBoxOverlay(shown, project, captionWindow, actions, draggable = false)
             }
         }
     }

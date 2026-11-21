@@ -68,15 +68,20 @@ object CaptionPlaces {
         return NormRect(usual.x, y0, usual.w, y1 - y0)
     }
 
-    /** The box for [place]: the preset's [usual] box itself, or that box moved into [safe]. */
+    /**
+     * The box for [place]: the preset's [usual] box itself, or a box the size of [current] (the caption's
+     * own, so a box the user resized keeps its size; the preset's by default) moved into [safe], at the
+     * preset box's left edge where it fits.
+     */
     fun box(
         place: CaptionPlace,
         usual: NormRect,
         safe: NormRect,
+        current: NormRect = usual,
     ): NormRect {
         if (place == CaptionPlace.USUAL) return usual
-        val w = minOf(usual.w, safe.w)
-        val h = minOf(usual.h, safe.h)
+        val w = minOf(current.w, safe.w)
+        val h = minOf(current.h, safe.h)
         val x = usual.x.coerceIn(safe.x, maxOf(safe.x, safe.x + safe.w - w))
         val y =
             when (place) {
@@ -93,7 +98,7 @@ object CaptionPlaces {
         usual: NormRect,
         safe: NormRect,
         places: List<CaptionPlace> = CaptionPlace.entries,
-    ): CaptionPlace? = places.firstOrNull { same(box(it, usual, safe), box) }
+    ): CaptionPlace? = places.firstOrNull { same(box(it, usual, safe, box), box) }
 
     /**
      * [start] moved by ([dx], [dy]) and kept inside [safe] (a box larger than
@@ -127,6 +132,23 @@ object CaptionPlaces {
     }
 
     /**
+     * [box] made at least [need] tall (in units of the canvas height),
+     * growing from its middle inside [bounds], never shorter; as tall as
+     * [bounds] allows when that is less (cm-caption-box: a bigger size or
+     * font keeps its words their size).
+     */
+    fun grown(
+        box: NormRect,
+        need: Double,
+        bounds: NormRect,
+    ): NormRect {
+        if (box.h >= need - TOLERANCE) return box
+        val h = minOf(need, maxOf(box.h, bounds.h))
+        val top = (box.y + box.h / 2 - h / 2).coerceIn(minOf(bounds.y, box.y), maxOf(bounds.y, bounds.y + bounds.h - h))
+        return NormRect(box.x, top, box.w, h).rounded()
+    }
+
+    /**
      * Where a drag with [grip] may take [box] (cm-caption-box). [inner] is
      * the frame window's safe area, [safe] the caption's (which reaches the
      * preset's strip under the window, across the preset box's width only).
@@ -134,13 +156,18 @@ object CaptionPlaces {
      * together) is resized within all of it, so a
      * caption in the picture can be made wider than the strip; a box across
      * the strip's width moves within [safe] (onto the strip and back); a
-     * wider one moves within the window only; anything else stays in [safe].
+     * wider one moves within the window only. A box on the strip is
+     * resized on the strip: no higher than the preset's [usual] box, so it
+     * never spills over the picture (words that need more lines than the
+     * strip holds are drawn smaller there; moved up into the picture, the
+     * box can grow). Anything else stays in [safe].
      */
     fun dragBounds(
         box: NormRect,
         grip: RectGrip,
         inner: NormRect,
         safe: NormRect,
+        usual: NormRect? = null,
     ): NormRect {
         // The picture: the window's height, and its width joined with the strip's (which may reach a little further).
         val left = minOf(inner.x, safe.x)
@@ -151,7 +178,14 @@ object CaptionPlaces {
             val acrossStrip = box.x >= safe.x - TOLERANCE && box.x + box.w <= safe.x + safe.w + TOLERANCE
             return if (acrossStrip || !within(box, picture)) safe else picture
         }
-        return if (within(box, picture)) picture else safe
+        if (within(box, picture)) return picture
+        if (usual != null && !within(usual, picture)) {
+            // On the strip: its own height, across the band's width.
+            val top = maxOf(safe.y, minOf(usual.y, box.y))
+            val bottom = minOf(safe.y + safe.h, maxOf(usual.y + usual.h, box.y + box.h))
+            if (bottom > top) return NormRect(safe.x, top, safe.w, bottom - top)
+        }
+        return safe
     }
 
     private fun within(
