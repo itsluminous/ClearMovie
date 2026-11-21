@@ -301,6 +301,41 @@ class RowEndPlusScreenTest {
     }
 
     @Test
+    fun `near the end with the row busy, the caption goes right after the captions there, on the same row`() {
+        val total = project.mainLayout().last().endMs
+        // Captions running to 2 s before the end, touching: the row is busy 3 s before the end.
+        val busy =
+            project
+                .addText("last", total - 6000, 4000, ids)
+        val h = EditorHarness(busy, Fixtures.preset)
+        compose.setContent { h.At(ScreenSize.EXPANDED, 1f) }
+        compose.waitForIdle()
+        val last = h.project.captionId("last")
+        val row = h.project.rowOf(last)
+        at(h, total - 5000)
+        tapEnd(row)
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, last, InsertSide.AFTER))
+        val made = newCaption(h)
+        assertThat(made.startMs).isEqualTo(total - 2000)
+        assertThat(h.project.rowOf(made.id)).isEqualTo(row)
+    }
+
+    @Test
+    fun `a selected ending just off the left edge is brought in so its plus before it shows`() {
+        val h = show()
+        val clips = h.project.main.clips
+        val ending = clips.last()
+        assertThat(ending).isInstanceOf(com.itsluminous.clearmovie.domain.model.EndingClip::class.java)
+        val start = h.project.mainSlot(ending.id)!!.startMs
+        // Zoomed in, the ending's start 10 dp left of the view.
+        compose.runOnIdle { h.state!!.zoom = ZoomState(msPerDp = 10.0, scrollMs = start + 100.0, fitAll = false) }
+        compose.waitForIdle()
+        compose.runOnIdle { h.state!!.selected = ending.id }
+        compose.waitForIdle()
+        compose.onNodeWithTag(plusTag(clips.lastIndex), useUnmergedTree = true).assertExists()
+    }
+
+    @Test
     fun `a selected caption flush with the column keeps the whole of its end handle`() {
         val h = show()
         val hello = h.project.captionId("hello")

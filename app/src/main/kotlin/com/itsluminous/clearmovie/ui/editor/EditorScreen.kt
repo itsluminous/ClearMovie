@@ -733,6 +733,7 @@ fun EditorScreen(
                         actions = timelineActions,
                         rowScroll = rowScroll,
                         metrics = metrics,
+                        photoMs = project?.photoDurationMs ?: com.itsluminous.clearmovie.ui.editor.timeline.RowEndPlus.SEEN_MS,
                     )
                 }
             }

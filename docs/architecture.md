@@ -476,11 +476,16 @@ the screen; the playhead is saved by `EditorViewModel`.
   new ones load), its type and length, and trim handles on the selected item.
   Every row has its own "+" in a 48 dp column at its right end, the same
   place on every row; items stop at that column, so none is hidden under it.
-  It adds to the right of the cursor (`RowEndPlus`): at the cursor in a gap,
-  else right after the item under it (on rows other than MAIN, past any items
-  that touch it; on MAIN later items move later). On the row of the selected
-  item it gives way to that item's own "+" on each side, which
-  `TimelineGeometry` and `TimedRowGeometry` place clear of its trim handles.
+  It adds to the right of the cursor (`RowEndPlus`): at the cursor where the
+  new item fits, else right after the item under it (on rows other than MAIN,
+  past any items that leave no room; on MAIN later items move later), never
+  starting later than the item's length before the video's end. The time is
+  fixed when the "+" is tapped (`OpenPanel.atMs`, shown in the chooser's
+  title), and opening a chooser pauses the preview. Rows the preset manages
+  and switched-off rows have no "+". On the row of the selected item it gives
+  way to that item's own "+" on each side, which `TimelineGeometry` and
+  `TimedRowGeometry` place clear of its trim handles, at most half into the
+  column.
 - **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
   finger before a long-press is a pinch (zoom around the fingers, clamped
   between Fit all and 1 s per 240 dp, `TimelineZoom`), movement is a scroll

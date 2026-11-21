@@ -57,11 +57,11 @@ class RowGeometryTest {
         // Kept whole on screen: an item at the very start has its "+" pulled in to the padding's edge.
         val atStart = TimedRowGeometry.plusPoints(listOf(clip("s", 0, 1000)), zoom, ClipId("s"), 300.0)
         assertThat(atStart.first().xDp - TimelineGeometry.PLUS_HIT_DP / 2).isAtLeast(-TimelineGeometry.EDGE_ROOM_DP - 1e-9)
-        assertThat(atStart.last().xDp + TimelineGeometry.PLUS_HIT_DP / 2).isAtMost(300.0 + TimelineGeometry.END_DP + 1e-9)
-        // At the end, its "+" after it may sit in the "+" column (empty on the selected item's row), never past it.
+        assertThat(atStart.last().xDp + TimelineGeometry.PLUS_HIT_DP / 2).isAtMost(300.0 + TimelineGeometry.SIDE_END_DP + 1e-9)
+        // At the end, its "+" after it reaches at most half into the "+" column, so it straddles the column's edge.
         val atEnd = TimedRowGeometry.plusPoints(listOf(clip("e", 2000, 2950)), zoom, ClipId("e"), 300.0)
         assertThat(atEnd.last().side).isEqualTo(InsertSide.AFTER)
-        assertThat(atEnd.last().xDp + TimelineGeometry.PLUS_HIT_DP / 2).isAtMost(300.0 + TimelineGeometry.END_DP + 1e-9)
+        assertThat(atEnd.last().xDp + TimelineGeometry.PLUS_HIT_DP / 2).isAtMost(300.0 + TimelineGeometry.SIDE_END_DP + 1e-9)
         assertThat(TimedRowGeometry.hitTest(clips, points, zoom, 200.0)).isEqualTo(TimedHit.Clip(ClipId("a")))
         // Inside the item, past the "+" next to it: the item.
         assertThat(TimedRowGeometry.hitTest(clips, points, zoom, 104.0)).isEqualTo(TimedHit.Clip(ClipId("a")))

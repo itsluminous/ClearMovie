@@ -36,10 +36,13 @@ data class MainEndTarget(
  *   no room: the first place right of the cursor where it fits. A picked file
  *   longer than that room goes, as every insert on these rows does, on the
  *   highest free row of its kind or a new one, at the same time.
- * - Never where it would not be seen: no later than [SEEN_MS] before the end
- *   of the video ([videoMs]). From a cursor nearer the end the rule starts at
- *   that moment, and when the first free place is later still the item goes
- *   at that moment (on another row of its kind if this one is busy then).
+ * - Never where it would not be seen: no later than the new item's length
+ *   before the end of the video ([videoMs]). From a cursor nearer the end the
+ *   rule starts at that moment. When the first free place is later still: at
+ *   that last moment if the row is free there, else right after the item
+ *   still in the way if it ends inside the video (the new item then runs on
+ *   past the end, as an insert after the last item always did), else at that
+ *   last moment on another row of its kind (the row has no room left).
  * - MAIN (one item after another): at the cursor when it is exactly between
  *   two items; on an item, right after it, and every later item moves later.
  *   In a transition two items are under the cursor: after the later one, so
@@ -48,8 +51,11 @@ data class MainEndTarget(
  *   ending.
  */
 object RowEndPlus {
-    /** How much of a new item must be inside the video: as long as a new caption. */
+    /** A new caption's, or a photo's, length when the project sets none. */
     const val SEEN_MS = 3000L
+
+    /** Less than this left of the video after an item, and the row has no room after it. */
+    private const val MIN_LEFT_MS = 100L
 
     fun timed(
         clips: List<RowClip>,
@@ -59,7 +65,7 @@ object RowEndPlus {
     ): EndPlusTarget {
         val live = clips.filter { it.endMs > it.startMs }
         val length = lengthMs.coerceAtLeast(1)
-        val latest = if (videoMs == Long.MAX_VALUE) Long.MAX_VALUE else (videoMs - maxOf(SEEN_MS, lengthMs)).coerceAtLeast(0)
+        val latest = if (videoMs == Long.MAX_VALUE) Long.MAX_VALUE else (videoMs - length).coerceAtLeast(0)
         val from = cursorMs.coerceIn(0, latest)
 
         // The items in the way of a new item from [start].
@@ -72,7 +78,12 @@ object RowEndPlus {
         while (true) {
             anchor = blocking(anchor.endMs).minByOrNull { it.startMs } ?: break
         }
-        return if (anchor.endMs > latest) EndPlusTarget.At(latest) else EndPlusTarget.After(anchor.id)
+        return when {
+            anchor.endMs <= latest -> EndPlusTarget.After(anchor.id)
+            blocking(latest).isEmpty() -> EndPlusTarget.At(latest)
+            anchor.endMs <= videoMs - MIN_LEFT_MS -> EndPlusTarget.After(anchor.id)
+            else -> EndPlusTarget.At(latest)
+        }
     }
 
     fun main(

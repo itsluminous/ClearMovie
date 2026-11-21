@@ -53,20 +53,31 @@ class RowEndPlusTest {
 
     @Test
     fun `nothing is added where it would not be seen, after the end of the video`() {
-        // A 14 s video; captions 2-4 s and 6-8 s; a new caption is 3 s and must be seen for 3 s.
+        // A 14 s video; captions 2-4 s and 6-8 s; a new caption is 3 s.
         val captions = listOf(clip("a", 2000, 4000), clip("b", 6000, 8000))
         // At the very end (after playing it through) and 1 s before it: from 11 s, the last moment that keeps 3 s in.
         assertThat(RowEndPlus.timed(captions, 14_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
         assertThat(RowEndPlus.timed(captions, 13_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
         // Further from the end the cursor stands.
         assertThat(RowEndPlus.timed(captions, 9000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(9000))
-        // A caption running to the end: right after it would be past the end, so at the last moment that is seen.
+        // "The End" captions 5-8 s and 8-12 s, cursor on the first: the row is busy at 11 s, so right after them, at 12 s.
+        val theEnd = listOf(clip("p", 5000, 8000), clip("q", 8000, 12_000))
+        assertThat(RowEndPlus.timed(theEnd, 6000, 3000, videoMs = 14_000)).isEqualTo(after("q"))
+        // A caption running to the end: no room on this row, so at the last moment (the model puts it on another row).
         val toEnd = listOf(clip("z", 8000, 14_000))
         assertThat(RowEndPlus.timed(toEnd, 12_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
-        // A video shorter than that: from the start.
+        // A video shorter than the item: from the start.
         assertThat(RowEndPlus.timed(emptyList(), 2000, 3000, videoMs = 2000)).isEqualTo(EndPlusTarget.At(0))
-        // A sound (length unknown) is kept 3 s from the end too.
-        assertThat(RowEndPlus.timed(emptyList(), 14_000, 100, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
+    }
+
+    @Test
+    fun `a sound or a recording counts its own small length, so it stays where the cursor is near the end`() {
+        // An empty voice row, cursor at 13 s of 14 s: recording starts at 13 s, not 3 s earlier.
+        assertThat(RowEndPlus.timed(emptyList(), 13_000, 100, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(13_000))
+        // At the very end: the last moment inside the video.
+        assertThat(RowEndPlus.timed(emptyList(), 14_000, 100, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(13_900))
+        // On a music clip 9-12 s, cursor 10 s: right after it, on the same row.
+        assertThat(RowEndPlus.timed(listOf(clip("m", 9000, 12_000)), 10_000, 100, videoMs = 14_000)).isEqualTo(after("m"))
     }
 
     @Test
