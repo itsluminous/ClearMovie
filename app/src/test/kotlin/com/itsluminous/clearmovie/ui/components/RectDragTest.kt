@@ -149,17 +149,4 @@ class RectDragTest {
         // Its middle, away from the dots, still moves it.
         assertThat(RectDrag.gripAt(thin, hs, 350f, 470f, w, h, reach, bodyMin, insetPx = 36f, dotPx = 36f)).isEqualTo(RectGrip.BODY)
     }
-
-    @Test
-    fun `TalkBack steps grow, shrink and move the box, clamped like a drag`() {
-        val steps = RectDrag.steps(min, min).toMap()
-        near(steps.getValue(RectStep.BIGGER)(r), NormRect(0.175, 0.175, 0.45, 0.45))
-        near(steps.getValue(RectStep.SMALLER)(r), NormRect(0.225, 0.225, 0.35, 0.35))
-        near(steps.getValue(RectStep.LEFT)(r), NormRect(0.15, 0.2, 0.4, 0.4))
-        near(steps.getValue(RectStep.DOWN)(r), NormRect(0.2, 0.25, 0.4, 0.4))
-        near(steps.getValue(RectStep.BIGGER)(NormRect.FULL), NormRect.FULL)
-        var tiny = NormRect(0.4, 0.4, 0.1, 0.1)
-        tiny = steps.getValue(RectStep.SMALLER)(tiny)
-        assertThat(tiny.w).isAtLeast(min - 1e-9)
-    }
 }

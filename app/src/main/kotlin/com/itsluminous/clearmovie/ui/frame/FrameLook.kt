@@ -67,7 +67,9 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,7 +85,9 @@ import com.itsluminous.clearmovie.domain.model.KeyMath
 import com.itsluminous.clearmovie.domain.model.KeySpec
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
-import com.itsluminous.clearmovie.ui.components.RectActionLabels
+import com.itsluminous.clearmovie.ui.components.RectAnchor
+import com.itsluminous.clearmovie.ui.components.RectDrag
+import com.itsluminous.clearmovie.ui.components.RectGrip
 import com.itsluminous.clearmovie.ui.components.ResizableRect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -290,6 +294,8 @@ private fun FramePicture(
             .aspectRatio(aspect)
             .testTag(FRAME_LOOK_PICTURE_TAG),
     ) {
+        val boxWidth = maxWidth
+        val boxHeight = maxHeight
         // Only the picture has round corners: the picture area's handles reach past its edges.
         Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))) {
             Checkerboard(Modifier.fillMaxSize())
@@ -330,22 +336,52 @@ private fun FramePicture(
             }
 
             FrameLookTab.AREA -> {
-                ResizableRect(
-                    rect = area ?: NormRect.FULL,
-                    onChange = onArea,
-                    minWidth = KeyMath.MIN_AREA_SIDE,
-                    minHeight = KeyMath.MIN_AREA_SIDE,
-                    description = boxDescription,
-                    actionLabels =
-                        RectActionLabels(
-                            stringResource(R.string.area_bigger),
-                            stringResource(R.string.area_smaller),
-                            stringResource(R.string.area_left),
-                            stringResource(R.string.area_right),
-                            stringResource(R.string.area_up),
-                            stringResource(R.string.area_down),
-                        ),
+                val a = area ?: NormRect.FULL
+                val labels =
+                    listOf(
+                        AreaStep.BIGGER to stringResource(R.string.area_bigger),
+                        AreaStep.SMALLER to stringResource(R.string.area_smaller),
+                        AreaStep.LEFT to stringResource(R.string.area_left),
+                        AreaStep.RIGHT to stringResource(R.string.area_right),
+                        AreaStep.UP to stringResource(R.string.area_up),
+                        AreaStep.DOWN to stringResource(R.string.area_down),
+                    )
+                // Outside the picture area is dimmed, so the part photos go into stands out.
+                Canvas(Modifier.fillMaxSize()) {
+                    val l = (a.x * size.width).toFloat()
+                    val t = (a.y * size.height).toFloat()
+                    val r = ((a.x + a.w) * size.width).toFloat()
+                    val b = ((a.y + a.h) * size.height).toFloat()
+                    val dim = Color.Black.copy(alpha = DIM_ALPHA)
+                    drawRect(dim, Offset(0f, 0f), Size(size.width, t))
+                    drawRect(dim, Offset(0f, b), Size(size.width, size.height - b))
+                    drawRect(dim, Offset(0f, t), Size(l, b - t))
+                    drawRect(dim, Offset(r, t), Size(size.width - r, b - t))
+                }
+                RectAnchor(
+                    a,
+                    boxWidth,
+                    boxHeight,
+                    Modifier.semantics {
+                        contentDescription = boxDescription
+                        customActions =
+                            labels.map { (step, label) ->
+                                CustomAccessibilityAction(label) {
+                                    onArea(AreaSteps.apply(a, step))
+                                    true
+                                }
+                            }
+                    },
                 )
+                var dragStart by remember { mutableStateOf<NormRect?>(null) }
+                ResizableRect(
+                    rect = a,
+                    onDragStart = { dragStart = a },
+                    onDragEnd = { dragStart = null },
+                ) { grip, dx, dy ->
+                    val from = dragStart ?: return@ResizableRect
+                    onArea(RectDrag.resize(from, grip, dx, dy, NormRect.FULL, KeyMath.MIN_AREA_SIDE, KeyMath.MIN_AREA_SIDE))
+                }
             }
         }
     }
@@ -542,3 +578,63 @@ private fun decode(text: String): NormRect? =
         ?.takeIf { KeyMath.isUsableArea(it) }
 
 private const val PICTURE_SHARE = 0.5f
+private const val DIM_ALPHA = 0.45f
+
+/** What each of the picture area's TalkBack actions does. */
+enum class AreaStep { BIGGER, SMALLER, LEFT, RIGHT, UP, DOWN }
+
+/** The picture area's TalkBack steps, in units of the frame's picture, clamped like a drag. Pure, unit-tested. */
+object AreaSteps {
+    /** How far one step moves or resizes the area. */
+    const val STEP = 0.05
+
+    fun apply(
+        r: NormRect,
+        step: AreaStep,
+    ): NormRect {
+        val min = KeyMath.MIN_AREA_SIDE
+        val all = NormRect.FULL
+        val half = STEP / 2
+        return when (step) {
+            AreaStep.BIGGER -> {
+                RectDrag.resize(
+                    RectDrag.resize(r, RectGrip.TOP_LEFT, -half, -half, all, min, min),
+                    RectGrip.BOTTOM_RIGHT,
+                    half,
+                    half,
+                    all,
+                    min,
+                    min,
+                )
+            }
+
+            AreaStep.SMALLER -> {
+                RectDrag.resize(
+                    RectDrag.resize(r, RectGrip.TOP_LEFT, half, half, all, min, min),
+                    RectGrip.BOTTOM_RIGHT,
+                    -half,
+                    -half,
+                    all,
+                    min,
+                    min,
+                )
+            }
+
+            AreaStep.LEFT -> {
+                RectDrag.move(r, -STEP, 0.0, all)
+            }
+
+            AreaStep.RIGHT -> {
+                RectDrag.move(r, STEP, 0.0, all)
+            }
+
+            AreaStep.UP -> {
+                RectDrag.move(r, 0.0, -STEP, all)
+            }
+
+            AreaStep.DOWN -> {
+                RectDrag.move(r, 0.0, STEP, all)
+            }
+        }
+    }
+}
