@@ -222,4 +222,26 @@ class CaptionPlacesTest {
         assertThat(out.x + out.w).isWithin(2e-4).of(0.9)
         assertThat(out.h).isWithin(2e-4).of(0.06)
     }
+
+    @Test
+    fun `a caption in the picture can be made wider than the preset's strip, and one that wide stays in the picture`() {
+        // The built-in preset: its caption box on the frame's strip, under the window, clear of the logo.
+        val strip = NormRect(0.15, 0.7981, 0.83, 0.1222)
+        val band = CaptionPlaces.safeArea(window, strip)
+        val inner = CaptionPlaces.safeArea(window)
+        val up = NormRect(0.15, 0.3, 0.83, 0.12)
+        // Resizing a box in the picture: the whole window (and the strip's width); on the strip: the band.
+        val picture = NormRect(inner.x, inner.y, maxOf(inner.x + inner.w, band.x + band.w) - inner.x, inner.h)
+        assertThat(CaptionPlaces.dragBounds(up, RectGrip.LEFT, inner, band)).isEqualTo(picture)
+        assertThat(CaptionPlaces.dragBounds(strip, RectGrip.LEFT, inner, band)).isEqualTo(band)
+        val wide = CaptionPlaces.resized(up, RectGrip.LEFT, -0.5, 0.0, picture, strip, minW, ::needed).first
+        assertThat(wide.x).isWithin(2e-4).of(inner.x)
+        assertThat(wide.w).isGreaterThan(strip.w)
+        // Moving: a box as wide as the strip goes onto it and back; a wider one stays in the picture.
+        assertThat(CaptionPlaces.dragBounds(up, RectGrip.BODY, inner, band)).isEqualTo(band)
+        assertThat(CaptionPlaces.dragBounds(wide, RectGrip.BODY, inner, band)).isEqualTo(picture)
+        val moved = CaptionPlaces.dragged(wide, 0.0, 0.5, picture, strip).first
+        assertThat(moved.w).isWithin(2e-4).of(wide.w)
+        assertThat(moved.y + moved.h).isWithin(2e-4).of(inner.y + inner.h)
+    }
 }

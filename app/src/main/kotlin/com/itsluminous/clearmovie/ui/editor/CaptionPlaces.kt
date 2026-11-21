@@ -127,6 +127,39 @@ object CaptionPlaces {
     }
 
     /**
+     * Where a drag with [grip] may take [box] (cm-caption-box). [inner] is
+     * the frame window's safe area, [safe] the caption's (which reaches the
+     * preset's strip under the window, across the preset box's width only).
+     * A box inside the window (as wide as the window and the strip
+     * together) is resized within all of it, so a
+     * caption in the picture can be made wider than the strip; a box across
+     * the strip's width moves within [safe] (onto the strip and back); a
+     * wider one moves within the window only; anything else stays in [safe].
+     */
+    fun dragBounds(
+        box: NormRect,
+        grip: RectGrip,
+        inner: NormRect,
+        safe: NormRect,
+    ): NormRect {
+        // The picture: the window's height, and its width joined with the strip's (which may reach a little further).
+        val left = minOf(inner.x, safe.x)
+        val right = maxOf(inner.x + inner.w, safe.x + safe.w)
+        val picture = NormRect(left, inner.y, right - left, inner.h)
+        if (grip == RectGrip.BODY) {
+            // Compared as stored (to 1/10000 of the canvas), as boxes are.
+            val acrossStrip = box.x >= safe.x - TOLERANCE && box.x + box.w <= safe.x + safe.w + TOLERANCE
+            return if (acrossStrip || !within(box, picture)) safe else picture
+        }
+        return if (within(box, picture)) picture else safe
+    }
+
+    private fun within(
+        a: NormRect,
+        b: NormRect,
+    ) = a.x >= b.x - TOLERANCE && a.y >= b.y - TOLERANCE && a.x + a.w <= b.x + b.w + TOLERANCE && a.y + a.h <= b.y + b.h + TOLERANCE
+
+    /**
      * The narrowest a caption's box may be made, in units of the canvas
      * width: room for about [MIN_WIDTH_EMS] letters at [sizePx] and the
      * box's padding, on a canvas of [shape].

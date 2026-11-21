@@ -918,6 +918,7 @@ internal fun CaptionBoxOverlay(
         text = caption.text,
         usual = defaults.box,
         safe = CaptionPlaces.safeArea(window, defaults.box, LocalCanvasShape.current.aspect),
+        inner = CaptionPlaces.safeArea(window, null, LocalCanvasShape.current.aspect),
         showSample = caption.text.isBlank(),
         dragKey = caption.id,
         modifier = modifier,
@@ -933,7 +934,8 @@ internal fun CaptionBoxOverlay(
 
 /**
  * A caption box drawn over a picture of the canvas, moved and resized: the
- * box of [style], kept inside [safe] and snapping to [usual], each change
+ * box of [style], kept inside [safe] (or the frame window's [inner] safe
+ * area, see [CaptionPlaces.dragBounds]) and snapping to [usual], each change
  * handed to [onBox] and [onDragEnd] called when a drag (or an accessibility
  * action) ends. A resize keeps the words ([text], or the sample when blank)
  * at their size: the box is never made shorter than they need at its new
@@ -949,6 +951,7 @@ internal fun CaptionBoxDrag(
     showSample: Boolean,
     dragKey: Any,
     modifier: Modifier = Modifier,
+    inner: NormRect = safe,
     text: String = "",
     draggable: Boolean = true,
     onDragEnd: () -> Unit = {},
@@ -958,6 +961,7 @@ internal fun CaptionBoxDrag(
     val move by rememberUpdatedState(onBox)
     val end by rememberUpdatedState(onDragEnd)
     var start by remember { mutableStateOf<NormRect?>(null) }
+    var bounds by remember { mutableStateOf(safe) }
     var snapped by remember { mutableStateOf(false) }
     val description = stringResource(R.string.caption_box_description)
     val wider = stringResource(R.string.caption_box_wider)
@@ -973,9 +977,11 @@ internal fun CaptionBoxDrag(
         dx: Double,
         dy: Double,
     ): Pair<NormRect, Boolean> {
-        if (grip == RectGrip.BODY) return CaptionPlaces.dragged(from, dx, dy, safe, usual)
+        val area = CaptionPlaces.dragBounds(from, grip, inner, safe)
+        bounds = area
+        if (grip == RectGrip.BODY) return CaptionPlaces.dragged(from, dx, dy, area, usual)
         val minW = CaptionPlaces.minWidth(latest.sizePx, shape)
-        return CaptionPlaces.resized(from, grip, dx, dy, safe, usual, minW) { w -> renderer.boxHeightFor(words, latest, w) }
+        return CaptionPlaces.resized(from, grip, dx, dy, area, usual, minW) { w -> renderer.boxHeightFor(words, latest, w) }
     }
 
     /** Wider or narrower by [step] of the canvas, both sides alike: for TalkBack, which cannot drag. */
@@ -991,13 +997,14 @@ internal fun CaptionBoxDrag(
         val h = maxHeight
         val box = style.box
         if (start != null) {
-            // While dragging: the safe area, and the preset's place when the box sits on it.
+            // While dragging: where the box may go, and the preset's place when the box sits on it.
             Canvas(Modifier.fillMaxSize()) {
                 val dash = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 6.dp.toPx()))
+                val area = bounds
                 drawRect(
                     Color.White.copy(alpha = 0.5f),
-                    Offset((safe.x * size.width).toFloat(), (safe.y * size.height).toFloat()),
-                    Size((safe.w * size.width).toFloat(), (safe.h * size.height).toFloat()),
+                    Offset((area.x * size.width).toFloat(), (area.y * size.height).toFloat()),
+                    Size((area.w * size.width).toFloat(), (area.h * size.height).toFloat()),
                     style = Stroke(1.dp.toPx(), pathEffect = dash),
                 )
                 if (snapped) {

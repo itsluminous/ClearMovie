@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -294,6 +295,17 @@ fun ResizableRect(
             }
         }
         if (enabled) {
+            // A handle near the screen's edge would start the system's Back swipe instead: each handle's 48 dp is
+            // kept out of the system's gestures (Android allows a little of each edge for this).
+            for (g in shown) {
+                val (hx, hy) = RectDrag.handlePoint(rect, g)
+                Box(
+                    Modifier
+                        .offset(maxWidth * hx.toFloat() - RectDrag.REACH, maxHeight * hy.toFloat() - RectDrag.REACH)
+                        .size(RectDrag.REACH * 2)
+                        .systemGestureExclusion(),
+                )
+            }
             val reach = with(density) { RectDrag.REACH.toPx() }
             val bodyMin = with(density) { RectDrag.BODY_MIN.toPx() }
             Box(
