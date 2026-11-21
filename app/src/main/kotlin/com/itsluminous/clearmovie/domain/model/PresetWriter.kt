@@ -88,6 +88,8 @@ object PresetWriter {
                 put("audioSampleRate", preset.export.audioSampleRate)
                 put("audioBitrate", preset.export.audioBitrate)
             }
+            // Written only when it is not the landscape every older preset is, so those read back unchanged.
+            if (preset.shape != CanvasShape.LANDSCAPE) put("shape", name(CanvasShape.serializer(), preset.shape))
         }
 
     private fun caption(

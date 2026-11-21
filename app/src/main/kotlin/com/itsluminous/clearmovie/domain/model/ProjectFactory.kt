@@ -29,14 +29,19 @@ data class PresetMedia(
 
 /** New projects (ARCHITECTURE section 6, "Defaults for a new project"). */
 object ProjectFactory {
-    /** "Start without a preset": the MAIN row plus an empty Text row on top. */
+    /**
+     * "Start without a preset": the MAIN row plus an empty Text row on top,
+     * 16:9 until a shape is chosen. With [askShape] the editor asks for the
+     * shape when it first opens the video.
+     */
     fun blank(
         id: ProjectId,
         ids: IdSource = RandomIds,
+        askShape: Boolean = false,
     ): Project {
         val main = Track(ids.trackId(), TrackType.MAIN)
         val text = Track(ids.trackId(), TrackType.TEXT)
-        return Project(id = id, tracks = listOf(text, main), stacking = listOf(main.id, text.id))
+        return Project(id = id, tracks = listOf(text, main), stacking = listOf(main.id, text.id), askShape = askShape)
     }
 
     /**
@@ -53,8 +58,8 @@ object ProjectFactory {
      * MAIN starts with the intro and ending. The frame and its music follow the
      * frame span (after the intro, to the end, or to the ending when the frame
      * does not cover it); the closing message follows a spoken ending. The
-     * preset's caption style, photo length, fit, effects and ducking are copied
-     * into the project. A bound file whose length is under
+     * preset's shape, caption style, photo length, fit, effects and ducking are
+     * copied into the project. A bound file whose length is under
      * [Limits.MIN_CLIP_MS] or over [Limits.MAX_MEDIA_MS] is refused with
      * [IllegalArgumentException].
      */
@@ -148,6 +153,7 @@ object ProjectFactory {
             defaultFit = preset.defaultFit,
             effectDefaults = preset.effects,
             ducking = preset.ducking,
+            shape = preset.shape,
         ).normalized()
     }
 }

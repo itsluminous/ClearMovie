@@ -11,6 +11,10 @@ import kotlinx.serialization.Serializable
  * A bundled preset names itself through a string resource ([displayNameRes]);
  * a user's own `preset.json` may carry a literal [displayName] instead, since
  * that is the user's data, not app text.
+ *
+ * [shape] is the shape of the videos it makes (cm-aspect-ratio); its frame
+ * and intro are expected to be made for it. A `preset.json` without one is
+ * landscape, as every preset was before.
  */
 data class Preset(
     val id: PresetId,
@@ -26,6 +30,7 @@ data class Preset(
     val effects: EffectDefaults = EffectDefaults(),
     val ducking: DuckingSpec = DuckingSpec(),
     val export: ExportSpec = ExportSpec(),
+    val shape: CanvasShape = CanvasShape.LANDSCAPE,
 ) {
     companion object {
         const val SCHEMA_VERSION = 1

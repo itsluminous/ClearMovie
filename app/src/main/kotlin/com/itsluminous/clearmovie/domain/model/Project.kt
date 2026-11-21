@@ -42,6 +42,10 @@ data class EffectDefaults(
  * [transitionForAll] is set by **Apply to all**: while it is set, every MAIN
  * junction, including new ones, gets that transition.
  *
+ * [shape] is the video's shape (cm-aspect-ratio): the preset's, or the one
+ * chosen for a video made without one. [askShape] is set on a new video made
+ * without a preset until its shape is chosen, so the editor asks once.
+ *
  * The schema version is not a field: `ProjectCodec` writes it.
  */
 @Serializable
@@ -58,6 +62,8 @@ data class Project(
     val effectDefaults: EffectDefaults = EffectDefaults(),
     val ducking: DuckingSpec = DuckingSpec(),
     val transitionForAll: Transition? = null,
+    val shape: CanvasShape = CanvasShape.LANDSCAPE,
+    val askShape: Boolean = false,
 ) {
     /** The MAIN row. Every valid project has exactly one. */
     val main: Track get() = tracks.first { it.type == TrackType.MAIN }

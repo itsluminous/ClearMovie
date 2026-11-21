@@ -36,16 +36,25 @@ class ProjectMigrations(
     companion object {
         /**
          * 2 (cm-captions): a caption may be attached to a photo or video
-         * (`TextClip.attachedTo`).
+         * (`TextClip.attachedTo`). 3 (cm-aspect-ratio): the video's `shape`,
+         * and `askShape`.
          */
-        const val CURRENT_VERSION = 2
+        const val CURRENT_VERSION = 3
 
         /**
          * 1 to 2: nothing to rewrite. A version 1 caption has no `attachedTo`,
          * so it reads as a free caption and keeps its own times, exactly as
          * version 1 played it.
+         *
+         * 2 to 3: every older video was 16:9, so it is written as landscape
+         * (and never asks for a shape). An older app refuses a version 3
+         * file rather than show an upright video sideways.
          */
-        val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> = mapOf(1 to { old -> old })
+        val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> =
+            mapOf(
+                1 to { old -> old },
+                2 to { old -> JsonObject(old + mapOf("shape" to JsonPrimitive("landscape"), "askShape" to JsonPrimitive(false))) },
+            )
     }
 }
 

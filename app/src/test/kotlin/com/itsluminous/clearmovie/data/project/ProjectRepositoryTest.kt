@@ -11,6 +11,7 @@ import com.itsluminous.clearmovie.data.db.ClearMovieDatabase
 import com.itsluminous.clearmovie.data.db.MediaGrantEntity
 import com.itsluminous.clearmovie.data.db.ProjectEntity
 import com.itsluminous.clearmovie.data.files.AppFiles
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.PhotoClip
@@ -544,7 +545,7 @@ class ProjectRepositoryTest {
     @Test
     fun `a project from an older model schema is upgraded and saved back when opened`() =
         runBlocking<Unit> {
-            // Saved by an app at schema 1; opened by this one, at schema 2 (cm-captions' attachedTo).
+            // Saved by an app at schema 1; opened by this one, at schema 3 (cm-captions' attachedTo, cm-aspect-ratio's shape).
             val v1 = ProjectMigrations(currentVersion = 1, steps = emptyMap())
             val db = db()
             repository(db, migrations = v1).createDraft(draft())
@@ -554,10 +555,26 @@ class ProjectRepositoryTest {
             val opened = upgraded.open(ProjectId("p1")) as OpenResult.Opened
             assertThat(opened.migratedFrom).isEqualTo(1)
             val row = db.projects().get("p1")!!
-            assertThat(row.schemaVersion).isEqualTo(2)
-            assertThat(row.modelJson).startsWith("{\n    \"schemaVersion\": 2")
+            assertThat(row.schemaVersion).isEqualTo(3)
+            assertThat(row.modelJson).startsWith("{\n    \"schemaVersion\": 3")
             // Opening again is not a migration any more.
             assertThat((upgraded.open(ProjectId("p1")) as OpenResult.Opened).migratedFrom).isNull()
+        }
+
+    @Test
+    fun `a video stored by 0_0_3 (schema 2) opens as landscape and is stored back at schema 3`() =
+        runBlocking<Unit> {
+            // cm-aspect-ratio: the row exactly as the released app stored it, read from the golden file.
+            val v2 = requireNotNull(javaClass.getResource("/fixtures/project/blank-v2.json")).readText()
+            val db = db()
+            db.projects().upsert(ProjectEntity("blank", null, null, 2, v2, null, 1L, 1L))
+            val opened = repository(db).open(ProjectId("blank")) as OpenResult.Opened
+            assertThat(opened.migratedFrom).isEqualTo(2)
+            assertThat(opened.project.shape).isEqualTo(CanvasShape.LANDSCAPE)
+            assertThat(opened.project.askShape).isFalse()
+            val row = db.projects().get("blank")!!
+            assertThat(row.schemaVersion).isEqualTo(3)
+            assertThat(row.modelJson).contains("\"shape\": \"landscape\"")
         }
 
     @Test

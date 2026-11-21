@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "event-frame",
   "displayNameRes": "preset_event_frame_name",
+  "shape": "landscape",
   "intro": { "slot": "intro", "kind": "video" },
   "ending": { "slot": "ending", "kind": "audio", "visual": "holdLast" },
   "frame": {

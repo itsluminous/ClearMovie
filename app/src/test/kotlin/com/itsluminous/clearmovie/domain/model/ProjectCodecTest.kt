@@ -33,28 +33,56 @@ class ProjectCodecTest {
 
     @Test
     fun `golden fixtures round-trip byte for byte`() {
-        for (name in listOf("rich-v2.json", "blank-v2.json")) {
+        for (name in listOf("rich-v3.json", "blank-v3.json")) {
             val text = fixture(name)
             assertThat(codec.encode(ok(text).project)).isEqualTo(text)
         }
     }
 
     @Test
-    fun `the rich fixture is the project the test builds`() {
-        // If the model changes shape, this fails before the byte comparison
-        // hides why; regenerate the fixture only for an intended change.
-        assertThat(ok(fixture("rich-v2.json")).project).isEqualTo(Fixtures.richProject())
-        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v2.json"))
+    fun `a schema 2 project reads as landscape, never asks for a shape, and saves as schema 3`() {
+        // cm-aspect-ratio: schema 3 adds the video's shape. Every older video was 16:9.
+        for (name in listOf("rich", "blank")) {
+            val result = ok(fixture("$name-v2.json"))
+            assertThat(result.fromVersion).isEqualTo(2)
+            assertThat(result.repaired).isFalse()
+            assertThat(result.project.shape).isEqualTo(CanvasShape.LANDSCAPE)
+            assertThat(result.project.askShape).isFalse()
+            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v3.json"))
+        }
     }
 
     @Test
-    fun `a schema 1 project reads as before, its captions free, and saves as schema 2`() {
+    fun `an upright or square video keeps its shape and its question through a save`() {
+        for (shape in CanvasShape.entries) {
+            val project = Fixtures.richProject().setShape(shape).copy(askShape = true)
+            val back = ok(codec.encode(project)).project
+            assertThat(back.shape).isEqualTo(shape)
+            assertThat(back.askShape).isTrue()
+            assertThat(back).isEqualTo(project)
+        }
+        assertThat(codec.encode(Fixtures.richProject().setShape(CanvasShape.PORTRAIT))).contains("\"shape\": \"portrait\"")
+        // A shape this app does not know is refused, never read as some other shape.
+        val unknown = fixture("blank-v3.json").replace("\"shape\": \"landscape\"", "\"shape\": \"cinema\"")
+        assertThat(failed(unknown)).isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
+    }
+
+    @Test
+    fun `the rich fixture is the project the test builds`() {
+        // If the model changes shape, this fails before the byte comparison
+        // hides why; regenerate the fixture only for an intended change.
+        assertThat(ok(fixture("rich-v3.json")).project).isEqualTo(Fixtures.richProject())
+        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v3.json"))
+    }
+
+    @Test
+    fun `a schema 1 project reads as before, its captions free, and saves as schema 3`() {
         // cm-captions: schema 2 adds TextClip.attachedTo. A schema 1 caption has none, so it keeps its own times.
         for (name in listOf("rich-v1.json", "blank-v1.json")) {
             val result = ok(fixture(name))
             assertThat(result.fromVersion).isEqualTo(1)
             assertThat(result.repaired).isFalse()
-            assertThat(codec.encode(result.project)).startsWith("{\n    \"schemaVersion\": 2,")
+            assertThat(codec.encode(result.project)).startsWith("{\n    \"schemaVersion\": 3,")
         }
         val rich = ok(fixture("rich-v1.json")).project
         assertThat(rich).isEqualTo(Fixtures.richProjectV1())
@@ -64,11 +92,11 @@ class ProjectCodecTest {
                 .filterIsInstance<TextClip>()
                 .map { it.attachedTo },
         ).containsExactly(null, null)
-        // Schema 2 written back, then read: the same project.
+        // Schema 3 written back, then read: the same project.
         assertThat(ok(codec.encode(rich)).project).isEqualTo(rich)
         // The app's chain starts at schema 1.
         assertThat(ProjectMigrations().oldestVersion).isEqualTo(1)
-        assertThat(ProjectMigrations.CURRENT_VERSION).isEqualTo(2)
+        assertThat(ProjectMigrations.CURRENT_VERSION).isEqualTo(3)
     }
 
     @Test
@@ -225,7 +253,7 @@ class ProjectCodecTest {
 
     @Test
     fun `a project from a newer app is refused`() {
-        val newer = fixture("blank-v2.json").replace("\"schemaVersion\": 2", "\"schemaVersion\": 3")
+        val newer = fixture("blank-v3.json").replace("\"schemaVersion\": 3", "\"schemaVersion\": 4")
         assertThat(failed(newer)).isEqualTo(ProjectDecodeResult.Reason.NEWER_VERSION)
     }
 

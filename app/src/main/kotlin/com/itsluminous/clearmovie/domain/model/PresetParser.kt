@@ -85,6 +85,7 @@ object PresetParser {
         val effects = obj("effects")?.readEffects() ?: EffectDefaults()
         val ducking = obj("ducking")?.readDucking() ?: DuckingSpec()
         val export = obj("export")?.readExport() ?: ExportSpec()
+        val shape = enum("shape", CanvasShape.serializer()) ?: CanvasShape.LANDSCAPE
         finish()
         if (id == null || report.errors.isNotEmpty()) return null
         return Preset(
@@ -101,6 +102,7 @@ object PresetParser {
             effects = effects,
             ducking = ducking,
             export = export,
+            shape = shape,
         )
     }
 
