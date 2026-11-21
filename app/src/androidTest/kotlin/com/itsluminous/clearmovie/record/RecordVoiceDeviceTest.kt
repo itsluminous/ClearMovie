@@ -5,6 +5,7 @@ import android.app.UiAutomation
 import android.content.pm.PackageManager
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -12,6 +13,8 @@ import androidx.compose.ui.test.junit4.android.ComposeNotIdleException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.core.content.ContextCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ActivityScenario
@@ -43,6 +46,8 @@ import com.itsluminous.clearmovie.ui.editor.RECORDING_PANEL_TAG
 import com.itsluminous.clearmovie.ui.editor.RECORDING_STOP_TAG
 import com.itsluminous.clearmovie.ui.editor.RECORD_OPTION
 import com.itsluminous.clearmovie.ui.editor.insertOptionTag
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_MAIN_ROW_TAG
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TOGGLE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.rowAddTag
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -109,10 +114,18 @@ class RecordVoiceDeviceTest {
 
     private fun openRecordVoice() {
         waitFor(hasTestTag(PREVIEW_TAG), LAUNCH_TIMEOUT_MS)
+        // On a small screen (CI's is 320x640) the voice row is folded away under "Show all rows": open them.
+        waitFor(hasTestTag(TIMELINE_MAIN_ROW_TAG))
+        Thread.sleep(500)
+        if (compose.onAllNodes(hasTestTag(rowAddTag(voiceRow.value))).fetchSemanticsNodes().isEmpty()) {
+            waitFor(hasTestTag(TIMELINE_ROWS_TOGGLE_TAG))
+            compose.onNodeWithTag(TIMELINE_ROWS_TOGGLE_TAG).performClick()
+        }
         waitFor(hasTestTag(rowAddTag(voiceRow.value)))
-        compose.onNodeWithTag(rowAddTag(voiceRow.value)).performClick()
+        // Its semantics action, not a touch: the "+" may sit under the floating preview on a small screen.
+        compose.onNodeWithTag(rowAddTag(voiceRow.value)).performSemanticsAction(SemanticsActions.OnClick)
         waitFor(hasTestTag(insertOptionTag(RECORD_OPTION)))
-        compose.onNodeWithTag(insertOptionTag(RECORD_OPTION)).performClick()
+        compose.onNodeWithTag(insertOptionTag(RECORD_OPTION)).performScrollTo().performClick()
     }
 
     /** Taps the system permission dialog's refusal ("Don't allow", or on Android 10 its "don't ask again" form the second time). */
@@ -189,7 +202,7 @@ class RecordVoiceDeviceTest {
             waitFor(hasTestTag(RECORDING_STOP_TAG), COUNTDOWN_TIMEOUT_MS)
             assertThat(mic.started).isTrue()
             Thread.sleep(RECORD_MS)
-            compose.onNodeWithTag(RECORDING_STOP_TAG).performClick()
+            compose.onNodeWithTag(RECORDING_STOP_TAG).performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(TIMEOUT_MS) { clipOnVoiceRow() != null }
             val clip = clipOnVoiceRow()!!
             Log.i(ExportHarness.TAG, "Recorded ${clip.durationMs} ms at ${clip.startMs} ms: ${clip.media}")
@@ -235,7 +248,7 @@ class RecordVoiceDeviceTest {
                 // It goes on recording in the new activity.
                 Thread.sleep(RECORD_MS)
                 assertThat(mic.released).isFalse()
-                compose.onNodeWithTag(RECORDING_STOP_TAG).performClick()
+                compose.onNodeWithTag(RECORDING_STOP_TAG).performSemanticsAction(SemanticsActions.OnClick)
                 compose.waitUntil(TIMEOUT_MS) { clipOnVoiceRow() != null }
                 assertThat(clipOnVoiceRow()!!.durationMs).isAtLeast(RECORD_MS)
             }
