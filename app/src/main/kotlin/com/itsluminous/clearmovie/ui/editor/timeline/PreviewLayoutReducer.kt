@@ -24,25 +24,33 @@ data class LayoutInput(
     val rulerDp: Double,
     /** The rows in screen order. */
     val rows: List<RowSpec>,
-    /** The "Show all rows" / "Show fewer rows" control. */
+    /** The "Show all rows" / "Show fewer rows" control (stacked only). */
     val toggleDp: Double,
-    /** The row holding the selected item, which is kept on screen first after MAIN. */
+    /** The row holding the selected item (the timeline scrolls it into view). */
     val selectedRow: String? = null,
     /** The width the preview gets when stacked. */
     val previewWidthDp: Double = windowWidthDp,
     /** The video's width over its height (cm-aspect-ratio): 16:9, upright 9:16 or square. */
     val canvasAspect: Double = 16.0 / 9.0,
+    /** The gap under each row ([RowMetrics.gapDp]). */
+    val rowGapDp: Double = PreviewLayoutReducer.ROW_GAP_DP,
 )
 
-/** Where the preview is and which rows show. */
+/**
+ * Where the preview is and which rows show. Every row is on the timeline,
+ * which scrolls up and down when they don't all fit (cm-timeline-scroll).
+ */
 sealed interface PreviewLayout {
-    /** The rows shown, in screen order. */
+    /** The rows on the timeline, in screen order: every row. */
     val visibleRows: List<String>
 
-    /** Rows left out ("Show all rows (N more)"); empty when everything shows. */
+    /**
+     * The rows below the ones that fit at the top, reached by scrolling or
+     * behind "Show all rows (N more)"; empty when everything fits.
+     */
     val hiddenRows: List<String>
 
-    /** Two panes: the preview fills the left pane. */
+    /** Two panes: the preview fills the left pane, and the rows scroll (no Show all rows there). */
     data class Docked(
         override val visibleRows: List<String>,
         override val hiddenRows: List<String>,
@@ -64,7 +72,7 @@ sealed interface PreviewLayout {
         override val hiddenRows: List<String> get() = emptyList()
     }
 
-    /** Stacked, the preview at its minimum and only the rows that fit. */
+    /** Stacked, the preview at its minimum and the rows scrolling under it, with Show all rows below. */
     data class Partial(
         val previewDp: Double,
         override val visibleRows: List<String>,
@@ -116,7 +124,8 @@ sealed interface LayoutEvent {
  * | Partial  | `minPreview + rows > space`, all rows not asked   |
  * | Floating | `minPreview + rows > space`, all rows asked       |
  *
- * Two panes are always Docked. `minPreview = max(180, 0.28 x windowHeight)`,
+ * Two panes are always Docked, every row on the scrolling timeline and no
+ * Show all rows. `minPreview = max(180, 0.28 x windowHeight)`,
  * except where the natural preview is already no taller than that (a phone
  * held upright: 231 dp against 249 dp), where it may shrink to 180 dp, so the
  * preview still makes room for rows on the phone that needs it most.
@@ -175,16 +184,9 @@ object PreviewLayoutReducer {
         val all = input.rows.map { it.key }
         val rowsDp = rowsHeight(input, input.rows)
         if (input.twoPane) {
-            // The right pane: the rows below the ruler, the rest behind "Show all rows" (which then scrolls).
-            val space = input.windowHeightDp - input.chromeHeightDp
-            val layout =
-                if (state.allRowsRequested || rowsDp <= space) {
-                    PreviewLayout.Docked(all, emptyList())
-                } else {
-                    val shown = fitting(input, space - input.toggleDp)
-                    PreviewLayout.Docked(shown, all - shown.toSet())
-                }
-            return state.copy(layout = layout)
+            // The right pane: every row under the ruler, scrolling when they don't fit. A request for all
+            // rows is kept for a move back to stacked.
+            return state.copy(layout = PreviewLayout.Docked(all, emptyList()))
         }
         val space = input.windowHeightDp - input.chromeHeightDp
         val full = fullPreviewDp(input.previewWidthDp, input.canvasAspect)
@@ -204,8 +206,8 @@ object PreviewLayoutReducer {
             }
 
             else -> {
-                val shown = fitting(input, space - min - input.toggleDp)
-                state.copy(layout = PreviewLayout.Partial(min, shown, all - shown.toSet()))
+                val fits = fitting(input, space - min - input.toggleDp)
+                state.copy(layout = PreviewLayout.Partial(min, all, all - fits.toSet()))
             }
         }
     }
@@ -214,37 +216,24 @@ object PreviewLayoutReducer {
     fun rowsHeight(
         input: LayoutInput,
         rows: List<RowSpec>,
-    ): Double = input.rulerDp + rows.sumOf { it.heightDp } + ROW_GAP_DP * rows.size
+    ): Double = input.rulerDp + rows.sumOf { it.heightDp } + input.rowGapDp * rows.size
 
     /**
-     * The rows that fit in [spaceDp], in screen order. MAIN is always shown,
-     * then the row of the selected item, then the others top first
-     * (ARCHITECTURE section 11.3).
+     * The rows that fit whole in [spaceDp] from the top, in screen order: what
+     * the timeline shows before it is scrolled. The rest are "N more".
      */
     fun fitting(
         input: LayoutInput,
         spaceDp: Double,
     ): List<String> {
-        val byKey = input.rows.associateBy { it.key }
-        val priority =
-            buildList {
-                input.rows.filter { it.isMain }.forEach { add(it.key) }
-                input.selectedRow?.takeIf { it in byKey && it !in this }?.let { add(it) }
-                input.rows
-                    .map { it.key }
-                    .filter { it !in this }
-                    .forEach { add(it) }
-            }
         var used = input.rulerDp
-        val chosen = mutableSetOf<String>()
-        for (key in priority) {
-            val row = byKey.getValue(key)
-            val next = used + row.heightDp + ROW_GAP_DP
-            if (next > spaceDp && !row.isMain) continue
-            used = next
-            chosen += key
+        val fits = mutableListOf<String>()
+        for (row in input.rows) {
+            used += row.heightDp + input.rowGapDp
+            if (used > spaceDp) break
+            fits += row.key
         }
-        return input.rows.map { it.key }.filter { it in chosen }
+        return fits
     }
 
     const val ROW_GAP_DP = 8.0

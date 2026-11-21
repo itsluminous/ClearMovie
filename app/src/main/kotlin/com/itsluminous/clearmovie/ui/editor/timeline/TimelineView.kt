@@ -43,14 +43,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -65,6 +68,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.ScrollAxisRange
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -74,10 +78,12 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.scrollBy
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.verticalScrollAxisRange
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,6 +117,9 @@ const val TIMELINE_RULER_TAG = "timeline_ruler"
 const val TIMELINE_PLAYHEAD_TAG = "timeline_playhead"
 const val TIMELINE_MAIN_ROW_TAG = "timeline_main_row"
 const val TIMELINE_ROWS_TOGGLE_TAG = "timeline_rows_toggle"
+
+/** The rows under the ruler, which scroll up and down. */
+const val TIMELINE_ROWS_TAG = "timeline_rows"
 
 fun clipTag(id: ClipId) = "timeline_clip_${id.value}"
 
@@ -235,14 +244,25 @@ interface TimelineActions {
     ) {}
 }
 
-/** Heights at a font scale (ARCHITECTURE section 11.3: MAIN 72 dp, others 48 dp, growing with the text). */
+/**
+ * Heights at a font scale (ARCHITECTURE section 11.3: MAIN 72 dp, others
+ * 48 dp, 8 dp between them, growing with the text). In a [compact] window (a
+ * phone held sideways, under 480 dp tall) the rows are slimmer, MAIN 64 dp
+ * and the others 40 dp with 4 dp between them, so at least four rows show on
+ * a 411 dp tall phone (cm-timeline-scroll). MAIN keeps room for a transition
+ * marker under its lifted "+" (TimelineGeometry.markerCentre is 48 dp down).
+ */
 data class RowMetrics(
     val fontScale: Float,
+    val compact: Boolean = false,
 ) {
     private val grow = fontScale.coerceAtLeast(1f)
     val rulerDp: Double get() = 28.0 * grow
-    val mainDp: Double get() = 72.0 + 24.0 * (grow - 1)
-    val rowDp: Double get() = 48.0 * grow
+    val mainDp: Double get() = (if (compact) 64.0 else 72.0) + 24.0 * (grow - 1)
+    val rowDp: Double get() = (if (compact) 40.0 else 48.0) * grow
+
+    /** The gap under each row. */
+    val gapDp: Double get() = if (compact) 4.0 else PreviewLayoutReducer.ROW_GAP_DP
 
     /** The row headers are an icon each (the owner's call: no label, so the rows keep the width); 48 dp to touch. */
     val headerDp: Double get() = HEADER_DP
@@ -391,7 +411,7 @@ fun TimelineView(
                 selectedTrimmable = selectedClip?.isContent() == true && drag == null,
             )
         val shown = rows.filter { it.key in visibleRows }
-        val bands = RowOrder.bands(shown.map { it.key to metrics.heightOf(it.type) }, PreviewLayoutReducer.ROW_GAP_DP)
+        val bands = RowOrder.bands(shown.map { it.key to metrics.heightOf(it.type) }, metrics.gapDp)
         val mainTopInRows = shown.indexOfFirst { it.type == RowType.MAIN }.let { i -> if (i >= 0) bands[i].topDp else 0.0 }
         val timedPlus =
             shown.filter { it.type != RowType.MAIN }.associate { row ->
@@ -399,6 +419,29 @@ fun TimelineView(
             }
         val haptics = LocalHapticFeedback.current
         val density = LocalDensity.current
+        // What the rows keep in view (cm-timeline-scroll): the selected row, or the row of the selected item,
+        // when it changes (a new caption on a new row at the bottom is seen at once), and again when the rows'
+        // room changes (a turn of the phone, a panel opening); with nothing selected, MAIN when the room changes
+        // (the editor opening). Letting go of a selection scrolls nothing.
+        val mainKey = shown.firstOrNull { it.type == RowType.MAIN }?.key
+        val focusKey =
+            selectedRow ?: selected?.let { id ->
+                if (slots.any { it.clip.id == id }) mainKey else shown.firstOrNull { r -> r.clips.any { it.id == id } }?.key
+            }
+        val latestBands by rememberUpdatedState(bands)
+        val viewport = rowScroll.viewportSize
+        val room = remember { RevealRoom() }
+        LaunchedEffect(focusKey, metrics, viewport) {
+            val roomChanged = room.metrics != metrics || room.viewportPx != viewport
+            room.metrics = metrics
+            room.viewportPx = viewport
+            val key = focusKey ?: mainKey.takeIf { roomChanged } ?: return@LaunchedEffect
+            // After the frame that lays the rows out with it (a row just added has no room to scroll to before).
+            withFrameNanos { }
+            val band = latestBands.firstOrNull { it.key == key } ?: return@LaunchedEffect
+            val target = RowOrder.revealScroll(band, density.density, rowScroll.value, rowScroll.viewportSize)
+            if (target != null) rowScroll.animateScrollTo(target)
+        }
         // The handler outlives recompositions: it always calls the latest callbacks.
         val latestOnZoom by rememberUpdatedState(onZoom)
         val latestActionsState = rememberUpdatedState(actions)
@@ -452,9 +495,23 @@ fun TimelineView(
             ) {
                 Column(Modifier.fillMaxWidth()) {
                     Ruler(z, totalMs, playheadMs, playing, metrics, spanWidth, latestActions)
-                    Column(Modifier.fillMaxWidth().verticalScroll(rowScroll, enabled = false)) {
+                    // Scrolled by the pointer handler above (a vertical swipe), so a scroll never fights a trim, a drag
+                    // or a pinch; TalkBack scrolls it through these semantics.
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag(TIMELINE_ROWS_TAG)
+                            .semantics {
+                                verticalScrollAxisRange =
+                                    ScrollAxisRange(value = { rowScroll.value.toFloat() }, maxValue = { rowScroll.maxValue.toFloat() })
+                                scrollBy { _, y ->
+                                    rowScroll.dispatchRawDelta(y)
+                                    true
+                                }
+                            }.verticalScroll(rowScroll, enabled = false),
+                    ) {
                         for ((i, row) in shown.withIndex()) {
-                            val lift = rowLift(rowDrag, bands, i, row.key)
+                            val lift = rowLift(rowDrag, bands, i, row.key, metrics.gapDp)
                             val dragged = rowDrag?.key == row.key
                             Row(
                                 Modifier
@@ -489,7 +546,7 @@ fun TimelineView(
                                     }
                                 }
                             }
-                            Spacer(Modifier.height(PreviewLayoutReducer.ROW_GAP_DP.dp))
+                            Spacer(Modifier.height(metrics.gapDp.dp))
                         }
                     }
                 }
@@ -518,12 +575,22 @@ fun TimelineView(
                             val band = bands[i]
                             // MAIN's box starts [lift] above its row, so a lifted "+" fits; the others start at their row.
                             val above = if (row.type == RowType.MAIN) 0.0 else lift
+                            val isMain = row.type == RowType.MAIN
                             Box(
                                 Modifier
-                                    // The scroll is read when placing, not composing: it changes every frame of a scroll.
+                                    // The scroll is read when placing and drawing, not composing: it changes every frame of a scroll.
                                     .offset { IntOffset(0, (((band.topDp + above) * density.density) - rowScroll.value).roundToInt()) }
                                     .fillMaxWidth()
-                                    .height((band.heightDp + lift - above).dp),
+                                    .height((band.heightDp + lift - above).dp)
+                                    // A row scrolled up under the ruler takes its "+" with it: nothing is drawn above the rows,
+                                    // except MAIN's lifted "+" while MAIN's top is in view.
+                                    .drawWithContent {
+                                        val boxTop = (band.topDp + above) * density.density - rowScroll.value
+                                        val rowsTop = lift * density.density
+                                        val mainInView = isMain && boxTop >= 0
+                                        val top = if (mainInView) 0f else (rowsTop - boxTop).toFloat()
+                                        clipRect(top = top) { this@drawWithContent.drawContent() }
+                                    },
                             ) {
                                 if (row.type == RowType.MAIN && shownSlots.isEmpty()) {
                                     // Nothing on MAIN yet: its one "+" adds the first photos and videos.
@@ -563,9 +630,15 @@ fun TimelineView(
                     }
                 }
             }
-            RowsToggle(hiddenRows, allRowsRequested, rows.size > visibleRows.size || allRowsRequested, metrics, actions)
+            RowsToggle(hiddenRows, allRowsRequested, hiddenRows.isNotEmpty() || allRowsRequested, metrics, actions)
         }
     }
+}
+
+/** The room the rows were last kept in view for (not state: changing it recomposes nothing). */
+private class RevealRoom {
+    var metrics: RowMetrics? = null
+    var viewportPx: Int = -1
 }
 
 /** How far row [index] is drawn from its place while a row is dragged: the dragged one follows the finger, the others make room. */
@@ -574,12 +647,13 @@ private fun rowLift(
     bands: List<RowBand>,
     index: Int,
     key: String,
+    gapDp: Double,
 ): Double {
     if (drag == null) return 0.0
     if (drag.key == key) return drag.dyDp
     val from = bands.indexOfFirst { it.key == drag.key }
     if (from < 0) return 0.0
-    val room = bands[from].heightDp + PreviewLayoutReducer.ROW_GAP_DP
+    val room = bands[from].heightDp + gapDp
     return when {
         index in (from + 1)..drag.dropShownIndex -> -room
         index in drag.dropShownIndex until from -> room
@@ -775,7 +849,9 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
             fun dp(px: Float) = (px / d).toDouble()
             val c0 = current()
             val start = hit(c0, metrics, dp(first.position.x), dp(first.position.y), rowScroll.value / d)
-            val arbiter = TimelineGestureArbiter(dp(viewConfiguration.touchSlop))
+            val arbiter = TimelineGestureArbiter(dp(viewConfiguration.touchSlop), rowsScroll = rowScroll.maxValue > 0)
+            // A row dragged by its icon moves with the rows when they scroll under it (an edge of the rows).
+            val scrollAtDown = rowScroll.value
             arbiter.down(first.id.value, dp(first.position.x), dp(first.position.y), first.uptimeMillis, start.kind)
             first.consume()
             touched(true)
@@ -891,18 +967,15 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         GestureMode.SCROLL -> {
                             val ch = event.changes.firstOrNull { it.id == first.id } ?: pressed.firstOrNull()
                             if (ch != null) {
-                                val dx = dp(lastScroll.x - ch.position.x)
-                                val dy = lastScroll.y - ch.position.y
-                                if (before != GestureMode.SCROLL) {
-                                    // The slop was spent getting here: start from the down point, no jump.
-                                    val sx = dp(first.position.x - ch.position.x)
-                                    live = TimelineZoom.scrollBy(live, sx, c.totalMs, c.spanWidth)
-                                    rowScroll.dispatchRawDelta(first.position.y - ch.position.y)
+                                // The slop was spent getting here: the first step is from the down point, no jump.
+                                val from = if (before != GestureMode.SCROLL) first.position else lastScroll
+                                // One way only (cm-timeline-scroll): up and down the rows, or along the time.
+                                if (arbiter.axis == ScrollAxis.ROWS) {
+                                    rowScroll.dispatchRawDelta(from.y - ch.position.y)
                                 } else {
-                                    live = TimelineZoom.scrollBy(live, dx, c.totalMs, c.spanWidth)
-                                    rowScroll.dispatchRawDelta(dy)
+                                    live = TimelineZoom.scrollBy(live, dp(from.x - ch.position.x), c.totalMs, c.spanWidth)
+                                    onZoom(live)
                                 }
-                                onZoom(live)
                                 lastScroll = ch.position
                             }
                             event.changes.forEach(PointerInputChange::consume)
@@ -943,8 +1016,13 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         GestureMode.DRAG -> {
                             val ch = event.changes.firstOrNull { it.id == first.id }
                             if (ch != null) {
+                                // Near the top or bottom of the rows, a row or an item being dragged scrolls them.
+                                val moving = start.held()
+                                if (moving is Hit.OnHeader || moving is Hit.OnTimedClip) {
+                                    edgeScroll(rowScroll, dp(ch.position.y), metrics, size.height / d.toDouble(), d)
+                                }
                                 dragDx = dp(ch.position.x - first.position.x)
-                                dragDy = dp(ch.position.y - first.position.y)
+                                dragDy = dp(ch.position.y - first.position.y) + (rowScroll.value - scrollAtDown) / d
                                 when (val held = start.held()) {
                                     is Hit.OnClip -> {
                                         val i = held.index
@@ -1080,9 +1158,10 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                         // Where the finger let go, which may be further than the last move seen.
                                         event.changes.firstOrNull { it.id == first.id }?.let { ch ->
                                             dragDx = dp(ch.position.x - first.position.x)
-                                            dragDy = dp(ch.position.y - first.position.y)
+                                            dragDy = dp(ch.position.y - first.position.y) + (rowScroll.value - scrollAtDown) / d
                                         }
-                                        val fingerInRows = dp(first.position.y) + dragDy - metrics.rulerDp + rowScroll.value / d
+                                        // dragDy already holds the rows' scroll since the finger went down.
+                                        val fingerInRows = dp(first.position.y) + dragDy - metrics.rulerDp + scrollAtDown / d
                                         endDrag(start.held(), c, dragDx, dragDy, fingerInRows, actions)
                                     }
                                     previews.clear()
@@ -1175,6 +1254,33 @@ private fun endDrag(
 }
 
 private const val SEEK_EVERY_MS = 80L
+
+/**
+ * A row or an item dragged with the finger within [EDGE_DP] of the top or
+ * bottom of the rows scrolls them that way, faster nearer the edge (at most
+ * [EDGE_STEP_DP] a move), so it can be taken to a row out of view.
+ */
+private fun edgeScroll(
+    rowScroll: ScrollState,
+    fingerYDp: Double,
+    metrics: RowMetrics,
+    heightDp: Double,
+    density: Float,
+) {
+    if (rowScroll.maxValue == 0) return
+    val toTop = fingerYDp - metrics.rulerDp
+    val toBottom = heightDp - fingerYDp
+    val stepDp =
+        when {
+            toTop < EDGE_DP -> -EDGE_STEP_DP * (1 - toTop.coerceAtLeast(0.0) / EDGE_DP)
+            toBottom < EDGE_DP -> EDGE_STEP_DP * (1 - toBottom.coerceAtLeast(0.0) / EDGE_DP)
+            else -> 0.0
+        }
+    if (stepDp != 0.0) rowScroll.dispatchRawDelta((stepDp * density).toFloat())
+}
+
+private const val EDGE_DP = 32.0
+private const val EDGE_STEP_DP = 4.0
 
 /** What a touch landed on, with the details the handler needs. */
 private sealed interface Hit {

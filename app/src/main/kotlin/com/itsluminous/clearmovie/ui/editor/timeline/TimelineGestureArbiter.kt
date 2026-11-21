@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.ui.editor.timeline
 
+import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
@@ -8,6 +9,9 @@ import kotlin.math.hypot
  * the row menu, anything else on it scrolls.
  */
 enum class GestureStart { CLIP, TRIM_START, TRIM_END, RULER, PLUS, HEADER, ROW, EMPTY }
+
+/** Which way a scroll moves: along the time (the zoom's scroll) or up and down the rows. */
+enum class ScrollAxis { TIME, ROWS }
 
 /** What a gesture has turned out to be. */
 enum class GestureMode {
@@ -40,7 +44,12 @@ enum class GestureMode {
  *    scroll in progress gives way; a trim or scrub does only within the first
  *    [PINCH_WINDOW_MS]).
  * 2. Movement past the touch slop before [LONG_PRESS_MS] is a **scroll**, or
- *    a **trim** or **scrub** when it started on a handle or the ruler.
+ *    a **trim** or **scrub** when it started on a handle or the ruler. A
+ *    scroll moves one way only ([axis], cm-timeline-scroll): up and down the
+ *    rows when they scroll ([rowsScroll]) and the finger went more up or
+ *    down than sideways, otherwise along the time. On a handle only a
+ *    clearly upright move ([UPRIGHT] times more up than sideways) scrolls the
+ *    rows; anything else trims.
  * 3. [LONG_PRESS_MS] without movement on an item, a row header or a row's
  *    empty space is a **long-press**; moving afterwards more than twice the
  *    slop **drags** (an item, or a row by its header; on a row's empty space
@@ -52,10 +61,16 @@ enum class GestureMode {
  */
 class TimelineGestureArbiter(
     private val touchSlopDp: Double = DEFAULT_SLOP_DP,
+    /** Whether the rows are taller than their room, so an upright move scrolls them. */
+    private val rowsScroll: Boolean = false,
 ) {
     var mode: GestureMode = GestureMode.ENDED
         private set
     var start: GestureStart = GestureStart.EMPTY
+        private set
+
+    /** The way a [GestureMode.SCROLL] moves, decided once when it starts. */
+    var axis: ScrollAxis = ScrollAxis.TIME
         private set
 
     private var firstId = -1L
@@ -82,6 +97,7 @@ class TimelineGestureArbiter(
             downX = x
             downY = y
             start = target
+            axis = ScrollAxis.TIME
             mode = GestureMode.PENDING
             return mode
         }
@@ -111,13 +127,23 @@ class TimelineGestureArbiter(
         // Once held, a hand that shakes a little still opens the menu: a drag needs twice the slop.
         val slop = if (mode == GestureMode.LONG_PRESSED) touchSlopDp * HELD_SLOP_FACTOR else touchSlopDp
         if (distance <= slop) return mode
-        mode =
+        val dx = abs(x - downX)
+        val dy = abs(y - downY)
+        val next =
             when (mode) {
                 GestureMode.PENDING -> {
                     when (start) {
-                        GestureStart.TRIM_START, GestureStart.TRIM_END -> GestureMode.TRIM
-                        GestureStart.RULER -> GestureMode.SCRUB
-                        else -> GestureMode.SCROLL
+                        GestureStart.TRIM_START, GestureStart.TRIM_END -> {
+                            if (rowsScroll && dy > UPRIGHT * dx) GestureMode.SCROLL else GestureMode.TRIM
+                        }
+
+                        GestureStart.RULER -> {
+                            GestureMode.SCRUB
+                        }
+
+                        else -> {
+                            GestureMode.SCROLL
+                        }
                     }
                 }
 
@@ -130,6 +156,10 @@ class TimelineGestureArbiter(
                     mode
                 }
             }
+        if (next == GestureMode.SCROLL && mode != GestureMode.SCROLL) {
+            axis = if (rowsScroll && dy > dx) ScrollAxis.ROWS else ScrollAxis.TIME
+        }
+        mode = next
         return mode
     }
 
@@ -176,6 +206,9 @@ class TimelineGestureArbiter(
 
         /** After a long-press, how many touch slops the finger must move before it drags. */
         const val HELD_SLOP_FACTOR = 2.0
+
+        /** How many times more up or down than sideways a move on a trim handle must go to scroll the rows. */
+        const val UPRIGHT = 2.0
 
         private val LONG_PRESSABLE = setOf(GestureStart.CLIP, GestureStart.HEADER, GestureStart.ROW)
         private val DONE = setOf(GestureMode.TAP, GestureMode.MENU, GestureMode.CANCELLED, GestureMode.ENDED)

@@ -156,4 +156,76 @@ class TimelineGestureArbiterTest {
         assertThat(a.isActive).isFalse()
         assertThat(a.down(5, 10.0, 80.0, 1000, GestureStart.EMPTY)).isEqualTo(GestureMode.PENDING)
     }
+
+    // ---------------------------------------------------------------- one way at a time (cm-timeline-scroll)
+
+    private fun rowsArbiter() = TimelineGestureArbiter(touchSlopDp = 8.0, rowsScroll = true)
+
+    @Test
+    fun `an upright swipe scrolls the rows and a sideways one the time, decided once`() {
+        val a = rowsArbiter()
+        a.down(1, 100.0, 200.0, 0, GestureStart.ROW)
+        assertThat(a.move(1, 104.0, 188.0, 40)).isEqualTo(GestureMode.SCROLL)
+        assertThat(a.axis).isEqualTo(ScrollAxis.ROWS)
+        // Turning sideways later does not change it.
+        a.move(1, 180.0, 186.0, 80)
+        assertThat(a.axis).isEqualTo(ScrollAxis.ROWS)
+        a.up(1, 120)
+        a.down(2, 100.0, 200.0, 200, GestureStart.CLIP)
+        a.move(2, 112.0, 205.0, 240)
+        assertThat(a.mode).isEqualTo(GestureMode.SCROLL)
+        assertThat(a.axis).isEqualTo(ScrollAxis.TIME)
+        a.move(2, 112.0, 120.0, 280)
+        assertThat(a.axis).isEqualTo(ScrollAxis.TIME)
+    }
+
+    @Test
+    fun `when the rows all fit every scroll moves the time`() {
+        val a = arbiter()
+        a.down(1, 100.0, 200.0, 0, GestureStart.HEADER)
+        assertThat(a.move(1, 100.0, 150.0, 40)).isEqualTo(GestureMode.SCROLL)
+        assertThat(a.axis).isEqualTo(ScrollAxis.TIME)
+    }
+
+    @Test
+    fun `a trim handle trims unless the move is clearly upright and the rows scroll`() {
+        val a = rowsArbiter()
+        a.down(1, 100.0, 200.0, 0, GestureStart.TRIM_END)
+        // More up than sideways, but not twice: still a trim.
+        assertThat(a.move(1, 112.0, 180.0, 40)).isEqualTo(GestureMode.TRIM)
+        a.up(1, 80)
+        a.down(2, 100.0, 200.0, 200, GestureStart.TRIM_START)
+        assertThat(a.move(2, 103.0, 180.0, 240)).isEqualTo(GestureMode.SCROLL)
+        assertThat(a.axis).isEqualTo(ScrollAxis.ROWS)
+        a.up(2, 280)
+        // Rows that all fit: the same upright move trims.
+        val b = arbiter()
+        b.down(3, 100.0, 200.0, 0, GestureStart.TRIM_START)
+        assertThat(b.move(3, 103.0, 180.0, 40)).isEqualTo(GestureMode.TRIM)
+    }
+
+    @Test
+    fun `long-press drags and the ruler scrub are not taken by the rows' scroll`() {
+        val a = rowsArbiter()
+        a.down(1, 100.0, 200.0, 0, GestureStart.CLIP)
+        assertThat(a.tick(500)).isEqualTo(GestureMode.LONG_PRESSED)
+        assertThat(a.move(1, 100.0, 160.0, 560)).isEqualTo(GestureMode.DRAG)
+        a.up(1, 600)
+        a.down(2, 100.0, 10.0, 700, GestureStart.RULER)
+        assertThat(a.move(2, 100.0, 60.0, 740)).isEqualTo(GestureMode.SCRUB)
+        a.up(2, 780)
+        // A row's empty space held, then moved up: it scrolls the rows, as it scrolled before.
+        a.down(3, 100.0, 200.0, 800, GestureStart.ROW)
+        a.tick(1300)
+        assertThat(a.move(3, 100.0, 150.0, 1340)).isEqualTo(GestureMode.SCROLL)
+        assertThat(a.axis).isEqualTo(ScrollAxis.ROWS)
+    }
+
+    @Test
+    fun `a second finger still pinches out of an upright scroll`() {
+        val a = rowsArbiter()
+        a.down(1, 100.0, 200.0, 0, GestureStart.ROW)
+        a.move(1, 100.0, 170.0, 40)
+        assertThat(a.down(2, 200.0, 200.0, 80, GestureStart.ROW)).isEqualTo(GestureMode.PINCH)
+    }
 }

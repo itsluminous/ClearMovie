@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.ui.editor.timeline
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.ResizeRange
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** What kind of item a clip on a row other than MAIN is, for its icon, colour and spoken name. */
 enum class RowClipKind { TEXT, PHOTO, VIDEO, OVERLAY, SOUND }
@@ -161,6 +162,28 @@ object RowOrder {
     ): List<RowBand> {
         var top = 0.0
         return shownHeights.map { (key, h) -> RowBand(key, top, h).also { top += h + gapDp } }
+    }
+
+    /**
+     * The scroll (px) that brings [band] whole into a viewport of
+     * [viewportPx] scrolled to [scrollPx], moving as little as it can, or
+     * null when it is already whole in view (or nothing is laid out yet). A
+     * row taller than the viewport shows its top.
+     */
+    fun revealScroll(
+        band: RowBand,
+        density: Float,
+        scrollPx: Int,
+        viewportPx: Int,
+    ): Int? {
+        if (viewportPx <= 0) return null
+        val top = (band.topDp * density).roundToInt()
+        val bottom = (band.bottomDp * density).roundToInt()
+        return when {
+            top < scrollPx -> top
+            bottom > scrollPx + viewportPx -> minOf(bottom - viewportPx, top)
+            else -> null
+        }
     }
 
     /**

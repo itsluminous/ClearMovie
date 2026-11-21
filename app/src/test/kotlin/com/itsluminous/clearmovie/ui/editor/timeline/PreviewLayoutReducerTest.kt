@@ -59,11 +59,15 @@ class PreviewLayoutReducerTest {
         s = measured(s, wide(rows(9)))
         val partial = s.layout as PreviewLayout.Partial
         assertThat(partial.previewDp).isWithin(1e-9).of(PreviewLayoutReducer.minPreviewDp(891.0, 393.75))
+        // Every row is on the timeline (it scrolls); the ones below those that fit are "N more".
+        assertThat(partial.visibleRows).isEqualTo(rows(9).map { it.key })
         assertThat(partial.hiddenRows).isNotEmpty()
-        assertThat(partial.visibleRows).contains("main")
-        // The rows shown fit under the minimum preview, with the Show all rows control.
-        val shownHeight = 28 + 80 + (partial.visibleRows.size - 1) * 56.0
-        assertThat(shownHeight + 48).isAtMost(641.0 - partial.previewDp)
+        val fits = partial.visibleRows - partial.hiddenRows.toSet()
+        assertThat(partial.hiddenRows).isEqualTo(partial.visibleRows.drop(fits.size))
+        // The rows that fit do so under the minimum preview, with the Show all rows control; one more would not.
+        val fitHeight = 28 + 80 + (fits.size - 1) * 56.0
+        assertThat(fitHeight + 48).isAtMost(641.0 - partial.previewDp)
+        assertThat(fitHeight + 56 + 48).isGreaterThan(641.0 - partial.previewDp)
         s = measured(s, wide(rows(5)))
         assertThat(s.layout).isInstanceOf(PreviewLayout.Shrunk::class.java)
         s = measured(s, wide(rows(2)))
@@ -81,17 +85,24 @@ class PreviewLayoutReducerTest {
     }
 
     @Test
-    fun `Partial keeps MAIN, then the selected row, then the others top first`() {
-        val many = rows(12)
-        val s = measured(PreviewLayoutState(), wide(many, selected = "r11"))
-        val shown = s.layout!!.visibleRows
-        assertThat(shown).contains("main")
-        assertThat(shown).contains("r11")
-        assertThat(shown.first()).isEqualTo("main")
-        // Screen order is kept: r11 comes last.
-        assertThat(shown.last()).isEqualTo("r11")
-        assertThat(shown).contains("r1")
-        assertThat(s.layout!!.hiddenRows.toSet() + shown.toSet()).isEqualTo(many.map { it.key }.toSet())
+    fun `Partial puts every row on the timeline in screen order, and counts the ones below those that fit`() {
+        // MAIN in the middle and a selected row at the bottom: nothing is taken out of order (the timeline
+        // scrolls to the selected row instead).
+        val many = (1..5).map { RowSpec("a$it", 48.0) } + RowSpec("main", 72.0, isMain = true) + (1..6).map { RowSpec("b$it", 48.0) }
+        val s = measured(PreviewLayoutState(), wide(many, selected = "b6"))
+        val layout = s.layout as PreviewLayout.Partial
+        assertThat(layout.visibleRows).isEqualTo(many.map { it.key })
+        val fits = layout.visibleRows - layout.hiddenRows.toSet()
+        assertThat(fits).isEqualTo(many.map { it.key }.take(fits.size))
+        assertThat(layout.hiddenRows).contains("b6")
+    }
+
+    @Test
+    fun `the gap under each row is the one measured, slimmer sideways`() {
+        val few = rows(3)
+        val normal = input(few)
+        assertThat(PreviewLayoutReducer.rowsHeight(normal, few)).isWithin(1e-9).of(28.0 + 72 + 48 + 48 + 3 * 8)
+        assertThat(PreviewLayoutReducer.rowsHeight(normal.copy(rowGapDp = 4.0), few)).isWithin(1e-9).of(28.0 + 72 + 48 + 48 + 3 * 4)
     }
 
     @Test
@@ -137,13 +148,13 @@ class PreviewLayoutReducerTest {
     }
 
     @Test
-    fun `two panes show the rows that fit and the rest behind Show all rows`() {
-        val s = measured(PreviewLayoutState(), input(rows(12), windowHeight = 480.0, twoPane = true, chrome = 200.0))
+    fun `two panes put every row on the scrolling timeline and have no Show all rows`() {
+        val s = measured(PreviewLayoutState(), input(rows(12), windowHeight = 411.0, twoPane = true, chrome = 200.0))
         val docked = s.layout as PreviewLayout.Docked
-        assertThat(docked.hiddenRows).isNotEmpty()
-        assertThat(docked.visibleRows.first()).isEqualTo("main")
+        assertThat(docked.visibleRows).hasSize(12)
+        assertThat(docked.hiddenRows).isEmpty()
         val all = PreviewLayoutReducer.reduce(s, LayoutEvent.ShowAllRows).layout as PreviewLayout.Docked
-        assertThat(all.hiddenRows).isEmpty()
+        assertThat(all).isEqualTo(docked)
     }
 
     @Test

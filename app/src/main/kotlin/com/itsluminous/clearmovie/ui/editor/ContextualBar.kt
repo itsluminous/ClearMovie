@@ -120,7 +120,9 @@ fun barGrowth(fontScale: Float): Float = if (fontScale < BAR_GROWTH_FROM) 1f els
  * (on the left in right-to-left languages). A long label is drawn smaller,
  * down to 10 sp, to stay on one line; only one too long even then takes a
  * second line, and then every button in the bar is two lines tall, so the
- * icons stay level. Buttons widen with text at 1.3x and larger.
+ * icons stay level. Buttons widen with text at 1.3x and larger. With
+ * one-line labels the bar is 56 dp tall, as the Play bar (cm-timeline-scroll),
+ * each button still 52 dp to touch.
  */
 @Composable
 fun ContextualBar(
@@ -212,7 +214,7 @@ private fun BarButton(
     Column(
         Modifier
             .width(width)
-            .heightIn(min = 72.dp)
+            .heightIn(min = BAR_HEIGHT)
             .padding(OUTER_PADDING)
             .clip(RoundedCornerShape(12.dp))
             .then(
@@ -231,7 +233,7 @@ private fun BarButton(
                         .toggleable(value = checked, enabled = action.enabled, role = Role.Switch) { onAction(action.action) }
                 },
             ).alpha(if (action.enabled) 1f else 0.38f)
-            .padding(horizontal = BUTTON_PADDING - OUTER_PADDING, vertical = 8.dp)
+            .padding(horizontal = BUTTON_PADDING - OUTER_PADDING, vertical = LABEL_PADDING)
             .testTag(barActionTag(action.action)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -361,4 +363,10 @@ fun barIcon(action: EditAction): Int =
 /** Room between a label and its button's edge: [OUTER_PADDING] outside the ripple, the rest inside. */
 private val BUTTON_PADDING = 4.dp
 private val OUTER_PADDING = 2.dp
+
+/** The bar's height with one-line labels: the Play bar's (a 24 dp icon, 4 dp, a 16 sp line, and 6 dp above and below). */
+private val BAR_HEIGHT = 56.dp
+
+/** Room above the icon and below the label, inside the touch area. */
+private val LABEL_PADDING = 4.dp
 private val FADE = 24.dp

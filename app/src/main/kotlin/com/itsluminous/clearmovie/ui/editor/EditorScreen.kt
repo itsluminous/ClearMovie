@@ -148,6 +148,7 @@ import com.itsluminous.clearmovie.ui.editor.timeline.itemName
 import com.itsluminous.clearmovie.ui.editor.timeline.model
 import com.itsluminous.clearmovie.ui.editor.timeline.rowName
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
+import com.itsluminous.clearmovie.ui.layout.HeightClass
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -253,7 +254,9 @@ fun EditorScreen(
     // The selected item's row, or the selected row: kept on screen first after MAIN when rows fold away.
     val focusRow = selectedClip?.let { project?.trackOf(it.id)?.id } ?: selectedTrack?.id
     val playheadMs = playhead.positionUs / 1000
-    val metrics = RowMetrics(LocalDensity.current.fontScale)
+    val fontScale = LocalDensity.current.fontScale
+    // One scroll for the rows in either layout, so turning the phone keeps it (cm-timeline-scroll).
+    val rowScroll = rememberScrollState()
     // Worked out once per project, not per playhead tick (it holds every item's handle limits).
     val rows = remember(project) { project?.let { timelineRows(it) }.orEmpty() }
     val missing = ui.missing.filterValues { it != MediaStatus.AVAILABLE }.keys
@@ -663,6 +666,10 @@ fun EditorScreen(
         AdaptiveScreen(Modifier.fillMaxSize().padding(padding)) { window ->
             val windowHeight = maxHeight.value.toDouble()
             val windowWidth = maxWidth.value.toDouble()
+            // A phone held sideways (under 480 dp tall): slimmer bars and rows, so at least four rows show.
+            val compact = window.height == HeightClass.COMPACT
+            val metrics = RowMetrics(fontScale, compact)
+            val topBarHeight = if (compact) TOP_BAR_HEIGHT_COMPACT else TOP_BAR_HEIGHT
             var topDp by remember { mutableFloatStateOf(0f) }
             var controlsDp by remember { mutableFloatStateOf(0f) }
             val density = LocalDensity.current
@@ -685,6 +692,7 @@ fun EditorScreen(
                     toggleDp = metrics.toggleDp,
                     selectedRow = focusRow?.value,
                     canvasAspect = canvasAspect.toDouble(),
+                    rowGapDp = metrics.gapDp,
                 )
             LaunchedEffect(input) { state.layoutEvent(LayoutEvent.Measured(input)) }
             // Worked out now from this frame's measurements (the reducer is pure), so a frame never shows the
@@ -703,7 +711,8 @@ fun EditorScreen(
                         rows = rows,
                         visibleRows = visible,
                         hiddenRows = hidden,
-                        allRowsRequested = state.layout.allRowsRequested,
+                        // "Show fewer rows" only while the preview floats; two panes have no Show all rows.
+                        allRowsRequested = layout is PreviewLayout.Floating,
                         selected = selectedClip?.id,
                         selectedRow = selectedTrack?.id?.value,
                         missing = missing,
@@ -714,7 +723,7 @@ fun EditorScreen(
                         onSpanWidth = { state.spanWidth = it },
                         thumbnail = thumbnail,
                         actions = timelineActions,
-                        rowScroll = rememberScrollState(),
+                        rowScroll = rowScroll,
                         metrics = metrics,
                     )
                 }
@@ -837,6 +846,7 @@ fun EditorScreen(
                             topActions,
                             openRename,
                             canRename,
+                            topBarHeight,
                             Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } }.then(lock),
                         )
                         timeline(Modifier.weight(1f).fillMaxWidth())
@@ -852,6 +862,7 @@ fun EditorScreen(
                             topActions,
                             openRename,
                             canRename,
+                            topBarHeight,
                             Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } }.then(lock),
                         )
                         val previewDp =
@@ -1016,7 +1027,8 @@ private fun replaceTrimmed(
  * The editor's top bar (kupraki's request): Back, the title (a tap renames
  * the video), Undo above Redo, Save video (the download arrow, which opens
  * the export sheet) and More options. Material's small top app bar, 64 dp
- * tall whatever the title; the window insets are already applied around it.
+ * tall whatever the title ([barHeight]: 56 dp on a phone held sideways,
+ * cm-timeline-scroll); the window insets are already applied around it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1026,6 +1038,7 @@ private fun TopBar(
     actions: EditorActions,
     onRename: () -> Unit,
     canRename: Boolean,
+    barHeight: Dp,
     modifier: Modifier,
 ) {
     // One height in every language and at every text size: the title fits itself to the room it has
@@ -1034,7 +1047,7 @@ private fun TopBar(
         title = {
             EditorTitle(
                 title,
-                TOP_BAR_HEIGHT,
+                barHeight,
                 onClick = onRename,
                 clickLabel = stringResource(R.string.editor_menu_rename),
                 enabled = canRename,
@@ -1050,7 +1063,7 @@ private fun TopBar(
             }
         },
         actions = {
-            UndoRedo(ui, actions)
+            UndoRedo(ui, actions, barHeight / 2)
             IconButton(onClick = actions::export, modifier = Modifier.size(TOUCH).testTag(EDITOR_EXPORT_TAG)) {
                 Icon(
                     painterResource(R.drawable.ic_download),
@@ -1060,7 +1073,7 @@ private fun TopBar(
             }
             MoreOptions(ui, actions, onRename, canRename)
         },
-        expandedHeight = TOP_BAR_HEIGHT,
+        expandedHeight = barHeight,
         windowInsets = WindowInsets(0, 0, 0, 0),
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         modifier = modifier.fillMaxWidth().testTag(EDITOR_TOP_BAR_TAG),
@@ -1069,6 +1082,9 @@ private fun TopBar(
 
 /** The editor's top bar is Material's small top app bar height, whatever the title. */
 private val TOP_BAR_HEIGHT = 64.dp
+
+/** Sideways on a phone the top bar is as tall as the bottom bar and the Play bar beside it. */
+private val TOP_BAR_HEIGHT_COMPACT = 56.dp
 
 /** The floating preview's width, as a share of the window's, for a landscape video. */
 private const val POPUP_WIDTH_SHARE = 0.45f
@@ -1139,18 +1155,20 @@ private fun MoreOptions(
 /**
  * Undo above Redo, one icon each, stacked with no gap so the title has their
  * width (kupraki's call). Two 48 dp buttons cannot stack in the 64 dp bar, so
- * each is 48 dp wide and half the bar tall: the one place in the editor a
- * touch target is under 48 dp tall. Each is named for TalkBack.
+ * each is 48 dp wide and half the bar tall ([height]: 32 dp, 28 dp sideways):
+ * the one place in the editor a touch target is under 48 dp tall. Each is
+ * named for TalkBack.
  */
 @Composable
 private fun UndoRedo(
     ui: EditorUi,
     actions: EditorActions,
+    height: Dp,
 ) {
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
         Column(Modifier.width(TOUCH)) {
-            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo)
-            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo)
+            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, height, actions::undo)
+            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, height, actions::redo)
         }
     }
 }
@@ -1161,15 +1179,13 @@ private fun StackedIcon(
     label: Int,
     enabled: Boolean,
     tag: String,
+    height: Dp,
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(TOUCH, STACKED_HEIGHT).testTag(tag)) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(TOUCH, height).testTag(tag)) {
         Icon(painterResource(icon), contentDescription = stringResource(label), modifier = Modifier.size(ICON))
     }
 }
-
-/** Each of the stacked Undo and Redo is half the top bar tall. */
-private val STACKED_HEIGHT = TOP_BAR_HEIGHT / 2
 
 /**
  * The playback strip under the preview: Play, the time, and "As exported"

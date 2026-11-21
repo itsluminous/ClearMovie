@@ -209,4 +209,38 @@ class RowGeometryTest {
         assertThat(TimedRowGeometry.hitTest(clips, pn, zoom, 405.0, ClipId("n"))).isEqualTo(TimedHit.Handle(ClipId("n"), true))
         assertThat(TimedRowGeometry.hitTest(clips, pn, zoom, 425.0, ClipId("n"))).isEqualTo(TimedHit.Handle(ClipId("n"), false))
     }
+
+    @Test
+    fun `a row scrolls into view by as little as it can, and a row taller than the view shows its top`() {
+        val bands = RowOrder.bands(listOf("t" to 48.0, "m" to 72.0, "a" to 48.0, "b" to 48.0), 8.0)
+        // At 2 px per dp: t 0-96, m 112-256, a 272-368, b 384-480. A 300 px view at the top.
+        assertThat(RowOrder.revealScroll(bands[0], 2f, 0, 300)).isNull()
+        assertThat(RowOrder.revealScroll(bands[2], 2f, 0, 300)).isEqualTo(368 - 300)
+        assertThat(RowOrder.revealScroll(bands[3], 2f, 0, 300)).isEqualTo(480 - 300)
+        // Scrolled past it: back to its top.
+        assertThat(RowOrder.revealScroll(bands[1], 2f, 200, 300)).isEqualTo(112)
+        // A view shorter than the row: its top.
+        assertThat(RowOrder.revealScroll(bands[1], 2f, 0, 100)).isEqualTo(112)
+        // Nothing laid out yet.
+        assertThat(RowOrder.revealScroll(bands[3], 2f, 0, 0)).isNull()
+    }
+
+    @Test
+    fun `sideways rows are slimmer, with a slimmer gap, and still grow with the text`() {
+        val upright = RowMetrics(1f)
+        assertThat(listOf(upright.mainDp, upright.rowDp, upright.gapDp)).containsExactly(72.0, 48.0, 8.0).inOrder()
+        val sideways = RowMetrics(1f, compact = true)
+        assertThat(listOf(sideways.mainDp, sideways.rowDp, sideways.gapDp)).containsExactly(64.0, 40.0, 4.0).inOrder()
+        // MAIN keeps its transition marker inside it: centred 48 dp down, 12 dp each way.
+        assertThat(
+            sideways.mainDp,
+        ).isAtLeast(TimelineGeometry.PLUS_HIT_DP / 2 + TimelineGeometry.MARKER_HIT_DP / 2 + TimelineGeometry.MARKER_DP / 2 + 4)
+        val big = RowMetrics(2f, compact = true)
+        assertThat(big.rowDp).isEqualTo(80.0)
+        assertThat(big.mainDp).isEqualTo(88.0)
+        // Four rows (MAIN and three) in the timeline of a 411 dp tall phone held sideways: 411 less the
+        // status and gesture bars (24 dp each), the 56 dp top and bottom bars and the 28 dp ruler.
+        val room = 411.0 - 48 - 56 - 56 - sideways.rulerDp
+        assertThat(sideways.mainDp + sideways.gapDp + 3 * (sideways.rowDp + sideways.gapDp)).isAtMost(room)
+    }
 }

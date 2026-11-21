@@ -12,6 +12,7 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasTestTag
@@ -26,10 +27,12 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.AudioRole
@@ -55,6 +58,7 @@ import com.itsluminous.clearmovie.testing.AtSize
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TOGGLE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TRIM_END_TAG
@@ -75,8 +79,9 @@ import org.robolectric.annotation.Config
  * Rows of every kind (ROADMAP cm-tracks, Compose UI acceptance): reorder by
  * the icon, the long-press menu on the icon and on the content, what shows
  * on top, "+" before and after on each kind of row (with a new row where it
- * would overlap), rows folding away by priority as the window gets shorter,
- * and everything kept across a restore and a turn of the phone.
+ * would overlap), every row on a timeline that scrolls up and down as the
+ * window gets shorter (cm-timeline-scroll), and everything kept across a
+ * restore and a turn of the phone.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w1300dp-h1300dp-xxhdpi")
@@ -691,7 +696,7 @@ class TracksScreenTest {
     // ---------------------------------------------------------------- rows folding away
 
     @Test
-    fun `rows fold away by priority as the window gets shorter, upright and sideways, and come back`() {
+    fun `every row stays on the timeline as the window gets shorter, the rows scroll, and Show all rows is offered only upright`() {
         val h = EditorHarness(project, Fixtures.preset)
         var size by mutableStateOf(DpSize(411.dp, 891.dp))
         compose.setContent {
@@ -701,42 +706,95 @@ class TracksScreenTest {
         }
         compose.waitForIdle()
         val all = h.project.keys()
-        val main = h.project.main.id.value
         val music = h.project.rowOf("m1").value
 
-        fun shown() = all.filter { compose.onNodeWithTag(rowTag(it)).run { runCatching { assertExists() }.isSuccess } }
-        assertThat(shown()).isEqualTo(all)
+        fun inTree() = all.filter { compose.onNodeWithTag(rowTag(it)).run { runCatching { assertExists() }.isSuccess } }
+
+        fun whole(key: String): Boolean {
+            val view = compose.onNodeWithTag(TIMELINE_ROWS_TAG).getUnclippedBoundsInRoot()
+            val row = compose.onNodeWithTag(rowTag(key)).getUnclippedBoundsInRoot()
+            return row.top >= view.top - 1.dp && row.bottom <= view.bottom + 1.dp
+        }
+        assertThat(inTree()).isEqualTo(all)
+        assertThat(all.all(::whole)).isTrue()
         compose.onNodeWithTag(TIMELINE_ROWS_TOGGLE_TAG).assertDoesNotExist()
-        // The music row is selected: it is kept after MAIN when space runs short.
+        // The music row is selected: however short the window, it is scrolled into view.
         compose.onNodeWithTag(rowHeaderTag(music), useUnmergedTree = true).performClick()
-        val seen = mutableListOf<List<String>>()
         for (height in listOf(760, 680, 620, 560)) {
             size = DpSize(411.dp, height.dp)
             compose.waitForIdle()
-            seen += shown()
+            assertThat(inTree()).isEqualTo(all)
+            assertWithMessage("music row in view at $height dp").that(whole(music)).isTrue()
         }
-        for (rows in seen) {
-            // MAIN always; then the selected row, when there is room for one more.
-            assertThat(rows).contains(main)
-            if (rows.size > 1) assertThat(rows).contains(music)
-            // The rest are kept from the top of the screen down, in screen order.
-            val others = all.filter { it != main && it != music }
-            val kept = others.filter { it in rows }
-            assertThat(kept).isEqualTo(others.take(kept.size))
-            assertThat(rows).isEqualTo(all.filter { it in rows })
-        }
-        assertThat(seen.map { it.size }.filter { it in 3 until all.size }).isNotEmpty()
-        assertThat(seen.map { it.size }).isInOrder(Comparator.reverseOrder<Int>())
+        assertThat(all.count(::whole)).isLessThan(all.size)
         compose.onNodeWithTag(TIMELINE_ROWS_TOGGLE_TAG).assertIsDisplayed()
-        // Sideways (a phone held on its side, two panes): fewer rows still fit, MAIN and music kept.
-        size = DpSize(800.dp, 420.dp)
+        // Sideways (a phone held on its side, two panes): every row, scrolling, and no Show all rows.
+        size = DpSize(800.dp, 363.dp)
         compose.waitForIdle()
-        assertThat(shown()).containsAtLeast(main, music)
-        assertThat(shown().size).isLessThan(all.size)
-        // Tall again: every row is back.
+        assertThat(inTree()).isEqualTo(all)
+        assertThat(whole(music)).isTrue()
+        compose.onNodeWithTag(TIMELINE_ROWS_TOGGLE_TAG).assertDoesNotExist()
+        // Tall again: every row in view.
         size = DpSize(411.dp, 891.dp)
         compose.waitForIdle()
-        assertThat(shown()).isEqualTo(all)
+        assertThat(all.all(::whole)).isTrue()
+    }
+
+    @Test
+    fun `an upright swipe scrolls the rows and leaves the time, and a sideways swipe scrolls the time and leaves the rows`() {
+        val h = EditorHarness(project, Fixtures.preset)
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(800.dp, 363.dp))) {
+                ClearMovieTheme(dynamicColor = false) { h.Content() }
+            }
+        }
+        compose.waitForIdle()
+        zoomTo(h, 0.0)
+        val first = h.project.keys().first()
+
+        fun top() = compose.onNodeWithTag(rowTag(first)).getUnclippedBoundsInRoot().top
+        val top0 = top()
+        val zoom0 = h.state!!.zoom
+        val rows = compose.onNodeWithTag(TIMELINE_ROWS_TAG)
+        rows.performTouchInput { swipe(Offset(width - 20f, height - 10f), Offset(width - 26f, 10f), 400) }
+        compose.waitForIdle()
+        assertThat(top()).isLessThan(top0)
+        assertThat(h.state!!.zoom).isEqualTo(zoom0)
+        val top1 = top()
+        // Back down, then sideways a little upward: the time moves, the rows stay.
+        rows.performTouchInput { swipe(Offset(width - 20f, 10f), Offset(width - 20f, height - 10f), 400) }
+        compose.waitForIdle()
+        assertThat(top()).isEqualTo(top0)
+        rows.performTouchInput { swipe(Offset(width - 20f, centerY), Offset(width / 3f, centerY - 40f), 400) }
+        compose.waitForIdle()
+        assertThat(top()).isEqualTo(top0)
+        assertThat(h.state!!.zoom!!.scrollMs).isGreaterThan(zoom0!!.scrollMs)
+        assertThat(top1).isLessThan(top0)
+    }
+
+    @Test
+    fun `a phone held sideways shows at least four whole rows, and a smaller one three`() {
+        // The editor's room on a 411 dp tall phone held sideways, less its 24 dp status and gesture bars
+        // (Robolectric has no insets), then on a 360 dp tall phone.
+        val h = EditorHarness(project, Fixtures.preset)
+        var size by mutableStateOf(DpSize(914.dp, 363.dp))
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(size)) {
+                ClearMovieTheme(dynamicColor = false) { h.Content() }
+            }
+        }
+        for ((height, rows) in listOf(363 to 4, 312 to 3)) {
+            size = DpSize(914.dp, height.dp)
+            compose.waitForIdle()
+            val view = compose.onNodeWithTag(TIMELINE_ROWS_TAG).getUnclippedBoundsInRoot()
+            val whole =
+                h.project.keys().count {
+                    val r = compose.onNodeWithTag(rowTag(it)).getUnclippedBoundsInRoot()
+                    r.top >= view.top - 1.dp && r.bottom <= view.bottom + 1.dp
+                }
+            assertWithMessage("whole rows at $height dp").that(whole).isAtLeast(rows)
+            compose.onNodeWithTag(TIMELINE_ROWS_TOGGLE_TAG).assertDoesNotExist()
+        }
     }
 
     // ---------------------------------------------------------------- state

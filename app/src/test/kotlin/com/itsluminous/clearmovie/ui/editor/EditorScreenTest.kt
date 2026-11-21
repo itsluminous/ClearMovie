@@ -793,10 +793,59 @@ class EditorScreenTest {
             for (a in listOf(EditAction.TRIM, EditAction.ADD_CAPTION)) {
                 val b = compose.onNodeWithTag(barActionTag(a)).bounds()
                 assertThat((b.right - b.left).v()).isAtLeast(BAR_MIN.value - 0.5f)
-                assertThat((b.bottom - b.top).v()).isAtLeast(67.5f)
+                // 52 dp to touch: the 56 dp bar less 2 dp outside the ripple at each edge.
+                assertThat((b.bottom - b.top).v()).isAtLeast(51.5f)
             }
             // Whole labels at font scale 2 are checked on the device screenshots: Robolectric's
             // text measurement is not real enough to judge overflow.
+        }
+    }
+
+    @Test
+    fun `the bottom bar is as tall as the Play bar, and sideways the top bar is too`() {
+        // Upright (411 x 891), then a phone held sideways (under 480 dp tall: 914 x 363).
+        var size by androidx.compose.runtime.mutableStateOf(
+            androidx.compose.ui.unit
+                .DpSize(411.dp, 891.dp),
+        )
+        val h = harness()
+        compose.setContent {
+            androidx.compose.ui.test.DeviceConfigurationOverride(
+                androidx.compose.ui.test.DeviceConfigurationOverride
+                    .ForcedSize(size),
+            ) {
+                com.itsluminous.clearmovie.ui.theme
+                    .ClearMovieTheme(dynamicColor = false) { h.Content() }
+            }
+        }
+        compose.waitForIdle()
+        // Upright: the 56 dp bottom bar (one-line labels) is as tall as the 56 dp Play bar; Material's 64 dp top bar.
+        val bar = compose.onNodeWithTag(BAR_TAG).bounds()
+        val play = compose.onNodeWithTag(TRANSPORT_TAG).bounds()
+        assertThat((bar.bottom - bar.top).v()).isWithin(0.5f).of((play.bottom - play.top).v())
+        assertThat((bar.bottom - bar.top).v()).isWithin(0.5f).of(56f)
+        val top = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).bounds()
+        assertThat((top.bottom - top.top).v()).isWithin(0.5f).of(64f)
+        // Sideways the top bar is 56 dp too; Undo and Redo stay 48 dp wide.
+        size =
+            androidx.compose.ui.unit
+                .DpSize(914.dp, 363.dp)
+        compose.waitForIdle()
+        val sideTop = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).bounds()
+        assertThat((sideTop.bottom - sideTop.top).v()).isWithin(0.5f).of(56f)
+        val sideBar = compose.onNodeWithTag(BAR_TAG).bounds()
+        val sidePlay = compose.onNodeWithTag(TRANSPORT_TAG).bounds()
+        assertThat((sideBar.bottom - sideBar.top).v()).isWithin(0.5f).of((sidePlay.bottom - sidePlay.top).v())
+        // The bottom bar and the Play bar beside it line up.
+        assertThat(sideBar.bottom.v()).isWithin(0.5f).of(sidePlay.bottom.v())
+        for (tag in listOf(UNDO_TAG, REDO_TAG)) {
+            val b = compose.onNodeWithTag(tag).bounds()
+            assertThat((b.bottom - b.top).v()).isWithin(0.5f).of(28f)
+            assertThat((b.right - b.left).v()).isAtLeast(47.5f)
+        }
+        for (tag in listOf(EDITOR_EXPORT_TAG, PLAY_TAG, EXACT_TAG)) {
+            val b = compose.onNodeWithTag(tag).bounds()
+            assertThat((b.bottom - b.top).v()).isAtLeast(47.5f)
         }
     }
 
