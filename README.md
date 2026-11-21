@@ -49,20 +49,28 @@ later will not match it. ClearMovie needs Android 10 or newer.
 
 ## Screenshots
 
-ClearMovie from `main` (what will become 0.0.2) on an Android 16 emulator, making a
-short video from three clips with the Event frame preset and its caption.
+ClearMovie from `main` on an Android 16 emulator, making a short video from three
+clips with a preset called Event frame and its caption.
 
 | Pick a preset | Check the preset | Add photos and videos | Arrange the timeline |
 | :---: | :---: | :---: | :---: |
-| ![Home screen: the Event frame preset ready with an Edit button, Start without a preset, New preset, and the video under My videos](site/screenshots/home.webp) | ![What this preset adds: the intro and frame, each with Play, Replace and Skip](site/screenshots/preset-review.webp) | ![The Android photo picker with three videos selected](site/screenshots/media-pick.webp) | ![The editor: the caption on the frame's blue strip, and every row of the timeline](site/screenshots/editor.webp) |
+| ![Home screen: the Event frame preset with an Edit button, Start without a preset, New preset, and the video under My videos](site/screenshots/home.webp) | ![What this preset adds: the intro and frame (the ending is further down), each with Play, Replace and Skip](site/screenshots/preset-review.webp) | ![The Android photo picker with three videos selected](site/screenshots/media-pick.webp) | ![The editor: back, title, undo and redo, the download button and More options at the top, the caption on the frame's blue strip, and every row of the timeline](site/screenshots/editor.webp) |
 
 | Add a caption | Choose a transition | Choose a size | Share it |
 | :---: | :---: | :---: | :---: |
-| ![Caption editor, Font tab with English and Hindi letters](site/screenshots/caption.webp) | ![Transition picker with previews, Wipe Left chosen](site/screenshots/transitions.webp) | ![Save your video: Best, Good or Small](site/screenshots/export.webp) | ![Your video is ready, with Share and Play](site/screenshots/export-done.webp) |
+| ![Caption editor, Font tab with English and Hindi letters, and handles on the caption's box](site/screenshots/caption.webp) | ![Transition picker with previews, Wipe Left chosen](site/screenshots/transitions.webp) | ![Save your video: Best, Good or Small](site/screenshots/export.webp) | ![Your video is ready, with Share and Play](site/screenshots/export-done.webp) |
 
-| Make a preset | Edit a preset | Set its caption style | The caption, selected |
+| Make a preset | Set up the frame | Place the picture | Edit a preset |
 | :---: | :---: | :---: | :---: |
-| ![New preset: a name, intro and frame switches, and the kind of ending](site/screenshots/preset-create.webp) | ![Edit preset, scrolled down: a preview of its caption, its files and Save](site/screenshots/preset-edit.webp) | ![Change caption style, Colour tab: white words, no outline, no band](site/screenshots/preset-caption-style.webp) | ![The caption selected in the editor: white on the frame's blue strip, with Edit text, Animation, Earlier, Later, Other row and Delete below](site/screenshots/editor-caption.webp) |
+| ![New preset, scrolled down: the kind of ending, the video shape, Keep a copy of the files, and Create](site/screenshots/preset-create.webp) | ![Set up this frame, Screen colour tab: the green screen tapped and removed, with Colour chosen](site/screenshots/frame-setup.webp) | ![Set up this frame, Picture area tab: a box with handles shows where photos and videos go](site/screenshots/frame-area.webp) | ![Edit preset, scrolled down: a preview of its caption, its files and Save](site/screenshots/preset-edit.webp) |
+
+| Set its caption style | The caption, selected | Trim on the timeline | Lower for talk |
+| :---: | :---: | :---: | :---: |
+| ![Change caption style, Animation tab: None, Fade in, Zoom in, Pop, Bounce or Slide in, with Fade in chosen](site/screenshots/preset-caption-style.webp) | ![The caption selected in the editor, with handles on its box and Edit text, Animation, Earlier, Later, Other row and Delete below](site/screenshots/editor-caption.webp) | ![A video selected on the timeline with a handle at each end to trim it](site/screenshots/item-handles.webp) | ![Lower for talk: lower the music when people talk, to 10%](site/screenshots/talk-level.webp) |
+
+| Record voice | Choose a shape | More options | Settings |
+| :---: | :---: | :---: | :---: |
+| ![Add to a voice row: Music or sound, or Record voice while the video plays](site/screenshots/record-voice.webp) | ![What shape should your video be? Landscape, Portrait or Square](site/screenshots/shape-first.webp) | ![The editor's More options menu: Rename video, Video shape and Settings](site/screenshots/editor-menu.webp) | ![Settings, scrolled to the end: Colours from wallpaper, Language, Storage, and the version with Open ClearMovie on GitHub](site/screenshots/settings.webp) |
 
 <table>
   <tr><th>Dark theme</th><th>In Hindi</th><th colspan="2">Sideways too</th></tr>
@@ -75,22 +83,29 @@ short video from three clips with the Event frame preset and its caption.
 
 ## Features
 
-In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
+What ClearMovie on `main` does:
 
 - **Presets** - one tap sets up the intro, the frame overlay (with its green window
   keyed out so your photos and videos show through) and the ending, which can be a
   video or a closing voice clip. You can replace any part for a single video, or skip it.
 - **Your own presets** - make a new preset from Home, and edit or delete any preset there.
-  A new install starts with none: New preset comes first on Home. An install that had the
-  Event frame keeps it as a preset like any other. Each
+  A new install starts with none: Home shows your presets, then Start without a preset and
+  New preset. An install that had the Event frame keeps it as a preset like any other. A new
+  preset can use your files where they are, or keep a copy of them. Each
   preset keeps a caption style (words, place, size, font, colour, outline, band and the
   animation it comes in with) that new captions start from, with a live preview.
+- **Set up the frame** - tap the frame's screen colour (like a green screen) to remove it, and
+  drag the picture area to where your photos and videos should show. A frame item on the
+  timeline has Colour and Area buttons to change them for one video.
+- **Video shapes** - landscape, portrait or square. A preset has its shape; without a preset,
+  ClearMovie asks once, and More options > Video shape changes it later.
 - **Share from your gallery** - select photos and videos in the gallery, tap Share, and
   choose ClearMovie. They open on the timeline in the order they were taken.
 - **A timeline that stays simple** - photos and videos on one row you reorder by dragging,
   plus as many text, music, voice, picture-in-picture and frame rows as you want. Each row has an
   icon, rows can be rearranged, and you choose which one shows on top. Pinch to zoom, or
-  use the zoom buttons. A "+" before and after each item adds something right there.
+  use the zoom buttons. A "+" before and after each item adds something right there, and a
+  selected item has a handle at each end to trim it.
 - **Big, labelled buttons** - tap any item for a toolbar of icons with names under them
   (trim, split, speed, loop, photo duration, volume, text, transition, animation, replace,
   delete). It scrolls sideways when there are more.
@@ -102,7 +117,9 @@ In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
   items, and gentle zooms or fade-ins on single items, each with a live preview.
 - **Background music and ducking** - the frame's music plays under the whole video and
   is lowered automatically while your videos play with their own sound, and everything
-  is lowered for the closing voice.
+  is lowered for the closing voice. Lower for talk sets how low the music goes.
+- **Record voice** - add a voice row, tap its "+" and choose Record voice to speak while the
+  video plays, lined up with the picture.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its
   colours from your wallpaper on Android 12+, and has a themed icon.
 - **Portrait and landscape** - in the editor, landscape puts the preview on the left and the
@@ -111,8 +128,9 @@ In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
 - **Autosave** - work is saved as you go and recovered after a crash. Your videos are
   listed under "My videos"; tap a video's title in the editor to give it a name (new on
   `main`, coming in 0.0.2).
-- **Hardware-accelerated export** - Best (1080p), Good (720p) or Small (480p), saved
-  to your gallery and ready to play or share.
+- **Hardware-accelerated export** - tap the download button at the top, then choose Best
+  (1080p), Good (720p) or Small (480p). The video is saved to your gallery, ready to play
+  or share.
 
 ## Feature checklist
 
@@ -123,6 +141,9 @@ What has shipped, and what is still to come:
 - [x] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
 - [x] Preset review: replace or skip the intro, frame or ending for this video
 - [x] Make your own presets, edit and delete any preset, each with its own caption style
+- [x] Set up a frame: tap its screen colour to remove it and place the picture area (done on `main`)
+- [x] Video shapes: landscape, portrait or square, per preset or asked once without one (done on `main`)
+- [x] Presets can use your files where they are, or keep a copy (done on `main`)
 - [x] Add photos and videos with the system photo picker
 - [x] Share photos and videos from the gallery straight into a new video
 
@@ -136,6 +157,8 @@ What has shipped, and what is still to come:
 - [x] Photo duration
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
 - [x] Audio overlay with volume, fade and automatic ducking
+- [x] Lower for talk: choose how low the music goes while people talk (done on `main`)
+- [x] Trim handles at both ends of a selected item (done on `main`)
 - [x] Record voice: speak over the video as it plays, lined up with the picture (done on `main`, ships in 0.0.2)
 - [x] Captions with preset defaults, drag-to-place, drag-to-resize, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
@@ -157,8 +180,8 @@ What has shipped, and what is still to come:
 - **Offline by design.** The app has no INTERNET permission: no servers, no
   telemetry, no analytics, no ads.
 - **Your media stays put.** Photos and videos are read from your gallery where they are.
-  The only files copied into the app are your preset files, and items the gallery can't
-  share permanently.
+  The only files copied into the app are preset files you chose to keep a copy of, and
+  items the gallery can't share permanently.
 - **The microphone only when you record.** It is asked for the first time you tap
   Record voice, used only while the recording panel shows, and recordings stay
   inside the app.
