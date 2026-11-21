@@ -610,7 +610,6 @@
     <string name="preset_caption_title">Captions</string>
     <string name="preset_caption_body">Naya caption inhi shabdon ke saath, isi jagah aur isi style me shuru hoga.</string>
     <string name="preset_caption_change">Caption ka style badlein</string>
-    <string name="preset_caption_no_words">Koi shabd nahi</string>
     <string name="preset_caption_words_label">Naya caption in shabdon se shuru hoga</string>
     <string name="preset_save">Save karein</string>
     <string name="preset_delete">Preset delete karein</string>

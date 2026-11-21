@@ -24,7 +24,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -33,6 +33,7 @@ import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.AudioRole
+import com.itsluminous.clearmovie.domain.model.CaptionWords
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.OverlayClip
@@ -371,7 +372,8 @@ class TracksScreenTest {
             compose.waitForIdle()
             assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, anchor, side))
             compose.onNodeWithTag(insertOptionTag("text")).performClick()
-            compose.onNodeWithTag(TEXT_FIELD_TAG).performTextInput(words)
+            // A new caption starts with the app's own words; the user's replace them.
+            compose.onNodeWithTag(TEXT_FIELD_TAG).performTextReplacement(words)
             compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
             compose.waitForIdle()
             return h.project.tracks
@@ -666,7 +668,15 @@ class TracksScreenTest {
         compose.waitForIdle()
         assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = row))
         compose.onNodeWithTag(insertOptionTag("text")).performClick()
-        compose.onNodeWithTag(TEXT_FIELD_TAG).performTextInput("here")
+        compose.waitForIdle()
+        // The preset sets no words of its own: the new caption starts with the app's.
+        assertThat(
+            h.project
+                .track(row)!!
+                .clips
+                .map { (it as TextClip).text },
+        ).containsExactly(CaptionWords.DEFAULT)
+        compose.onNodeWithTag(TEXT_FIELD_TAG).performTextReplacement("here")
         compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
         compose.waitForIdle()
         val made =

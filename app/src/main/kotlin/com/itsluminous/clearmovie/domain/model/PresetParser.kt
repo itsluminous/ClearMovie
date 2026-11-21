@@ -78,7 +78,7 @@ object PresetParser {
         val frame = obj("frame")?.readFrame()
         val captionFields = obj("caption")
         val caption = captionFields?.readCaption() ?: CaptionStyle.STANDARD
-        val defaultText = captionFields?.localized("defaultText", Limits.MAX_TEXT_LENGTH)
+        val defaultText = CaptionWords.withoutRetired(captionFields?.localized("defaultText", Limits.MAX_TEXT_LENGTH))
         captionFields?.finish()
         val photoMs = long("photoDurationMs", range = 500L..60_000L) ?: Project.DEFAULT_PHOTO_MS
         val fit = enum("defaultFit", Fit.serializer()) ?: Fit.FILL_CROP

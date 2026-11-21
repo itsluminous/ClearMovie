@@ -190,8 +190,8 @@ class PresetEditScreenTest {
     fun `the caption style editor changes the words and style live, and Cancel puts them back`() {
         val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
         compose.onNodeWithTag(PRESET_CAPTION_CHANGE_TAG).performScrollTo().performClick()
-        compose.onNodeWithTag(PRESET_WORDS_TAG).performTextReplacement("सुंदर प्रकृति")
-        assertThat(calls.words).isEqualTo("सुंदर प्रकृति")
+        compose.onNodeWithTag(PRESET_WORDS_TAG).performTextReplacement("नमस्ते")
+        assertThat(calls.words).isEqualTo("नमस्ते")
         compose.onNodeWithTag(captionTabTag(CaptionTab.COLOUR)).performClick()
         compose.onNodeWithText(s(R.string.caption_background)).performClick()
         assertThat(calls.style!!.background).isNull()

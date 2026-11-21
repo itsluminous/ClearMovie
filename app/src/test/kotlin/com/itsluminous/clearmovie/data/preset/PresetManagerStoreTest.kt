@@ -316,7 +316,7 @@ class PresetManagerStoreTest {
         }
 
     @Test
-    fun `the shipped preset puts a plain caption on the frame's blue strip, with its words`() =
+    fun `the shipped preset puts a plain caption on the frame's blue strip, with no words of its own`() =
         runBlocking<Unit> {
             val caption = store.definition(builtIn)!!.preset
             // Measured on old/Frame-White.mp4 (1920 x 1080): the blue strip is rows 862-993, columns 272-1901.
@@ -324,7 +324,8 @@ class PresetManagerStoreTest {
             assertThat(caption.caption.background).isNull()
             assertThat(caption.caption.outline).isNull()
             assertThat(caption.caption.color).isEqualTo(ArgbColor.WHITE)
-            assertThat(caption.defaultText).isEqualTo(LocalizedText(hi = "सुंदर प्रकृति"))
+            // A new caption starts with the app's own words (CaptionWords.DEFAULT).
+            assertThat(caption.defaultText).isNull()
         }
 
     @Test

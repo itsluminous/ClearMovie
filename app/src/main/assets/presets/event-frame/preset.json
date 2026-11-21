@@ -23,8 +23,7 @@
     "sizePx": 60,
     "color": "#FFFFFF",
     "outline": null,
-    "background": null,
-    "defaultText": { "hi": "सुंदर प्रकृति" }
+    "background": null
   },
   "photoDurationMs": 3000,
   "defaultFit": "fillCrop",

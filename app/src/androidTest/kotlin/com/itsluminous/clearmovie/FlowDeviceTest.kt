@@ -23,6 +23,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.intent.Intents
@@ -35,6 +36,7 @@ import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.data.media.MediaPermissions
 import com.itsluminous.clearmovie.data.preset.SlotBindResult
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.domain.model.CaptionWords
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Speed
@@ -274,7 +276,9 @@ class FlowDeviceTest {
             waitFor(hasTestTag(barActionTag(EditAction.ADD_CAPTION)))
             compose.onNodeWithTag(barActionTag(EditAction.ADD_CAPTION)).performClick()
             waitFor(hasTestTag(TEXT_FIELD_TAG))
-            compose.onNodeWithTag(TEXT_FIELD_TAG).performTextInput("नमस्ते")
+            // A new caption starts with the app's own words (cm-caption-default); the user's replace them.
+            compose.waitUntil(TIMEOUT_MS) { captionText() == CaptionWords.DEFAULT }
+            compose.onNodeWithTag(TEXT_FIELD_TAG).performTextReplacement("नमस्ते")
             compose.waitUntil(TIMEOUT_MS) { captionText() == "नमस्ते" }
 
             scenario.recreate()

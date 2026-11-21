@@ -602,7 +602,6 @@
     <string name="preset_caption_title">कैप्शन</string>
     <string name="preset_caption_body">नया कैप्शन इन्हीं शब्दों के साथ, इसी जगह और इसी स्टाइल में शुरू होगा।</string>
     <string name="preset_caption_change">कैप्शन का स्टाइल बदलें</string>
-    <string name="preset_caption_no_words">कोई शब्द नहीं</string>
     <string name="preset_caption_words_label">नया कैप्शन इन शब्दों से शुरू होगा</string>
     <string name="preset_save">सेव करें</string>
     <string name="preset_delete">प्रीसेट हटाएँ</string>

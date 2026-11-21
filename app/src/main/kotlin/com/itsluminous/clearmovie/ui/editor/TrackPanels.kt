@@ -135,8 +135,8 @@ internal fun TimedInsertPanel(
                 R.drawable.ic_text_fields,
                 insertOptionTag("text"),
             ) {
-                // The caption is made now, with the preset's words or none, and the editor opens on it (it goes again if
-                // left empty).
+                // The caption is made now, with the preset's words or the app's own, and the editor opens on it (it goes
+                // again if the user leaves it empty).
                 val id = RandomIds.clipId()
                 val ok =
                     callbacks.editMerged(captionMergeKey(id)) {

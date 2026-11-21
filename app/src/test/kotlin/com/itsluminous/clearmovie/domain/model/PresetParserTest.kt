@@ -95,10 +95,10 @@ class PresetParserTest {
     @Test
     fun `the bundled preset contains no personal text`() {
         val p = ok(bundled).preset
-        // Its name is a string resource, present in all three languages; it has no literal name. Its only words
-        // are its default caption (cm-preset-manager): "beautiful nature", nothing personal.
+        // Its name is a string resource, present in all three languages; it has no literal name, and no caption
+        // words: a new caption starts with the app's own (CaptionWords.DEFAULT).
         assertThat(p.displayName).isNull()
-        assertThat(p.defaultText).isEqualTo(LocalizedText(hi = "सुंदर प्रकृति"))
+        assertThat(p.defaultText).isNull()
         assertThat(p.displayNameRes).isEqualTo("preset_event_frame_name")
         for (dir in SourceTree.shippedValuesDirs) {
             val names = StringXml.entries(File(dir, "strings.xml")).map { it.name }
@@ -106,7 +106,7 @@ class PresetParserTest {
         }
         // Every string value in the file is an identifier, a colour or a fixed keyword: no words for a person to read.
         val strings =
-            Regex("\"([^\"]*)\"\\s*[,}\\]\\n]").findAll(bundled).map { it.groupValues[1] }.toList() - "सुंदर प्रकृति"
+            Regex("\"([^\"]*)\"\\s*[,}\\]\\n]").findAll(bundled).map { it.groupValues[1] }.toList()
         assertThat(strings).isNotEmpty()
         for (s in strings) assertThat(s).matches("[A-Za-z0-9_#-]+")
     }
@@ -146,6 +146,16 @@ class PresetParserTest {
         assertThat(p.displayName).isEqualTo(LocalizedText("My frame", "मेरा फ़्रेम", "Mera frame"))
         val withText = ok(bundledWith("caption.defaultText", """{ "en": "Line one\nLine two" }""")).preset
         assertThat(withText.defaultText).isEqualTo(LocalizedText(en = "Line one\nLine two"))
+    }
+
+    @Test
+    fun `an edited copy of the 0_0_2 Event frame reads back without its sample words`() {
+        // The words that preset set in 0.0.2 and 0.0.3, which an edited copy kept.
+        val retired = Json.encodeToString(LocalizedText.serializer(), CaptionWords.RETIRED)
+        assertThat(ok(bundledWith("caption.defaultText", retired)).preset.defaultText).isNull()
+        // Other Hindi words stay.
+        assertThat(ok(bundledWith("caption.defaultText", """{ "hi": "नमस्ते" }""")).preset.defaultText)
+            .isEqualTo(LocalizedText(hi = "नमस्ते"))
     }
 
     @Test

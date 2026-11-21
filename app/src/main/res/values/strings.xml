@@ -654,7 +654,6 @@
     <string name="preset_caption_title">Captions</string>
     <string name="preset_caption_body">A new caption starts with these words, in this place and style.</string>
     <string name="preset_caption_change">Change caption style</string>
-    <string name="preset_caption_no_words">No words</string>
     <string name="preset_caption_words_label">Words a new caption starts with</string>
     <string name="preset_save">Save</string>
     <string name="preset_delete">Delete preset</string>

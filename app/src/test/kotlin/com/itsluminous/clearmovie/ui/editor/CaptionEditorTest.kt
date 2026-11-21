@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
@@ -44,6 +45,7 @@ import com.itsluminous.clearmovie.domain.model.CaptionAttachment
 import com.itsluminous.clearmovie.domain.model.CaptionFont
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.CaptionStyleOverride
+import com.itsluminous.clearmovie.domain.model.CaptionWords
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.NormRect
@@ -150,6 +152,13 @@ class CaptionEditorTest {
     /** Inside [r], allowing for boxes being stored to 1/10000 of the canvas. */
     private fun NormRect.inside(r: NormRect) = x >= r.x - 2e-4 && y >= r.y - 2e-4 && x + w <= r.x + r.w + 2e-4 && y + h <= r.y + r.h + 2e-4
 
+    /** A new caption starts with the app's own words (cm-caption-default); the user's words replace them. */
+    private fun EditorHarness.clearNewWords() {
+        assertThat(caption().text).isEqualTo(CaptionWords.DEFAULT)
+        panel(TEXT_FIELD_TAG).performTextClearance()
+        compose.waitForIdle()
+    }
+
     private fun SemanticsNodeInteraction.heightDp(): Float {
         val b = getUnclippedBoundsInRoot()
         return (b.bottom - b.top).value
@@ -174,6 +183,7 @@ class CaptionEditorTest {
                     val node = compose.onNodeWithTag(captionTabTag(t)).assertExists()
                     assertThat(node.heightDp()).isAtLeast(47.5f)
                 }
+                h.clearNewWords()
                 panel(TEXT_FIELD_TAG).performTextInput("नमस्ते")
                 assertThat(h.caption().text).isEqualTo("नमस्ते")
                 for (t in CaptionTab.EDITOR) tab(t)
@@ -211,6 +221,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Hello")
         panel(PANEL_DONE_TAG).performClick()
         compose.waitForIdle()
@@ -228,6 +239,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Hello")
         assertThat(h.caption().text).isEqualTo("Hello")
         panel(TEXT_FIELD_TAG).performTextReplacement("दादी\u202E की ख़ुशी")
@@ -285,6 +297,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Hello")
         tab(CaptionTab.SIZE)
         compose.onNodeWithTag(CAPTION_SAMPLE_TAG).assertExists()
@@ -301,6 +314,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Hello")
         panel(CAPTION_RESET_TAG).assertIsNotEnabled()
         tab(CaptionTab.FONT)
@@ -364,6 +378,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Hello")
         panel(PANEL_CANCEL_TAG).performClick()
         compose.waitForIdle()
@@ -377,6 +392,7 @@ class CaptionEditorTest {
         // An existing caption: Edit text opens the editor; Cancel puts the style back.
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Kept")
         panel(PANEL_DONE_TAG).performClick()
         compose.waitForIdle()
@@ -398,6 +414,7 @@ class CaptionEditorTest {
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
         assertThat(h.project.captions()).hasSize(1)
+        h.clearNewWords()
         // Tapping another item closes the editor.
         h.select("v2")
         compose.waitForIdle()
@@ -407,11 +424,29 @@ class CaptionEditorTest {
     }
 
     @Test
+    fun `a new caption closed untouched keeps The image caption`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(PANEL_DONE_TAG).performClick()
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isNull()
+        assertThat(h.caption().text).isEqualTo("The image caption")
+        // Closed by a tap on another item, too.
+        h.select("p3")
+        tapBar(EditAction.ADD_CAPTION)
+        h.select("v2")
+        compose.waitForIdle()
+        assertThat(h.project.captions().map { it.text }).containsExactly("The image caption", "The image caption")
+    }
+
+    @Test
     fun `leaving the editor with Back while a new caption has no words takes the caption away`() {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
         assertThat(h.project.captions()).hasSize(1)
+        h.clearNewWords()
         compose
             .onNode(
                 androidx.compose.ui.test.hasContentDescription(
@@ -433,6 +468,7 @@ class CaptionEditorTest {
         h.state!!.selected = ClipId("p1")
         compose.waitForIdle()
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("नमस्ते सब")
         tab(CaptionTab.FONT)
         val id = h.caption().id
@@ -458,6 +494,7 @@ class CaptionEditorTest {
         compose.waitForIdle()
         panel(insertOptionTag("text")).performClick()
         compose.waitForIdle()
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Free words")
         panel(PANEL_DONE_TAG).performClick()
         compose.waitForIdle()
@@ -470,6 +507,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Kept")
         compose
             .onNodeWithTag(
@@ -486,6 +524,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Kept")
         panel(PANEL_DONE_TAG).performClick()
         compose.waitForIdle()
@@ -547,6 +586,7 @@ class CaptionEditorTest {
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
         h.lagging = true
+        h.clearNewWords()
         for (c in listOf("C", "u", "t")) panel(TEXT_FIELD_TAG).performTextInput(c)
         // The project shows "C" while the field already holds "Cut"; then another key, then the rest arrives.
         h.catchUp()

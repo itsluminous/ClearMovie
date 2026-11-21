@@ -16,11 +16,11 @@ class CaptionDefaultsTest {
     @Test
     fun `a plain caption style and the default words survive saving and reading`() {
         val plain = CaptionStyle(box = NormRect(0.15, 0.7981, 0.83, 0.1222), outline = null, background = null)
-        val p = Fixtures.richProject().copy(captionDefaults = plain, captionDefaultText = LocalizedText(hi = "सुंदर प्रकृति"))
+        val p = Fixtures.richProject().copy(captionDefaults = plain, captionDefaultText = LocalizedText(hi = "नमस्ते"))
         val back = roundTrip(p)
         assertThat(back.captionDefaults).isEqualTo(plain)
-        assertThat(back.captionDefaultText).isEqualTo(LocalizedText(hi = "सुंदर प्रकृति"))
-        assertThat(codec.encode(p)).contains("\"hi\": \"सुंदर प्रकृति\"")
+        assertThat(back.captionDefaultText).isEqualTo(LocalizedText(hi = "नमस्ते"))
+        assertThat(codec.encode(p)).contains("\"hi\": \"नमस्ते\"")
     }
 
     @Test
@@ -28,7 +28,7 @@ class CaptionDefaultsTest {
         val preset =
             Fixtures.preset.copy(
                 caption = CaptionStyle(sizePx = 60, outline = null, background = null),
-                defaultText = LocalizedText(hi = "सुंदर प्रकृति"),
+                defaultText = LocalizedText(hi = "नमस्ते"),
             )
         val p = ProjectFactory.fromPreset(Fixtures.PROJECT_ID, preset, Fixtures.presetMedia, SequentialIds())
         assertThat(p.captionDefaults).isEqualTo(preset.caption)

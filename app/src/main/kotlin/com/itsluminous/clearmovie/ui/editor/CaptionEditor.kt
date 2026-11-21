@@ -81,6 +81,7 @@ import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CaptionFont
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.CaptionStyleOverride
+import com.itsluminous.clearmovie.domain.model.CaptionWords
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.NormRect
@@ -222,7 +223,7 @@ private const val BAND_SHOWS = 0x40
 
 /**
  * "Add caption" on photo or video [itemId]: a new caption attached to it,
- * with the preset's default words (or none) and in the preset's style, with the preset's start animation, then
+ * with the preset's default words (or the app's own, [CaptionWords.DEFAULT]) and in the preset's style, with the preset's start animation, then
  * the editor on it. The caption is part of the editor visit's undo step.
  * When the item already has a caption covering it whole, the editor opens on
  * that one instead: a second would cover the same time in the same place,
@@ -242,7 +243,7 @@ fun startCaption(
         ?.firstOrNull { it.attachedTo?.clip == itemId && it.attachedTo.whole }
         ?.let { return openCaption(it.id, state) }
     val id = RandomIds.clipId()
-    val words = project?.newCaptionWords().orEmpty()
+    val words = project?.newCaptionWords() ?: CaptionWords.DEFAULT
     val made = actions.editMerged(captionMergeKey(id)) { addCaptionFor(itemId, words, captionId = id).withEffectDefaultsFor(listOf(id)) }
     if (made) openCaption(id, state)
 }
@@ -250,10 +251,16 @@ fun startCaption(
 /**
  * The words a new caption starts with: the preset's default words
  * ([Project.captionDefaultText]) in the app's language, or the nearest
- * language there is; none when the preset has none.
+ * language there is; [CaptionWords.DEFAULT] when the preset has none (or
+ * when it is a video without a preset).
  */
 fun Project.newCaptionWords(locale: Locale = appLocale()): String =
-    captionDefaultText?.let { PresetNames.pick(it, locale) }?.let(::usableCaptionText).orEmpty()
+    CaptionWords
+        .withoutRetired(captionDefaultText)
+        ?.let { PresetNames.pick(it, locale) }
+        ?.let(::usableCaptionText)
+        ?.takeIf { it.isNotBlank() }
+        ?: CaptionWords.DEFAULT
 
 /** The language the app shows: the one chosen in Settings, else the phone's. */
 private fun appLocale(): Locale = AppCompatDelegate.getApplicationLocales()[0] ?: Locale.getDefault()

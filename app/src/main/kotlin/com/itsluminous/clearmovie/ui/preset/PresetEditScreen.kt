@@ -55,7 +55,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -78,6 +77,7 @@ import com.itsluminous.clearmovie.domain.model.AnimKind
 import com.itsluminous.clearmovie.domain.model.AnimSlot
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
+import com.itsluminous.clearmovie.domain.model.CaptionWords
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EffectDefaults
 import com.itsluminous.clearmovie.domain.model.Limits
@@ -160,7 +160,10 @@ fun PresetEditRoute(
     )
 }
 
-/** The words a new caption of [preset] starts with, in the app's language, as the editor shows them. */
+/**
+ * The preset's own words for a new caption, in the app's language, as the words field shows them; empty when it
+ * has none, and the field's placeholder and the picture then show the app's own ([CaptionWords.DEFAULT]).
+ */
 @Composable
 private fun shownWords(preset: Preset): String {
     val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
@@ -611,7 +614,6 @@ private fun PresetCaptionPreview(
     onBox: (NormRect) -> Unit,
 ) {
     val media = LocalMediaColors.current
-    val sample = stringResource(R.string.caption_font_sample)
     BoxWithConstraints(
         modifier
             .aspectRatio(LocalCanvasShape.current.aspect.toFloat())
@@ -628,13 +630,12 @@ private fun PresetCaptionPreview(
             )
         }
         val box = style.box
-        val shown = words.isNotBlank()
+        // Empty words: a new caption starts with the app's own, so the picture shows those.
         Box(
             Modifier
                 .offset(maxWidth * box.x.toFloat(), maxHeight * box.y.toFloat())
-                .size(maxWidth * box.w.toFloat(), maxHeight * box.h.toFloat())
-                .alpha(if (shown) 1f else SAMPLE_ALPHA),
-        ) { CaptionImage(if (shown) words else sample, style) }
+                .size(maxWidth * box.w.toFloat(), maxHeight * box.h.toFloat()),
+        ) { CaptionImage(words.ifBlank { CaptionWords.DEFAULT }, style) }
         if (editing) {
             CaptionBoxDrag(
                 style = style,
@@ -643,14 +644,12 @@ private fun PresetCaptionPreview(
                 inner = inner,
                 showSample = false,
                 dragKey = presetKey,
-                text = if (shown) words else sample,
+                text = words.ifBlank { CaptionWords.DEFAULT },
                 onBox = onBox,
             )
         }
     }
 }
-
-private const val SAMPLE_ALPHA = 0.6f
 
 /** A caption to show the start animations on (only its kind matters: tiles draw it as a plain block). */
 private val SAMPLE_CAPTION = TextClip(ClipId("preset-caption-sample"), 0, Limits.DEFAULT_TEXT_MS, "")
@@ -686,7 +685,7 @@ private fun ColumnScope.CaptionStyleEditor(
     val usual = refitBox(preset.caption.box, preset.shape, shape)
     val fit =
         rememberCaptionFit(
-            words.ifBlank { stringResource(R.string.caption_font_sample) },
+            words.ifBlank { CaptionWords.DEFAULT },
             usual,
             CaptionPlaces.safeArea(frameWindow, usual, shape.aspect),
             CaptionPlaces.safeArea(frameWindow, null, shape.aspect),
@@ -700,7 +699,8 @@ private fun ColumnScope.CaptionStyleEditor(
                     value = words,
                     onValueChange = { onWords(usableCaptionText(it)) },
                     label = { Text(stringResource(R.string.caption_text_hint)) },
-                    placeholder = { Text(stringResource(R.string.preset_caption_no_words)) },
+                    // Empty words mean the app's own: a new caption starts with those.
+                    placeholder = { Text(CaptionWords.DEFAULT) },
                     supportingText = { Text(stringResource(R.string.preset_caption_words_label)) },
                     minLines = 2,
                     maxLines = 4,
@@ -726,7 +726,7 @@ private fun ColumnScope.CaptionStyleEditor(
 
             CaptionTab.SIZE -> {
                 // 100% is the app's usual caption size, so a size chosen here reads the same when opened again.
-                SizeTab(preset.id.value, words, style, CaptionStyle.STANDARD, restyle)
+                SizeTab(preset.id.value, words.ifBlank { CaptionWords.DEFAULT }, style, CaptionStyle.STANDARD, restyle)
             }
 
             CaptionTab.FONT -> {
