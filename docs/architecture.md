@@ -444,7 +444,7 @@ few threads of their own, so a provider that hangs costs only its items.
 
 `EditorScreen` has the top bar, Material's small top app bar (Back, the title,
 Undo stacked above Redo, Save video and More options; the bar is always 64 dp
-tall, so the title shrinks to stay on one line, down to 14 sp (less at the
+tall, 56 dp on a phone held sideways, so the title shrinks to stay on one line, down to 14 sp (less at the
 largest text sizes, so two lines still fit), before it takes a second line). A tap on the title, or More options > Rename video, opens the
 rename dialog (`RenameDialog`); the new name is an edit like any other, so Undo
 takes it back. More options also holds Video shape and Settings, which opens
@@ -457,12 +457,19 @@ the screen; the playhead is saved by `EditorViewModel`.
 
 - **Layout.** `PreviewLayoutReducer` places the preview from the window, the
   bars' measured heights and the rows' heights (which grow with the font
-  size): two panes are Docked; stacked, the preview is Full, Shrunk (down to
-  180 dp, or 28% of the window when that is more and the natural preview is
-  taller), Partial (only the rows that fit, MAIN and the selected row first,
-  with "Show all rows (N more)"), or Floating: when all rows are asked for and
-  don't fit, the preview is a small window over them that drags and snaps to
-  a corner, with Move and Close buttons.
+  size). Every row is always on the timeline, which scrolls up and down when
+  they don't fit. Two panes are Docked, with no "Show all rows"; stacked, the
+  preview is Full, Shrunk (down to 180 dp, or 28% of the window when that is
+  more and the natural preview is taller), Partial (the minimum preview, the
+  rows scrolling under it, and "Show all rows (N more)" for the rows below
+  those that fit), or Floating: when all rows are asked for and don't fit,
+  the preview is a small window over them that drags and snaps to a corner,
+  with Move and Close buttons. The contextual bar is 56 dp with one-line
+  labels, as tall as the Play bar. In a window under 480 dp tall (a phone
+  held sideways) the rows are slimmer (`RowMetrics.compact`: MAIN 64 dp, the
+  others 40 dp, 4 dp apart), so four rows show on a 411 dp tall phone. The
+  selected row, or MAIN with nothing selected, is scrolled into view when the
+  selection or the rows' room changes.
 - **Timeline.** A ruler, the playhead and the rows in screen order, each with
   its type icon and name. MAIN shows each item with a thumbnail strip
   (re-planned per zoom step by `ThumbPlan`, the old pictures drawn until the
@@ -473,8 +480,10 @@ the screen; the playhead is saved by `EditorViewModel`.
   The other rows are drawn read-only until cm-tracks.
 - **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
   finger before a long-press is a pinch (zoom around the fingers, clamped
-  between Fit all and 1 s per 240 dp, `TimelineZoom`), movement is a scroll,
-  a trim from a handle or a scrub from the ruler, a hold then a drag moves an
+  between Fit all and 1 s per 240 dp, `TimelineZoom`), movement is a scroll
+  (one way per gesture: up and down the rows when it starts more upright than
+  sideways and the rows scroll, otherwise along the time), a trim from a
+  handle (unless clearly upright) or a scrub from the ruler, a hold then a drag moves an
   item, a hold and release opens its menu, and a quick release is a tap. Each
   gesture has a button: the zoom buttons, the bar's Move left and Move right,
   the Trim panel, TalkBack actions on the items and the time.
