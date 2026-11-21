@@ -116,20 +116,20 @@ internal class SpanCache(
         if (spans.containsKey(anchor)) spans[anchor] else project.anchorSpan(anchor).also { spans[anchor] = it }
 }
 
-/** The sides of an anchored clip held at their own time (cm-timeline-handles), start then end. */
+/** The dragged sides of an anchored clip, as distances from its span's edges (cm-timeline-handles), start then end. */
 internal val Clip.detachedSides: Pair<Long?, Long?>
     get() =
         when (this) {
-            is OverlayClip -> detachedStartMs to detachedEndMs
-            is AudioClip -> detachedStartMs to detachedEndMs
+            is OverlayClip -> detachedStartOffsetMs to detachedEndOffsetMs
+            is AudioClip -> detachedStartOffsetMs to detachedEndOffsetMs
             else -> null to null
         }
 
-/** An anchored clip placed on [span], each detached side kept at its own time. */
+/** An anchored clip placed on [span], each detached side at its distance from that edge of the span. */
 internal fun Clip.following(span: Pair<Long, Long>): Clip {
     val (ds, de) = detachedSides
     if (ds == null && de == null) return respanned(span.first, span.second)
-    val (start, end) = heldApart(ds ?: span.first, de ?: span.second, startHeld = ds != null)
+    val (start, end) = sidesOn(span, ds, de)
     return respanned(start, end)
 }
 

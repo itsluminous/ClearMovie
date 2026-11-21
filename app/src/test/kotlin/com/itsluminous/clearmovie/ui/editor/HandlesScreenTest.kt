@@ -145,8 +145,8 @@ class HandlesScreenTest {
         val after = h.project.requireClip(ClipId("cap")) as TextClip
         assertThat(after.startMs).isWithin(30L).of(before.startMs + 1000)
         assertThat(after.endMs).isEqualTo(before.endMs)
-        assertThat(after.attachedTo!!.detachedStartMs).isEqualTo(after.startMs)
-        assertThat(after.attachedTo!!.detachedEndMs).isNull()
+        assertThat(after.attachedTo!!.detachedStartOffsetMs).isEqualTo(after.startMs - before.startMs)
+        assertThat(after.attachedTo!!.detachedEndOffsetMs).isNull()
         // The end still follows v2: v2 a second shorter, the caption's end with it, its start where it was.
         compose.runOnIdle { h.actions.edit { trimVideo(ClipId("v2"), 0, 3000) } }
         compose.waitForIdle()

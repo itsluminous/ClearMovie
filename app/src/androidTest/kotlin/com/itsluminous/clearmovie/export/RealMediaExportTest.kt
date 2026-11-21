@@ -69,6 +69,11 @@ import java.io.File
  * with the voice turned all the way down, so the music's own level can be
  * measured under it (`duck-quiet-50.mp4`, `duck-quiet-5.mp4`), each with its
  * timeline.
+ *
+ * With `-e cm.handlesmove true` it exports the same two captions before and
+ * after their videos are reordered (`handles-move-before.mp4`,
+ * `handles-move-after.mp4`): each dragged side keeps its distance from its
+ * video's edge, so the captions travel with their videos.
  */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
@@ -78,17 +83,19 @@ class RealMediaExportTest {
     private val demo = InstrumentationRegistry.getArguments().getString("cm.demo") == "true"
     private val captions = InstrumentationRegistry.getArguments().getString("cm.captions") == "true"
     private val handles = InstrumentationRegistry.getArguments().getString("cm.handles") == "true"
+    private val handlesMove = InstrumentationRegistry.getArguments().getString("cm.handlesmove") == "true"
 
     @Before
     fun setUp() {
-        val enabled = demo || captions || handles || InstrumentationRegistry.getArguments().getString("cm.realmedia") == "true"
+        val enabled =
+            demo || captions || handles || handlesMove || InstrumentationRegistry.getArguments().getString("cm.realmedia") == "true"
         assumeTrue("Run by hand with -e cm.realmedia true and the files in realmedia/", enabled && File(dir, "Intro.mp4").isFile)
         h.setUp()
     }
 
     @After
     fun tearDown() {
-        if (File(dir, "Intro.mp4").isFile && !demo && !captions && !handles) h.cleanUp()
+        if (File(dir, "Intro.mp4").isFile && !demo && !captions && !handles && !handlesMove) h.cleanUp()
     }
 
     private fun file(name: String) = File(dir, name)
@@ -182,8 +189,43 @@ class RealMediaExportTest {
     }
 
     @Test
+    fun exportDetachedCaptionsMovedWithTheirItems() {
+        assumeTrue("Run with -e cm.handlesmove true", handlesMove)
+        val items =
+            realItems()
+                .filterIsInstance<VideoClip>()
+                .filter { it.sourceDurationMs >= 4000 }
+                .take(3)
+                .map { it.copy(trimEndMs = 4000L) }
+        assertThat(items.size).isEqualTo(3)
+        var before = h.project(items, "Handles moved", caption = null)
+        before = before.addCaptionFor(items[1].id, "Start detached", captionId = ClipId("cap-start"))
+        before = before.addCaptionFor(items[2].id, "End detached", captionId = ClipId("cap-end"))
+        before = before.resizeClip(ClipId("cap-start"), ResizeEdge.START, before.attachSpan(items[1].id)!!.first + 1500)
+        before = before.resizeClip(ClipId("cap-end"), ResizeEdge.END, before.attachSpan(items[2].id)!!.second - 1000)
+        // The second video goes last: the third plays second now.
+        val after = before.moveMainClip(items[1].id, items.lastIndex)
+        for ((name, project) in listOf("handles-move-before" to before, "handles-move-after" to after)) {
+            val stored =
+                project.copy(
+                    id =
+                        com.itsluminous.clearmovie.domain.model
+                            .ProjectId(RandomIds.next()),
+                )
+            assertThat(stored.validate()).isEmpty()
+            assertThat(runBlocking { h.app.projectRepository.createDraft(stored, inEditor = false) }).isTrue()
+            writeTimeline(stored, "$name-timeline.txt")
+            val outcome = runBlocking { h.pipeline().run(stored.id, ExportQuality.SMALL, name) {} }
+            val done = (outcome as ExportOutcome.Done).done
+            h.exported(done.uri)
+            h.keep(done.uri, "$name.mp4")
+            Log.i(ExportHarness.TAG, "HANDLES $name $done")
+        }
+    }
+
+    @Test
     fun exportTheRealPresetProjectAtEverySize() {
-        assumeTrue("Not in the captions or handles run", !captions && !handles)
+        assumeTrue("Not in the captions or handles run", !captions && !handles && !handlesMove)
         val project = realProject()
         if (demo) return
         writeTimeline(project)

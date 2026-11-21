@@ -66,7 +66,7 @@ internal fun TextClip.following(span: Pair<Long, Long>): TextClip {
     val length = e - s
     if (a.whole) {
         if (!a.partlyDetached) return copy(startMs = s, durationMs = length, attachedTo = a.copy(offsetMs = 0, lengthMs = null))
-        val (start, end) = heldApart(a.detachedStartMs ?: s, a.detachedEndMs ?: e, startHeld = a.detachedStartMs != null)
+        val (start, end) = sidesOn(span, a.detachedStartOffsetMs, a.detachedEndOffsetMs)
         return copy(startMs = start, durationMs = end - start, attachedTo = a.copy(offsetMs = 0, lengthMs = null))
     }
     val offset = a.offsetMs.coerceIn(0L, (length - Limits.MIN_CLIP_MS).coerceAtLeast(0L))
@@ -75,6 +75,22 @@ internal fun TextClip.following(span: Pair<Long, Long>): TextClip {
     val wanted = a.lengthMs ?: durationMs
     val duration = wanted.coerceAtMost(room).coerceAtLeast(minOf(Limits.MIN_CLIP_MS, room))
     return copy(startMs = start, durationMs = duration, attachedTo = a.copy(lengthMs = wanted))
+}
+
+/**
+ * Where a clip with a side detached from [span] goes: a detached side at its
+ * distance from that edge of the span ([startOffset] from its start,
+ * [endOffset] from its end), the other side on the span's edge, the start
+ * never before 0, and kept apart as [heldApart] says.
+ */
+internal fun sidesOn(
+    span: Pair<Long, Long>,
+    startOffset: Long?,
+    endOffset: Long?,
+): Pair<Long, Long> {
+    val start = startOffset?.let { (span.first + it).coerceAtLeast(0L) } ?: span.first
+    val end = endOffset?.let { span.second + it } ?: span.second
+    return heldApart(start, end, startHeld = startOffset != null)
 }
 
 /**
@@ -230,20 +246,21 @@ internal fun Project.captionsAfterSplit(
     var project = this
     for ((trackId, caption) in attached) {
         val a = caption.attachedTo!!
-        val ds = a.detachedStartMs
-        val de = a.detachedEndMs
-        if (a.whole && ds != null && ds >= second.first) {
-            // Its start was detached inside the second part: it is all on the second part now.
-            project = project.replaceCaption(trackId, caption.copy(attachedTo = a.copy(clip = secondId)))
-        } else if (a.whole && de != null && de <= first.second) {
-            // Its end was detached inside the first part: it stays on the first part.
-            Unit
+        val ds = a.detachedStartOffsetMs
+        val de = a.detachedEndOffsetMs
+        if (a.whole && ds != null && caption.startMs >= second.first) {
+            // Its start was detached inside the second part: it is all on the second part now, as far into it.
+            val moved = a.copy(clip = secondId, detachedStartOffsetMs = caption.startMs - second.first)
+            project = project.replaceCaption(trackId, caption.copy(attachedTo = moved))
+        } else if (a.whole && de != null && caption.endMs <= first.second) {
+            // Its end was detached inside the first part: it stays there, as far from the first part's end.
+            project = project.replaceCaption(trackId, caption.copy(attachedTo = a.copy(detachedEndOffsetMs = caption.endMs - first.second)))
         } else if (a.whole) {
             // The first part's caption shrinks to it first, so the copy fits on the same row after it.
             // A detached start stays with the first part and a detached end goes with the second.
-            val p = project.replaceCaption(trackId, caption.copy(attachedTo = a.copy(detachedEndMs = null)).following(first))
+            val p = project.replaceCaption(trackId, caption.copy(attachedTo = a.copy(detachedEndOffsetMs = null)).following(first))
             val copy =
-                caption.copy(id = p.copyIdFor(caption.id, secondId), attachedTo = a.copy(clip = secondId, detachedStartMs = null))
+                caption.copy(id = p.copyIdFor(caption.id, secondId), attachedTo = a.copy(clip = secondId, detachedStartOffsetMs = null))
             project = p.placeTimed(copy.following(second), trackId, null, { p.rowIdFor(copy.id) }).first
         } else if (caption.startMs >= second.first) {
             val moved = caption.copy(attachedTo = a.copy(clip = secondId, offsetMs = caption.startMs - second.first))
@@ -283,9 +300,9 @@ internal fun Project.captionsBeforeJoin(
             if (twin != null) {
                 keptWhole += twin.id
                 val dropped = project.withTrackClips(trackId, project.requireTrack(trackId).clips.filterNot { it.id == caption.id })
-                // The joined caption keeps the second part's detached end (a split gave each part one side).
-                val end = caption.attachedTo!!.detachedEndMs
-                if (end == null) dropped else dropped.withDetachedEnd(twin.id, end)
+                // The joined caption keeps the second part's detached end (a split gave each part one side);
+                // the second part's end is the joined item's end, so its distance stays as it is.
+                if (caption.attachedTo.detachedEndOffsetMs == null) dropped else dropped.withDetachedEnd(twin.id, caption)
             } else {
                 val offset = caption.startMs - firstSpan.first
                 val attached = CaptionAttachment(firstId, offset, whole = false, lengthMs = caption.wantedMs)
@@ -308,14 +325,11 @@ internal fun Project.captionsForDuplicate(
     copyId: ClipId,
 ): Project {
     val span = attachSpan(copyId) ?: return this
-    // A detached side keeps its distance from the item on the copy.
-    val shift = span.first - (attachSpan(originalId)?.first ?: span.first)
     var project = this
     for ((trackId, caption) in captionsAttachedTo(originalId)) {
         val p = project
-        val a = caption.attachedTo!!
-        val moved = a.copy(clip = copyId, detachedStartMs = a.detachedStartMs?.plus(shift), detachedEndMs = a.detachedEndMs?.plus(shift))
-        val copy = caption.copy(id = p.copyIdFor(caption.id, copyId), attachedTo = moved)
+        // A detached side is a distance from the item's edge, so the copy's caption sits on the copy the same way.
+        val copy = caption.copy(id = p.copyIdFor(caption.id, copyId), attachedTo = caption.attachedTo!!.copy(clip = copyId))
         project = p.placeTimed(copy.following(span), trackId, null, { p.rowIdFor(copy.id) }).first
     }
     return project
@@ -326,23 +340,80 @@ private fun Project.replaceCaption(
     caption: TextClip,
 ): Project = withTrackClips(trackId, requireTrack(trackId).clips.map { if (it.id == caption.id) caption else it })
 
-/** Caption [captionId] with its end detached at [endMs]; with its start detached too, it is free. */
+/**
+ * Caption [captionId] given the detached end of [from] (the second part's
+ * copy of it); with its own start detached too, it is free, from where it
+ * starts now to where [from] ends now.
+ */
 private fun Project.withDetachedEnd(
     captionId: ClipId,
-    endMs: Long,
+    from: TextClip,
 ): Project {
     val trackId = trackOf(captionId)?.id ?: return this
     val caption = clip(captionId) as? TextClip ?: return this
     val a = caption.attachedTo ?: return this
     val next =
-        if (a.detachedStartMs != null) {
-            caption.copy(
-                startMs = a.detachedStartMs,
-                durationMs = (endMs - a.detachedStartMs).coerceAtLeast(Limits.MIN_CLIP_MS),
-                attachedTo = null,
-            )
+        if (a.detachedStartOffsetMs != null) {
+            caption.copy(durationMs = (from.endMs - caption.startMs).coerceAtLeast(Limits.MIN_CLIP_MS), attachedTo = null)
         } else {
-            caption.copy(attachedTo = a.copy(detachedEndMs = endMs))
+            caption.copy(attachedTo = a.copy(detachedEndOffsetMs = from.attachedTo!!.detachedEndOffsetMs))
         }
     return replaceCaption(trackId, next)
+}
+
+/**
+ * A schema 4 project kept a detached side as its time in the video (an
+ * unreleased build on main, cm-timeline-handles' first version); from schema
+ * 5 it is a distance from the item's edge. The same times, as distances.
+ */
+internal fun Project.withDetachedSidesAsDistances(): Project {
+    val spans = AttachSpans(this)
+    val anchors = SpanCache(this)
+    return copy(
+        tracks =
+            tracks.map { t ->
+                t.copy(
+                    clips =
+                        t.clips.map { c ->
+                            when {
+                                c is TextClip && c.attachedTo?.partlyDetached == true -> {
+                                    val a = c.attachedTo
+                                    val span = spans[a.clip]
+                                    if (span == null) {
+                                        c
+                                    } else {
+                                        c.copy(
+                                            attachedTo =
+                                                a.copy(
+                                                    detachedStartOffsetMs = a.detachedStartOffsetMs?.minus(span.first),
+                                                    detachedEndOffsetMs = a.detachedEndOffsetMs?.minus(span.second),
+                                                ),
+                                        )
+                                    }
+                                }
+
+                                c is OverlayClip && c.anchor != null && c.detachedSides != (null to null) -> {
+                                    val span = anchors[c.anchor] ?: return@map c
+                                    c.copy(
+                                        detachedStartOffsetMs = c.detachedStartOffsetMs?.minus(span.first),
+                                        detachedEndOffsetMs = c.detachedEndOffsetMs?.minus(span.second),
+                                    )
+                                }
+
+                                c is AudioClip && c.anchor != null && c.detachedSides != (null to null) -> {
+                                    val span = anchors[c.anchor] ?: return@map c
+                                    c.copy(
+                                        detachedStartOffsetMs = c.detachedStartOffsetMs?.minus(span.first),
+                                        detachedEndOffsetMs = c.detachedEndOffsetMs?.minus(span.second),
+                                    )
+                                }
+
+                                else -> {
+                                    c
+                                }
+                            }
+                        },
+                )
+            },
+    )
 }

@@ -346,8 +346,8 @@ private fun Project.placedByHand(
 /** The clip with its span anchor removed: the user has taken control of its timing. */
 private fun Clip.detached(): Clip =
     when (this) {
-        is OverlayClip -> copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
-        is AudioClip -> copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
+        is OverlayClip -> copy(anchor = null, detachedStartOffsetMs = null, detachedEndOffsetMs = null)
+        is AudioClip -> copy(anchor = null, detachedStartOffsetMs = null, detachedEndOffsetMs = null)
         else -> this
     }
 
@@ -516,7 +516,14 @@ fun Project.trimAudio(
     updateTyped<AudioClip>(clipId, "sounds") {
         requireTrim(startMs, endMs, it.sourceDurationMs)
         val length = if (it.repeat) it.durationMs else endMs - startMs
-        it.copy(trimStartMs = startMs, trimEndMs = endMs, durationMs = length, anchor = null, detachedStartMs = null, detachedEndMs = null)
+        it.copy(
+            trimStartMs = startMs,
+            trimEndMs = endMs,
+            durationMs = length,
+            anchor = null,
+            detachedStartOffsetMs = null,
+            detachedEndOffsetMs = null,
+        )
     }
 
 private fun requireTrim(

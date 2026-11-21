@@ -150,8 +150,8 @@ fun Project.resizeClip(
             is TextClip -> resizedCaption(clip, edge, start, end)
             is PhotoClip -> clip.copy(startMs = start, durationMs = end - start)
             is VideoClip -> resizedVideo(clip, edge, end - start)
-            is AudioClip -> keptWhereDragged(resizedSound(clip, edge, start, end).heldOn(edge, start, end))
-            is OverlayClip -> keptWhereDragged(clip.copy(startMs = start, durationMs = end - start).heldOn(edge, start, end))
+            is AudioClip -> keptWhereDragged(heldOn(resizedSound(clip, edge, start, end), edge, start, end))
+            is OverlayClip -> keptWhereDragged(heldOn(clip.copy(startMs = start, durationMs = end - start), edge, start, end))
             else -> throw IllegalArgumentException("This item has no handles")
         }
     return withTrackClips(track.id, track.clips.map { if (it.id == clipId) changed else it }.sortedBy { it.startMs }).normalized()
@@ -170,15 +170,15 @@ private fun Project.resizedCaption(
         }
 
         a.whole -> {
-            // Let go exactly on its item's edge, a side follows it again.
-            val span = attachSpan(a.clip)
+            // A dragged side keeps its distance from its item's edge; let go exactly on the edge, it follows it again.
+            val span = attachSpan(a.clip) ?: (start to end)
             val next =
                 if (edge == ResizeEdge.START) {
-                    a.copy(detachedStartMs = start.takeUnless { it == span?.first })
+                    a.copy(detachedStartOffsetMs = (start - span.first).takeUnless { it == 0L })
                 } else {
-                    a.copy(detachedEndMs = end.takeUnless { it == span?.second })
+                    a.copy(detachedEndOffsetMs = (end - span.second).takeUnless { it == 0L })
                 }
-            val free = next.detachedStartMs != null && next.detachedEndMs != null
+            val free = next.detachedStartOffsetMs != null && next.detachedEndOffsetMs != null
             clip.copy(startMs = start, durationMs = end - start, attachedTo = next.takeUnless { free })
         }
 
@@ -231,40 +231,53 @@ private fun Project.keptWhereDragged(clip: Clip): Clip {
     val followed = clip.following(span)
     if (followed.startMs == clip.startMs && followed.durationMs == clip.durationMs) return clip
     return when (clip) {
-        is OverlayClip -> clip.copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
-        is AudioClip -> clip.copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
+        is OverlayClip -> clip.copy(anchor = null, detachedStartOffsetMs = null, detachedEndOffsetMs = null)
+        is AudioClip -> clip.copy(anchor = null, detachedStartOffsetMs = null, detachedEndOffsetMs = null)
         else -> clip
     }
 }
 
-/** An anchored clip with the dragged side held at its own time; both sides held, it is an ordinary clip. */
-private fun Clip.heldOn(
+/**
+ * An anchored clip with the dragged side kept at its distance from that edge
+ * of its span; both sides dragged, it is an ordinary clip at its times.
+ */
+private fun Project.heldOn(
+    clip: Clip,
     edge: ResizeEdge,
     start: Long,
     end: Long,
 ): Clip {
-    val (ds, de) = detachedSides
-    val held = if (edge == ResizeEdge.START) start to de else ds to end
+    val span = clip.anchor?.let { anchorSpan(it) } ?: return clip
+    val (ds, de) = clip.detachedSides
+    val held = if (edge == ResizeEdge.START) start - span.first to de else ds to end - span.second
     val free = held.first != null && held.second != null
-    return when (this) {
+    return when (clip) {
         is OverlayClip -> {
-            when {
-                anchor == null -> this
-                free -> copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
-                else -> copy(detachedStartMs = held.first, detachedEndMs = held.second)
+            if (free) {
+                clip.copy(
+                    anchor = null,
+                    detachedStartOffsetMs = null,
+                    detachedEndOffsetMs = null,
+                )
+            } else {
+                clip.copy(detachedStartOffsetMs = held.first, detachedEndOffsetMs = held.second)
             }
         }
 
         is AudioClip -> {
-            when {
-                anchor == null -> this
-                free -> copy(anchor = null, detachedStartMs = null, detachedEndMs = null)
-                else -> copy(detachedStartMs = held.first, detachedEndMs = held.second)
+            if (free) {
+                clip.copy(
+                    anchor = null,
+                    detachedStartOffsetMs = null,
+                    detachedEndOffsetMs = null,
+                )
+            } else {
+                clip.copy(detachedStartOffsetMs = held.first, detachedEndOffsetMs = held.second)
             }
         }
 
         else -> {
-            this
+            clip
         }
     }
 }

@@ -112,8 +112,11 @@ private fun Project.checkAttachments(fail: (Violation.Rule, String) -> Unit) {
 
                 a.offsetMs !in 0..Limits.MAX_MEDIA_MS ||
                     a.lengthMs?.let { it !in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS } == true ||
-                    (a.partlyDetached && (!a.whole || (a.detachedStartMs != null && a.detachedEndMs != null))) ||
-                    listOfNotNull(a.detachedStartMs, a.detachedEndMs).any { it !in 0..Limits.MAX_MEDIA_MS } ||
+                    (a.partlyDetached && (!a.whole || (a.detachedStartOffsetMs != null && a.detachedEndOffsetMs != null))) ||
+                    listOfNotNull(
+                        a.detachedStartOffsetMs,
+                        a.detachedEndOffsetMs,
+                    ).any { it !in -Limits.MAX_MEDIA_MS..Limits.MAX_MEDIA_MS } ||
                     clip.following(span) != clip -> {
                     fail(Violation.Rule.ANCHOR, "${clip.id.value} is not where its item puts it")
                 }
@@ -278,7 +281,7 @@ private fun Project.checkClipRanges(
     val anchored = (clip is OverlayClip && clip.anchor != null) || (clip is AudioClip && clip.anchor != null)
     val (ds, de) = clip.detachedSides
     if ((ds != null || de != null) && (!anchored || (ds != null && de != null))) bad("detached side")
-    if (listOfNotNull(ds, de).any { it !in 0..Limits.MAX_MEDIA_MS }) bad("detached side")
+    if (listOfNotNull(ds, de).any { it !in -Limits.MAX_MEDIA_MS..Limits.MAX_MEDIA_MS }) bad("detached side")
     if (!anchored && !inRange(clip.durationMs)) bad("length")
     if (anchored && clip.durationMs !in 0..Limits.MAX_MEDIA_MS) bad("length")
     when (clip) {

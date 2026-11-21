@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.domain.model
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -38,10 +39,12 @@ class ProjectMigrations(
          * 2 (cm-captions): a caption may be attached to a photo or video
          * (`TextClip.attachedTo`). 3 (cm-aspect-ratio): the video's `shape`,
          * and `askShape`. 4 (cm-timeline-handles): a caption's or a
-         * preset item's side detached by its handle (`detachedStartMs`,
-         * `detachedEndMs`), and a music row's `lowerToDb`.
+         * preset item's side detached by its handle (`detachedStartOffsetMs`,
+         * `detachedEndOffsetMs`), and a music row's `lowerToDb`. 5
+         * (cm-timeline-handles): a dragged side is a distance from its
+         * item's edge rather than a time in the video.
          */
-        const val CURRENT_VERSION = 4
+        const val CURRENT_VERSION = 5
 
         /**
          * 1 to 2: nothing to rewrite. A version 1 caption has no `attachedTo`,
@@ -56,14 +59,52 @@ class ProjectMigrations(
          * row has its own talk level, so every item follows and every row
          * ducks exactly as before. An older app refuses a version 4 file
          * rather than drop a detached side without a word.
+         *
+         * 4 to 5: `detachedStartMs` and `detachedEndMs` are renamed
+         * `detachedStartOffsetMs` and `detachedEndOffsetMs`; their times are
+         * made distances from the item's edges after reading
+         * (`withDetachedSidesAsDistances`), since that needs the item's span.
+         * Only unreleased builds wrote schema 4.
          */
         val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> =
             mapOf(
                 1 to { old -> old },
                 2 to { old -> JsonObject(old + mapOf("shape" to JsonPrimitive("landscape"), "askShape" to JsonPrimitive(false))) },
                 3 to { old -> old },
+                4 to { old -> renameDetachedSides(old) },
             )
     }
+}
+
+private val DETACHED_KEYS = mapOf("detachedStartMs" to "detachedStartOffsetMs", "detachedEndMs" to "detachedEndOffsetMs")
+
+private fun JsonObject.renamed(): JsonObject =
+    if (keys.none { it in DETACHED_KEYS }) this else JsonObject(entries.associate { (k, v) -> (DETACHED_KEYS[k] ?: k) to v })
+
+/** Schema 4 to 5: the detached-side keys of every clip and caption attachment, renamed (values unchanged). */
+private fun renameDetachedSides(old: JsonObject): JsonObject {
+    val tracks = old["tracks"] as? JsonArray ?: return old
+    val renamed =
+        JsonArray(
+            tracks.map { t ->
+                val track = t as? JsonObject ?: return@map t
+                val clips = track["clips"] as? JsonArray ?: return@map t
+                JsonObject(
+                    track +
+                        (
+                            "clips" to
+                                JsonArray(
+                                    clips.map { c ->
+                                        val clip = (c as? JsonObject)?.renamed() ?: return@map c
+                                        val a = clip["attachedTo"] as? JsonObject
+                                        if (a == null) clip else JsonObject(clip + ("attachedTo" to a.renamed()))
+                                    },
+                                )
+                        ),
+                )
+            },
+        )
+    return JsonObject(old + ("tracks" to renamed))
 }
 
 /** The outcome of reading stored project JSON. */
@@ -146,7 +187,7 @@ class ProjectCodec(
                 // throws is a refusal, never a crash.
                 return failed(ProjectDecodeResult.Reason.MALFORMED, "could not upgrade from version $version")
             }
-        val project =
+        val decoded =
             try {
                 json.decodeFromJsonElement(Project.serializer(), upgraded)
             } catch (e: IllegalArgumentException) {
@@ -154,6 +195,8 @@ class ProjectCodec(
                 // the checks in the model's constructors (ids, media references).
                 return failed(ProjectDecodeResult.Reason.MALFORMED, e.message.orEmpty().take(200))
             }
+        // Schema 4 kept a dragged side as its time in the video; the model keeps it as a distance from the item's edge.
+        val project = if (version == 4) decoded.withDetachedSidesAsDistances() else decoded
         val problems = project.validate()
         if (problems.isEmpty()) return ProjectDecodeResult.Ok(project, version)
         // Values the model derives (spans that follow MAIN, fitted transitions,

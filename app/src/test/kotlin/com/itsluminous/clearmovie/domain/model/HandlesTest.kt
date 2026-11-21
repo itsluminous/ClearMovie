@@ -52,14 +52,18 @@ class HandlesTest {
     fun `the start handle detaches only the start`() {
         var p = captioned().let { it.resizeClip(it.captionId(), ResizeEdge.START, 4000) }.assertValid()
         assertThat(p.span("on b")).isEqualTo(4000L to 7000L)
-        assertThat(p.caption("on b").attachedTo).isEqualTo(CaptionAttachment(ClipId("b"), detachedStartMs = 4000))
+        // 1 s into b, which starts at 3 s.
+        assertThat(p.caption("on b").attachedTo).isEqualTo(CaptionAttachment(ClipId("b"), detachedStartOffsetMs = 1000))
         // The item gets longer at its end: the end follows, the start stays.
         p = p.trimVideo(ClipId("b"), 2000, 7000).assertValid()
         assertThat(p.span("on b")).isEqualTo(4000L to 8000L)
-        // The item moves (a goes last): the start keeps its time, the end follows the item's new end.
+        // The item moves (a goes last): the caption goes with it, still starting 1 s into it, ending with it.
         p = p.moveMainClip(ClipId("a"), 2).assertValid()
         assertThat(p.attachSpan(ClipId("b"))).isEqualTo(0L to 5000L)
-        assertThat(p.span("on b")).isEqualTo(4000L to 5000L)
+        assertThat(p.span("on b")).isEqualTo(1000L to 5000L)
+        // And back: the same place on b as before.
+        p = p.moveMainClip(ClipId("a"), 0).assertValid()
+        assertThat(p.span("on b")).isEqualTo(4000L to 8000L)
     }
 
     @Test
@@ -67,13 +71,14 @@ class HandlesTest {
         var p = captioned()
         p = p.resizeClip(p.captionId(), ResizeEdge.END, 6000).assertValid()
         assertThat(p.span("on b")).isEqualTo(3000L to 6000L)
-        assertThat(p.caption("on b").attachedTo!!.detachedEndMs).isEqualTo(6000L)
-        assertThat(p.caption("on b").attachedTo!!.detachedStartMs).isNull()
-        // Trimmed at its start: the start follows, the end stays.
+        // 1 s before b's end.
+        assertThat(p.caption("on b").attachedTo!!.detachedEndOffsetMs).isEqualTo(-1000L)
+        assertThat(p.caption("on b").attachedTo!!.detachedStartOffsetMs).isNull()
+        // Trimmed by a second: the start follows b's start, the end stays 1 s before b's end.
         p = p.trimVideo(ClipId("b"), 3000, 6000).assertValid()
         assertThat(p.attachSpan(ClipId("b"))).isEqualTo(3000L to 6000L)
-        assertThat(p.span("on b")).isEqualTo(3000L to 6000L)
-        // The photo before it gets longer: b starts later, and so does the caption, which still ends at 6 s.
+        assertThat(p.span("on b")).isEqualTo(3000L to 5000L)
+        // The photo before it gets longer: b starts and ends later, and so does the caption.
         p = p.setPhotoDuration(ClipId("a"), 4000).assertValid()
         assertThat(p.span("on b")).isEqualTo(4000L to 6000L)
     }
@@ -102,11 +107,34 @@ class HandlesTest {
     }
 
     @Test
+    fun `a caption whose end was dragged travels with its item when MAIN is reordered`() {
+        var p = captioned()
+        p = p.resizeClip(p.captionId(), ResizeEdge.END, 5500).assertValid()
+        // b goes first: 0..4 s; the caption ends 1.5 s before b's end, as before the move.
+        p = p.moveMainClip(ClipId("b"), 0).assertValid()
+        assertThat(p.span("on b")).isEqualTo(0L to 2500L)
+        // Put b last: 8..12 s.
+        p = p.moveMainClip(ClipId("b"), 2).assertValid()
+        assertThat(p.span("on b")).isEqualTo(8000L to 10_500L)
+    }
+
+    @Test
+    fun `a dragged side of a picture-in-picture item's caption travels when that item is moved in time`() {
+        var p =
+            captioned().addTimedClip(PhotoClip(ClipId("q"), media("q"), 4000, startMs = 1000, pip = PipPlacement.DEFAULT), ids = ids)
+        p = p.addCaptionFor(ClipId("q"), "on q", ids)
+        val id = p.caption("on q").id
+        p = p.resizeClip(id, ResizeEdge.START, 2000).assertValid()
+        p = p.moveClip(ClipId("q"), 6000).assertValid()
+        assertThat(p.span("on q")).isEqualTo(7000L to 10_000L)
+    }
+
+    @Test
     fun `dragging a detached side again moves only that side`() {
         var p = captioned()
         p = p.resizeClip(p.captionId(), ResizeEdge.START, 4000)
         p = p.resizeClip(p.captionId(), ResizeEdge.START, 3500).assertValid()
-        assertThat(p.caption("on b").attachedTo).isEqualTo(CaptionAttachment(ClipId("b"), detachedStartMs = 3500))
+        assertThat(p.caption("on b").attachedTo).isEqualTo(CaptionAttachment(ClipId("b"), detachedStartOffsetMs = 500))
     }
 
     @Test
@@ -152,7 +180,7 @@ class HandlesTest {
                 .filterIsInstance<TextClip>()
                 .sortedBy { it.startMs }
         assertThat(captions.map { it.startMs to it.endMs }).containsExactly(4000L to 5000L, 5000L to 7000L).inOrder()
-        assertThat(captions[0].attachedTo).isEqualTo(CaptionAttachment(ClipId("b"), detachedStartMs = 4000))
+        assertThat(captions[0].attachedTo).isEqualTo(CaptionAttachment(ClipId("b"), detachedStartOffsetMs = 1000))
         assertThat(captions[1].attachedTo).isEqualTo(CaptionAttachment(ClipId("b2")))
         // Joined again: one caption, its start still detached.
         p = p.joinClips(ClipId("b"), ClipId("b2")).assertValid()
@@ -382,11 +410,12 @@ class HandlesTest {
         p = p.resizeClip(music.id, ResizeEdge.END, music.endMs - 1000).assertValid()
         val start = p.requireClip(music.id).startMs
         p = p.setPhotoDuration(ClipId("p1"), 5000).assertValid()
-        assertThat(p.spanOf(music.id.value)).isEqualTo(start to music.endMs - 1000)
+        // The video is 2 s longer: the music still ends 1 s before the video's end.
+        assertThat(p.spanOf(music.id.value)).isEqualTo(start to music.endMs + 1000)
         // Moved by hand, it stops following altogether, as before.
         p = p.moveClip(music.id, 500).assertValid()
         val moved = p.requireClip(music.id) as AudioClip
-        assertThat(moved.anchor to moved.detachedEndMs).isEqualTo(null to null)
+        assertThat(moved.anchor to moved.detachedEndOffsetMs).isEqualTo(null to null)
     }
 
     // ---- Validation ---------------------------------------------------------------
@@ -410,9 +439,11 @@ class HandlesTest {
                         }
                     },
             )
-        assertThat(with(CaptionAttachment(ClipId("b"), detachedStartMs = 4000, detachedEndMs = 5000)).validate()).isNotEmpty()
-        assertThat(with(CaptionAttachment(ClipId("b"), whole = false, lengthMs = 1000, detachedStartMs = 4000)).validate()).isNotEmpty()
-        assertThat(with(CaptionAttachment(ClipId("b"), detachedStartMs = -1)).validate()).isNotEmpty()
+        assertThat(with(CaptionAttachment(ClipId("b"), detachedStartOffsetMs = 4000, detachedEndOffsetMs = 5000)).validate()).isNotEmpty()
+        assertThat(
+            with(CaptionAttachment(ClipId("b"), whole = false, lengthMs = 1000, detachedStartOffsetMs = 4000)).validate(),
+        ).isNotEmpty()
+        assertThat(with(CaptionAttachment(ClipId("b"), detachedStartOffsetMs = Limits.MAX_MEDIA_MS + 1)).validate()).isNotEmpty()
     }
 
     @Test

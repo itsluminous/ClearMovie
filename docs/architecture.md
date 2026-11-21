@@ -126,17 +126,20 @@ Android types, so all of it is tested on the JVM.
   by hand inside its item, a caption keeps an offset; placed outside, it is
   free. Captions made on a text row ("+", "Add here") are free and keep
   their times. Dragging a whole caption's handle detaches only that side
-  (`CaptionAttachment.detachedStartMs` / `detachedEndMs`): it keeps its own
-  time while the other side follows the item, and follows it again when let
-  go exactly on the item's edge. Both detached, the caption is free. While
+  (`CaptionAttachment.detachedStartOffsetMs` / `detachedEndOffsetMs`, its
+  distance from that edge of the item): it keeps that distance wherever the
+  item goes or however it is trimmed, while the other side follows the item,
+  and follows it again when let go exactly on the item's edge. Both detached,
+  the caption is free and keeps its times. While
   one side is detached, Match item gives it both sides back.
 - **Handles** (`Resize.kt`). Every item off MAIN can be resized by side:
   `resizeRange` gives each handle's limits (neighbours on its row, the
   video's start and end, 0.5 s or 0.3 s for video and sound, and its file
   for media that does not repeat) and `resizeClip` applies one. The preset's
   frame, its music and the closing message keep following the video on the
-  side that was not dragged (`detachedStartMs` / `detachedEndMs` on the clip,
-  next to its `anchor`).
+  side that was not dragged, and the dragged side keeps its distance from
+  that edge of the span (`detachedStartOffsetMs` / `detachedEndOffsetMs` on
+  the clip, next to its `anchor`).
 - **Lower for talk.** A music row's `lowerToDb` is the level its music goes
   down to under voices, videos' own sound and the closing message; without
   one the project's `DuckingSpec` levels apply (-20 dB under a voice or the
@@ -160,7 +163,9 @@ Android types, so all of it is tested on the JVM.
   versions one step at a time (schema 2 added `attachedTo`; the 1 to 2
   step rewrites nothing, so a schema 1 caption reads as a free one; schema
   4 added detached sides and `lowerToDb`, and its step rewrites nothing
-  either). Golden files under `app/src/test/resources/fixtures/project/` must
+  either; schema 5 keeps a detached side as a distance from its item's edge,
+  and its step renames the schema 4 keys and turns their times into
+  distances). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.
 
 ## Rendering

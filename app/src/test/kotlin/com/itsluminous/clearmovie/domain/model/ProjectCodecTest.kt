@@ -33,7 +33,7 @@ class ProjectCodecTest {
 
     @Test
     fun `golden fixtures round-trip byte for byte`() {
-        for (name in listOf("rich-v4.json", "blank-v4.json")) {
+        for (name in listOf("rich-v5.json", "blank-v5.json")) {
             val text = fixture(name)
             assertThat(codec.encode(ok(text).project)).isEqualTo(text)
         }
@@ -48,18 +48,18 @@ class ProjectCodecTest {
             assertThat(result.repaired).isFalse()
             assertThat(result.project.shape).isEqualTo(CanvasShape.LANDSCAPE)
             assertThat(result.project.askShape).isFalse()
-            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v4.json"))
+            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v5.json"))
         }
     }
 
     @Test
-    fun `a schema 3 project reads exactly as before and saves as schema 4`() {
+    fun `a schema 3 project reads exactly as before and saves at the current schema`() {
         // cm-timeline-handles: schema 4 adds detached sides and a music row's talk level; schema 3 has neither.
         for (name in listOf("rich", "blank")) {
             val result = ok(fixture("$name-v3.json"))
             assertThat(result.fromVersion).isEqualTo(3)
             assertThat(result.repaired).isFalse()
-            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v4.json"))
+            assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v5.json"))
             val captions =
                 result.project.tracks
                     .flatMap { it.clips }
@@ -67,6 +67,32 @@ class ProjectCodecTest {
             assertThat(captions.mapNotNull { it.attachedTo }.none { it.partlyDetached }).isTrue()
             assertThat(result.project.tracks.all { it.lowerToDb == null }).isTrue()
         }
+    }
+
+    @Test
+    fun `a schema 4 dragged side, a time in the video, reads as the same time kept as a distance from its item`() {
+        // cm-timeline-handles: schema 4 (unreleased) kept the time; schema 5 keeps the distance from the item's edge.
+        val v4 =
+            fixture("rich-v4.json")
+                .replace(
+                    "\"startMs\": 6500,\n                    \"durationMs\": 3600,",
+                    "\"startMs\": 7000,\n                    \"durationMs\": 3100,",
+                ).replace(
+                    "\"clip\": \"photo1\",\n                        \"offsetMs\": 0,\n                        \"whole\": true",
+                    "\"clip\": \"photo1\",\n                        \"offsetMs\": 0,\n                        \"whole\": true,\n                        \"detachedStartMs\": 7000",
+                )
+        assertThat(v4).contains("detachedStartMs")
+        val result = ok(v4)
+        assertThat(result.fromVersion).isEqualTo(4)
+        val caption =
+            result.project.tracks
+                .flatMap { it.clips }
+                .filterIsInstance<TextClip>()
+                .single { it.text == "Welcome" }
+        assertThat(caption.startMs to caption.endMs).isEqualTo(7000L to 10_100L)
+        // photo1 starts at 6.5 s: the start is 0.5 s into it.
+        assertThat(caption.attachedTo!!.detachedStartOffsetMs).isEqualTo(500L)
+        assertThat(codec.encode(result.project)).contains("\"detachedStartOffsetMs\": 500")
     }
 
     @Test
@@ -86,8 +112,8 @@ class ProjectCodecTest {
         assertThat(project.validate()).isEmpty()
         val text = codec.encode(project)
         assertThat(text).contains("\"lowerToDb\": -9.5")
-        assertThat(text).contains("\"detachedStartMs\"")
-        assertThat(text).contains("\"detachedEndMs\"")
+        assertThat(text).contains("\"detachedStartOffsetMs\"")
+        assertThat(text).contains("\"detachedEndOffsetMs\"")
         assertThat(ok(text).project).isEqualTo(project)
         // A default (null) is left out, so a project without one is byte for byte what schema 3 wrote.
         assertThat(codec.encode(rich)).doesNotContain("lowerToDb")
@@ -105,7 +131,7 @@ class ProjectCodecTest {
         }
         assertThat(codec.encode(Fixtures.richProject().setShape(CanvasShape.PORTRAIT))).contains("\"shape\": \"portrait\"")
         // A shape this app does not know is refused, never read as some other shape.
-        val unknown = fixture("blank-v4.json").replace("\"shape\": \"landscape\"", "\"shape\": \"cinema\"")
+        val unknown = fixture("blank-v5.json").replace("\"shape\": \"landscape\"", "\"shape\": \"cinema\"")
         assertThat(failed(unknown)).isEqualTo(ProjectDecodeResult.Reason.MALFORMED)
     }
 
@@ -113,8 +139,8 @@ class ProjectCodecTest {
     fun `the rich fixture is the project the test builds`() {
         // If the model changes shape, this fails before the byte comparison
         // hides why; regenerate the fixture only for an intended change.
-        assertThat(ok(fixture("rich-v4.json")).project).isEqualTo(Fixtures.richProject())
-        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v4.json"))
+        assertThat(ok(fixture("rich-v5.json")).project).isEqualTo(Fixtures.richProject())
+        assertThat(codec.encode(Fixtures.richProject())).isEqualTo(fixture("rich-v5.json"))
     }
 
     @Test
@@ -124,7 +150,7 @@ class ProjectCodecTest {
             val result = ok(fixture(name))
             assertThat(result.fromVersion).isEqualTo(1)
             assertThat(result.repaired).isFalse()
-            assertThat(codec.encode(result.project)).startsWith("{\n    \"schemaVersion\": 4,")
+            assertThat(codec.encode(result.project)).startsWith("{\n    \"schemaVersion\": 5,")
         }
         val rich = ok(fixture("rich-v1.json")).project
         assertThat(rich).isEqualTo(Fixtures.richProjectV1())
@@ -138,7 +164,7 @@ class ProjectCodecTest {
         assertThat(ok(codec.encode(rich)).project).isEqualTo(rich)
         // The app's chain starts at schema 1.
         assertThat(ProjectMigrations().oldestVersion).isEqualTo(1)
-        assertThat(ProjectMigrations.CURRENT_VERSION).isEqualTo(4)
+        assertThat(ProjectMigrations.CURRENT_VERSION).isEqualTo(5)
     }
 
     @Test
@@ -295,7 +321,7 @@ class ProjectCodecTest {
 
     @Test
     fun `a project from a newer app is refused`() {
-        val newer = fixture("blank-v4.json").replace("\"schemaVersion\": 4", "\"schemaVersion\": 5")
+        val newer = fixture("blank-v5.json").replace("\"schemaVersion\": 5", "\"schemaVersion\": 6")
         assertThat(failed(newer)).isEqualTo(ProjectDecodeResult.Reason.NEWER_VERSION)
     }
 
