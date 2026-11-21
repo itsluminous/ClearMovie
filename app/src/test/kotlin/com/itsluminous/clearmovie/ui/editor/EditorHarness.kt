@@ -63,6 +63,9 @@ class EditorHarness(
     var project by mutableStateOf(initial)
         private set
     var playheadUs by mutableStateOf(0L)
+
+    /** The title the top bar shows. */
+    var title by mutableStateOf("Party")
     var state: EditorScreenState? = null
 
     /** What the photo picker "returns" for a "+": put in by the test's stand-in for the view model's intake. */
@@ -249,7 +252,7 @@ class EditorHarness(
         val ui = ui()
         EditorScreen(
             ui = ui,
-            title = "Party",
+            title = title,
             playhead = PlayheadUi(playheadUs, (ui.slots.lastOrNull()?.endMs ?: 0) * 1000, false),
             preview = { m -> Box(m.background(Color.Black).testTag(PREVIEW_TAG)) },
             thumbnail = { _, _ -> null },

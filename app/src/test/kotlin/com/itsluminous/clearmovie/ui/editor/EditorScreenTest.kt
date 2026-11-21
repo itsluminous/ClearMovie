@@ -720,11 +720,11 @@ class EditorScreenTest {
         repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
         tapBar(EditAction.DELETE)
         compose.waitForIdle()
-        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).assertExists()
+        compose.onNodeWithText(s(R.string.action_undo)).assertExists()
         selectItem(h, "p1")
         tapBar(EditAction.ROTATE)
         compose.waitForIdle()
-        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).assertDoesNotExist()
+        compose.onNodeWithText(s(R.string.action_undo)).assertDoesNotExist()
         assertThat(h.project.contentIds()).doesNotContain("p3")
     }
 
@@ -750,7 +750,7 @@ class EditorScreenTest {
             tapBar(EditAction.DELETE)
             compose.waitForIdle()
         }
-        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).performClick()
+        compose.onNodeWithText(s(R.string.action_undo)).performClick()
         compose.waitForIdle()
         assertThat(h.project.contentIds()).contains("p3")
         assertThat(h.project.contentIds()).doesNotContain("p1")
@@ -776,9 +776,15 @@ class EditorScreenTest {
     @Test
     fun `main controls are at least 48 dp to touch and bar buttons at least the bar's minimum wide, at font scale 2`() {
         forEachSize(fontScales = listOf(1f, 2f)) { _, h ->
-            for (tag in listOf(EDITOR_EXPORT_TAG, UNDO_TAG, REDO_TAG, PLAY_TAG, EXACT_TAG)) {
+            for (tag in listOf(EDITOR_EXPORT_TAG, PLAY_TAG, EXACT_TAG)) {
                 val b = compose.onNodeWithTag(tag).bounds()
                 assertThat((b.bottom - b.top).v()).isAtLeast(47.5f)
+                assertThat((b.right - b.left).v()).isAtLeast(47.5f)
+            }
+            // Undo and Redo are stacked in the 64 dp top bar (kupraki's call): 48 dp wide, half the bar tall.
+            for (tag in listOf(UNDO_TAG, REDO_TAG)) {
+                val b = compose.onNodeWithTag(tag).bounds()
+                assertThat((b.bottom - b.top).v()).isWithin(0.5f).of(32f)
                 assertThat((b.right - b.left).v()).isAtLeast(47.5f)
             }
             selectItem(h, "v2")
@@ -836,7 +842,7 @@ class EditorScreenTest {
         repeat(3) { compose.onNodeWithTag(BAR_TAG).performTouchInput { swipeLeft() } }
         tapBar(EditAction.DELETE)
         assertThat(h.project.contentIds()).doesNotContain("p3")
-        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).performClick()
+        compose.onNodeWithText(s(R.string.action_undo)).performClick()
         compose.waitForIdle()
         assertThat(h.project.contentIds()).contains("p3")
     }
@@ -845,12 +851,16 @@ class EditorScreenTest {
     fun `Undo and Redo in the top bar step through edits`() {
         val h = show(ScreenSize.COMPACT)
         compose.onNodeWithTag(UNDO_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(REDO_TAG).assertIsNotEnabled()
         selectItem(h, "p1")
         tapBar(EditAction.ROTATE)
+        compose.onNodeWithTag(REDO_TAG).assertIsNotEnabled()
         compose.onNodeWithTag(UNDO_TAG).assertIsEnabled().performClick()
         assertThat((h.project.clip(ClipId("p1")) as com.itsluminous.clearmovie.domain.model.PhotoClip).rotation.degrees).isEqualTo(0)
+        compose.onNodeWithTag(UNDO_TAG).assertIsNotEnabled()
         compose.onNodeWithTag(REDO_TAG).assertIsEnabled().performClick()
         assertThat((h.project.clip(ClipId("p1")) as com.itsluminous.clearmovie.domain.model.PhotoClip).rotation.degrees).isEqualTo(90)
+        compose.onNodeWithTag(REDO_TAG).assertIsNotEnabled()
     }
 
     // ---------------------------------------------------------------- rows and the floating preview
@@ -940,7 +950,7 @@ class EditorScreenTest {
         selectItem(h, intro.value)
         tapBar(EditAction.SKIP)
         assertThat(h.project.mainClips.first()).isNotInstanceOf(com.itsluminous.clearmovie.domain.model.IntroClip::class.java)
-        compose.onNode(hasText(s(R.string.action_undo)) and !hasTestTag(UNDO_TAG)).performClick()
+        compose.onNodeWithText(s(R.string.action_undo)).performClick()
         compose.waitForIdle()
         assertThat(h.project.mainClips.first()).isInstanceOf(com.itsluminous.clearmovie.domain.model.IntroClip::class.java)
     }

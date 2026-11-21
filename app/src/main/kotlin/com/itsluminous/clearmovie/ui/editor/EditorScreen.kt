@@ -37,6 +37,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -80,7 +81,6 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -153,6 +153,7 @@ const val ZOOM_FIT_TAG = "bar_action_FIT_ALL"
 const val TRANSPORT_TAG = "editor_transport"
 const val PLAY_TAG = "editor_play"
 const val TIME_TAG = "editor_time"
+const val EDITOR_TOP_BAR_TAG = "editor_top_bar"
 const val UNDO_TAG = "editor_undo"
 const val REDO_TAG = "editor_redo"
 const val EXACT_TAG = "editor_exact"
@@ -919,102 +920,77 @@ private fun TopBar(
     actions: EditorActions,
     modifier: Modifier,
 ) {
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    val labelStyle = MaterialTheme.typography.labelMedium
     val exportStyle = MaterialTheme.typography.labelLarge
-    val undoWord = stringResource(R.string.action_undo)
-    val redoWord = stringResource(R.string.action_redo)
     val exportWord = stringResource(R.string.editor_export)
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        // Undo and Redo keep their words while the title still has room for a few letters (and up to 1.3x
-        // text); otherwise only their icons (named for TalkBack), so the title is never cut to one letter.
-        val labelled =
-            with(density) {
-                fun w(
-                    text: String,
-                    style: androidx.compose.ui.text.TextStyle,
-                ) = measurer
-                    .measure(text, style)
-                    .size.width
-                    .toDp()
-                val undoDp = maxOf(TEXT_BUTTON_MIN, w(undoWord, labelStyle) + 16.dp)
-                val redoDp = maxOf(TEXT_BUTTON_MIN, w(redoWord, labelStyle) + 16.dp)
-                val exportDp = ICON + 8.dp + w(exportWord, exportStyle) + 32.dp
-                val titleRoom = maxWidth - 16.dp - TOUCH - exportDp - undoDp - redoDp - 8.dp * 4
-                titleRoom >= MIN_TITLE
-            }
-        val iconsOnly = LocalDensity.current.fontScale > TOP_BAR_LABELS_FONT_SCALE || !labelled
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButton(onClick = actions::back) {
-                Icon(
-                    painterResource(R.drawable.ic_arrow_back),
-                    contentDescription = stringResource(R.string.action_back),
-                    modifier = Modifier.size(ICON),
-                )
-            }
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+    // One height in every language and at every text size: the title fits itself to the room it has
+    // (EditorTitle) rather than making the bar taller.
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(TOP_BAR_HEIGHT)
+            .testTag(EDITOR_TOP_BAR_TAG)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        IconButton(onClick = actions::back) {
+            Icon(
+                painterResource(R.drawable.ic_arrow_back),
+                contentDescription = stringResource(R.string.action_back),
+                modifier = Modifier.size(ICON),
             )
-            LabelledIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo, iconsOnly)
-            LabelledIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo, iconsOnly)
-            Button(
-                onClick = actions::export,
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_EXPORT_TAG),
-            ) {
-                Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
-                Spacer(Modifier.width(8.dp))
-                AutoSizeLabel(exportWord, style = exportStyle)
-            }
+        }
+        EditorTitle(title, TOP_BAR_HEIGHT, Modifier.weight(1f))
+        UndoRedo(ui, actions)
+        Button(
+            onClick = actions::export,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_EXPORT_TAG),
+        ) {
+            Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
+            Spacer(Modifier.width(8.dp))
+            AutoSizeLabel(exportWord, style = exportStyle)
         }
     }
 }
 
-/** The least room the editor's title keeps before Undo and Redo give up their words. */
-private val MIN_TITLE = 96.dp
+/** The editor's top bar is Material's small top app bar height, whatever the title. */
+private val TOP_BAR_HEIGHT = 64.dp
 
-/** A TextButton is never narrower than this (Material's ButtonDefaults.MinWidth). */
-private val TEXT_BUTTON_MIN = 58.dp
-
-/** An icon with its name under it (ARCHITECTURE section 11: every control has a label), 48 dp to touch. */
+/**
+ * Undo above Redo, one icon each, stacked with no gap so the title has their
+ * width (kupraki's call). Two 48 dp buttons cannot stack in the 64 dp bar, so
+ * each is 48 dp wide and half the bar tall: the one place in the editor a
+ * touch target is under 48 dp tall. Each is named for TalkBack.
+ */
 @Composable
-private fun LabelledIcon(
+private fun UndoRedo(
+    ui: EditorUi,
+    actions: EditorActions,
+) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        Column(Modifier.width(TOUCH)) {
+            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo)
+            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo)
+        }
+    }
+}
+
+@Composable
+private fun StackedIcon(
     icon: Int,
     label: Int,
     enabled: Boolean,
     tag: String,
     onClick: () -> Unit,
-    iconOnly: Boolean = false,
 ) {
-    if (iconOnly) {
-        val name = stringResource(label)
-        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(tag)) {
-            Icon(painterResource(icon), contentDescription = name, modifier = Modifier.size(ICON))
-        }
-        return
-    }
-    TextButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-        modifier = Modifier.heightIn(min = TOUCH).testTag(tag),
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(ICON))
-            AutoSizeLabel(stringResource(label), style = MaterialTheme.typography.labelMedium)
-        }
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(TOUCH, STACKED_HEIGHT).testTag(tag)) {
+        Icon(painterResource(icon), contentDescription = stringResource(label), modifier = Modifier.size(ICON))
     }
 }
+
+/** Each of the stacked Undo and Redo is half the top bar tall. */
+private val STACKED_HEIGHT = TOP_BAR_HEIGHT / 2
 
 /**
  * The playback strip under the preview: Play, the time, and "As exported"
@@ -1180,9 +1156,6 @@ private const val PANEL_SHARE_TWO_PANE = 0.38
 /** The caption editor's share of an upright window, and of the right pane in two panes. */
 private const val CAPTION_PANEL_SHARE = 0.42
 private const val CAPTION_PANEL_SHARE_TWO_PANE = 0.72
-
-/** Above this text size Undo and Redo drop their words. */
-private const val TOP_BAR_LABELS_FONT_SCALE = 1.3f
 
 @Composable
 private fun Banners(
