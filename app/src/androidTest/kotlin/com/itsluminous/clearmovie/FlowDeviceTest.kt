@@ -284,7 +284,8 @@ class FlowDeviceTest {
             scenario.recreate()
             waitFor(hasTestTag(TEXT_FIELD_TAG))
             compose.onNodeWithTag(TEXT_FIELD_TAG).performTextInput(" जी")
-            compose.waitUntil(TIMEOUT_MS) { captionText() == "नमस्ते जी" }
+            runCatching { compose.waitUntil(TIMEOUT_MS) { captionText() == "नमस्ते जी" } }
+            assertThat(captionText()).isEqualTo("नमस्ते जी")
             compose.onNodeWithTag(PANEL_DONE_TAG).performClick()
             waitFor(hasTestTag(barActionTag(EditAction.EDIT_TEXT)))
             val project = runBlocking { app.projectRepository.open.value!! }

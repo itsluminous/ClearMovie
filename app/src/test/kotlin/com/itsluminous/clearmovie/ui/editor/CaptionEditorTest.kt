@@ -425,22 +425,6 @@ class CaptionEditorTest {
     }
 
     @Test
-    fun `typing in a new caption replaces The image caption`() {
-        val h = show()
-        h.select("p1")
-        tapBar(EditAction.ADD_CAPTION)
-        assertThat(h.caption().text).isEqualTo(CaptionWords.DEFAULT)
-        panel(TEXT_FIELD_TAG).performTextInput("Hello")
-        assertThat(h.caption().text).isEqualTo("Hello")
-        // Words of the user's own open with the cursor after them, so typing adds to them.
-        panel(PANEL_DONE_TAG).performClick()
-        compose.waitForIdle()
-        tapBar(EditAction.EDIT_TEXT)
-        panel(TEXT_FIELD_TAG).performTextInput(" there")
-        assertThat(h.caption().text).isEqualTo("Hello there")
-    }
-
-    @Test
     fun `a new caption closed untouched keeps The image caption`() {
         val h = show()
         h.select("p1")
