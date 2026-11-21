@@ -7,17 +7,31 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.domain.export.ExportQuality
+import com.itsluminous.clearmovie.domain.model.AudioClip
+import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.PhotoClip
+import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.RandomIds
+import com.itsluminous.clearmovie.domain.model.ResizeEdge
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addCaptionFor
+import com.itsluminous.clearmovie.domain.model.addTimedClip
+import com.itsluminous.clearmovie.domain.model.attachSpan
 import com.itsluminous.clearmovie.domain.model.moveMainClip
+import com.itsluminous.clearmovie.domain.model.resizeClip
+import com.itsluminous.clearmovie.domain.model.setTalkLowering
+import com.itsluminous.clearmovie.domain.model.setTrackMuted
+import com.itsluminous.clearmovie.domain.model.setVolume
+import com.itsluminous.clearmovie.domain.model.trimVideo
+import com.itsluminous.clearmovie.domain.model.validate
 import com.itsluminous.clearmovie.render.plan.LayerRole
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import com.itsluminous.clearmovie.render.plan.VisualSegment
+import com.itsluminous.clearmovie.ui.editor.percentToDb
 import com.itsluminous.clearmovie.work.ExportOutcome
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -45,6 +59,16 @@ import java.io.File
  * the second (`captions-before.mp4`), then with the first item moved to the
  * end (`captions-after.mp4`), each with its timeline; the reordered project
  * is left open in the editor, for the preview frames at the same times.
+ *
+ * With `-e cm.handles true` (cm-timeline-handles) it exports, at Small:
+ * captions with one side detached by its handle before and after the item
+ * before them is trimmed (`handles-text-before.mp4`, `handles-text-after.mp4`),
+ * and the frame's music lowered for a voice clip at 50% and at 5%, once
+ * (the main row muted, so only the voice lowers it), once
+ * with the voice heard (`duck-voice-50.mp4`, `duck-voice-5.mp4`) and once
+ * with the voice turned all the way down, so the music's own level can be
+ * measured under it (`duck-quiet-50.mp4`, `duck-quiet-5.mp4`), each with its
+ * timeline.
  */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
@@ -53,17 +77,18 @@ class RealMediaExportTest {
     private val dir get() = File(checkNotNull(h.context.getExternalFilesDir(null)), "realmedia")
     private val demo = InstrumentationRegistry.getArguments().getString("cm.demo") == "true"
     private val captions = InstrumentationRegistry.getArguments().getString("cm.captions") == "true"
+    private val handles = InstrumentationRegistry.getArguments().getString("cm.handles") == "true"
 
     @Before
     fun setUp() {
-        val enabled = demo || captions || InstrumentationRegistry.getArguments().getString("cm.realmedia") == "true"
+        val enabled = demo || captions || handles || InstrumentationRegistry.getArguments().getString("cm.realmedia") == "true"
         assumeTrue("Run by hand with -e cm.realmedia true and the files in realmedia/", enabled && File(dir, "Intro.mp4").isFile)
         h.setUp()
     }
 
     @After
     fun tearDown() {
-        if (File(dir, "Intro.mp4").isFile && !demo && !captions) h.cleanUp()
+        if (File(dir, "Intro.mp4").isFile && !demo && !captions && !handles) h.cleanUp()
     }
 
     private fun file(name: String) = File(dir, name)
@@ -96,8 +121,69 @@ class RealMediaExportTest {
     }
 
     @Test
+    fun exportDetachedCaptionsAndTwoTalkLevels() {
+        assumeTrue("Run with -e cm.handles true", handles)
+        // Three videos of 4 s each, so the exports stay short.
+        // (A file whose length the phone can't read is left out.)
+        val items =
+            realItems()
+                .filterIsInstance<VideoClip>()
+                .filter { it.sourceDurationMs >= 4000 }
+                .take(3)
+                .map { it.copy(trimEndMs = 4000L) }
+        assertThat(items.size).isEqualTo(3)
+        val base = h.project(items, "Handles", caption = null)
+        // "Start detached" on the second video, its start dragged 1.5 s later; "End detached" on the third, its end 1 s earlier.
+        var text = base.addCaptionFor(items[1].id, "Start detached", captionId = ClipId("cap-start"))
+        text = text.addCaptionFor(items[2].id, "End detached", captionId = ClipId("cap-end"))
+        text = text.resizeClip(ClipId("cap-start"), ResizeEdge.START, text.attachSpan(items[1].id)!!.first + 1500)
+        text = text.resizeClip(ClipId("cap-end"), ResizeEdge.END, text.attachSpan(items[2].id)!!.second - 1000)
+        // Then the second video is trimmed 1.5 s shorter: the first caption's end and the second's start follow, the detached sides stay.
+        val trimmed = text.trimVideo(items[1].id, 0, items[1].trimEndMs - 1500)
+        val speech = h.insert("speech_last.mp3", "audio/mpeg") { file(it).inputStream() }
+        val voiceMs =
+            android.media.MediaMetadataRetriever().run {
+                setDataSource(file("speech_last.mp3").path)
+                extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)!!.toLong().also { release() }
+            }
+        val voiceAt = base.attachSpan(items[0].id)!!.first + 1000
+        val voice = AudioClip(ClipId("voice"), MediaRef.Store(speech.toString()), voiceAt, voiceMs, sourceDurationMs = voiceMs)
+        val music = base.tracks.single { it.presetRole == PresetRole.FRAME_MUSIC }.id
+        val runs = mutableListOf("handles-text-before" to text, "handles-text-after" to trimmed)
+        for (percent in listOf(50, 5)) {
+            val level = percentToDb(percent.toFloat())
+            // MAIN muted, so only the voice lowers the music (its videos would too, at the same level).
+            val heard =
+                base
+                    .addTimedClip(
+                        voice,
+                        AudioRole.VOICE,
+                    ).setTalkLowering(music, lower = true, levelDb = level)
+                    .setTrackMuted(base.main.id, true)
+            runs += "duck-voice-$percent" to heard
+            runs += "duck-quiet-$percent" to heard.setVolume(ClipId("voice"), Limits.MIN_VOLUME_DB)
+        }
+        for ((name, project) in runs) {
+            val stored =
+                project.copy(
+                    id =
+                        com.itsluminous.clearmovie.domain.model
+                            .ProjectId(RandomIds.next()),
+                )
+            assertThat(stored.validate()).isEmpty()
+            assertThat(runBlocking { h.app.projectRepository.createDraft(stored, inEditor = false) }).isTrue()
+            writeTimeline(stored, "$name-timeline.txt")
+            val outcome = runBlocking { h.pipeline().run(stored.id, ExportQuality.SMALL, name) {} }
+            val done = (outcome as ExportOutcome.Done).done
+            h.exported(done.uri)
+            h.keep(done.uri, "$name.mp4")
+            Log.i(ExportHarness.TAG, "HANDLES $name $done")
+        }
+    }
+
+    @Test
     fun exportTheRealPresetProjectAtEverySize() {
-        assumeTrue("Not in the captions run", !captions)
+        assumeTrue("Not in the captions or handles run", !captions && !handles)
         val project = realProject()
         if (demo) return
         writeTimeline(project)

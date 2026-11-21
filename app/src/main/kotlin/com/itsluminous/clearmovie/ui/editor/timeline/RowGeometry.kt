@@ -75,22 +75,27 @@ object TimedRowGeometry {
         val out = mutableListOf<TimedPlus>()
         val sel = sorted.firstOrNull { it.id == selected }
         val handles = sel?.let { handleHitAreas(it, zoom) }
+
+        fun clear(p: TimedPlus) =
+            handles == null ||
+                handles.toList().all { h ->
+                    p.xDp + half + TimelineGeometry.HANDLE_GAP_DP <= h.start ||
+                        p.xDp - half - TimelineGeometry.HANDLE_GAP_DP >= h.endInclusive
+                }
         // The selected item: one "+" on each side, just outside it (and its handles), so the item stays easy to touch.
+        // One pulled in from past the view's edge onto a handle is left out, as on MAIN: the item's menu has Add before and after.
         sel?.let { c ->
             val outward = if (handles != null) TimelineGeometry.DISPLACE_DP else half
-            out += TimedPlus(c.id, InsertSide.BEFORE, zoom.xOf(c.startMs.toDouble()) - outward).kept()
-            out += TimedPlus(c.id, InsertSide.AFTER, zoom.xOf(c.endMs.toDouble()) + outward).kept()
+            out +=
+                listOf(
+                    TimedPlus(c.id, InsertSide.BEFORE, zoom.xOf(c.startMs.toDouble()) - outward).kept(),
+                    TimedPlus(c.id, InsertSide.AFTER, zoom.xOf(c.endMs.toDouble()) + outward).kept(),
+                ).filter(::clear)
         }
         // One "+" at the end of the row, after its last item, never on a handle.
         val last = sorted.maxBy { it.endMs }
         val end = TimedPlus(last.id, InsertSide.AFTER, zoom.xOf(last.endMs.toDouble()) + half).kept()
-        val clear =
-            handles == null ||
-                handles.toList().all { h ->
-                    end.xDp + half + TimelineGeometry.HANDLE_GAP_DP <= h.start ||
-                        end.xDp - half - TimelineGeometry.HANDLE_GAP_DP >= h.endInclusive
-                }
-        if (clear && out.none { abs(it.xDp - end.xDp) < TimelineGeometry.PLUS_HIT_DP }) out += end
+        if (clear(end) && out.none { abs(it.xDp - end.xDp) < TimelineGeometry.PLUS_HIT_DP }) out += end
         return out.sortedBy { it.xDp }
     }
 

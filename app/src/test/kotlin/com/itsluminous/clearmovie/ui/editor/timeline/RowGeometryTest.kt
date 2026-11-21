@@ -176,6 +176,14 @@ class RowGeometryTest {
                     it.anchor.value == "a" && it.side == InsertSide.BEFORE
                 }.xDp,
         ).isWithin(1e-9).of(100.0 - TimelineGeometry.DISPLACE_DP)
+        // An item running past the view's end: its "+" after it would be pulled onto its end handle, so it is left out.
+        val long = listOf(handled("l", 1000, 3000))
+        val inView = TimedRowGeometry.plusPoints(long, zoom, ClipId("l"), widthDp = 290.0)
+        val (_, lEnd) = TimedRowGeometry.handleHitAreas(long[0], zoom)!!
+        assertThat(
+            inView.none { it.xDp + half > lEnd.start - TimelineGeometry.HANDLE_GAP_DP && it.xDp - half < lEnd.endInclusive },
+        ).isTrue()
+        assertThat(inView.map { it.side }).containsExactly(InsertSide.BEFORE)
         // Without handles (nothing to resize), the plus sits just outside, as before.
         assertThat(plus(listOf(clip("a", 1000, 3000)), selected = "a").first().xDp).isWithin(1e-9).of(100.0 - half)
     }
