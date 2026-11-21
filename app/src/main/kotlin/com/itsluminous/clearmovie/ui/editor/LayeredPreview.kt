@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
@@ -111,6 +112,11 @@ fun LayeredPreview(
         }
     }
     val now: () -> Long = remember(clock) { { clock.longValue } }
+    // MAIN's item by the clock, not by the player's last report: the player says it moved on to the
+    // next item a moment after that item's first picture is on screen, which then showed with the
+    // item before's place and motion (a video full screen before going into the frame's window).
+    // Read through derivedStateOf, the clock recomposes the preview only when the item changes.
+    val mainIndex by remember(schedule, clock) { derivedStateOf { schedule.mainIndexAt(clock.longValue) } }
     BoxWithConstraints(modifier.clipToBounds().background(media.previewBackground).testTag(PREVIEW_TAG)) {
         val w = maxWidth
         val h = maxHeight
@@ -119,7 +125,7 @@ fun LayeredPreview(
             key(layer) {
                 when (layer) {
                     LayerRef.Main -> {
-                        MainLayer(engine, schedule, state, now, stills, resolver, w, h, aspect)
+                        MainLayer(engine, schedule, state, mainIndex, now, stills, resolver, w, h, aspect)
                     }
 
                     is LayerRef.Overlay -> {
@@ -150,6 +156,8 @@ private class Picture(
     val content: MainContent,
     val placement: Placement,
     val videoSize: VideoSize?,
+    /** Whether the player's surface holds this picture's own video yet (else it is drawn hidden). */
+    val surfaceReady: Boolean,
     val motionAt: (Long) -> MotionFrame,
     val showsAt: (Long) -> Boolean,
 )
@@ -160,6 +168,7 @@ private fun MainLayer(
     engine: LayeredPreviewEngine,
     schedule: PreviewSchedule,
     state: PreviewState,
+    mainIndex: Int,
     now: () -> Long,
     stills: StillLoader,
     resolver: MediaResolver?,
@@ -167,7 +176,7 @@ private fun MainLayer(
     h: Dp,
     aspect: Double,
 ) {
-    val entry = schedule.main.getOrNull(state.mainIndex) ?: schedule.main.firstOrNull() ?: return
+    val entry = schedule.main.getOrNull(mainIndex) ?: schedule.main.firstOrNull() ?: return
     // The tail playing now, else the next one (composed a little early, so it is ready when its overlap starts).
     val positionUs = state.positionUs
     val tail = schedule.tailAt(positionUs) ?: schedule.tail.firstOrNull { it.startUs >= positionUs } ?: schedule.tail.lastOrNull()
@@ -181,6 +190,7 @@ private fun MainLayer(
                         tail.content,
                         tail.placement,
                         state.tailVideoSize,
+                        surfaceReady = true,
                         motionAt = { t -> tail.motion?.let { MotionMath.frameAt(it, tail.clipUsAt(t), aspect) } ?: MotionFrame.STILL },
                         showsAt = { t -> t >= tail.startUs && t < tail.endUs },
                     ),
@@ -204,6 +214,8 @@ private fun MainLayer(
                     entry.content,
                     entry.placement,
                     state.mainVideoSize,
+                    // A surface still holding the last picture of an earlier video stays hidden until this one's first.
+                    surfaceReady = state.mainSurfaceReady,
                     motionAt = { t -> entry.motion?.let { MotionMath.frameAt(it, entry.clipUsAt(t), aspect) } ?: MotionFrame.STILL },
                     showsAt = { true },
                 ),
@@ -317,7 +329,7 @@ private fun PlacedPicture(
                         .requiredSize(cw, ch)
                         .graphicsLayer {
                             // A hidden surface is still drawn, faintly: see HIDDEN_ALPHA.
-                            alpha = if (isVideo) 1f else HIDDEN_ALPHA
+                            alpha = if (isVideo && picture.surfaceReady) 1f else HIDDEN_ALPHA
                             rotationZ = rotation.degrees.toFloat()
                         },
                 )

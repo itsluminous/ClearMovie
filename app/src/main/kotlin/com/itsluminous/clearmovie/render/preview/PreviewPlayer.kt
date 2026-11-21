@@ -3,11 +3,13 @@ package com.itsluminous.clearmovie.render.preview
 import android.content.Context
 import android.net.Uri
 import android.view.TextureView
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ClippingMediaSource
@@ -92,11 +94,16 @@ class ExoPreviewPlayers(
 ) : PreviewPlayerFactory {
     private val sourceFactory by lazy { DefaultMediaSourceFactory(context) }
 
+    @OptIn(ExperimentalApi::class)
     override fun create(
         role: PlayerRole,
         key: KeySpec?,
     ): PreviewPlayer {
-        val player = ExoPlayer.Builder(context).build()
+        // Dynamic scheduling (on by default in Media3 1.11) lets a player that plays only sound, as
+        // MAIN does over a photo, update its position about four times a second: the motion drawn
+        // from MAIN's clock then moved in steps, and followers looked out of step and were moved
+        // back over and over. Off, every player keeps its position up to date.
+        val player = ExoPlayer.Builder(context).experimentalSetDynamicSchedulingEnabled(false).build()
         when (role) {
             PlayerRole.MAIN -> {
                 player.setAudioAttributes(MOVIE_AUDIO, true)

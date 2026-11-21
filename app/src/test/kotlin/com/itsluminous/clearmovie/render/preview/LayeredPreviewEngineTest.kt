@@ -215,6 +215,97 @@ class LayeredPreviewEngineTest {
     }
 
     @Test
+    fun `a follower near its next part waits at its start and starts when MAIN gets there`() {
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        engine.play()
+        val frame = overlays().single()
+        val lane = schedule.overlays.single()
+        val first = lane.entries.indexOfFirst { it is PreviewSchedule.LaneEntry.Play }
+        val startUs = lane.entries[first].startUs
+        assertThat(startUs).isGreaterThan(LayeredPreviewEngine.PARK_AHEAD_US)
+        // Far from its first part it plays its silence, as before: no decoder held yet.
+        assertThat(frame.playWhenReady).isTrue()
+        assertThat(frame.seeks.lastOrNull()?.first).isNotEqualTo(first)
+
+        fun mainAt(us: Long) {
+            val i = schedule.mainIndexAt(us)
+            main().currentMediaItemIndex = i
+            main().currentPosition = (us - schedule.main[i].startUs) / 1000
+        }
+        // A second before it: it waits, paused, at its part's start, decoding it already.
+        mainAt(startUs - 1_000_000)
+        frame.currentPosition = (startUs - 1_000_000) / 1000
+        scope.advanceTimeBy(LayeredPreviewEngine.TICK_MS + 1)
+        idle()
+        assertThat(frame.playWhenReady).isFalse()
+        assertThat(frame.seeks.last()).isEqualTo(first to 0L)
+        val seeksWaiting = frame.seeks.size
+        // Ticks while it waits do not move it again.
+        scope.advanceTimeBy(LayeredPreviewEngine.TICK_MS * 3 + 1)
+        idle()
+        assertThat(frame.seeks.size).isEqualTo(seeksWaiting)
+        // MAIN reaches the part's start: the frame starts where it waits, without a seek.
+        mainAt(startUs)
+        scope.advanceTimeBy(1_000)
+        idle()
+        assertThat(frame.playWhenReady).isTrue()
+        assertThat(frame.seeks.size).isEqualTo(seeksWaiting)
+        assertThat(engine.state.value.overlayVisible).containsExactly(true)
+    }
+
+    @Test
+    fun `a paused seek within a gap leaves the frame player in its silence, then puts its picture up`() {
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        val frame = overlays().single()
+        val lane = schedule.overlays.single()
+        val first = lane.entries.indexOfFirst { it is PreviewSchedule.LaneEntry.Play }
+        val seeksAtLoad = frame.seeks.size
+        // Into the intro, before the frame starts: the keyed player stays where it is in its silence.
+        engine.seekTo(lane.entries[first].startUs / 2)
+        assertThat(frame.seeks.size).isEqualTo(seeksAtLoad)
+        assertThat(frame.playWhenReady).isFalse()
+        assertThat(engine.state.value.overlayVisible).containsExactly(false)
+        // Onto the photo: the frame is sought there, and plays only to put its picture up.
+        val p1 = project.mainSlot(ClipId("p1"))!!
+        engine.seekTo((p1.startMs + 500) * 1000)
+        assertThat(frame.seeks.last().first).isEqualTo(lane.indexAt((p1.startMs + 500) * 1000))
+        assertThat(frame.playWhenReady).isTrue()
+        assertThat(engine.state.value.overlayVisible).containsExactly(true)
+    }
+
+    @Test
+    fun `MAIN's surface is drawn hidden from a photo on until the next video's first picture`() {
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        assertThat(engine.state.value.mainSurfaceReady).isFalse()
+        main().firstFrame()
+        assertThat(engine.state.value.mainSurfaceReady).isTrue()
+        // MAIN moves on to the photo: it plays silence there, and its surface keeps the intro's last picture.
+        val p1 = project.mainSlot(ClipId("p1"))!!
+        main().transitionTo(schedule.mainIndexAt(p1.startMs * 1000))
+        assertThat(engine.state.value.mainSurfaceReady).isFalse()
+        // On to the next video: still the old picture until this one's first is drawn.
+        val v2 = project.mainSlot(ClipId("v2"))!!
+        main().transitionTo(schedule.mainIndexAt(v2.startMs * 1000))
+        assertThat(engine.state.value.mainSurfaceReady).isFalse()
+        main().firstFrame()
+        assertThat(engine.state.value.mainSurfaceReady).isTrue()
+        // A seek onto the photo hides it again.
+        engine.seekTo((p1.startMs + 500) * 1000)
+        assertThat(engine.state.value.mainSurfaceReady).isFalse()
+    }
+
+    @Test
+    fun `an edit that reloads the players keeps showing MAIN's picture until the new player draws`() {
+        engine.setMainSurface(TextureView(ApplicationProvider.getApplicationContext()))
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        main().firstFrame()
+        assertThat(engine.state.value.mainSurfaceReady).isTrue()
+        // A trim, say: new players, the same surface, which still holds the old player's picture.
+        engine.load(schedule, resolver, startUs = 1_000_000, play = false)
+        assertThat(engine.state.value.mainSurfaceReady).isTrue()
+    }
+
+    @Test
     fun `the music is lowered under a video's own sound, as in the export`() {
         engine.load(schedule, resolver, startUs = 0, play = false)
         val music = schedule.sounds.indexOfFirst { it.role.name == "MUSIC" }

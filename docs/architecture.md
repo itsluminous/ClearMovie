@@ -296,7 +296,24 @@ lays it out for players:
   alike. A preset's caption style also sets `effects.textStart`, the start
   animation new captions get (`withEffectDefaultsFor`).
 
-`LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. It takes its
+`LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. In the last
+1.5 s before one of its parts (the frame after the intro, the outgoing video of
+a transition, a sound row's next sound) a follower waits, paused, at that
+part's start and starts when MAIN reaches it, its picture already decoded:
+crossing from silence into the file mid-play, it started late and was then
+moved back in step again and again. Further away it plays its silence and
+holds no decoder, which an export running beside the editor may need. A
+paused seek within a gap leaves a keyed frame player where it is in its
+silence: one moved within its silence and then to its file stayed buffering,
+and the paused preview showed no frame. Every preview player has Media3's
+dynamic scheduling off: with it on, a player that plays only sound (MAIN over
+a photo, a card or the held last frame) updated its position about four times
+a second, so the motion drawn from MAIN's clock moved in steps and the
+followers looked out of step. The preview picks MAIN's item by the clock, not
+by the player's last report (the next item's first picture can be on screen a
+moment before the player says it moved on), and draws MAIN's surface hidden
+from a photo, card or gap on until the next video's first picture, as the
+surface still holds the last picture of the video before. It takes its
 players from a `PreviewPlayerFactory` (`ExoPreviewPlayers` in the app), so
 `LayeredPreviewEngineTest` checks its playlists, seeks, speeds, drift
 correction, volumes and error handling with fake players. It is owned

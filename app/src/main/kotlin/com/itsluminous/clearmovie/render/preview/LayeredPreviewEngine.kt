@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.render.preview
 import android.content.Context
 import android.net.Uri
 import android.os.Looper
+import android.os.SystemClock
 import android.view.TextureView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -35,6 +36,13 @@ data class PreviewState(
     val mainIndex: Int = -1,
     /** The MAIN player's picture size for the current video, or null before it is known. */
     val mainVideoSize: VideoSize? = null,
+    /**
+     * Whether the MAIN player's surface holds a picture of the video playing:
+     * false from a photo, card or gap on (the player plays silence there) until
+     * the next video's first picture is drawn, as the surface still holds the
+     * last picture of the video before.
+     */
+    val mainSurfaceReady: Boolean = false,
     /** The tail player's picture size (the outgoing video in a transition), or null before it is known. */
     val tailVideoSize: VideoSize? = null,
     /** Per overlay lane: whether its picture shows now. */
@@ -173,6 +181,7 @@ class LayeredPreviewEngine(
                     null
                 } else {
                     players.create(PlayerRole.OVERLAY, key).apply {
+                        if (key != null) keyed += this
                         setSegments(lane.entries.mapIndexed { j, e -> sources[j] ?: silence(e.durationUs) })
                         addListener(OverlayListener(this, i))
                         overlaySurfaces[i]?.let {
@@ -197,6 +206,9 @@ class LayeredPreviewEngine(
                     }
                 }
         }
+        // The MAIN surface outlives its players: the picture it holds from the player before stays
+        // shown until the new one draws, as it did before an edit reloaded them, so an edit never blinks.
+        val surfaceReady = stateFlow.value.mainSurfaceReady && mainSurface != null
         stateFlow.value =
             PreviewState(
                 durationUs = next.durationUs,
@@ -204,6 +216,7 @@ class LayeredPreviewEngine(
                 overlaySizes = List(next.overlays.size) { null },
                 unavailable = missing,
                 loads = loads,
+                mainSurfaceReady = surfaceReady,
             )
         allPlayers().forEach { it.prepare() }
         seekTo(startUs)
@@ -215,13 +228,17 @@ class LayeredPreviewEngine(
         val p = main ?: return
         stillPending.clear()
         if (p.playbackState == Player.STATE_ENDED) seekTo(0)
-        allPlayers().forEach { it.playWhenReady = true }
+        p.playWhenReady = true
+        // Each follower plays now, or waits for its next part (see keepInStep).
+        sync(force = false)
         startTicker()
         publish()
     }
 
     fun pause() {
         checkMainThread()
+        wake?.cancel()
+        wake = null
         allPlayers().forEach { it.playWhenReady = false }
         sync(force = true)
         publish()
@@ -239,6 +256,7 @@ class LayeredPreviewEngine(
         val e = s.main[i]
         p.seekTo(i, mediaOffsetMs(e.content, t - e.startUs))
         applySpeed(i)
+        surfaceLeftVideo(i)
         followTo(t)
         publish(t)
     }
@@ -321,6 +339,10 @@ class LayeredPreviewEngine(
 
     private fun releasePlayers() {
         stillPending.clear()
+        parked.clear()
+        keyed.clear()
+        wake?.cancel()
+        wake = null
         mainAttached = false
         tailAttached = false
         overlaysAttached.clear()
@@ -389,17 +411,21 @@ class LayeredPreviewEngine(
     private fun followTo(t: Long) {
         val s = schedule ?: return
         val paused = main?.playWhenReady != true
+        parked.clear()
+        wake?.cancel()
+        wake = null
         s.overlays.forEachIndexed { i, lane ->
             val player = overlays.getOrNull(i) ?: return@forEachIndexed
-            seekLane(player, lane.entries, t)
             // A player with video effects shows nothing after a seek until it plays, so a paused
             // preview would lose the frame. It plays (silent: its sound is off) until the first
             // frame is on screen, then stops again.
-            if (paused && lane.entries.getOrNull(lane.indexAt(t)) is LaneEntry.Play) showStill(player)
+            if (place(player, lane.entries, t) && paused) showStill(player)
         }
-        s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.let { seekLane(it, lane.entries, t) } }
-        s.tailLane?.let { lane -> tail?.let { seekLane(it, lane.entries, t) } }
+        s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.let { place(it, lane.entries, t) } }
+        s.tailLane?.let { lane -> tail?.let { place(it, lane.entries, t) } }
         applyTailSpeed()
+        // Playing on, each starts with MAIN, or waits for its next part (see keepInStep).
+        if (!paused) keepInStep(t)
     }
 
     /** Followers playing only to show their first frame after a seek, with the request each is for. */
@@ -421,21 +447,108 @@ class LayeredPreviewEngine(
         }
     }
 
+    /** Followers waiting, paused, at the start of their next part: the entry each waits at. */
+    private val parked = mutableMapOf<PreviewPlayer, Int>()
+
+    /** The frame players that key out a green (see [place]). */
+    private val keyed = mutableSetOf<PreviewPlayer>()
+
+    /** The check that parks or starts a waiting follower in time, and when it runs (uptime, ms). */
+    private var wake: Job? = null
+    private var wakeAtMs = 0L
+
+    /**
+     * Keeps every follower at MAIN's time [t] while playing. In the last
+     * [PARK_AHEAD_US] before one of its parts, a follower waits, paused, at
+     * that part's start ([park]), and starts when MAIN reaches it, its picture
+     * already decoded (a picture player: the frame, a picture in picture, the
+     * outgoing video; a sound row plays through its silence as before, so its
+     * music never pauses and jumps). Crossing from its silence into the file while playing,
+     * it started late: the outgoing video of a transition (and the frame after
+     * the intro) showed late, then was moved back in step and was late again.
+     * Further from its next part it plays its silence, as before, holding no
+     * decoder. A follower that drifts more than [MAX_DRIFT_US] while playing
+     * is moved back in step.
+     */
     private fun keepInStep(t: Long) {
         val s = schedule ?: return
         val playing = isPlaying
+        var soonest = Long.MAX_VALUE
 
         fun check(
             player: PreviewPlayer,
             entries: List<LaneEntry>,
         ) {
+            val i = entries.indexOfLast { it.startUs <= t }
+            if (entries.getOrNull(i) !is LaneEntry.Play) {
+                val next = (i + 1 until entries.size).firstOrNull { entries[it] is LaneEntry.Play }
+                val until = next?.let { entries[it].startUs - t }
+                if (playing && next != null && until != null && until <= PARK_AHEAD_US && player !in sounds) {
+                    player.playWhenReady = false
+                    park(player, entries, next)
+                    soonest = minOf(soonest, until)
+                    return
+                }
+                if (until != null && player !in sounds) soonest = minOf(soonest, until - PARK_AHEAD_US)
+            }
             player.playWhenReady = playing
+            // One that waited at this entry's start is there and starts now: in step, unless MAIN got here late.
+            parked.remove(player)
             val at = laneTimeUs(player, entries) ?: return seekLane(player, entries, t)
             if (abs(at - t) > MAX_DRIFT_US) seekLane(player, entries, t)
         }
         s.overlays.forEachIndexed { i, lane -> overlays.getOrNull(i)?.let { check(it, lane.entries) } }
         s.sounds.forEachIndexed { i, lane -> sounds.getOrNull(i)?.let { check(it, lane.entries) } }
         s.tailLane?.let { lane -> tail?.let { check(it, lane.entries) } }
+        val wakeAt = if (playing && soonest != Long.MAX_VALUE) SystemClock.uptimeMillis() + (soonest / 1000).coerceAtLeast(1) else null
+        // The same moment as the check already waiting (give or take a tick's drift): it stays.
+        if (wakeAt != null && wake?.isActive == true && abs(wakeAt - wakeAtMs) < WAKE_SLACK_MS) return
+        wake?.cancel()
+        wakeAtMs = wakeAt ?: 0
+        wake =
+            wakeAt?.let { at ->
+                scope.launch {
+                    delay(at - SystemClock.uptimeMillis())
+                    sync(force = false)
+                }
+            }
+    }
+
+    /**
+     * Puts [player] at [t] (a seek, or MAIN paused); true when it plays
+     * something then. A keyed frame player already in its silence is left
+     * where it is when [t] is in a gap too: one moved within its silence
+     * while paused, then to its file, stayed buffering (for ten seconds and
+     * more, even while played to put its picture up), so the frame did not
+     * show in the paused preview (cm-preview-smooth).
+     */
+    private fun place(
+        player: PreviewPlayer,
+        entries: List<LaneEntry>,
+        t: Long,
+    ): Boolean {
+        val i = entries.indexOfLast { it.startUs <= t }
+        if (entries.getOrNull(i) is LaneEntry.Play) {
+            seekLane(player, entries, t)
+            return true
+        }
+        // In a gap: not playing on to put up a picture asked for before.
+        stillPending -= player
+        player.playWhenReady = false
+        val inSilence = entries.getOrNull(player.currentMediaItemIndex) !is LaneEntry.Play
+        if (!(player in keyed && inSilence)) seekLane(player, entries, t)
+        return false
+    }
+
+    /** Puts [player] at the start of entry [at], unless it waits there already. */
+    private fun park(
+        player: PreviewPlayer,
+        entries: List<LaneEntry>,
+        at: Int,
+    ) {
+        if (parked[player] == at) return
+        parked[player] = at
+        seekLane(player, entries, entries[at].startUs)
     }
 
     private fun laneTimeUs(
@@ -470,6 +583,12 @@ class LayeredPreviewEngine(
         if (p.speed != wanted) p.speed = wanted
     }
 
+    /** MAIN is on item [index]: when it is not a video, the surface holds no picture of what plays (see PreviewState). */
+    private fun surfaceLeftVideo(index: Int) {
+        val video = schedule?.main?.getOrNull(index)?.content is MainContent.Video
+        if (!video && stateFlow.value.mainSurfaceReady) stateFlow.value = stateFlow.value.copy(mainSurfaceReady = false)
+    }
+
     private fun applySpeed(index: Int) {
         val e = schedule?.main?.getOrNull(index) ?: return
         val speed = (e.content as? MainContent.Video)?.speed ?: Speed.X1
@@ -480,14 +599,15 @@ class LayeredPreviewEngine(
     private fun publish(at: Long? = null) {
         val s = schedule ?: return
         val p = main
+        val t = at ?: mainTimeUs()
+        // By the video's time, not the player's item: a follower parked for its next part is already on it.
         val overlayShown =
             s.overlays.mapIndexed { i, lane ->
-                val player = overlays.getOrNull(i) ?: return@mapIndexed false
-                lane.entries.getOrNull(player.currentMediaItemIndex) is LaneEntry.Play
+                overlays.getOrNull(i) != null && lane.entries.getOrNull(lane.indexAt(t)) is LaneEntry.Play
             }
         stateFlow.value =
             stateFlow.value.copy(
-                positionUs = at ?: mainTimeUs(),
+                positionUs = t,
                 durationUs = s.durationUs,
                 playing = p?.playWhenReady == true && p.playbackState != Player.STATE_ENDED,
                 mainIndex = p?.currentMediaItemIndex ?: -1,
@@ -500,13 +620,20 @@ class LayeredPreviewEngine(
             mediaItem: MediaItem?,
             reason: Int,
         ) {
-            main?.let { applySpeed(it.currentMediaItemIndex) }
+            main?.let {
+                applySpeed(it.currentMediaItemIndex)
+                surfaceLeftVideo(it.currentMediaItemIndex)
+            }
             sync(force = false)
             publish()
         }
 
         override fun onVideoSizeChanged(videoSize: VideoSize) {
             if (videoSize.width > 0 && videoSize.height > 0) stateFlow.value = stateFlow.value.copy(mainVideoSize = videoSize)
+        }
+
+        override fun onRenderedFirstFrame() {
+            if (!stateFlow.value.mainSurfaceReady) stateFlow.value = stateFlow.value.copy(mainSurfaceReady = true)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -609,6 +736,10 @@ class LayeredPreviewEngine(
     companion object {
         const val TICK_MS = 100L
         const val MAX_DRIFT_US = 200_000L
+
+        /** How long before its next part a follower playing its silence is put, paused, at that part's start (see keepInStep). */
+        const val PARK_AHEAD_US = 1_500_000L
+        private const val WAKE_SLACK_MS = 20L
         private const val STILL_TIMEOUT_MS = 10_000L
         private const val STILL_SETTLE_MS = 300L
 
