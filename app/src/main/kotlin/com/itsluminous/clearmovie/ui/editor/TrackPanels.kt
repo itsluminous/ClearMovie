@@ -50,6 +50,7 @@ import com.itsluminous.clearmovie.domain.model.addRow
 import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.domain.model.deleteClip
 import com.itsluminous.clearmovie.domain.model.insertAt
+import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.domain.model.moveClip
 import com.itsluminous.clearmovie.domain.model.moveClipToNewRow
 import com.itsluminous.clearmovie.domain.model.removeRow
@@ -120,8 +121,14 @@ internal fun TimedInsertPanel(
             val where = stringResource(timedItemName(null, anchor))
             stringResource(if (side == InsertSide.BEFORE) R.string.insert_title_before else R.string.insert_title_after, where)
         } else if (open.atMs != null) {
-            // From a row's "+": the time it adds at, fixed when the "+" was tapped.
-            stringResource(R.string.timeline_add_at, nameOf(track, rows), durationText(open.atMs * 1000))
+            // From a row's "+": the time it adds at, fixed when the "+" was tapped; "another row" when this one is
+            // taken there, as the model then puts it on another row of its kind.
+            val time = durationText(open.atMs * 1000)
+            if (track.isFree(open.atMs, open.atMs + Limits.MIN_CLIP_MS)) {
+                stringResource(R.string.timeline_add_at, nameOf(track, rows), time)
+            } else {
+                stringResource(R.string.timeline_add_other_row, stringResource(rowLook(rowTypeOf(track)).second), time)
+            }
         } else {
             stringResource(R.string.add_here_title, nameOf(track, rows))
         }
@@ -145,7 +152,11 @@ internal fun TimedInsertPanel(
                 val id = RandomIds.clipId()
                 val ok =
                     callbacks.editMerged(captionMergeKey(id)) {
-                        val made = TextClip(id, 0, Limits.DEFAULT_TEXT_MS, newCaptionWords())
+                        // Never past the end of the video: near it, the new caption ends with the video.
+                        val from = if (anchor != null && side == InsertSide.AFTER) anchor.endMs else hereMs
+                        val left = (mainLayout().lastOrNull()?.endMs ?: 0L) - from
+                        val length = if (left >= Limits.MIN_CLIP_MS) minOf(Limits.DEFAULT_TEXT_MS, left) else Limits.DEFAULT_TEXT_MS
+                        val made = TextClip(id, 0, length, newCaptionWords())
                         val placed =
                             if (anchor != null) {
                                 insertAt(trackOf(anchor.id)!!.id, anchor.id, side.model(), made)

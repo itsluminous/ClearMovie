@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -317,7 +318,49 @@ class RowEndPlusScreenTest {
         assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, last, InsertSide.AFTER))
         val made = newCaption(h)
         assertThat(made.startMs).isEqualTo(total - 2000)
+        // Cut to end with the video.
+        assertThat(made.endMs).isEqualTo(total)
         assertThat(h.project.rowOf(made.id)).isEqualTo(row)
+    }
+
+    @Test
+    fun `a row full to the end says the caption goes on another row, and it does`() {
+        val total = project.mainLayout().last().endMs
+        val full = project.addText("last", total - 6000, 6000, ids)
+        val h = EditorHarness(full, Fixtures.preset)
+        compose.setContent { h.At(ScreenSize.EXPANDED, 1f) }
+        compose.waitForIdle()
+        val row = h.project.rowOf(h.project.captionId("last"))
+        at(h, total - 1000)
+        val at = total - 3000
+        val seconds = (at + 500) / 1000
+        val time = context.getString(R.string.duration_minutes_seconds, seconds / 60, seconds % 60)
+        val said = context.getString(R.string.timeline_add_other_row, context.getString(R.string.timeline_row_text), time)
+        assertThat(description(row)).isEqualTo(said)
+        tapEnd(row)
+        compose.onNodeWithText(said).assertExists()
+        val made = newCaption(h)
+        assertThat(made.startMs).isEqualTo(at)
+        assertThat(h.project.rowOf(made.id)).isNotEqualTo(row)
+    }
+
+    @Test
+    fun `while playing, TalkBack's plus adds where it said, at the time play started from`() {
+        val h = show()
+        val textRow = h.project.rowOf(h.project.captionId("hello"))
+        at(h, 5000)
+        compose.runOnIdle { h.playing = true }
+        compose.waitForIdle()
+        // Playing on into "hello" (10-12 s): the text still says 0:05, and the TalkBack action adds there.
+        at(h, 10_500)
+        assertThat(
+            description(textRow),
+        ).isEqualTo(context.getString(R.string.timeline_add_at, context.getString(R.string.timeline_row_text), "0:05"))
+        compose
+            .onNodeWithTag(rowEndPlusTag(textRow.value), useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = textRow, atMs = 5000))
     }
 
     @Test

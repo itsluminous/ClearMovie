@@ -63,9 +63,14 @@ class RowEndPlusTest {
         // "The End" captions 5-8 s and 8-12 s, cursor on the first: the row is busy at 11 s, so right after them, at 12 s.
         val theEnd = listOf(clip("p", 5000, 8000), clip("q", 8000, 12_000))
         assertThat(RowEndPlus.timed(theEnd, 6000, 3000, videoMs = 14_000)).isEqualTo(after("q"))
-        // A caption running to the end: no room on this row, so at the last moment (the model puts it on another row).
+        // A caption running to the end: no room on this row, so at the last moment on another row, and it says so.
         val toEnd = listOf(clip("z", 8000, 14_000))
-        assertThat(RowEndPlus.timed(toEnd, 12_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000))
+        assertThat(RowEndPlus.timed(toEnd, 12_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000, full = true))
+        // Less than a second left after the item in the way: the row is full too.
+        val nearlyEnd = listOf(clip("y", 10_000, 13_500))
+        assertThat(RowEndPlus.timed(nearlyEnd, 11_000, 3000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(11_000, full = true))
+        // A long photo (10 s) is still kept only 3 s from the end, so the "+" does not move far left of the cursor.
+        assertThat(RowEndPlus.timed(emptyList(), 8000, 10_000, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(8000))
         // A video shorter than the item: from the start.
         assertThat(RowEndPlus.timed(emptyList(), 2000, 3000, videoMs = 2000)).isEqualTo(EndPlusTarget.At(0))
     }

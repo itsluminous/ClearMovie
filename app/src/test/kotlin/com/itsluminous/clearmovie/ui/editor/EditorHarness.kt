@@ -64,6 +64,9 @@ class EditorHarness(
         private set
     var playheadUs by mutableStateOf(0L)
 
+    /** Whether the preview is playing, as the view model reports it. */
+    var playing by mutableStateOf(false)
+
     /** The title the top bar shows for an unnamed video; a named one shows its name, as in the app. */
     var title by mutableStateOf("Party")
     var state: EditorScreenState? = null
@@ -257,7 +260,7 @@ class EditorHarness(
         EditorScreen(
             ui = ui,
             title = project.name ?: title,
-            playhead = PlayheadUi(playheadUs, (ui.slots.lastOrNull()?.endMs ?: 0) * 1000, false),
+            playhead = PlayheadUi(playheadUs, (ui.slots.lastOrNull()?.endMs ?: 0) * 1000, playing),
             preview = { m -> Box(m.background(Color.Black).testTag(PREVIEW_TAG)) },
             thumbnail = { _, _ -> null },
             actions = actions,

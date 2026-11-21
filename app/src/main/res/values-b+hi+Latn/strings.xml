@@ -350,6 +350,7 @@
     <string name="timeline_add_before">Is %1$s se pehle add karein</string>
     <string name="timeline_add_after">Is %1$s ke baad add karein</string>
     <string name="timeline_add_at">%2$s par %1$s me add karein</string>
+    <string name="timeline_add_other_row">%2$s par kisi doosri %1$s row me add karein</string>
     <string name="timeline_colour_card">Colour card</string>
     <string name="timeline_text_card">Text card</string>
     <string name="timeline_item_description">%1$s, %3$d me se %2$d, %4$s ka</string>

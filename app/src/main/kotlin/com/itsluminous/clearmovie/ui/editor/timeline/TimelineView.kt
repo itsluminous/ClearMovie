@@ -1220,7 +1220,6 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                                             goes.toDouble(),
                                                             c.totalMs,
                                                             c.spanWidth,
-                                                            marginDp = 0.0,
                                                         )
                                                     if (shown != c.zoom) onZoom(shown)
                                                 }
@@ -1524,9 +1523,10 @@ private sealed interface RowPlus {
         val atMs: Long?,
     ) : RowPlus
 
-    /** Room on the row: Add here, from [atMs] (the cursor, or the last moment that keeps it in the video). */
+    /** Add here from [atMs] (the cursor, or the last moment that keeps it in the video); [full]: on another row. */
     data class At(
         val atMs: Long,
+        val full: Boolean = false,
     ) : RowPlus
 
     /** Right after [clip], the first place right of the cursor where the row has room. */
@@ -1573,7 +1573,7 @@ private fun rowPlus(
             else -> Limits.MIN_CLIP_MS
         }
     return when (val t = RowEndPlus.timed(row.clips, cursorMs, length, videoMs)) {
-        is EndPlusTarget.At -> if (row.clips.isEmpty()) RowPlus.Empty(t.atMs) else RowPlus.At(t.atMs)
+        is EndPlusTarget.At -> if (row.clips.isEmpty()) RowPlus.Empty(t.atMs) else RowPlus.At(t.atMs, t.full)
         is EndPlusTarget.After -> row.clips.firstOrNull { it.id == t.anchor }?.let { RowPlus.After(it) }
     }
 }
@@ -2216,7 +2216,12 @@ private fun rowPlusDescription(
         }
 
         is RowPlus.At -> {
-            stringResource(R.string.timeline_add_at, rowName(row), durationText(plus.atMs * 1000))
+            val kind = stringResource(rowLook(row.type).second)
+            if (plus.full) {
+                stringResource(R.string.timeline_add_other_row, kind, durationText(plus.atMs * 1000))
+            } else {
+                stringResource(R.string.timeline_add_at, rowName(row), durationText(plus.atMs * 1000))
+            }
         }
 
         is RowPlus.After -> {
