@@ -19,7 +19,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -131,6 +134,31 @@ class EditorTopBarTest {
         return layout.lineCount == 1 && !layout.hasVisualOverflow
     }
 
+    /** How tall [title] is on two lines at [size] (sp), laid out as the title is, in the title's room. */
+    private fun twoLineHeightPx(
+        title: String,
+        size: Float,
+    ): Float {
+        val roomPx =
+            compose
+                .onNodeWithTag(EDITOR_TITLE_ROOM_TAG)
+                .fetchSemanticsNode()
+                .size.width
+        val input = titleLayout().layoutInput
+        val measurer = TextMeasurer(input.fontFamilyResolver, input.density, input.layoutDirection)
+        val layout =
+            measurer.measure(
+                title,
+                input.style.copy(fontSize = size.sp),
+                maxLines = 2,
+                constraints = Constraints.fixedWidth(roomPx),
+            )
+        return layout.size.height.toFloat()
+    }
+
+    /** How large [size] (sp) is on screen, in dp, at the text size shown (font scaling may be non-linear). */
+    private fun onScreenDp(size: Float): Float = with(titleLayout().layoutInput.density) { size.sp.toDp().value }
+
     private fun barHeight(): Float {
         val b = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).getUnclippedBoundsInRoot()
         return (b.bottom - b.top).value
@@ -197,20 +225,66 @@ class EditorTopBarTest {
                     val text = compose.onNodeWithTag(EDITOR_TITLE_TAG).getUnclippedBoundsInRoot()
                     assertThat(text.bottom.value).isAtMost(bar.bottom.value + 0.5f)
                     assertThat(text.top.value).isAtLeast(bar.top.value - 0.5f)
-                    assertThat(sizeOf(title)).isAtLeast(TITLE_MIN_FONT_SIZE.value)
+                    // Never smaller on screen than 14 sp at usual text sizes.
+                    assertThat(onScreenDp(sizeOf(title))).isAtLeast(TITLE_MIN_FONT_SIZE.value - 0.01f)
                 }
             }
         }
     }
 
     @Test
-    fun `at twice the text size a very long title stays on one line, cut`() {
-        show(VERY_LONG, fontScale = 2f)
-        val layout = titleLayout()
-        assertThat(layout.lineCount).isEqualTo(1)
-        assertThat(layout.isLineEllipsized(0)).isTrue()
-        assertThat(sizeOf(VERY_LONG)).isEqualTo(TITLE_MIN_FONT_SIZE.value)
-        assertThat(barHeight()).isWithin(0.5f).of(64f)
+    fun `at large text a very long title still takes two lines, just small enough for both to fit the bar`() {
+        // From about 1.6x two lines of 14 sp no longer fit the 64 dp bar.
+        for (scale in listOf(1.65f, 1.75f, 2f)) {
+            for (size in listOf(ScreenSize.COMPACT, ScreenSize.MEDIUM)) {
+                for (title in listOf(VERY_LONG, HINDI)) {
+                    show(title, size, scale)
+                    val where = "$title at $scale x on $size"
+                    val layout = titleLayout()
+                    assertWithMessage(where).that(layout.lineCount).isEqualTo(2)
+                    assertThat(layout.isLineEllipsized(1)).isTrue()
+                    assertThat(barHeight()).isWithin(0.5f).of(64f)
+                    val chosen = sizeOf(title)
+                    assertWithMessage(where).that(chosen).isLessThan(TITLE_MIN_FONT_SIZE.value)
+                    // Two lines at the chosen size fit the bar; two lines half a point larger would not.
+                    val barPx = with(layout.layoutInput.density) { 64.dp.toPx() }
+                    assertWithMessage(where).that(twoLineHeightPx(title, chosen)).isAtMost(barPx)
+                    assertWithMessage(where).that(twoLineHeightPx(title, chosen + 0.5f)).isGreaterThan(barPx - 2f)
+                    // Drawn inside the bar, and never smaller on screen than 14 sp at usual text sizes.
+                    val bar = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).getUnclippedBoundsInRoot()
+                    val text = compose.onNodeWithTag(EDITOR_TITLE_TAG).getUnclippedBoundsInRoot()
+                    assertWithMessage(where).that(text.bottom.value).isAtMost(bar.bottom.value + 0.01f)
+                    assertWithMessage(where).that(text.top.value).isAtLeast(bar.top.value - 0.01f)
+                    assertThat(onScreenDp(chosen)).isAtLeast(TITLE_MIN_FONT_SIZE.value - 0.01f)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `with Android's non-linear text scaling at 2x the smallest size is 11 sp, 22 dp on screen`() {
+        // Android 14's table for 2x text (sp to dp): 8 to 16, 10 to 20, 12 to 24, 14 to 26, 18 to 30, 20 to 34.
+        val table = listOf(8f to 16f, 10f to 20f, 12f to 24f, 14f to 26f, 18f to 30f, 20f to 34f, 24f to 36f)
+        val nonLinear =
+            object : Density {
+                override val density = 3f
+                override val fontScale = 2f
+
+                override fun TextUnit.toDp(): Dp {
+                    val sp = value
+                    val (a, b) = table.zipWithNext().first { (_, hi) -> sp <= hi.first }
+                    return (a.second + (sp - a.first) / (b.first - a.first) * (b.second - a.second)).dp
+                }
+            }
+        val min = titleMinSize(nonLinear, 64.dp).value
+        assertThat(min).isEqualTo(11f)
+        with(nonLinear) {
+            assertThat(11.sp.toDp().value).isWithin(0.01f).of(22f)
+
+            fun twoLinesPx(sp: Float) = 2 * kotlin.math.ceil(sp.sp.toPx() * 1.4f)
+            assertThat(twoLinesPx(min)).isAtMost(64.dp.toPx())
+            assertThat(twoLinesPx(min + 0.5f)).isGreaterThan(64.dp.toPx() - 2f)
+        }
     }
 
     @Test

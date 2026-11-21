@@ -415,7 +415,8 @@ few threads of their own, so a provider that hangs costs only its items.
 
 `EditorScreen` has the top bar (Back, the title, Undo stacked above Redo, and
 Export at the top right; the bar is always 64 dp tall, so the title shrinks to
-stay on one line, down to 14 sp, before it takes a second line),
+stay on one line, down to 14 sp (less at the largest text sizes, so two
+lines still fit), before it takes a second line),
 the preview with Play, the time and the Zoom out / Zoom in / Fit all buttons,
 the timeline, and the contextual bar or, while one is open, the panel of the
 action in use. Its on-screen state (`EditorScreenState`: selection, open panel,
