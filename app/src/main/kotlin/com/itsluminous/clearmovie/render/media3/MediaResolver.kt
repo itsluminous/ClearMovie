@@ -22,14 +22,17 @@ fun interface MediaResolver {
 }
 
 /**
- * Resolves preset slots to the bound copies in [presetFiles], copied items
- * to files under [copiedRoot], and MediaStore items to their `content://`
- * uri. Paths are checked again here, after the model's own check: a copied
- * path must stay inside [copiedRoot] once symlinks and `..` are resolved.
+ * Resolves preset slots to the bound copies in [presetFiles] (or, for a
+ * preset file used where it is, to its link in [presetLinks]; cm-frame-area),
+ * copied items to files under [copiedRoot], and MediaStore items to their
+ * `content://` uri. Paths are checked again here, after the model's own
+ * check: a copied path must stay inside [copiedRoot] once symlinks and `..`
+ * are resolved.
  */
 class FileMediaResolver(
     private val presetFiles: Map<PresetSlot, File>,
     private val copiedRoot: File?,
+    private val presetLinks: Map<PresetSlot, String> = emptyMap(),
 ) : MediaResolver {
     override fun resolve(ref: MediaRef): Uri =
         when (ref) {
@@ -44,6 +47,10 @@ class FileMediaResolver(
             }
 
             is MediaRef.Preset -> {
+                presetLinks[ref.slot]?.let { link ->
+                    if (!MediaRef.isSafeContentUri(link)) throw MediaUnavailableException("Not a content uri")
+                    return link.toUri()
+                }
                 val file = presetFiles[ref.slot] ?: throw MediaUnavailableException("The preset file is not set up")
                 if (!file.isFile) throw MediaUnavailableException("The preset file is missing")
                 Uri.fromFile(file)

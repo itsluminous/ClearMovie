@@ -308,6 +308,7 @@ private fun Project.checkClipRanges(
             if (!inRange(clip.sourceDurationMs)) bad("media length")
             if (!clip.repeat && clip.durationMs > clip.sourceDurationMs) bad("longer than its media")
             clip.key?.let { if (!(it.tolerance in 0.0..1.0 && it.softness in 0.0..1.0)) bad("key") }
+            clip.area?.let { if (!KeyMath.isUsableArea(it)) bad("picture area") }
         }
 
         is MediaClip -> {

@@ -639,4 +639,25 @@
     <string name="preset_shape_fixed">इस प्रीसेट से वीडियो बन चुके हैं, इसलिए इसकी आकृति %1$s ही रहेगी।</string>
     <string name="setup_file_shape_mismatch">यह वीडियो इस प्रीसेट के वीडियो की आकृति (%1$s) का नहीं है, इसलिए खिंचा हुआ दिखेगा। आप दूसरी फ़ाइल चुन सकते हैं।</string>
     <string name="preset_shape_files_note">नई आकृति के लिए इसका फ़्रेम और इंट्रो \"फ़ाइलें\" में फिर से चुनें।</string>
+    <!-- cm-frame-area -->
+    <string name="action_key_colour">स्क्रीन का रंग</string>
+    <string name="action_picture_area">फ़ोटो की जगह</string>
+    <string name="frame_look_title">यह फ़्रेम सेट करें</string>
+    <string name="frame_look_colour_body">जिस रंग को हटाना है, उस पर टैप करें, ताकि आपकी फ़ोटो और वीडियो उसमें से दिखें।</string>
+    <string name="frame_look_area_body">बॉक्स को वहाँ खींचें जहाँ आपकी फ़ोटो और वीडियो दिखने चाहिए। आकार बदलने के लिए कोई कोना खींचें।</string>
+    <string name="frame_look_moment">फ़्रेम वीडियो का पल</string>
+    <string name="frame_look_amount">कितना हटाना है</string>
+    <string name="frame_look_less">कम</string>
+    <string name="frame_look_more">ज़्यादा</string>
+    <string name="frame_look_no_colour">उस जगह लगभग कोई रंग नहीं है। किसी रंगीन हिस्से पर टैप करें, जैसे हरी स्क्रीन।</string>
+    <string name="frame_look_fit_area">स्क्रीन के रंग पर फ़िट करें</string>
+    <string name="frame_look_unreadable">यह फ़्रेम वीडियो खुल नहीं सका।</string>
+    <string name="frame_look_picked">चुना गया रंग</string>
+    <string name="frame_look_still">फ़्रेम वीडियो। किसी रंग को हटाने के लिए उस पर टैप करें।</string>
+    <string name="frame_look_box">फ़ोटो की जगह। हिलाने के लिए खींचें।</string>
+    <string name="frame_look_corner">फ़ोटो की जगह का कोना। आकार बदलने के लिए खींचें।</string>
+    <string name="preset_slot_frame_look">रंग और जगह</string>
+    <string name="preset_copy_title">फ़ाइलों की कॉपी रखें</string>
+    <string name="preset_copy_body">बंद: प्रीसेट आपकी फ़ाइलें वहीं से इस्तेमाल करता है जहाँ वे हैं, इसलिए वे ज़्यादा जगह नहीं लेतीं। अगर आप कोई फ़ाइल हटाते या मिटाते हैं, तो ClearMovie उसे फिर से माँगेगा। चालू: ClearMovie अपनी कॉपी रखता है।</string>
+    <string name="preset_setup_body_linked">हर फ़ाइल अपने फ़ोन से एक बार चुनें। ClearMovie उसे वहीं से इस्तेमाल करता है, इसलिए उसे वहीं रहने दें।</string>
 </resources>

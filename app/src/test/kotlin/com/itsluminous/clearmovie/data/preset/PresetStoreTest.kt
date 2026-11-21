@@ -147,9 +147,9 @@ class PresetStoreTest {
             val binding = (result as SlotBindResult.Bound).binding
             assertThat(binding.sha256).isEqualTo(MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) })
             assertThat(binding.sizeBytes).isEqualTo(7000)
-            assertThat(binding.file.readBytes()).isEqualTo(bytes)
-            assertThat(binding.file.parentFile).isEqualTo(files.presetDir(id))
-            assertThat(binding.file.name).isEqualTo("frame-tok00001_Frame-White.mp4")
+            assertThat(binding.file!!.readBytes()).isEqualTo(bytes)
+            assertThat(binding.file!!.parentFile).isEqualTo(files.presetDir(id))
+            assertThat(binding.file!!.name).isEqualTo("frame-tok00001_Frame-White.mp4")
             assertThat(binding.originalName).isEqualTo("Frame-White.mp4")
             assertThat(binding.durationMs).isEqualTo(4000)
             assertThat(binding.loudnessLufs).isEqualTo(-14.5)
@@ -171,7 +171,7 @@ class PresetStoreTest {
         runBlocking<Unit> {
             bindAll()
             val frame = (store.status(id).slots.getValue(PresetSlot.FRAME) as SlotStatus.Ready).binding
-            frame.file.delete()
+            frame.file!!.delete()
 
             val status = store.status(id)
 
@@ -186,18 +186,18 @@ class PresetStoreTest {
         runBlocking<Unit> {
             bindAll()
             val intro = (store.status(id).slots.getValue(PresetSlot.INTRO) as SlotStatus.Ready).binding
-            intro.file.appendBytes(byteArrayOf(9))
+            intro.file!!.appendBytes(byteArrayOf(9))
             assertThat(store.status(id).slots.getValue(PresetSlot.INTRO)).isInstanceOf(SlotStatus.Changed::class.java)
 
             // Untouched files are not re-hashed: the bind time is after their last change.
             assertThat(store.verifyBeforeExport(id).slots.getValue(PresetSlot.FRAME)).isInstanceOf(SlotStatus.Ready::class.java)
             assertThat(hashed).isEmpty()
             val ending = (store.status(id).slots.getValue(PresetSlot.ENDING) as SlotStatus.Ready).binding
-            ending.file.writeBytes(ByteArray(900) { 4 })
-            ending.file.setLastModified(ending.boundAt + 60_000)
+            ending.file!!.writeBytes(ByteArray(900) { 4 })
+            ending.file!!.setLastModified(ending.boundAt + 60_000)
             assertThat(store.status(id).slots.getValue(PresetSlot.ENDING)).isInstanceOf(SlotStatus.Ready::class.java)
             assertThat(store.verifyBeforeExport(id).slots.getValue(PresetSlot.ENDING)).isInstanceOf(SlotStatus.Changed::class.java)
-            assertThat(hashed).containsExactly(ending.file.name)
+            assertThat(hashed).containsExactly(ending.file!!.name)
         }
 
     @Test
@@ -221,13 +221,13 @@ class PresetStoreTest {
         runBlocking<Unit> {
             bindAll()
             val old = (store.status(id).slots.getValue(PresetSlot.FRAME) as SlotStatus.Ready).binding
-            old.file.delete()
+            old.file!!.delete()
             probe.frames = frames("original")
             val again = store.bindSlot(id, PresetSlot.FRAME, file("Frame-White (1).mp4", ByteArray(6000) { 5 }, "video/mp4"))
             val now = (again as SlotBindResult.Bound).binding
             assertThat(store.status(id).isReady).isTrue()
-            assertThat(now.file.name).isNotEqualTo(old.file.name)
-            assertThat(files.presetDir(id).listFiles()!!.map { it.name }).doesNotContain(old.file.name)
+            assertThat(now.file!!.name).isNotEqualTo(old.file!!.name)
+            assertThat(files.presetDir(id).listFiles()!!.map { it.name }).doesNotContain(old.file!!.name)
         }
 
     @Test

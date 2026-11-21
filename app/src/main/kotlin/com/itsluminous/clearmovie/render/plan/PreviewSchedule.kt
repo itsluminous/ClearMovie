@@ -262,10 +262,12 @@ data class PreviewSchedule(
 
                     // A frame row and a picture-in-picture row both follow MAIN in a player of their own.
                     LayerRole.OVERLAY, LayerRole.VISUAL -> {
-                        val lane = overlayLane(layer, total)
-                        if (lane.drawsAnything) {
-                            order += LayerRef.Overlay(overlays.size)
-                            overlays += lane
+                        for (part in byKey(layer)) {
+                            val lane = overlayLane(part, total)
+                            if (lane.drawsAnything) {
+                                order += LayerRef.Overlay(overlays.size)
+                                overlays += lane
+                            }
                         }
                     }
 
@@ -444,6 +446,49 @@ data class PreviewSchedule(
                 }
             }
             return out
+        }
+
+        /**
+         * [layer] as one layer per key colour (cm-frame-area): a preview player keys one colour, so frames
+         * on one row with different colours each get a player of their own, the others' time left empty
+         * there. The items of one row never overlap, so the order of these layers does not matter.
+         */
+        internal fun byKey(layer: VisualLayer): List<VisualLayer> {
+            val videos = layer.segments.filterIsInstance<VisualSegment.Picture>().filter { it.source is Source.Video }
+            val groups: List<KeySpec?> = videos.map { it.key }.distinct()
+            if (groups.size <= 1) return listOf(layer)
+            return groups.map { key ->
+                layer.copy(
+                    segments =
+                        layer.segments.map { seg ->
+                            val p = seg as? VisualSegment.Picture
+                            when {
+                                p == null -> {
+                                    seg
+                                }
+
+                                // Stills are drawn by the preview itself, once: with the first group's layer.
+                                p.source !is Source.Video -> {
+                                    if (key ==
+                                        groups.first()
+                                    ) {
+                                        seg
+                                    } else {
+                                        VisualSegment.Fill(seg.startUs, seg.durationUs)
+                                    }
+                                }
+
+                                p.key == key -> {
+                                    seg
+                                }
+
+                                else -> {
+                                    VisualSegment.Fill(seg.startUs, seg.durationUs)
+                                }
+                            }
+                        },
+                )
+            }
         }
 
         private fun overlayLane(

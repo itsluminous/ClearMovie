@@ -161,7 +161,7 @@ abstract class ClearMovieDatabase : RoomDatabase() {
     abstract fun grants(): MediaGrantDao
 
     companion object {
-        const val VERSION = 2
+        const val VERSION = 3
         const val FILE_NAME = "clearmovie.db"
 
         /**
@@ -177,7 +177,21 @@ abstract class ClearMovieDatabase : RoomDatabase() {
                 }
             }
 
+        /**
+         * 2 to 3 (cm-frame-area): a preset can use its files where they are.
+         * `preset_bindings` gains `sourceUri` (null: every file so far is a
+         * copy) and `preset_definitions` gains `copyFiles` (1: every preset so
+         * far copies its files).
+         */
+        val MIGRATION_2_3 =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `preset_bindings` ADD COLUMN `sourceUri` TEXT")
+                    db.execSQL("ALTER TABLE `preset_definitions` ADD COLUMN `copyFiles` INTEGER NOT NULL DEFAULT 1")
+                }
+            }
+
         /** Version n to n + 1, for every n from 1 to [VERSION] - 1. Version 1 is the first. */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }

@@ -552,7 +552,7 @@ class ShareDeviceTest {
         runBlocking { app.projectRepository.close() }
 
         // The frame file goes missing: the share's preset pick opens repair, not the editor.
-        runBlocking { assertThat((store.status(id).slots[PresetSlot.FRAME] as SlotStatus.Ready).binding.file.delete()).isTrue() }
+        runBlocking { assertThat((store.status(id).slots[PresetSlot.FRAME] as SlotStatus.Ready).binding.file!!.delete()).isTrue() }
         shareFromOtherApp(listOf("n3~photo_blue.png"))
         readyHeader(1)
         tap(s(R.string.preset_event_frame_name))

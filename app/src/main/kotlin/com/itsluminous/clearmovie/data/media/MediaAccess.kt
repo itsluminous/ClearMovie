@@ -171,7 +171,9 @@ class MediaAccess(
     /**
      * Releases persisted grants that no project uses and no intake is about
      * to use: left over when the app stopped between [plan] and [execute].
-     * Every grant the app persists is for project media, so this is safe.
+     * Every grant the app persists is for project media or for a preset file
+     * used where it is (cm-frame-area), and both are recorded in
+     * `media_grants`, so this is safe.
      */
     suspend fun reconcileGrants(persisted: List<String>) {
         withContext(dispatcher) {

@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.KeyMath
 import com.itsluminous.clearmovie.domain.model.KeySpec
 
 /**
@@ -13,7 +14,9 @@ import com.itsluminous.clearmovie.domain.model.KeySpec
  * alpha comes from the distance to [KeySpec.color] in the BT.709 Cb/Cr plane,
  * fully transparent within [KeySpec.tolerance] and fully opaque beyond
  * tolerance + [KeySpec.softness]. In the soft band the green spill is pulled
- * down to the larger of red and blue, so edges carry no green fringe.
+ * down to the larger of red and blue, so edges carry no green fringe; a key
+ * of another colour the user picked (cm-frame-area) has no such step, as
+ * its spill is not green. [KeyMath] holds the same arithmetic for the CPU.
  *
  * The key colour is stored as true BT.709 RGB (cm-storage measures it with
  * the stream's own matrix), but the GPU's video sampler does not always
@@ -65,6 +68,7 @@ class ChromaKeyEffect(
             program.setFloatsUniform("uKey601", floatArrayOf(cb2, cr2))
             program.setFloatUniform("uTolerance", key.tolerance.toFloat())
             program.setFloatUniform("uSoftness", key.softness.toFloat().coerceAtLeast(1e-4f))
+            program.setFloatUniform("uGreenSpill", if (KeyMath.suppressesGreenSpill(key.color)) 1f else 0f)
         }
 
         override fun outputSize(
@@ -76,33 +80,14 @@ class ChromaKeyEffect(
     }
 
     companion object {
-        /** BT.709 (Cb, Cr) of [color], each in -0.5..0.5. The shader uses the same formula. */
+        /** BT.709 (Cb, Cr) of [color], each in -0.5..0.5. The shader uses the same formula ([KeyMath.chroma]). */
         fun chroma(color: ArgbColor): Pair<Float, Float> {
-            val r = ((color.argb shr 16) and 0xFF) / 255f
-            val g = ((color.argb shr 8) and 0xFF) / 255f
-            val b = (color.argb and 0xFF) / 255f
-            val y = 0.2126f * r + 0.7152f * g + 0.0722f * b
-            return (b - y) / 1.8556f to (r - y) / 1.5748f
+            val (cb, cr) = KeyMath.chroma(color.argb.toInt())
+            return cb.toFloat() to cr.toFloat()
         }
 
-        /**
-         * [color] as a decoder shows it when it encodes with BT.709 (the file's
-         * matrix) and decodes with BT.601 (what a sampler ignoring the tag uses).
-         */
-        fun misdecodedAsBt601(color: ArgbColor): ArgbColor {
-            val r = ((color.argb shr 16) and 0xFF) / 255.0
-            val g = ((color.argb shr 8) and 0xFF) / 255.0
-            val b = (color.argb and 0xFF) / 255.0
-            val y = 0.2126 * r + 0.7152 * g + 0.0722 * b
-            val cb = (b - y) / 1.8556
-            val cr = (r - y) / 1.5748
-
-            fun byte(v: Double) = (v.coerceIn(0.0, 1.0) * 255 + 0.5).toLong()
-            val r2 = byte(y + 1.402 * cr)
-            val g2 = byte(y - 0.344136 * cb - 0.714136 * cr)
-            val b2 = byte(y + 1.772 * cb)
-            return ArgbColor(0xFF000000L or (r2 shl 16) or (g2 shl 8) or b2)
-        }
+        /** [KeyMath.misdecodedAsBt601]. */
+        fun misdecodedAsBt601(color: ArgbColor): ArgbColor = KeyMath.misdecodedAsBt601(color)
 
         private const val FRAGMENT = """
 precision highp float;
@@ -111,6 +96,7 @@ uniform vec2 uKey;
 uniform vec2 uKey601;
 uniform float uTolerance;
 uniform float uSoftness;
+uniform float uGreenSpill;
 varying vec2 vUv;
 
 void main() {
@@ -121,7 +107,7 @@ void main() {
   float keep = smoothstep(uTolerance, uTolerance + uSoftness, d);
   vec3 rgb = c.rgb;
   float limit = max(rgb.r, rgb.b);
-  if (rgb.g > limit) {
+  if (uGreenSpill > 0.5 && rgb.g > limit) {
     rgb.g = mix(limit, rgb.g, keep);
   }
   gl_FragColor = vec4(rgb, c.a * keep);

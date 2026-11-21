@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.data.preset
 
+import android.net.Uri
 import java.io.File
 
 /** What [MediaProbe] found in a file. */
@@ -32,4 +33,14 @@ interface MediaProbe {
         frameAt: List<Double> = emptyList(),
         measureLoudness: Boolean = false,
     ): ProbeResult?
+
+    /**
+     * The same for a file used where it is (cm-frame-area), by its
+     * `content://` [uri]; null when it cannot be read.
+     */
+    suspend fun probe(
+        uri: Uri,
+        frameAt: List<Double> = emptyList(),
+        measureLoudness: Boolean = false,
+    ): ProbeResult? = null
 }

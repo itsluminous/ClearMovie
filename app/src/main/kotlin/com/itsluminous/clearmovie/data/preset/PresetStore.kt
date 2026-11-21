@@ -6,6 +6,7 @@ import android.database.SQLException
 import android.net.Uri
 import androidx.room.withTransaction
 import com.itsluminous.clearmovie.data.db.ClearMovieDatabase
+import com.itsluminous.clearmovie.data.db.MediaGrantEntity
 import com.itsluminous.clearmovie.data.db.PresetBindingEntity
 import com.itsluminous.clearmovie.data.db.PresetDefinitionEntity
 import com.itsluminous.clearmovie.data.files.AppFiles
@@ -14,13 +15,17 @@ import com.itsluminous.clearmovie.data.media.CopyBudget
 import com.itsluminous.clearmovie.data.media.CopyFailedException
 import com.itsluminous.clearmovie.data.media.MediaCopier
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
+import com.itsluminous.clearmovie.data.media.UriGrants
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.EndingSpec
 import com.itsluminous.clearmovie.domain.model.IntroSpec
+import com.itsluminous.clearmovie.domain.model.KeyMath
+import com.itsluminous.clearmovie.domain.model.KeySpec
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.LocalizedText
+import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
@@ -72,6 +77,8 @@ data class PresetParts(
     val ending: EndingKind? = EndingKind.AUDIO,
     /** The shape of the videos it makes (cm-aspect-ratio). */
     val shape: CanvasShape = CanvasShape.LANDSCAPE,
+    /** Whether its files are copied into the app, or used where they are (cm-frame-area, the default). */
+    val copyFiles: Boolean = false,
 )
 
 sealed interface PresetSaveResult {
@@ -98,10 +105,14 @@ sealed interface PresetDeleteResult {
     data object Unknown : PresetDeleteResult
 }
 
-/** A preset file copied into app storage. */
+/**
+ * A preset file: a copy in app storage ([file]), or a file used where it is
+ * ([linkedUri], a `content://` link whose read grant the app keeps;
+ * cm-frame-area). Exactly one of the two is set.
+ */
 data class PresetBinding(
     val slot: PresetSlot,
-    val file: File,
+    val file: File?,
     val sha256: String,
     val sizeBytes: Long,
     val originalName: String?,
@@ -113,8 +124,15 @@ data class PresetBinding(
     val measuredKeyColor: ArgbColor?,
     val keyDeltaE: Double?,
     val boundAt: Long,
+    val linkedUri: String? = null,
 ) {
     val durationMs: Long get() = durationUs / 1000
+
+    /** True for a file used where it is, not copied. */
+    val isLinked: Boolean get() = linkedUri != null
+
+    /** Where the file is read from: the copy, or the user's own file. */
+    val uri: Uri get() = linkedUri?.let(Uri::parse) ?: Uri.fromFile(requireNotNull(file))
 
     /** True when the frame was re-measured and keys out its own green: "Frame adjusted to this file". */
     val keyAdjusted: Boolean get() = keyColor != null
@@ -132,7 +150,7 @@ sealed interface SlotStatus {
         val binding: PresetBinding,
     ) : SlotStatus
 
-    /** The copy in app storage is gone: the repair screen asks for the file again. */
+    /** The copy in app storage is gone, or the file used where it is was moved or deleted: the repair screen asks for it again. */
     data class Missing(
         val binding: PresetBinding,
     ) : SlotStatus
@@ -250,6 +268,8 @@ class PresetStore(
     private val hash: (File) -> String = MediaCopier::sha256,
     /** True when the app had run on this phone before this launch: see [seedOnce]. */
     private val installedBefore: () -> Boolean = { false },
+    /** Read grants for files used where they are; without it every file is copied. */
+    private val grants: UriGrants? = null,
 ) {
     private val seedLock = Mutex()
 
@@ -370,7 +390,7 @@ class PresetStore(
                     // The template's caption place, on the new shape (its frame's window is measured when the frame is chosen).
                     caption = template.caption.copy(box = refitBox(template.caption.box, template.shape, parts.shape)),
                 )
-            (write(preset, createdAt = clock()) as? PresetSaveResult.Saved)?.preset?.id
+            (write(preset, createdAt = clock(), copyFiles = parts.copyFiles) as? PresetSaveResult.Saved)?.preset?.id
         }
 
     /**
@@ -395,7 +415,41 @@ class PresetStore(
                 return@withContext PresetSaveResult.Invalid
             }
             val row = db.presets().definition(preset.id.value)
-            write(preset, createdAt = row?.createdAt ?: 0L, retiredAt = row?.retiredAt)
+            write(preset, createdAt = row?.createdAt ?: 0L, retiredAt = row?.retiredAt, copyFiles = row?.copyFiles ?: true)
+        }
+
+    /**
+     * Whether preset [id] copies the files chosen for it into the app (the
+     * presets the app ships, and every preset from before cm-frame-area), or
+     * uses them where they are.
+     */
+    suspend fun copiesFiles(id: PresetId): Boolean = withContext(dispatcher) { db.presets().definition(id.value)?.copyFiles ?: true }
+
+    /**
+     * The frame's look, chosen by the user (cm-frame-area): the colour keyed
+     * out of it and where photos and videos go while it shows ([area], in
+     * units of the frame's picture). It replaces any green the key-colour
+     * check measured. For a preset the app ships this is an edit, which
+     * Reset removes.
+     */
+    suspend fun setFrameLook(
+        id: PresetId,
+        key: KeySpec,
+        area: NormRect,
+    ): PresetSaveResult =
+        withContext(dispatcher) {
+            if (!KeyMath.isUsableArea(area) || key.tolerance !in 0.0..1.0 || key.softness !in 0.0..1.0) {
+                return@withContext PresetSaveResult.Invalid
+            }
+            val preset = definition(id)?.preset ?: return@withContext PresetSaveResult.NotSaved
+            val frame = preset.frame ?: return@withContext PresetSaveResult.Invalid
+            val result = save(preset.copy(frame = frame.copy(key = key, contentRect = area)))
+            if (result is PresetSaveResult.Saved) {
+                db.presets().binding(id.value, PresetSlot.FRAME.fileStem)?.let { row ->
+                    if (row.keyColor != null) db.presets().upsertBinding(row.copy(keyColor = null))
+                }
+            }
+            result
         }
 
     /** How many videos were made from [id]: while any is, its shape stays (cm-aspect-ratio). */
@@ -417,6 +471,7 @@ class PresetStore(
                         db.presets().retire(id.value, clock())
                         PresetDeleteResult.Retired(videos)
                     } else {
+                        dropLinks(id)
                         db.presets().deleteBindings(id.value)
                         db.presets().deleteDefinition(id.value)
                         PresetDeleteResult.Deleted
@@ -435,6 +490,7 @@ class PresetStore(
                 val gone =
                     db.withTransaction {
                         if (db.presets().projectsUsing(row.presetId) > 0) return@withTransaction false
+                        dropLinks(id)
                         db.presets().deleteBindings(row.presetId)
                         db.presets().deleteDefinition(row.presetId)
                         true
@@ -452,6 +508,7 @@ class PresetStore(
         preset: Preset,
         createdAt: Long,
         retiredAt: Long? = null,
+        copyFiles: Boolean = true,
     ): PresetSaveResult {
         val text = PresetWriter.write(preset)
         val parsed = PresetParser.parse(text) as? PresetParseResult.Ok ?: return PresetSaveResult.Invalid
@@ -481,6 +538,7 @@ class PresetStore(
                             boundAt = clock(),
                             createdAt = createdAt,
                             retiredAt = retiredAt,
+                            copyFiles = copyFiles,
                         ),
                     )
                     old
@@ -521,7 +579,8 @@ class PresetStore(
                     when {
                         preset == null || !preset.needs(slot) -> SlotStatus.NotNeeded
                         binding == null -> SlotStatus.NotSet
-                        !binding.file.isFile -> SlotStatus.Missing(binding)
+                        binding.isLinked -> linkStatus(binding)
+                        binding.file?.isFile != true -> SlotStatus.Missing(binding)
                         binding.file.length() != binding.sizeBytes -> SlotStatus.Changed(binding)
                         else -> SlotStatus.Ready(binding)
                     }
@@ -542,7 +601,8 @@ class PresetStore(
                 quick.slots.mapValues { (_, s) ->
                     val ready = s as? SlotStatus.Ready ?: return@mapValues s
                     val b = ready.binding
-                    if (b.file.lastModified() <= b.boundAt) return@mapValues s
+                    // A file used where it is was checked by its size; reading all of it again before each export costs too much.
+                    if (b.file == null || b.file.lastModified() <= b.boundAt) return@mapValues s
                     if (runCatching { hash(b.file) }.getOrNull() == b.sha256) s else SlotStatus.Changed(b)
                 },
             )
@@ -565,6 +625,11 @@ class PresetStore(
             if (!preset.needs(slot)) return@withContext SlotBindResult.NotNeeded
             if (uri.scheme != ContentResolver.SCHEME_CONTENT) return@withContext SlotBindResult.Unreadable
             val info = gateway.describe(uri) ?: return@withContext SlotBindResult.Unreadable
+            // Used where it is (cm-frame-area) when the preset says so and the link's read grant can be kept;
+            // otherwise copied, as before.
+            if (!copiesFiles(id) && grants?.persist(uri) == true) {
+                return@withContext bindLinked(id, slot, preset, uri, info)
+            }
             val free = freeBytes()
             val size = info.sizeBytes ?: 0L
             if (size + CopyBudget.RESERVE_BYTES >
@@ -645,7 +710,7 @@ class PresetStore(
                             } catch (e: SQLException) {
                                 return@withContext false
                             }
-                        if (previous != null && previous.fileName != name) runCatching { files.presetFile(id, previous.fileName).delete() }
+                        if (previous != null) forget(id, slot, previous, keepFile = name)
                         true
                     }
                 if (!committed) {
@@ -656,7 +721,12 @@ class PresetStore(
                     // The frame plays either way; a window that could not be stored keeps the copied one.
                     withContext(NonCancellable) {
                         val row = db.presets().definition(id.value)
-                        write(preset.copy(frame = frame.copy(contentRect = ownWindow)), row?.createdAt ?: 0L, row?.retiredAt)
+                        write(
+                            preset.copy(frame = frame.copy(contentRect = ownWindow)),
+                            row?.createdAt ?: 0L,
+                            row?.retiredAt,
+                            row?.copyFiles ?: true,
+                        )
                     }
                 }
                 val fileShape =
@@ -722,6 +792,7 @@ class PresetStore(
                             clock(),
                             createdAt = old?.createdAt ?: 0L,
                             retiredAt = old?.retiredAt,
+                            copyFiles = old?.copyFiles ?: true,
                         ),
                     )
                     old
@@ -771,7 +842,9 @@ class PresetStore(
         row: PresetBindingEntity,
     ): PresetBinding? {
         val slot = PresetSlot.entries.firstOrNull { it.fileStem == row.slot } ?: return null
-        val file = runCatching { files.presetFile(id, row.fileName) }.getOrNull() ?: return null
+        val link = row.sourceUri?.takeIf(MediaRef::isSafeContentUri)
+        if (row.sourceUri != null && link == null) return null
+        val file = if (link != null) null else runCatching { files.presetFile(id, row.fileName) }.getOrNull() ?: return null
         return PresetBinding(
             slot = slot,
             file = file,
@@ -785,8 +858,131 @@ class PresetStore(
             measuredKeyColor = row.measuredKeyColor?.let(ArgbColor::parse),
             keyDeltaE = row.keyDeltaE,
             boundAt = row.boundAt,
+            linkedUri = link,
         )
     }
+
+    /**
+     * A file used where it is: Missing once its read grant is gone or its
+     * provider no longer finds it (moved, renamed or deleted), Changed when
+     * its size is not what was bound. One query, no reading.
+     */
+    private fun linkStatus(binding: PresetBinding): SlotStatus {
+        val link = binding.linkedUri ?: return SlotStatus.Missing(binding)
+        if (grants?.isPersisted(link) != true) return SlotStatus.Missing(binding)
+        val info = gateway.describe(Uri.parse(link)) ?: return SlotStatus.Missing(binding)
+        val size = info.sizeBytes
+        return if (binding.sizeBytes >= 0 && size != null &&
+            size != binding.sizeBytes
+        ) {
+            SlotStatus.Changed(binding)
+        } else {
+            SlotStatus.Ready(binding)
+        }
+    }
+
+    /**
+     * Binds [uri] as [slot] of [preset] where it is, without copying: its
+     * read grant is already persisted. The grant is recorded under this
+     * preset slot (in `media_grants`, as a project's links are), so the
+     * launch sweep keeps it and the last user releases it.
+     */
+    private suspend fun bindLinked(
+        id: PresetId,
+        slot: PresetSlot,
+        preset: Preset,
+        uri: Uri,
+        info: com.itsluminous.clearmovie.data.media.SourceInfo,
+    ): SlotBindResult {
+        val link = uri.toString()
+        val owner = grantOwner(id, slot)
+
+        // Released only when nothing else (another preset slot, a project) uses the same link.
+        suspend fun giveBack() {
+            runCatching { if (db.grants().usersOf(link) == 0) grants?.release(link) }
+        }
+        val frame = preset.frame.takeIf { slot == PresetSlot.FRAME }
+        val facts = probe.probe(uri, if (frame != null) FRAME_SAMPLES else emptyList(), measureLoudness = true)
+        if (facts == null || !fits(slot, preset, facts)) {
+            giveBack()
+            return SlotBindResult.WrongKind
+        }
+        currentCoroutineContext().ensureActive()
+        val check = frame?.let { KeyColorCheck.measure(facts.frames, it.contentRect, it.key.color) }
+        val entity =
+            PresetBindingEntity(
+                presetId = id.value,
+                slot = slot.fileStem,
+                fileName = "",
+                sha256 = "",
+                sizeBytes = info.sizeBytes ?: -1L,
+                originalName = info.displayName?.take(MAX_ORIGINAL_NAME),
+                mime = facts.mime ?: info.mime,
+                durationUs = facts.durationUs,
+                loudnessLufs = facts.loudnessLufs?.takeIf { it.isFinite() },
+                keyColor = check?.takeIf { it.needsAdjusting }?.measured?.toString(),
+                measuredKeyColor = check?.measured?.toString(),
+                keyDeltaE = check?.deltaE,
+                boundAt = clock(),
+                sourceUri = link,
+            )
+        val committed =
+            withContext(NonCancellable) {
+                val previous =
+                    try {
+                        db.withTransaction {
+                            val old = db.presets().binding(id.value, slot.fileStem)
+                            db.presets().upsertBinding(entity)
+                            if (db.grants().usersOf(link, owner) == 0) db.grants().add(MediaGrantEntity(link, owner))
+                            old
+                        }
+                    } catch (e: SQLException) {
+                        giveBack()
+                        return@withContext false
+                    }
+                if (previous != null) forget(id, slot, previous, keepLink = link)
+                true
+            }
+        if (!committed) return SlotBindResult.Unreadable
+        val fileShape = CanvasShape.suiting(facts.shownWidth, facts.shownHeight)?.takeIf { facts.hasVideo && it != preset.shape }
+        return SlotBindResult.Bound(toBinding(id, entity)!!, fileShape)
+    }
+
+    /**
+     * Lets go of what the [previous] binding of [slot] held, now that a new
+     * one replaced it: its copy (unless it is [keepFile]), or its link's
+     * grant record and, when nothing else uses the link, the grant itself
+     * (unless it is [keepLink]).
+     */
+    private suspend fun forget(
+        id: PresetId,
+        slot: PresetSlot,
+        previous: PresetBindingEntity,
+        keepFile: String? = null,
+        keepLink: String? = null,
+    ) {
+        val link = previous.sourceUri
+        if (link == null) {
+            if (previous.fileName.isNotEmpty() && previous.fileName != keepFile) {
+                runCatching { files.presetFile(id, previous.fileName).delete() }
+            }
+            return
+        }
+        if (link == keepLink) return
+        runCatching {
+            db.grants().remove(link, grantOwner(id, slot))
+            if (db.grants().usersOf(link) == 0) grants?.release(link)
+        }
+    }
+
+    /** Releases every link preset [id] holds, before its bindings are deleted. */
+    private suspend fun dropLinks(id: PresetId) {
+        for (row in db.presets().bindings(id.value)) {
+            val slot = PresetSlot.entries.firstOrNull { it.fileStem == row.slot } ?: continue
+            if (row.sourceUri != null) forget(id, slot, row)
+        }
+    }
+
 
     /** The presets the app ships: templates for a new preset, never offered on their own. */
     private fun bundled(): List<Preset> =
@@ -838,6 +1034,12 @@ class PresetStore(
 
     companion object {
         const val ASSET_DIR = "presets"
+
+        /** Who holds a preset file's link in `media_grants`: never a project id, which has no colon. */
+        fun grantOwner(
+            id: PresetId,
+            slot: PresetSlot,
+        ): String = "preset:${id.value}:${slot.fileStem}"
 
         /** The start of every id the app gives a preset the user makes, so it never takes a bundled preset's id. */
         const val OWN_PREFIX = "my-"

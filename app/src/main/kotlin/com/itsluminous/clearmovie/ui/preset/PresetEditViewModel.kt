@@ -1,11 +1,10 @@
 package com.itsluminous.clearmovie.ui.preset
 
 import android.graphics.Bitmap
-import android.media.MediaMetadataRetriever
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.itsluminous.clearmovie.data.preset.Lab
+import com.itsluminous.clearmovie.data.preset.FrameStills
 import com.itsluminous.clearmovie.data.preset.PresetDefinition
 import com.itsluminous.clearmovie.data.preset.PresetDeleteResult
 import com.itsluminous.clearmovie.data.preset.PresetSaveResult
@@ -25,9 +24,9 @@ import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectCodec
 import com.itsluminous.clearmovie.domain.model.TextRules
 import com.itsluminous.clearmovie.domain.model.refitBox
+import com.itsluminous.clearmovie.ui.frame.keyedPicture
 import com.itsluminous.clearmovie.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -114,6 +113,7 @@ class PresetEditViewModel
     constructor(
         private val savedState: SavedStateHandle,
         private val presetStore: PresetStore,
+        private val frameStills: FrameStills,
     ) : ViewModel() {
         val presetId: PresetId = PresetId(requireNotNull(savedState.get<String>(Routes.ARG_PRESET)))
 
@@ -284,16 +284,19 @@ class PresetEditViewModel
             preset: Preset,
         ) {
             val frame = (status.slots[PresetSlot.FRAME] as? SlotStatus.Ready)?.binding
-            val key = frame?.let { "${it.file.path}:${it.sha256}" }
-            if (key == stillFor) return
-            stillFor = key
+            val stillKey = frame?.let { "${it.uri}:${it.sha256}:${it.sizeBytes}:${it.keyColor}:${preset.frame?.key}" }
+            if (stillKey == stillFor) return
+            stillFor = stillKey
             if (frame == null) {
                 uiState.update { it.copy(frameStill = null) }
                 return
             }
-            val keyColor = frame.keyColor ?: preset.frame?.key?.color ?: return
+            val frameKey = preset.frame?.key ?: return
+            val keySpec = frame.keyColor?.let { frameKey.copy(color = it) } ?: frameKey
             viewModelScope.launch {
-                val still = withContext(Dispatchers.IO) { keyedStill(frame.file.path, keyColor.argb.toInt()) }
+                // The frame's picture keyed as the export keys it (cm-frame-area), with the colour it was set to.
+                val sample = frameStills.still(frame.uri, STILL_AT_US.coerceAtMost(frame.durationUs / 2), STILL_WIDTH)
+                val still = sample?.let { withContext(Dispatchers.Default) { keyedPicture(it, keySpec) } }
                 uiState.update { it.copy(frameStill = still) }
             }
         }
@@ -306,10 +309,6 @@ class PresetEditViewModel
             private const val KEY_EFFECTS = "draftEffects"
             private const val STILL_AT_US = 1_000_000L
             private const val STILL_WIDTH = 640
-            private const val STILL_HEIGHT = 360
-
-            /** How near the key colour (CIE76) a pixel is cut out of the preview picture. */
-            private const val CUT_DELTA_E = 30.0
 
             private fun decodeStyle(text: String): CaptionStyle? =
                 runCatching { ProjectCodec.json.decodeFromString(CaptionStyle.serializer(), text) }.getOrNull()
@@ -353,35 +352,6 @@ class PresetEditViewModel
                     shape = shape ?: preset.shape,
                     effects = effects ?: preset.effects,
                 )
-            }
-
-            /** The frame's picture at one second, its green window made see-through. */
-            internal fun keyedStill(
-                path: String,
-                keyArgb: Int,
-            ): Bitmap? {
-                val r = MediaMetadataRetriever()
-                return try {
-                    r.setDataSource(path)
-                    val frame =
-                        r.getScaledFrameAtTime(STILL_AT_US, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, STILL_WIDTH, STILL_HEIGHT)
-                            ?: return null
-                    val bitmap = frame.copy(Bitmap.Config.ARGB_8888, true)
-                    val pixels = IntArray(bitmap.width * bitmap.height)
-                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                    val key = Lab.of(keyArgb)
-                    for (i in pixels.indices) {
-                        if (Lab.of(pixels[i]).deltaE(key) < CUT_DELTA_E) pixels[i] = 0
-                    }
-                    bitmap.setPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                    bitmap
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    null
-                } finally {
-                    runCatching { r.release() }
-                }
             }
         }
     }

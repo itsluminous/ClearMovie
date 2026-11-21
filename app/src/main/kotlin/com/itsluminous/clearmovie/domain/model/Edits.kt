@@ -599,6 +599,21 @@ fun Project.setVolume(
     }
 }
 
+/**
+ * A frame's look (cm-frame-area): the colour keyed out of it ([key]) and
+ * where photos and videos go while it shows ([area], in units of the
+ * frame's picture; null on the preset frame for the preset's own window).
+ */
+fun Project.setFrameLook(
+    clipId: ClipId,
+    key: KeySpec,
+    area: NormRect?,
+): Project {
+    require(key.tolerance in 0.0..1.0 && key.softness in 0.0..1.0) { "Key out of range" }
+    require(area == null || KeyMath.isUsableArea(area)) { "Picture area out of range" }
+    return updateTyped<OverlayClip>(clipId, "frames") { it.copy(key = key, area = area) }
+}
+
 /** Fade in and out on a sound clip; together they fit inside it. */
 fun Project.setAudioFades(
     clipId: ClipId,

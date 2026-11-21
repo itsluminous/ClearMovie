@@ -80,6 +80,39 @@ class StorageDeviceTest {
     }
 
     @Test
+    fun version2PresetRowsMigrateToVersion3CopiedAsBefore() {
+        // cm-frame-area: 2 to 3 adds sourceUri (null: a copy) to preset_bindings and copyFiles (1) to preset_definitions.
+        migrations.createDatabase(DB3, 2).apply {
+            execSQL(
+                "INSERT INTO preset_definitions (presetId, fileName, sha256, sizeBytes, originalName, boundAt, createdAt, retiredAt) " +
+                    "VALUES ('my-abc', 'preset-abc.json', '00', 10, null, 42, 7, null)",
+            )
+            execSQL(
+                "INSERT INTO preset_bindings (presetId, slot, fileName, sha256, sizeBytes, originalName, mime, durationUs, " +
+                    "loudnessLufs, keyColor, measuredKeyColor, keyDeltaE, boundAt) " +
+                    "VALUES ('my-abc', 'frame', 'frame-x.mp4', '00', 5, null, 'video/mp4', 4000000, null, '#05C925', null, null, 42)",
+            )
+            close()
+        }
+        val db = migrations.runMigrationsAndValidate(DB3, 3, true, ClearMovieDatabase.MIGRATION_2_3)
+        db.query("SELECT presetId, createdAt, copyFiles FROM preset_definitions").use { c ->
+            assertThat(c.count).isEqualTo(1)
+            c.moveToFirst()
+            assertThat(c.getString(0)).isEqualTo("my-abc")
+            assertThat(c.getLong(1)).isEqualTo(7)
+            assertThat(c.getInt(2)).isEqualTo(1)
+        }
+        db.query("SELECT fileName, keyColor, sourceUri FROM preset_bindings").use { c ->
+            assertThat(c.count).isEqualTo(1)
+            c.moveToFirst()
+            assertThat(c.getString(0)).isEqualTo("frame-x.mp4")
+            assertThat(c.getString(1)).isEqualTo("#05C925")
+            assertThat(c.isNull(2)).isTrue()
+        }
+        db.close()
+    }
+
+    @Test
     fun theReEncodedFrameDecodedOnThePhoneGetsItsKeyColourAdjusted() =
         runBlocking<Unit> {
             val probe = AndroidMediaProbe()
@@ -121,6 +154,7 @@ class StorageDeviceTest {
     private companion object {
         const val DB = "migration-test.db"
         const val DB2 = "migration-1-2-test.db"
+        const val DB3 = "migration-2-3-test.db"
         const val TAG = "StorageDeviceTest"
     }
 }

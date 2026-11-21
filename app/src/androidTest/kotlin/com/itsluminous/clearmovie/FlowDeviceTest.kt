@@ -321,7 +321,7 @@ class FlowDeviceTest {
                 PresetSlot.FRAME to insert("fixtures/frame.mp4", "video/mp4"),
                 PresetSlot.ENDING to insert("fixtures/speech.m4a", "audio/mp4"),
             ).forEach { (slot, uri) -> assertThat(store.bindSlot(id, slot, uri)).isInstanceOf(SlotBindResult.Bound::class.java) }
-            val frame = (store.status(id).slots[PresetSlot.FRAME] as SlotStatus.Ready).binding.file
+            val frame = (store.status(id).slots[PresetSlot.FRAME] as SlotStatus.Ready).binding.file!!
             assertThat(frame.delete()).isTrue()
         }
         ActivityScenario.launch(MainActivity::class.java).use {

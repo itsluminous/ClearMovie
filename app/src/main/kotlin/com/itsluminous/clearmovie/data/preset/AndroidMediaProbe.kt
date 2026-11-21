@@ -24,16 +24,40 @@ import kotlin.coroutines.coroutineContext
  */
 class AndroidMediaProbe(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** For files used where they are (`content://` links); without it those are not probed. */
+    private val context: Context? = null,
 ) : MediaProbe {
     override suspend fun probe(
         file: File,
         frameAt: List<Double>,
         measureLoudness: Boolean,
     ): ProbeResult? =
+        probe(
+            { it.setDataSource(file.path) },
+            { it.setDataSource(file.path) },
+            frameAt,
+            measureLoudness,
+        )
+
+    override suspend fun probe(
+        uri: Uri,
+        frameAt: List<Double>,
+        measureLoudness: Boolean,
+    ): ProbeResult? {
+        val context = context ?: return null
+        return probe({ it.setDataSource(context, uri) }, { it.setDataSource(context, uri, null) }, frameAt, measureLoudness)
+    }
+
+    private suspend fun probe(
+        openRetriever: (MediaMetadataRetriever) -> Unit,
+        openExtractor: (MediaExtractor) -> Unit,
+        frameAt: List<Double>,
+        measureLoudness: Boolean,
+    ): ProbeResult? =
         withContext(dispatcher) {
             val retriever = MediaMetadataRetriever()
             try {
-                retriever.setDataSource(file.path)
+                openRetriever(retriever)
                 val durationMs =
                     retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: return@withContext null
                 val hasVideo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
@@ -43,12 +67,16 @@ class AndroidMediaProbe(
                 val frames =
                     if (hasVideo && frameAt.isNotEmpty()) {
                         orNullUnlessCancelled {
-                            YuvFrameDecoder.frames(file, frameAt.map { (durationMs * 1000 * it.coerceIn(0.0, 1.0)).toLong() }, FRAME_WIDTH)
+                            YuvFrameDecoder.frames(
+                                openExtractor,
+                                frameAt.map { (durationMs * 1000 * it.coerceIn(0.0, 1.0)).toLong() },
+                                FRAME_WIDTH,
+                            )
                         } ?: emptyList()
                     } else {
                         emptyList()
                     }
-                val lufs = if (measureLoudness && hasAudio) orNullUnlessCancelled { loudness(file) } else null
+                val lufs = if (measureLoudness && hasAudio) orNullUnlessCancelled { loudness(openExtractor) } else null
                 val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
                 val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
                 val turned = (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0) % 180 != 0
@@ -75,8 +103,6 @@ class AndroidMediaProbe(
         withContext(dispatcher) {
             orNullUnlessCancelled { loudness { it.setDataSource(context, uri, null) } }
         }
-
-    private suspend fun loudness(file: File): Double? = loudness { it.setDataSource(file.path) }
 
     private suspend fun loudness(open: (MediaExtractor) -> Unit): Double? {
         val extractor = MediaExtractor()

@@ -15,8 +15,10 @@ import com.itsluminous.clearmovie.data.media.MediaResolver
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.data.media.UriGrants
 import com.itsluminous.clearmovie.data.preset.AndroidFrameKeyCheck
+import com.itsluminous.clearmovie.data.preset.AndroidFrameStills
 import com.itsluminous.clearmovie.data.preset.AndroidMediaProbe
 import com.itsluminous.clearmovie.data.preset.FrameKeyCheck
+import com.itsluminous.clearmovie.data.preset.FrameStills
 import com.itsluminous.clearmovie.data.preset.MediaProbe
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.project.ProjectRepository
@@ -90,7 +92,9 @@ object StorageModule {
 
     @Provides
     @Singleton
-    fun provideProbe(): MediaProbe = AndroidMediaProbe()
+    fun provideProbe(
+        @ApplicationContext context: Context,
+    ): MediaProbe = AndroidMediaProbe(context = context)
 
     @Provides
     @Singleton
@@ -134,6 +138,7 @@ object StorageModule {
         probe: MediaProbe,
         freeSpace: FreeSpace,
         history: InstallHistory,
+        grants: UriGrants,
     ): PresetStore =
         PresetStore(
             context.assets,
@@ -145,6 +150,7 @@ object StorageModule {
             probe,
             freeSpace::bytes,
             installedBefore = { history.openedBefore },
+            grants = grants,
         )
 
     /**
@@ -172,6 +178,11 @@ object StorageModule {
         }
         return InstallHistory(openedBefore)
     }
+
+    @Provides
+    fun provideFrameStills(
+        @ApplicationContext context: Context,
+    ): FrameStills = AndroidFrameStills(context)
 
     @Provides
     fun provideMediaFactsProbe(

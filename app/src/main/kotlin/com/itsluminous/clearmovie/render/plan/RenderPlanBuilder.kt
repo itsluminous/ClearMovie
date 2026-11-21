@@ -138,6 +138,13 @@ class RenderPlanBuilder(
 
     private fun windowRect(project: Project): NormRect = frameWindow(project, preset)
 
+    /** Where photos and videos shown from [startMs] to [endMs] go: see [pictureWindow]. */
+    private fun windowFor(
+        ctx: Context,
+        startMs: Long,
+        endMs: Long,
+    ): NormRect = pictureWindow(ctx.project, preset, startMs, endMs, ctx.window)
+
     private fun frameBoxFor(project: Project): NormRect = frameBox(project, preset)
 
     // The preset's intro and video ending are made for its shape: on a canvas of another shape they are
@@ -190,7 +197,7 @@ class RenderPlanBuilder(
         slot: MainSlot,
     ): List<VisualSegment.Picture> {
         val durUs = slot.durationMs * US
-        val window = ctx.window
+        val window = windowFor(ctx, slot.startMs, slot.startMs + slot.durationMs)
         return when (val clip = slot.clip) {
             is IntroClip -> {
                 listOf(picture(durUs, Source.Video(clip.media, durUs, 0, durUs), ctx.parts))
@@ -228,7 +235,7 @@ class RenderPlanBuilder(
         durUs: Long,
     ): VisualSegment.Picture {
         val prev = ctx.slots.getOrNull(slot.index - 1)?.clip
-        val window = ctx.window
+        val window = windowFor(ctx, slot.startMs, slot.startMs + slot.durationMs)
         return when (prev) {
             is VideoClip -> {
                 val lastUs = (prev.trimEndMs * US - FRAME_US).coerceAtLeast(prev.trimStartMs * US)
@@ -367,7 +374,7 @@ class RenderPlanBuilder(
                 }
 
                 is MediaClip -> {
-                    val rect = pipRect(clip.pip ?: PipPlacement.DEFAULT, ctx.window, ctx.aspect)
+                    val rect = pipRect(clip.pip ?: PipPlacement.DEFAULT, windowFor(ctx, clip.startMs, clip.endMs), ctx.aspect)
                     val placement = Placement.Pip(rect, clip.rotation)
                     val motion = motionFor(clip.animations, durUs, placement)
                     when (clip) {
@@ -898,8 +905,56 @@ fun frameWindow(
     preset: Preset?,
 ): NormRect {
     val frame = preset?.frame ?: return NormRect.FULL
-    val frameRowOn = project.tracks.any { it.presetRole == PresetRole.FRAME && it.enabled && it.clips.isNotEmpty() }
-    return if (frameRowOn) frame.contentRect.within(frameBox(project, preset)) else NormRect.FULL
+    val row =
+        project.tracks.firstOrNull { it.presetRole == PresetRole.FRAME && it.enabled && it.clips.isNotEmpty() } ?: return NormRect.FULL
+    // The preset frame's own picture area for this video (cm-frame-area), else the preset's.
+    val area = row.clips.firstNotNullOfOrNull { (it as? OverlayClip)?.area } ?: frame.contentRect
+    return area.within(frameBox(project, preset))
+}
+
+/**
+ * Where photos and videos shown from [startMs] to [endMs] go (cm-frame-area):
+ * the picture area of the frame that is shown longest over that time, among
+ * the frames on rows that are switched on and that have an area (the preset
+ * frame always has one; a frame the user added has one once it was set).
+ * Equal times go to the frame drawn on top. With no such frame over that
+ * time, [fallback]: the preset frame's window while its row is on, else the
+ * whole canvas ([frameWindow]), as before frames had areas of their own.
+ *
+ * A frame the user added covers the canvas, so its area is already in canvas
+ * units; the preset frame's is placed in its box ([frameBox]).
+ */
+fun pictureWindow(
+    project: Project,
+    preset: Preset?,
+    startMs: Long,
+    endMs: Long,
+    fallback: NormRect = frameWindow(project, preset),
+): NormRect {
+    var best: NormRect? = null
+    var bestOverlap = 0L
+    for (id in project.stacking) {
+        val track = project.track(id) ?: continue
+        if (track.type != TrackType.OVERLAY || !track.enabled) continue
+        for (clip in track.clips) {
+            if (clip !is OverlayClip) continue
+            val overlap = minOf(endMs, clip.endMs) - maxOf(startMs, clip.startMs)
+            if (overlap <= 0) continue
+            val area =
+                if (track.presetRole == PresetRole.FRAME) {
+                    val frame = preset?.frame ?: continue
+                    (clip.area ?: frame.contentRect).within(frameBox(project, preset))
+                } else {
+                    clip.area ?: continue
+                }
+            // Later in the stacking is drawn on top, so it wins a tie.
+            if (overlap >= bestOverlap) {
+                best = area
+                bestOverlap = overlap
+            }
+        }
+    }
+    return best ?: fallback
 }
 
 /** Where the preset's frame is drawn on the video: the whole canvas, or its own shape centred on a canvas of another. */

@@ -48,7 +48,12 @@ class ProjectMedia
             return ProjectMediaSet(
                 preset = id?.let { presets.effectivePreset(it) },
                 presetStatus = status,
-                resolver = FileMediaResolver(ready.mapValues { it.value.file }, files.projectMediaDir(project.id)),
+                resolver =
+                    FileMediaResolver(
+                        ready.mapNotNull { (slot, b) -> b.file?.let { slot to it } }.toMap(),
+                        files.projectMediaDir(project.id),
+                        ready.mapNotNull { (slot, b) -> b.linkedUri?.let { slot to it } }.toMap(),
+                    ),
                 loudness = LoudnessTable { lufs[it] },
             )
         }

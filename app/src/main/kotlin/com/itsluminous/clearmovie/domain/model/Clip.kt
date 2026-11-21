@@ -408,6 +408,12 @@ data class TextClip(
  * green window (null draws it as it is). While it has an [anchor], a side
  * dragged by its handle stays at [detachedStartMs] or [detachedEndMs] and the
  * other side keeps following the span (see [CaptionAttachment]).
+ *
+ * [area] (cm-frame-area) is where photos and videos go while this frame is
+ * shown, in units of the frame's own picture (0..1, y down): the part the
+ * frame leaves free. Null for a frame the user added and never set one for
+ * (photos then fill the canvas); on the preset frame, null means the
+ * preset's own window.
  */
 @Serializable
 @SerialName("overlay")
@@ -423,6 +429,7 @@ data class OverlayClip(
     override val animations: Animations = Animations.NONE,
     val detachedStartMs: Long? = null,
     val detachedEndMs: Long? = null,
+    val area: NormRect? = null,
 ) : Clip {
     override fun withStartMs(ms: Long) = copy(startMs = ms)
 

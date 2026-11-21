@@ -1,9 +1,11 @@
 package com.itsluminous.clearmovie.ui.home
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.itsluminous.clearmovie.data.preset.PresetBinding
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SlotStatus
@@ -18,6 +20,7 @@ import com.itsluminous.clearmovie.ui.navigation.EntryMode
 import com.itsluminous.clearmovie.ui.navigation.FlowStep
 import com.itsluminous.clearmovie.ui.navigation.NewVideoFlow
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -77,6 +80,7 @@ class HomeViewModel
         private val presetStore: PresetStore,
         private val newVideos: NewVideos,
         repository: ProjectRepository,
+        @ApplicationContext private val context: Context,
     ) : ViewModel() {
         private val presetsState = MutableStateFlow<List<PresetCard>?>(null)
 
@@ -111,7 +115,7 @@ class HomeViewModel
                                 PresetSlot.INTRO,
                                 PresetSlot.FRAME,
                             ).firstNotNullOfOrNull { (status.slots[it] as? SlotStatus.Ready)?.binding }
-                        val thumb = old?.thumbnail ?: picture?.let { thumbnail(it.file.path) }
+                        val thumb = old?.thumbnail ?: picture?.let { thumbnail(it) }
                         PresetCard(def.preset, PresetCard.stateOf(status), if (picture != null) thumb else null)
                     }
             }
@@ -158,11 +162,12 @@ class HomeViewModel
             }
         }
 
-        private suspend fun thumbnail(path: String): Bitmap? =
+        private suspend fun thumbnail(binding: PresetBinding): Bitmap? =
             withContext(Dispatchers.IO) {
                 val r = MediaMetadataRetriever()
                 try {
-                    r.setDataSource(path)
+                    // A copy by its path; a file used where it is (cm-frame-area) by its link.
+                    binding.file?.let { r.setDataSource(it.path) } ?: r.setDataSource(context, binding.uri)
                     r.getScaledFrameAtTime(THUMB_AT_US, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, THUMB_SIZE, THUMB_SIZE)
                 } catch (e: CancellationException) {
                     throw e

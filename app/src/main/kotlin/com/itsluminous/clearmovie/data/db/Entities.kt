@@ -48,6 +48,10 @@ data class SessionEntity(
  * [keyColor] is set only when the frame's measured green differed from the
  * preset's by more than the limit, and then replaces it for this binding;
  * [measuredKeyColor] and [keyDeltaE] record what was measured.
+ *
+ * [sourceUri] (version 3, cm-frame-area) is set for a file used where it is
+ * instead of copied: the `content://` link whose read grant the app
+ * persisted. [fileName] is then empty and [sha256] is not worked out.
  */
 @Entity(tableName = "preset_bindings", primaryKeys = ["presetId", "slot"])
 data class PresetBindingEntity(
@@ -64,6 +68,7 @@ data class PresetBindingEntity(
     val measuredKeyColor: String?,
     val keyDeltaE: Double?,
     val boundAt: Long,
+    val sourceUri: String? = null,
 )
 
 /**
@@ -75,7 +80,9 @@ data class PresetBindingEntity(
  * [createdAt] orders the user's presets (0 for rows from before it existed).
  * [retiredAt] is set when the user deleted a preset that videos still use:
  * it is no longer offered, but its definition and files stay until no video
- * uses it, so those videos keep working.
+ * uses it, so those videos keep working. [copyFiles] (version 3,
+ * cm-frame-area) is false for a preset that uses its files where they are;
+ * the rows from before it, and presets the app ships, copy them.
  */
 @Entity(tableName = "preset_definitions")
 data class PresetDefinitionEntity(
@@ -87,6 +94,7 @@ data class PresetDefinitionEntity(
     val boundAt: Long,
     @ColumnInfo(defaultValue = "0") val createdAt: Long = 0,
     val retiredAt: Long? = null,
+    @ColumnInfo(defaultValue = "1") val copyFiles: Boolean = true,
 )
 
 /**
