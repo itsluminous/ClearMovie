@@ -345,7 +345,7 @@ class RowEndPlusScreenTest {
     }
 
     @Test
-    fun `a caption ending the video in a short gap: the plus and the chooser both say another row, and it goes there`() {
+    fun `a caption ending the video in a short gap, the plus and the chooser both say another row, and it goes there`() {
         val total = project.mainLayout().last().endMs
         // "The End" from 2.5 s before the end: the last 3 s are taken.
         val end = project.addText("The End", total - 2500, 2500, ids)
