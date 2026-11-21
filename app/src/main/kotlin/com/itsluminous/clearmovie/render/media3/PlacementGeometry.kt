@@ -67,7 +67,8 @@ data class PlacementGeometry(
 
                 is Placement.Pip -> {
                     val g = window(placement.rect, Fit.FILL_CROP, placement.rotation, inputWidth, inputHeight, canvasWidth, canvasHeight)
-                    val px = max(1.0, (BORDER_PX_AT_1080 * canvasHeight / 1080.0).roundToInt().toDouble())
+                    // Measured on the short side, so an upright video's border is as thin as a landscape one's.
+                    val px = max(1.0, (BORDER_PX_AT_1080 * min(canvasWidth, canvasHeight) / 1080.0).roundToInt().toDouble())
                     g.copy(borderX = px / canvasWidth, borderY = px / canvasHeight)
                 }
             }

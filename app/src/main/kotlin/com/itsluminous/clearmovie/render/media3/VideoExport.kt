@@ -71,18 +71,18 @@ class VideoExport(
 
     suspend fun run(
         composition: Composition,
-        height: Int,
+        canvasLongSide: Int,
         spec: EncodeSpec,
         output: ExportOutput,
         onRestart: suspend () -> Unit = {},
         onProgress: suspend (Int) -> Unit,
     ): Outcome {
-        val first = attempt(composition, height, spec, output, EncoderPreference.HARDWARE_FIRST, onProgress)
+        val first = attempt(composition, canvasLongSide, spec, output, EncoderPreference.HARDWARE_FIRST, onProgress)
         if (first !is Outcome.Failed || !isEncoderError(first.error)) return first
         Log.w(TAG, "The first encoder failed (${first.error.errorCodeName}); exporting again with software encoders", first.error)
         output.reset()
         onRestart()
-        return when (val second = attempt(composition, height, spec, output, EncoderPreference.SOFTWARE_ONLY, onProgress)) {
+        return when (val second = attempt(composition, canvasLongSide, spec, output, EncoderPreference.SOFTWARE_ONLY, onProgress)) {
             is Outcome.Done -> second.copy(hardwareFailure = first.error)
             is Outcome.Failed -> second
         }
@@ -90,7 +90,7 @@ class VideoExport(
 
     private suspend fun attempt(
         composition: Composition,
-        height: Int,
+        canvasLongSide: Int,
         spec: EncodeSpec,
         output: ExportOutput,
         preference: EncoderPreference,
@@ -98,7 +98,7 @@ class VideoExport(
     ): Outcome {
         val thread = HandlerThread("export").apply { start() }
         val handler = Handler(thread.looper)
-        val exporter = RenderExporter(context, height, deviceColour, preference, baseEncoders, output.muxerFactory)
+        val exporter = RenderExporter(context, canvasLongSide, deviceColour, preference, baseEncoders, output.muxerFactory)
         var transformer: Transformer? = null
         try {
             return coroutineScope {

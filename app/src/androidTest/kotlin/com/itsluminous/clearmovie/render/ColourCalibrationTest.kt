@@ -171,7 +171,7 @@ class ColourCalibrationTest {
             RenderHarness.exportComposition(
                 composition,
                 "tag-bt601",
-                RenderExporter(RenderHarness.context, plan.height, colour),
+                RenderExporter(RenderHarness.context, maxOf(plan.width, plan.height), colour),
                 EncodeSpec.forHeight(plan.height),
             )
         val standard = colourStandard(out.file)

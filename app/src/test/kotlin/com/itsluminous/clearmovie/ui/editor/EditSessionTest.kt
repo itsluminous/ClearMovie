@@ -1,15 +1,19 @@
 package com.itsluminous.clearmovie.ui.editor
 
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EditResult
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.Fixtures.mainIds
+import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.addToMain
+import com.itsluminous.clearmovie.domain.model.chooseShape
 import com.itsluminous.clearmovie.domain.model.deleteClip
 import com.itsluminous.clearmovie.domain.model.moveMainClip
 import com.itsluminous.clearmovie.domain.model.setPhotoDuration
+import com.itsluminous.clearmovie.domain.model.setShape
 import org.junit.Test
 
 /** Undo and redo in the editor, with changes that arrive from elsewhere. */
@@ -108,5 +112,25 @@ class EditSessionTest {
         s.edit("caption") { setPhotoDuration(ClipId("b"), 1200) }
         s.undo()
         assertThat(s.revertMerge("caption")).isNull()
+    }
+
+    @Test
+    fun `settling a change makes no undo step and leaves earlier steps as they were`() {
+        // cm-aspect-ratio: the first-time shape choice must not be undone into asking again.
+        val session = EditSession()
+        val start = ProjectFactory.blank(Fixtures.PROJECT_ID, askShape = true)
+        session.adopt(start)
+        val settled = session.settle { chooseShape(CanvasShape.PORTRAIT) }!!
+        assertThat(settled.shape).isEqualTo(CanvasShape.PORTRAIT)
+        assertThat(settled.askShape).isFalse()
+        assertThat(session.canUndo).isFalse()
+        // Our own write coming back adds no step either.
+        session.adopt(settled)
+        assertThat(session.canUndo).isFalse()
+        // A later shape change is an ordinary step, undone to the settled shape.
+        assertThat(session.edit { setShape(CanvasShape.SQUARE) }).isEqualTo(EditResult.Applied)
+        assertThat(session.undo()!!.shape).isEqualTo(CanvasShape.PORTRAIT)
+        // Nothing to settle, or a change that makes nothing new, is refused.
+        assertThat(session.settle { this }).isNull()
     }
 }

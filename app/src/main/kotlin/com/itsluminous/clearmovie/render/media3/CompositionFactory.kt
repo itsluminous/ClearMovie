@@ -149,7 +149,7 @@ class CompositionFactory(
         private val plan: RenderPlan,
         private val colour: DeviceColour,
     ) {
-        private val captions = CaptionBitmapRenderer(plan.height, CaptionTypefaces.get(context))
+        private val captions = CaptionBitmapRenderer(plan.shortSide, CaptionTypefaces.get(context), plan.shape)
         private val uris = mutableMapOf<MediaRef, Uri>()
         private val infos = mutableMapOf<Uri, SourceInfo>()
         val images = mutableSetOf<Uri>()
@@ -240,7 +240,8 @@ class CompositionFactory(
                 is Source.Caption -> {
                     val (w, h) = boxPixels(segment.placement)
                     val font = captions.fontKey(source.style.font)
-                    val key = "caption|v${CaptionBitmapRenderer.VERSION}|$font|${plan.height}|${source.text}|${source.style}|${w}x$h"
+                    val key =
+                        "caption|v${CaptionBitmapRenderer.VERSION}|$font|${plan.width}x${plan.height}|${source.text}|${source.style}|${w}x$h"
                     val png =
                         assets.png(key) {
                             captions.caption(source.text, source.style, w, h)
@@ -252,7 +253,7 @@ class CompositionFactory(
                     val (w, h) = boxPixels(segment.placement)
                     val font = captions.fontKey(source.style.font)
                     val key =
-                        "card|v${CaptionBitmapRenderer.VERSION}|$font|${plan.height}|${source.color}|${source.text}|${source.style}|${w}x$h"
+                        "card|v${CaptionBitmapRenderer.VERSION}|$font|${plan.width}x${plan.height}|${source.color}|${source.text}|${source.style}|${w}x$h"
                     val png =
                         assets.png(key) {
                             captions.card(source.color, source.text, source.style, w, h)

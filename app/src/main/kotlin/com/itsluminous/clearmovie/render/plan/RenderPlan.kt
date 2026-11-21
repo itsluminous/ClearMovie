@@ -1,6 +1,7 @@
 package com.itsluminous.clearmovie.render.plan
 
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.Fit
 import com.itsluminous.clearmovie.domain.model.KeySpec
@@ -31,6 +32,12 @@ data class RenderPlan(
     val visual: List<VisualLayer>,
     val audio: List<AudioLayer>,
 ) {
+    /** The canvas's short side: what the export quality names (cm-aspect-ratio). */
+    val shortSide: Int get() = minOf(width, height)
+
+    /** The canvas's shape, from its size. */
+    val shape: CanvasShape get() = CanvasShape.suiting(width, height) ?: CanvasShape.LANDSCAPE
+
     /**
      * The part of this plan from [fromUs] to [toUs], as a plan of its own that
      * starts at 0: the "Play exactly as exported" draft around the playhead.

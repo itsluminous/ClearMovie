@@ -95,10 +95,10 @@ class ExactDraft(
                 try {
                     suspendCancellableCoroutine { cont ->
                         transformer =
-                            RenderExporter(context, plan.height, colour).start(
+                            RenderExporter(context, maxOf(plan.width, plan.height), colour).start(
                                 composition,
                                 out,
-                                EncodeSpec.forHeight(plan.height),
+                                EncodeSpec.forHeight(plan.shortSide),
                                 object : RenderExporter.Listener {
                                     override fun onCompleted(result: ExportResult) {
                                         if (cont.isActive) cont.resume(Result.Done(out))

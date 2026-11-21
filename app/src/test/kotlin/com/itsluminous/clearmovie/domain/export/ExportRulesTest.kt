@@ -6,9 +6,9 @@ import org.junit.Test
 class ExportRulesTest {
     @Test
     fun `each choice has its own height and bitrate class`() {
-        assertThat(ExportQuality.SMALL.height).isEqualTo(480)
-        assertThat(ExportQuality.GOOD.height).isEqualTo(720)
-        assertThat(ExportQuality.BEST.height).isEqualTo(1080)
+        assertThat(ExportQuality.SMALL.shortSide).isEqualTo(480)
+        assertThat(ExportQuality.GOOD.shortSide).isEqualTo(720)
+        assertThat(ExportQuality.BEST.shortSide).isEqualTo(1080)
         assertThat(ExportQuality.SMALL.videoBitrate).isEqualTo(2_500_000)
         assertThat(ExportQuality.GOOD.videoBitrate).isEqualTo(6_000_000)
         assertThat(ExportQuality.BEST.videoBitrate).isEqualTo(12_000_000)

@@ -13,6 +13,7 @@ import android.text.TextPaint
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.withClip
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.TextAlign
 import kotlin.math.max
@@ -36,10 +37,14 @@ import kotlin.math.roundToInt
  * only then cut at the box.
  */
 class CaptionBitmapRenderer(
-    private val canvasHeight: Int,
+    private val shortSide: Int,
     private val typefaces: CaptionTypefaces?,
+    shape: CanvasShape = CanvasShape.LANDSCAPE,
 ) {
-    private val scale = canvasHeight / 1080f
+    private val scale = shortSide / CanvasShape.REFERENCE_SHORT_SIDE.toFloat()
+
+    /** The canvas's width in layout units: 1920 for landscape, 1080 upright or square. */
+    private val logicalCanvasWidth = shape.size(CanvasShape.REFERENCE_SHORT_SIDE).first.toDouble()
 
     fun caption(
         text: String,
@@ -55,7 +60,7 @@ class CaptionBitmapRenderer(
             canvas.drawRoundRect(RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()), r, r, paint)
         }
         // Laid out on the caption's box in 1080-line units, not on the rounded bitmap, so every export size wraps alike.
-        drawText(canvas, text, style, bitmap.width, bitmap.height, logicalWidth = (style.box.w * LOGICAL_CANVAS_W).toFloat())
+        drawText(canvas, text, style, bitmap.width, bitmap.height, logicalWidth = (style.box.w * logicalCanvasWidth).toFloat())
         return bitmap
     }
 
@@ -163,7 +168,6 @@ class CaptionBitmapRenderer(
         const val VERSION = 3
 
         /** The canvas width in 1080-line units (the canvas is always 16:9). */
-        private const val LOGICAL_CANVAS_W = 1920.0
 
         private fun ArgbColor.toAndroid(): Int = argb.toInt()
     }

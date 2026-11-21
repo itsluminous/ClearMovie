@@ -73,6 +73,25 @@ class EditSession(
         return EditResult.Applied
     }
 
+    /**
+     * Applies [change] without making an undo step: the first-time shape
+     * choice of a new video (cm-aspect-ratio), which Undo must not take back
+     * to ask the question again. Refused (null) on the same terms as [edit].
+     */
+    fun settle(change: Project.() -> Project): Project? {
+        val now = current ?: return null
+        val next =
+            try {
+                now.change().normalized()
+            } catch (e: IllegalArgumentException) {
+                return null
+            }
+        if (next == now || next.validate().isNotEmpty()) return null
+        mergeKey = null
+        current = next
+        return next
+    }
+
     /** Ends a run of merged edits, so the next edit is a step of its own. */
     fun endMerge() {
         mergeKey = null

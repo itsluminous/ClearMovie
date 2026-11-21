@@ -91,7 +91,7 @@ class EffectsRenderTest {
         shared.getOrPut(kind) {
             val project = junction(kind)
             assertThat(project.totalDurationMs()).isEqualTo(5000)
-            val out = RenderHarness.export(RenderPlanBuilder().build(project, height = height), "fx-${kind.name}")
+            val out = RenderHarness.export(RenderPlanBuilder().build(project, shortSide = height), "fx-${kind.name}")
             assertThat(RenderHarness.durationUs(out.file)).isIn(
                 com.google.common.collect.Range
                     .closed(4_950_000L, 5_050_000L),
@@ -239,7 +239,7 @@ class EffectsRenderTest {
     fun zoomInScalesTheOutgoingPictureTo1_2AtTheMidpoint() {
         val project = junction(TransitionKind.ZOOM_IN, PhotoClip(ClipId("a"), fixture("photo_target.png"), 3000))
         assertThat(project.totalDurationMs()).isEqualTo(5000)
-        val out = RenderHarness.export(RenderPlanBuilder().build(project, height = height), "fx-ZOOM_IN")
+        val out = RenderHarness.export(RenderPlanBuilder().build(project, shortSide = height), "fx-ZOOM_IN")
         frameAt(out.file, 2_000_000 + frameUs).also { savePng(it, "fx-zoom_in-start") }
         val mid = frameAt(out.file, 2_500_000).also { savePng(it, "fx-zoom_in-mid") }
         frameAt(out.file, 3_000_000 - frameUs).also { savePng(it, "fx-zoom_in-end") }
@@ -271,7 +271,7 @@ class EffectsRenderTest {
                 .addToMain(listOf(first, VideoClip(ClipId("b"), fixture("clip_light.mp4"), sourceDurationMs = 3000)), ids = ids)
                 .setTransition(first.id, Transition(TransitionKind.CROSSFADE, 600))
         assertThat(project.totalDurationMs()).isEqualTo(1500 + 3000 - 600)
-        val out = RenderHarness.export(RenderPlanBuilder().build(project, height = height), "fx-speed-crossfade")
+        val out = RenderHarness.export(RenderPlanBuilder().build(project, shortSide = height), "fx-speed-crossfade")
         val shares =
             listOf(0.8, 1.2, 1.6).map { t ->
                 val f = frameAt(out.file, (t * 1_000_000).toLong()).also { savePng(it, "fx-speed-t%03.1f".format(Locale.ROOT, t)) }
@@ -346,7 +346,7 @@ class EffectsRenderTest {
         val items = cases.mapIndexed { i, c -> c.clip.withId(ClipId("i$i")) as MainClip }
         var project = ProjectFactory.blank(ProjectId("anim"), ids).addToMain(items, ids = ids)
         cases.forEachIndexed { i, c -> project = project.setAnimation(items[i].id, c.slot, c.anim) }
-        val plan = RenderPlanBuilder().build(project, height = height)
+        val plan = RenderPlanBuilder().build(project, shortSide = height)
         val pictures =
             plan.visual
                 .single { it.role == LayerRole.MAIN }

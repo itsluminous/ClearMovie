@@ -124,7 +124,7 @@ class TracksRenderTest {
                     VideoClip(ids.clipId(), fixture("clip_dark.mp4"), sourceDurationMs = 3000, pip = PipPlacement(Corner.TOP_RIGHT, 0.4)),
                     ids = ids,
                 )
-        val schedule = PreviewSchedule.of(RenderPlanBuilder().build(project, height = 720))
+        val schedule = PreviewSchedule.of(RenderPlanBuilder().build(project, shortSide = 720))
         assertThat(schedule.overlays).hasSize(1)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val activity = compose.activity

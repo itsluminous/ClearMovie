@@ -346,13 +346,13 @@ class RenderPlanBuilderTest {
         assertThat(RenderPlanBuilder.evenWidthFor(1080)).isEqualTo(1920)
         assertThat(RenderPlanBuilder.evenWidthFor(720)).isEqualTo(1280)
         assertThat(RenderPlanBuilder.evenWidthFor(480)).isEqualTo(854)
-        val plan = RenderPlanBuilder().build(Fixtures.blankWith(photo("a")), height = 720)
+        val plan = RenderPlanBuilder().build(Fixtures.blankWith(photo("a")), shortSide = 720)
         assertThat(plan.width to plan.height).isEqualTo(1280 to 720)
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun `an absurd output height is refused`() {
-        RenderPlanBuilder().build(Fixtures.blankWith(photo("a")), height = 100_000)
+        RenderPlanBuilder().build(Fixtures.blankWith(photo("a")), shortSide = 100_000)
     }
 
     @Test

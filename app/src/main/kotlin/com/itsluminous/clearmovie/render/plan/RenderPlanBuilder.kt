@@ -5,6 +5,7 @@ import com.itsluminous.clearmovie.domain.model.Animations
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.AudioRole
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.Corner
 import com.itsluminous.clearmovie.domain.model.EndingClip
@@ -27,9 +28,11 @@ import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.containedRect
 import com.itsluminous.clearmovie.domain.model.isValid
 import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.domain.model.totalDurationMs
+import com.itsluminous.clearmovie.domain.model.within
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.log10
@@ -67,17 +70,22 @@ class RenderPlanBuilder(
     private val preset: Preset? = null,
     private val loudness: LoudnessTable = LoudnessTable.NONE,
 ) {
+    /**
+     * The plan at [shortSide] pixels across the canvas's short side (the
+     * height of a landscape video, the width of an upright one): see
+     * [CanvasShape.size].
+     */
     fun build(
         project: Project,
-        height: Int = 1080,
+        shortSide: Int = 1080,
         fps: Int = 30,
     ): RenderPlan {
-        require(height in MIN_HEIGHT..MAX_HEIGHT) { "Unsupported output height" }
+        require(shortSide in MIN_HEIGHT..MAX_HEIGHT) { "Unsupported output size" }
         require(fps in 1..60) { "Unsupported frame rate" }
         require(project.isValid) { "The project is not valid" }
-        val width = evenWidthFor(height)
+        val (width, height) = project.shape.size(shortSide)
         val totalUs = project.totalDurationMs() * US
-        val ctx = Context(project, totalUs, windowRect(project), width.toDouble() / height)
+        val ctx = Context(project, totalUs, windowRect(project), width.toDouble() / height, partsPlacement(project), frameBoxFor(project))
 
         val visual = mutableListOf<VisualLayer>()
         for (id in project.stacking) {
@@ -110,6 +118,10 @@ class RenderPlanBuilder(
         val totalUs: Long,
         val window: NormRect,
         val aspect: Double,
+        /** Where the intro and a video ending go: the whole canvas, or fitted over a blurred copy on a canvas of another shape. */
+        val parts: Placement,
+        /** Where the preset frame is drawn: the whole canvas, or its own shape centred on a canvas of another shape. */
+        val frameBox: NormRect,
     ) {
         val slots: List<MainSlot> = project.mainLayout()
 
@@ -125,6 +137,13 @@ class RenderPlanBuilder(
     }
 
     private fun windowRect(project: Project): NormRect = frameWindow(project, preset)
+
+    private fun frameBoxFor(project: Project): NormRect = frameBox(project, preset)
+
+    // The preset's intro and video ending are made for its shape: on a canvas of another shape they are
+    // fitted whole over a blurred copy of themselves (never stretched, never cut).
+    private fun partsPlacement(project: Project): Placement =
+        if (preset == null || preset.shape == project.shape) Placement.FullFrame else Placement.Window(NormRect.FULL, Fit.FIT_BLUR)
 
     // ---- MAIN ----------------------------------------------------------------
 
@@ -174,12 +193,12 @@ class RenderPlanBuilder(
         val window = ctx.window
         return when (val clip = slot.clip) {
             is IntroClip -> {
-                listOf(picture(durUs, Source.Video(clip.media, durUs, 0, durUs), Placement.FullFrame))
+                listOf(picture(durUs, Source.Video(clip.media, durUs, 0, durUs), ctx.parts))
             }
 
             is EndingClip -> {
                 if (clip.kind == EndingKind.VIDEO) {
-                    listOf(picture(durUs, Source.Video(clip.media, durUs, 0, durUs), Placement.FullFrame))
+                    listOf(picture(durUs, Source.Video(clip.media, durUs, 0, durUs), ctx.parts))
                 } else {
                     listOf(holdLast(ctx, slot, durUs))
                 }
@@ -228,7 +247,7 @@ class RenderPlanBuilder(
             is IntroClip -> {
                 // A spoken ending straight after the intro holds the intro's last frame, full frame.
                 val lastUs = (prev.durationMs * US - FRAME_US).coerceAtLeast(0)
-                picture(durUs, Source.VideoFrame(prev.media, lastUs), Placement.FullFrame)
+                picture(durUs, Source.VideoFrame(prev.media, lastUs), ctx.parts)
             }
 
             else -> {
@@ -324,15 +343,23 @@ class RenderPlanBuilder(
                 }
 
                 is OverlayClip -> {
+                    // The preset frame keeps its own shape (centred, when the video's shape differs); a frame the
+                    // user added covers the canvas.
+                    val placement =
+                        if (track.presetRole == PresetRole.FRAME && ctx.frameBox != NormRect.FULL) {
+                            Placement.Box(ctx.frameBox)
+                        } else {
+                            Placement.FullFrame
+                        }
                     overlayCopies(clip).forEach { (offset, length, srcEnd) ->
                         lane.add(
                             VisualSegment.Picture(
                                 startUs = startUs + offset,
                                 durationUs = length,
                                 source = Source.Video(clip.media, clip.sourceDurationMs * US, 0, srcEnd),
-                                placement = Placement.FullFrame,
+                                placement = placement,
                                 key = clip.key,
-                                motion = motionFor(clip.animations, durUs, Placement.FullFrame),
+                                motion = motionFor(clip.animations, durUs, placement),
                                 clipOffsetUs = offset,
                             ),
                         )
@@ -641,7 +668,7 @@ class RenderPlanBuilder(
         private const val CURVE_STEPS = 32
 
         /** A 16:9 canvas width for [height], rounded to an even number (encoders need it). */
-        fun evenWidthFor(height: Int): Int = ((height * 16 + 8) / 9 + 1) / 2 * 2
+        fun evenWidthFor(height: Int): Int = CanvasShape.LANDSCAPE.size(height).first
 
         /** [total] split into [n] near-equal (offset, length) parts that add up exactly. */
         fun evenSplit(
@@ -860,6 +887,8 @@ internal fun Speed.sourceUs(timelineUs: Long): Long = timelineUs * numerator / d
 /**
  * Where photos and videos are drawn: the preset frame's window while the
  * frame row is on, else the whole canvas. Captions are placed inside it too.
+ * A frame made for another shape than the video's is drawn at its own shape,
+ * centred ([frameBox]), and its window with it.
  */
 fun frameWindow(
     project: Project,
@@ -867,5 +896,11 @@ fun frameWindow(
 ): NormRect {
     val frame = preset?.frame ?: return NormRect.FULL
     val frameRowOn = project.tracks.any { it.presetRole == PresetRole.FRAME && it.enabled && it.clips.isNotEmpty() }
-    return if (frameRowOn) frame.contentRect else NormRect.FULL
+    return if (frameRowOn) frame.contentRect.within(frameBox(project, preset)) else NormRect.FULL
 }
+
+/** Where the preset's frame is drawn on the video: the whole canvas, or its own shape centred on a canvas of another. */
+fun frameBox(
+    project: Project,
+    preset: Preset?,
+): NormRect = if (preset?.frame == null) NormRect.FULL else containedRect(preset.shape, project.shape)

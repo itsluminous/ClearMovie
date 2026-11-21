@@ -5,11 +5,13 @@ import java.text.Normalizer
 /**
  * The three export choices (ARCHITECTURE section 7, Export): Small is
  * 480p30 at about 2.5 Mb/s, Good 720p30 at about 6 Mb/s and Best 1080p30 at
- * about 12 Mb/s, each with AAC at 192 kb/s. The user sees only the friendly
+ * about 12 Mb/s, each with AAC at 192 kb/s. The number is the picture's
+ * short side, for every shape: Good is 1280 x 720, 720 x 1280 or 720 x 720. The user sees only the friendly
  * name and the estimated size, never these numbers.
  */
 enum class ExportQuality(
-    val height: Int,
+    /** The picture's short side: its height when landscape, its width when upright (cm-aspect-ratio). */
+    val shortSide: Int,
     val videoBitrate: Int,
     val audioBitrate: Int = AUDIO_BITRATE,
 ) {

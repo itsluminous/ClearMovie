@@ -35,7 +35,7 @@ class PreviewScheduleTest {
     private fun presetProject(vararg items: MainClip) =
         ProjectFactory.fromPreset(Fixtures.PROJECT_ID, preset, Fixtures.presetMedia, SequentialIds("x")).addToMain(items.toList())
 
-    private fun schedule(project: Project) = PreviewSchedule.of(RenderPlanBuilder(preset).build(project, height = 720))
+    private fun schedule(project: Project) = PreviewSchedule.of(RenderPlanBuilder(preset).build(project, shortSide = 720))
 
     private fun assertCovers(
         entries: List<Pair<Long, Long>>,

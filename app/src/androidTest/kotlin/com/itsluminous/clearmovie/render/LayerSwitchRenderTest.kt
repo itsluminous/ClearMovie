@@ -89,7 +89,7 @@ class LayerSwitchRenderTest {
                 PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 500, startMs = 4_800, pip = PipPlacement(Corner.TOP_LEFT, 0.3)),
                 ids = ids,
             )
-        val plan = RenderPlanBuilder(RenderHarness.preset).build(project, height = 360)
+        val plan = RenderPlanBuilder(RenderHarness.preset).build(project, shortSide = 360)
         val frameRow =
             plan.visual
                 .single { it.role == LayerRole.OVERLAY }

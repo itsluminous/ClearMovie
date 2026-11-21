@@ -115,7 +115,7 @@ class ExportViewModel
                 withContext(Dispatchers.Default) {
                     runCatching {
                         val set = projectMedia.forProject(project)
-                        RenderPlanBuilder(set.preset, set.loudness).build(project, height = ExportQuality.SMALL.height).durationUs
+                        RenderPlanBuilder(set.preset, set.loudness).build(project, shortSide = ExportQuality.SMALL.shortSide).durationUs
                     }.getOrNull()
                 }
             val free = withContext(Dispatchers.IO) { ExportModule.exportFreeBytes(context) }

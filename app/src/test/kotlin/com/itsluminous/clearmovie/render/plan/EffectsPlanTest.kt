@@ -104,7 +104,7 @@ class EffectsPlanTest {
                 .withEffectDefaultsFor(listOf(photo.id))
                 .addTimedClip(TextClip(ClipId("tx"), 7000, 2000, "Hi"), ids = ids)
                 .let { it.setAnimation(ClipId("tx"), AnimSlot.START, Anim(AnimKind.POP, 400)) }
-        val plan = RenderPlanBuilder(Fixtures.preset).build(project, height = 720)
+        val plan = RenderPlanBuilder(Fixtures.preset).build(project, shortSide = 720)
         val ph =
             plan.visual
                 .flatMap { it.segments }
@@ -184,7 +184,7 @@ class EffectsPlanTest {
                 .fromPreset(Fixtures.PROJECT_ID, Fixtures.preset, Fixtures.presetMedia, SequentialIds("x"))
                 .addToMain(listOf(photo), ids = ids)
                 .withEffectDefaultsFor(listOf(photo.id))
-        val plan = RenderPlanBuilder(Fixtures.preset).build(project, height = 720)
+        val plan = RenderPlanBuilder(Fixtures.preset).build(project, shortSide = 720)
         val photos =
             plan.visual
                 .flatMap { it.segments }

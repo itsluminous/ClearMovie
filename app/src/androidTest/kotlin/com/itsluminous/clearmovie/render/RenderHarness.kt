@@ -116,8 +116,8 @@ object RenderHarness {
         return exportComposition(
             composition,
             name,
-            RenderExporter(context, plan.height, colour),
-            EncodeSpec.forHeight(plan.height),
+            RenderExporter(context, maxOf(plan.width, plan.height), colour),
+            EncodeSpec.forHeight(plan.shortSide),
             timeoutMin,
         )
     }

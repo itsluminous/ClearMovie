@@ -109,7 +109,7 @@ class RealMediaExportTest {
             h.exported(done.uri)
             h.keep(done.uri, "realmedia-${quality.name.lowercase()}.mp4")
             Log.i(ExportHarness.TAG, "REALMEDIA ${quality.name} wall=${wallMs}ms $done")
-            assertThat(h.probe(done.uri).height).isEqualTo(quality.height)
+            assertThat(h.probe(done.uri).height).isEqualTo(quality.shortSide)
         }
     }
 
@@ -156,7 +156,7 @@ class RealMediaExportTest {
         fileName: String = "realmedia-timeline.txt",
     ) {
         val set = runBlocking { ProjectMedia(h.app.presetStore, h.app.appFiles).forProject(project) }
-        val plan = RenderPlanBuilder(set.preset, set.loudness).build(project, height = 1080)
+        val plan = RenderPlanBuilder(set.preset, set.loudness).build(project, shortSide = 1080)
         val lines = mutableListOf("duration ${plan.durationUs / 1e6}")
         val main = plan.visual.filter { it.role == LayerRole.MAIN || it.role == LayerRole.MAIN_B }
         val pieces =

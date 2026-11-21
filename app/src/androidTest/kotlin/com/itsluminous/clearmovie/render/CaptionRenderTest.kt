@@ -75,7 +75,7 @@ class CaptionRenderTest {
     private fun export(
         project: Project,
         name: String,
-    ): File = RenderHarness.export(RenderPlanBuilder(RenderHarness.preset).build(project, height = 1080), name).file
+    ): File = RenderHarness.export(RenderPlanBuilder(RenderHarness.preset).build(project, shortSide = 1080), name).file
 
     /** The caption's pure red band, not the frame's darker red border (200, 20, 20). */
     private fun isRed(c: Int) = Color.red(c) > 230 && Color.green(c) < 70 && Color.blue(c) < 70

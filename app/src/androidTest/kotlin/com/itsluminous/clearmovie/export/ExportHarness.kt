@@ -170,7 +170,7 @@ class ExportHarness {
     fun plannedUs(project: Project): Long =
         runBlocking {
             val set = ProjectMedia(app.presetStore, app.appFiles).forProject(project)
-            RenderPlanBuilder(set.preset, set.loudness).build(project, height = 480).durationUs
+            RenderPlanBuilder(set.preset, set.loudness).build(project, shortSide = 480).durationUs
         }
 
     fun pipeline(

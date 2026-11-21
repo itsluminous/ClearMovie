@@ -108,7 +108,7 @@ class TransitionRenderTest {
                     ids = ids,
                 ).setTransition(a, Transition(TransitionKind.CROSSFADE, 1000))
                 .setTransition(b, Transition(TransitionKind.CROSSFADE, 1000))
-        val plan = RenderPlanBuilder().build(project, height = 360).slice(3_500_000, 5_500_000)
+        val plan = RenderPlanBuilder().build(project, shortSide = 360).slice(3_500_000, 5_500_000)
         val out = RenderHarness.export(plan, "draft-slice")
         val dark = luma(rgb(frameAt(File(RenderHarness.fixtureDir, "clip_dark.mp4"), 1_500_000), 0.5, 0.6))
         val light = luma(rgb(frameAt(File(RenderHarness.fixtureDir, "clip_light.mp4"), 1_500_000), 0.5, 0.6))

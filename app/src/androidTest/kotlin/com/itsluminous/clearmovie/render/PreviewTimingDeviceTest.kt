@@ -132,7 +132,7 @@ class PreviewTimingDeviceTest {
                 Probe("c", 1500),
             )
 
-        val schedule = PreviewSchedule.of(RenderPlanBuilder(if (withPreset) RenderHarness.preset else null).build(project, height = 720))
+        val schedule = PreviewSchedule.of(RenderPlanBuilder(if (withPreset) RenderHarness.preset else null).build(project, shortSide = 720))
         if (withPreset) {
             assertWithMessage(
                 "the preset brings a frame lane and sound lanes",

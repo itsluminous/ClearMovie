@@ -87,8 +87,8 @@ class ExportDeviceTest {
                 ExportHarness.TAG,
                 "${quality.name}: $probe, configured $configured b/s, average video ${done.averageVideoBitrate} b/s, encoder ${done.videoEncoder}",
             )
-            assertThat(probe.height).isEqualTo(quality.height)
-            assertThat(probe.width).isEqualTo(RenderPlanBuilder.evenWidthFor(quality.height))
+            assertThat(probe.height).isEqualTo(quality.shortSide)
+            assertThat(probe.width).isEqualTo(RenderPlanBuilder.evenWidthFor(quality.shortSide))
             assertThat(probe.videoMime).isEqualTo("video/avc")
             assertThat(probe.audioMime).isEqualTo("audio/mp4a-latm")
             // The plan's length (overlaps included), within one frame at 30 fps.

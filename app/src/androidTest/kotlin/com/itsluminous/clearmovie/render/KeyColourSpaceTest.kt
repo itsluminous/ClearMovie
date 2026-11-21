@@ -129,7 +129,7 @@ class KeyColourSpaceTest {
         val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build()).build()
         Handler(Looper.getMainLooper()).post {
             try {
-                RenderExporter(RenderHarness.context, 1080, DeviceColour.TRUSTED).start(
+                RenderExporter(RenderHarness.context, 1920, DeviceColour.TRUSTED).start(
                     composition,
                     out,
                     EncodeSpec.forHeight(1080),

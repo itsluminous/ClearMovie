@@ -22,6 +22,7 @@ import com.itsluminous.clearmovie.data.project.ProjectMediaSet
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -50,10 +51,12 @@ import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.addToTrack
+import com.itsluminous.clearmovie.domain.model.chooseShape
 import com.itsluminous.clearmovie.domain.model.insertAt
 import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.domain.model.replaceMainItem
 import com.itsluminous.clearmovie.domain.model.replacePresetPart
+import com.itsluminous.clearmovie.domain.model.setShape
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.render.media3.MediaResolver
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
@@ -389,6 +392,40 @@ class EditorViewModel
             publishHistory()
         }
 
+        private val suggestion = MutableStateFlow<CanvasShape?>(null)
+
+        /**
+         * The shape the first-time question suggests (cm-aspect-ratio): the
+         * one that suits the first photo or video, landscape until that is known.
+         */
+        val suggestedShape: StateFlow<CanvasShape?> = suggestion.asStateFlow()
+        private var suggesting: Job? = null
+
+        private fun suggestShape(project: Project) {
+            if (!project.askShape || suggesting != null) return
+            val first = project.mainClips.firstOrNull { it is PhotoClip || it is VideoClip } as? MediaClip
+            suggesting =
+                viewModelScope.launch {
+                    val size = first?.let { probe.shownSize(projectId, it.media, isPhoto = it is PhotoClip) }
+                    // A quarter turn the user gave the item counts too.
+                    val shown = size?.let { (w, h) -> if (first.rotation.degrees % 180 != 0) h to w else w to h }
+                    suggestion.value = shown?.let { (w, h) -> CanvasShape.suiting(w, h) } ?: CanvasShape.LANDSCAPE
+                }
+        }
+
+        /** The first-time choice of shape for a video made without a preset: not an undo step, and never asked again. */
+        fun chooseFirstShape(shape: CanvasShape) {
+            session.settle { chooseShape(shape) }?.let(::write)
+            publishHistory()
+        }
+
+        /** "Video shape": the video becomes [shape], as one undo step (cm-aspect-ratio). */
+        fun changeShape(shape: CanvasShape): Boolean {
+            val preset = uiState.value.preset
+            val frameShape = preset?.shape?.takeIf { preset.frame != null }
+            return edit { setShape(shape, frameShape) }
+        }
+
         /** Ends a run of merged edits (the caption editor closed with Done). */
         fun endMerge() = session.endMerge()
 
@@ -674,6 +711,7 @@ class EditorViewModel
         private suspend fun load(project: Project) = loading.withLock { loadNow(project) }
 
         private suspend fun loadNow(project: Project) {
+            suggestShape(project)
             // Only captions changed (a word typed, a colour picked, the box dragged): the files and the
             // media's state are as they were, so the new schedule is worked out straight away, without
             // looking anything up, and the players carry on.
@@ -684,7 +722,7 @@ class EditorViewModel
                 val quick =
                     runCatching {
                         PreviewSchedule.of(
-                            RenderPlanBuilder(cached.preset, cached.loudness).build(project, height = PREVIEW_HEIGHT),
+                            RenderPlanBuilder(cached.preset, cached.loudness).build(project, shortSide = PREVIEW_HEIGHT),
                         )
                     }.getOrNull()
                 if (quick != null && engine.updateCaptions(quick)) {
@@ -705,7 +743,7 @@ class EditorViewModel
             media = set
             resolver = set.resolver
             val schedule =
-                runCatching { PreviewSchedule.of(RenderPlanBuilder(set.preset, set.loudness).build(project, height = PREVIEW_HEIGHT)) }
+                runCatching { PreviewSchedule.of(RenderPlanBuilder(set.preset, set.loudness).build(project, shortSide = PREVIEW_HEIGHT)) }
                     .getOrNull()
             val missing = access?.let { mediaAccess.missing(project, it) }.orEmpty()
             uiState.update {
@@ -789,7 +827,12 @@ class EditorViewModel
             draftJob =
                 viewModelScope.launch {
                     val plan =
-                        runCatching { RenderPlanBuilder(set.preset, set.loudness).build(project, height = ExactDraft.HEIGHT) }.getOrNull()
+                        runCatching {
+                            RenderPlanBuilder(
+                                set.preset,
+                                set.loudness,
+                            ).build(project, shortSide = ExactDraft.HEIGHT)
+                        }.getOrNull()
                     if (plan == null || plan.durationUs <= 0) {
                         draftState.value = DraftState.Failed
                         return@launch

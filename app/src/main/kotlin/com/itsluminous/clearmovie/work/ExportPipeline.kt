@@ -155,7 +155,7 @@ class ExportPipeline(
 
         val loudness = withContext(Dispatchers.IO) { measuredLoudness(project, set.loudness, set.resolver) }
         val plan =
-            runCatching { RenderPlanBuilder(set.preset, loudness).build(project, height = quality.height) }
+            runCatching { RenderPlanBuilder(set.preset, loudness).build(project, shortSide = quality.shortSide) }
                 .onFailure { Log.w(TAG, "The plan could not be built", it) }
                 .getOrNull() ?: return ExportOutcome.Failed(ExportFailure.FAILED)
         if (plan.durationUs <= 0 || plan.visual.isEmpty()) return ExportOutcome.Failed(ExportFailure.NOTHING)
@@ -219,7 +219,7 @@ class ExportPipeline(
                             context,
                             colour,
                             baseEncoders,
-                        ).run(composition, plan.height, spec, output) { onProgress(it) }
+                        ).run(composition, maxOf(plan.width, plan.height), spec, output) { onProgress(it) }
                 ) {
                     is VideoExport.Outcome.Failed -> {
                         Log.w(TAG, "Export failed: ${outcome.error.errorCodeName}", outcome.error)

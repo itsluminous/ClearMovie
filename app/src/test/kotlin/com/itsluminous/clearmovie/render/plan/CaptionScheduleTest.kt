@@ -17,7 +17,7 @@ import org.junit.Test
 class CaptionScheduleTest {
     private val preset = Fixtures.preset
 
-    private fun schedule(p: Project) = PreviewSchedule.of(RenderPlanBuilder(preset).build(p, height = 720))
+    private fun schedule(p: Project) = PreviewSchedule.of(RenderPlanBuilder(preset).build(p, shortSide = 720))
 
     private val base =
         ProjectFactory

@@ -84,13 +84,13 @@ enum class EncoderPreference { HARDWARE_FIRST, SOFTWARE_ONLY }
 @UnstableApi
 class RenderExporter(
     private val context: Context,
-    canvasHeight: Int,
+    canvasLongSide: Int,
     private val deviceColour: DeviceColour,
     private val preference: EncoderPreference = EncoderPreference.HARDWARE_FIRST,
     private val baseEncoders: ((EncodeSpec, EncoderPreference) -> Codec.EncoderFactory)? = null,
     private val muxerFactory: Muxer.Factory? = null,
 ) {
-    val maxImageDimension: Int = minOf(MAX_TEXTURE, 2 * maxOf(canvasHeight, (canvasHeight * 16 + 8) / 9))
+    val maxImageDimension: Int = minOf(MAX_TEXTURE, 2 * canvasLongSide)
 
     interface Listener {
         fun onCompleted(result: ExportResult)
