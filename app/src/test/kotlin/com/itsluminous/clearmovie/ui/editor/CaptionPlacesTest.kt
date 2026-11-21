@@ -1,7 +1,9 @@
 package com.itsluminous.clearmovie.ui.editor
 
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.NormRect
+import com.itsluminous.clearmovie.ui.components.RectGrip
 import org.junit.Test
 
 /** The caption editor's place choices and drag rules (cm-captions). */
@@ -121,5 +123,103 @@ class CaptionPlacesTest {
             assertThat(safe.y).isWithin(1e-12).of(CaptionPlaces.MARGIN)
             assertThat(safe.x).isWithin(1e-12).of(CaptionPlaces.MARGIN / aspect)
         }
+    }
+
+    // cm-caption-box: resizing. Words that need 0.7 of the canvas width on one line, 0.1 of its height a line.
+    private val wordsWidth = 0.7
+    private val lineH = 0.1
+
+    private fun needed(w: Double) = Math.ceil(wordsWidth / w - 1e-9) * lineH
+
+    private val minW = CaptionPlaces.minWidth(64, CanvasShape.LANDSCAPE)
+
+    private fun resize(
+        grip: RectGrip,
+        dx: Double,
+        dy: Double,
+        start: NormRect = usual,
+    ) = CaptionPlaces.resized(start, grip, dx, dy, safe, usual, minW, ::needed).first
+
+    @Test
+    fun `the narrowest box holds a few letters at the caption's size, on every shape`() {
+        assertThat(CaptionPlaces.minWidth(64, CanvasShape.LANDSCAPE)).isWithin(1e-9).of((4 * 64 + 32) / 1920.0)
+        assertThat(CaptionPlaces.minWidth(64, CanvasShape.PORTRAIT)).isWithin(1e-9).of((4 * 64 + 32) / 1080.0)
+        assertThat(CaptionPlaces.minWidth(64, CanvasShape.SQUARE)).isWithin(1e-9).of((4 * 64 + 32) / 1080.0)
+    }
+
+    @Test
+    fun `a side handle makes the box narrower, and it grows from its middle so the words keep their size`() {
+        val narrow = resize(RectGrip.RIGHT, -0.5, 0.0)
+        assertThat(narrow.x).isWithin(1e-4).of(usual.x)
+        assertThat(narrow.w).isWithin(2e-4).of(0.31)
+        // Three lines now: 0.3 tall, from the old middle, kept inside the safe area at the bottom.
+        assertThat(narrow.h).isWithin(2e-4).of(0.3)
+        assertThat(narrow.y + narrow.h).isWithin(2e-4).of(safe.y + safe.h)
+        assertThat(narrow.inside(safe)).isTrue()
+        // Narrower than the narrowest: it stops there.
+        assertThat(resize(RectGrip.RIGHT, -2.0, 0.0).w).isWithin(2e-4).of(minW)
+        // Wider: as far as the safe area, the height as it was (the words need less).
+        val wide = resize(RectGrip.LEFT, -0.5, 0.0)
+        assertThat(wide.x).isWithin(2e-4).of(safe.x)
+        assertThat(wide.x + wide.w).isWithin(2e-4).of(usual.x + usual.w)
+        assertThat(wide.h).isWithin(2e-4).of(usual.h)
+    }
+
+    @Test
+    fun `the height can be changed, but never below what the words need`() {
+        val taller = resize(RectGrip.TOP, 0.0, -0.1)
+        assertThat(taller.y).isWithin(2e-4).of(usual.y - 0.1)
+        assertThat(taller.y + taller.h).isWithin(2e-4).of(usual.y + usual.h)
+        val flat = resize(RectGrip.BOTTOM, 0.0, -0.5)
+        assertThat(flat.y).isWithin(2e-4).of(usual.y)
+        assertThat(flat.h).isWithin(2e-4).of(lineH)
+        // A corner pulled in: two lines; the side opposite the finger stays, so it grows at the top it holds.
+        val corner = resize(RectGrip.TOP_RIGHT, -0.4, 0.0)
+        assertThat(corner.w).isWithin(2e-4).of(0.41)
+        assertThat(corner.h).isWithin(2e-4).of(0.2)
+        assertThat(corner.y + corner.h).isWithin(2e-4).of(usual.y + usual.h)
+        assertThat(corner.inside(safe)).isTrue()
+        val held = resize(RectGrip.BOTTOM_LEFT, 0.4, 0.0, start = NormRect(0.16, 0.2, 0.81, 0.14))
+        assertThat(held.y).isWithin(2e-4).of(0.2)
+        assertThat(held.h).isWithin(2e-4).of(0.2)
+    }
+
+    @Test
+    fun `a moved side lands on the preset's place when near it`() {
+        val start = NormRect(0.16, 0.3, 0.6, 0.14)
+        val (box, snapped) = CaptionPlaces.resized(start, RectGrip.RIGHT, 0.205, 0.0, safe, usual, minW, ::needed)
+        assertThat(snapped).isTrue()
+        assertThat(box.x + box.w).isWithin(1e-4).of(usual.x + usual.w)
+        val (_, far) = CaptionPlaces.resized(start, RectGrip.RIGHT, 0.1, 0.0, safe, usual, minW, ::needed)
+        assertThat(far).isFalse()
+        // The body handle is the drag that moves it.
+        assertThat(CaptionPlaces.resized(start, RectGrip.BODY, 0.0, 0.05, safe, usual, minW, ::needed))
+            .isEqualTo(CaptionPlaces.dragged(start, 0.0, 0.05, safe, usual))
+    }
+
+    @Test
+    fun `no drag ever takes the box out of the safe area or below its smallest`() {
+        for (g in RectGrip.entries) {
+            for (dx in listOf(-3.0, -0.2, 0.0, 0.2, 3.0)) {
+                for (dy in listOf(-3.0, -0.2, 0.0, 0.2, 3.0)) {
+                    val b = resize(g, dx, dy)
+                    assertThat(b.inside(safe)).isTrue()
+                    assertThat(b.isValid).isTrue()
+                    assertThat(b.w).isAtLeast(minW - 2e-4)
+                    assertThat(b.h).isAtLeast(minOf(needed(b.w), safe.h) - 2e-4)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `resizing holds on an upright canvas, in its own units`() {
+        val upright = NormRect(0.05, 0.05, 0.9, 0.9)
+        val box = NormRect(0.1, 0.7, 0.8, 0.06)
+        val mw = CaptionPlaces.minWidth(64, CanvasShape.PORTRAIT)
+        val (out, _) = CaptionPlaces.resized(box, RectGrip.LEFT, 0.9, 0.0, upright, box, mw) { 0.05 }
+        assertThat(out.w).isWithin(2e-4).of(mw)
+        assertThat(out.x + out.w).isWithin(2e-4).of(0.9)
+        assertThat(out.h).isWithin(2e-4).of(0.06)
     }
 }

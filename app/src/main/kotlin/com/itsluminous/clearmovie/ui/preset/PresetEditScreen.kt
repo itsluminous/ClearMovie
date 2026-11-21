@@ -72,15 +72,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.domain.model.Anim
+import com.itsluminous.clearmovie.domain.model.AnimKind
+import com.itsluminous.clearmovie.domain.model.AnimSlot
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
+import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.EffectDefaults
+import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectCodec
+import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.editor.AnimationChoices
 import com.itsluminous.clearmovie.ui.editor.CaptionBoxDrag
 import com.itsluminous.clearmovie.ui.editor.CaptionImage
 import com.itsluminous.clearmovie.ui.editor.CaptionPlace
@@ -93,6 +101,7 @@ import com.itsluminous.clearmovie.ui.editor.LocalCanvasShape
 import com.itsluminous.clearmovie.ui.editor.PanelTitle
 import com.itsluminous.clearmovie.ui.editor.PlaceTab
 import com.itsluminous.clearmovie.ui.editor.SizeTab
+import com.itsluminous.clearmovie.ui.editor.timeline.ThumbSource
 import com.itsluminous.clearmovie.ui.editor.usableCaptionText
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
@@ -140,6 +149,7 @@ fun PresetEditRoute(
         onWords = viewModel::setWords,
         onShape = viewModel::setShape,
         onRevertCaption = viewModel::revertStyle,
+        onCaptionAnimation = viewModel::setCaptionAnimation,
         onFiles = { onFiles(viewModel.presetId) },
         onSave = viewModel::save,
         onDelete = viewModel::delete,
@@ -172,13 +182,14 @@ fun PresetEditScreen(
     onName: (String) -> Unit,
     onStyle: (CaptionStyle) -> Unit,
     onWords: (String) -> Unit,
-    onRevertCaption: (CaptionStyle?, String?) -> Unit,
+    onRevertCaption: (CaptionStyle?, String?, EffectDefaults?) -> Unit,
     onFiles: () -> Unit,
     onSave: (shownName: String, shownWords: String) -> Unit,
     onDelete: () -> Unit,
     onBack: () -> Unit,
     onDismissMessage: () -> Unit,
     onShape: (CanvasShape) -> Unit = {},
+    onCaptionAnimation: (AnimKind?) -> Unit = {},
 ) {
     // Captions are drawn for the preset's own shape (cm-aspect-ratio).
     CompositionLocalProvider(LocalCanvasShape provides ui.shape) {
@@ -194,6 +205,7 @@ fun PresetEditScreen(
             onBack,
             onDismissMessage,
             onShape,
+            onCaptionAnimation,
         )
     }
 }
@@ -205,13 +217,14 @@ private fun PresetEditContent(
     onName: (String) -> Unit,
     onStyle: (CaptionStyle) -> Unit,
     onWords: (String) -> Unit,
-    onRevertCaption: (CaptionStyle?, String?) -> Unit,
+    onRevertCaption: (CaptionStyle?, String?, EffectDefaults?) -> Unit,
     onFiles: () -> Unit,
     onSave: (shownName: String, shownWords: String) -> Unit,
     onDelete: () -> Unit,
     onBack: () -> Unit,
     onDismissMessage: () -> Unit,
     onShape: (CanvasShape) -> Unit,
+    onCaptionAnimation: (AnimKind?) -> Unit,
 ) {
     val definition = ui.definition
     val preset = ui.preset
@@ -220,6 +233,7 @@ private fun PresetEditContent(
     // The draft as the caption editor found it, so its Cancel puts it back.
     var openedStyle by rememberSaveable { mutableStateOf<String?>(null) }
     var openedWords by rememberSaveable { mutableStateOf<String?>(null) }
+    var openedEffects by rememberSaveable { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableStateOf(CaptionTab.WORDS.name) }
     val shownName = preset?.let { presetName(it) }.orEmpty()
     val shownWords = preset?.let { shownWords(it) }.orEmpty()
@@ -235,6 +249,9 @@ private fun PresetEditContent(
                     runCatching { ProjectCodec.json.decodeFromString(CaptionStyle.serializer(), it) }.getOrNull()
                 },
                 openedWords,
+                openedEffects?.let {
+                    runCatching { ProjectCodec.json.decodeFromString(EffectDefaults.serializer(), it) }.getOrNull()
+                },
             )
         }
         captionOpen = false
@@ -312,7 +329,7 @@ private fun PresetEditContent(
             if (captionOpen) {
                 val editor: @Composable ColumnScope.() -> Unit = {
                     CaptionStyleEditor(
-                        tab = CaptionTab.entries.firstOrNull { it.name == tab } ?: CaptionTab.WORDS,
+                        tab = CaptionTab.PRESET.firstOrNull { it.name == tab } ?: CaptionTab.WORDS,
                         onTab = { tab = it.name },
                         preset = preset,
                         style = style,
@@ -320,6 +337,8 @@ private fun PresetEditContent(
                         frameWindow = frameWindow,
                         onStyle = onStyle,
                         onWords = onWords,
+                        animation = ui.captionAnimation,
+                        onAnimation = onCaptionAnimation,
                         onCancel = { closeCaption(cancel = true) },
                         onDone = { closeCaption(cancel = false) },
                     )
@@ -362,6 +381,7 @@ private fun PresetEditContent(
             val openCaption = {
                 openedStyle = ui.draftStyle?.let { ProjectCodec.json.encodeToString(CaptionStyle.serializer(), it) }
                 openedWords = ui.draftWords
+                openedEffects = ui.draftEffects?.let { ProjectCodec.json.encodeToString(EffectDefaults.serializer(), it) }
                 tab = CaptionTab.WORDS.name
                 captionOpen = true
             }
@@ -572,7 +592,7 @@ private fun FilesCard(
 /**
  * The 16:9 picture of a video from this preset: the frame (its green window
  * cut out) and a new caption on it, drawn as the export draws it. While
- * [editing], the caption's box can be dragged.
+ * [editing], the caption's box can be moved and resized.
  */
 @Composable
 private fun PresetCaptionPreview(
@@ -612,17 +632,34 @@ private fun PresetCaptionPreview(
                 .alpha(if (shown) 1f else SAMPLE_ALPHA),
         ) { CaptionImage(if (shown) words else sample, style) }
         if (editing) {
-            CaptionBoxDrag(style = style, usual = usual, safe = safe, showSample = false, dragKey = presetKey, onBox = onBox)
+            CaptionBoxDrag(
+                style = style,
+                usual = usual,
+                safe = safe,
+                showSample = false,
+                dragKey = presetKey,
+                text = if (shown) words else sample,
+                onBox = onBox,
+            )
         }
     }
 }
 
 private const val SAMPLE_ALPHA = 0.6f
 
+/** A caption to show the start animations on (only its kind matters: tiles draw it as a plain block). */
+private val SAMPLE_CAPTION = TextClip(ClipId("preset-caption-sample"), 0, Limits.DEFAULT_TEXT_MS, "")
+
+/** Animation tiles for a caption need no thumbnails. */
+private val NO_THUMBNAILS: ThumbSource = { _, _ -> null }
+
 /** The share of the screen's height the picture takes while the caption style is edited on a phone held upright. */
 private const val PREVIEW_SHARE = 0.3f
 
-/** The caption editor's tabs for a preset: the words a new caption starts with, its place, size, font and colour. */
+/**
+ * The caption editor's tabs for a preset: the words a new caption starts with, its place, size, font and
+ * colour, and the animation it comes in with ([animation], null for none).
+ */
 @Composable
 private fun ColumnScope.CaptionStyleEditor(
     tab: CaptionTab,
@@ -633,11 +670,13 @@ private fun ColumnScope.CaptionStyleEditor(
     frameWindow: NormRect,
     onStyle: (CaptionStyle) -> Unit,
     onWords: (String) -> Unit,
+    animation: AnimKind?,
+    onAnimation: (AnimKind?) -> Unit,
     onCancel: () -> Unit,
     onDone: () -> Unit,
 ) {
     PanelTitle(stringResource(R.string.preset_caption_change), onDone = onDone, onCancel = onCancel)
-    CaptionTabBar(tab, onTab)
+    CaptionTabBar(tab, CaptionTab.PRESET, onTab)
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         when (tab) {
             CaptionTab.WORDS -> {
@@ -679,6 +718,17 @@ private fun ColumnScope.CaptionStyleEditor(
 
             CaptionTab.COLOUR -> {
                 ColourTab(style, onStyle)
+            }
+
+            CaptionTab.ANIMATION -> {
+                Text(
+                    stringResource(R.string.preset_caption_animation_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                // The editor's own Start choices, on a caption: what a new caption of this preset gets.
+                AnimationChoices(SAMPLE_CAPTION, AnimSlot.START, animation, Anim.DEFAULT_MS, NO_THUMBNAILS, onAnimation)
             }
         }
     }

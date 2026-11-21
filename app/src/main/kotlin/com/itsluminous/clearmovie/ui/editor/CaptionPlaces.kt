@@ -2,6 +2,9 @@ package com.itsluminous.clearmovie.ui.editor
 
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.NormRect
+import com.itsluminous.clearmovie.render.media3.CaptionBitmapRenderer
+import com.itsluminous.clearmovie.ui.components.RectDrag
+import com.itsluminous.clearmovie.ui.components.RectGrip
 import kotlin.math.abs
 
 /** The places the caption editor offers, besides dragging the box on the preview. */
@@ -35,6 +38,9 @@ object CaptionPlaces {
 
     /** How near (in canvas units) a dragged box snaps to the preset's box. */
     const val SNAP = 0.02
+
+    /** The narrowest box holds about this many letters' widths at the caption's size. */
+    const val MIN_WIDTH_EMS = 4
 
     /**
      * [window] less [MARGIN] on every side (the horizontal margin is as many
@@ -118,6 +124,102 @@ object CaptionPlaces {
             snapped = true
         }
         return NormRect(x, y, w, h).rounded() to snapped
+    }
+
+    /**
+     * The narrowest a caption's box may be made, in units of the canvas
+     * width: room for about [MIN_WIDTH_EMS] letters at [sizePx] and the
+     * box's padding, on a canvas of [shape].
+     */
+    fun minWidth(
+        sizePx: Int,
+        shape: CanvasShape,
+    ): Double {
+        val canvasWidth = shape.size(CanvasShape.REFERENCE_SHORT_SIDE).first.toDouble()
+        return (MIN_WIDTH_EMS * sizePx + 2 * CaptionBitmapRenderer.PADDING_PX) / canvasWidth
+    }
+
+    /**
+     * [start] resized by [grip] moving ([dx], [dy]) (cm-caption-box): kept
+     * inside [safe], at least [minW] wide, and never shorter than its words
+     * need at their size at the new width ([neededH], in units of the canvas
+     * height), so they wrap again and keep their size. When the box must
+     * grow for that, the side opposite the handle stays, as in any resize,
+     * and it grows at the side the finger holds (from its middle for a side
+     * handle), as far as [safe] allows; past that the words are drawn
+     * smaller, as for any box too small for them. A moved
+     * side within [SNAP] of the same side of the preset's [usual] box lands
+     * on it. [RectGrip.BODY] is [dragged]. Returns the box and whether it
+     * snapped.
+     */
+    fun resized(
+        start: NormRect,
+        grip: RectGrip,
+        dx: Double,
+        dy: Double,
+        safe: NormRect,
+        usual: NormRect,
+        minW: Double,
+        neededH: (w: Double) -> Double,
+    ): Pair<NormRect, Boolean> {
+        if (grip == RectGrip.BODY) return dragged(start, dx, dy, safe, usual)
+        // The width first: it decides how many lines the words need.
+        val across = RectDrag.resize(start, grip, dx, 0.0, safe, minW, 0.0)
+        var l = across.x
+        var r = across.x + across.w
+        var snapped = false
+        if (grip.left && abs(l - usual.x) < SNAP && usual.x >= safe.x - EPS && r - usual.x >= minW - EPS) {
+            l = usual.x
+            snapped = true
+        }
+        if (grip.right && abs(r - (usual.x + usual.w)) < SNAP && usual.x + usual.w <= safe.x + safe.w + EPS &&
+            usual.x + usual.w - l >= minW - EPS
+        ) {
+            r = usual.x + usual.w
+            snapped = true
+        }
+        val need = neededH(r - l).coerceIn(0.0, safe.h)
+        val moved = RectDrag.resize(NormRect(l, across.y, r - l, across.h), grip, 0.0, dy, safe, 0.0, need)
+        var t = moved.y
+        var b = moved.y + moved.h
+        if (grip.top && abs(t - usual.y) < SNAP && usual.y >= safe.y - EPS && b - usual.y >= need - EPS) {
+            t = usual.y
+            snapped = true
+        }
+        if (grip.bottom && abs(b - (usual.y + usual.h)) < SNAP && usual.y + usual.h <= safe.y + safe.h + EPS &&
+            usual.y + usual.h - t >= need - EPS
+        ) {
+            b = usual.y + usual.h
+            snapped = true
+        }
+        if (b - t < need) {
+            // Taller for the words: away from the side held, or from the middle, inside the safe area.
+            val top = safe.y
+            val bottom = safe.y + safe.h
+            when {
+                grip.top -> {
+                    t = b - need
+                }
+
+                grip.bottom -> {
+                    b = t + need
+                }
+
+                else -> {
+                    t = (t + b - need) / 2
+                    b = t + need
+                }
+            }
+            if (t < top) {
+                t = top
+                b = t + need
+            }
+            if (b > bottom) {
+                b = bottom
+                t = b - need
+            }
+        }
+        return NormRect(l, t, r - l, b - t).rounded() to snapped
     }
 
     private fun same(

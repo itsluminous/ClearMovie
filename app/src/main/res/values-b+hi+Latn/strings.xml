@@ -573,7 +573,7 @@
     <string name="caption_place_top">Upar</string>
     <string name="caption_place_middle">Beech</string>
     <string name="caption_place_bottom">Neeche</string>
-    <string name="caption_place_hint">Ya picture par box ko kheenchein.</string>
+    <string name="caption_place_hint">Ya picture par box ko kheenchein. Chauda ya patla karne ke liye iske kinare ka handle kheenchein.</string>
     <string name="caption_size_value">%1$d%%</string>
     <string name="caption_size_smaller">Chhota</string>
     <string name="caption_size_bigger">Bada</string>
@@ -584,7 +584,10 @@
     <string name="caption_outline">Kinara</string>
     <string name="caption_background">Shabdon ke peeche patti</string>
     <string name="caption_reset">Preset jaisa karein</string>
-    <string name="caption_box_description">Caption ka box. Caption khiskane ke liye ise kheenchein, ya Jagah chunein.</string>
+    <string name="caption_box_description">Caption ka box. Caption khiskane ke liye ise kheenchein, ya size badalne ke liye iske kinare ya kone ka handle kheenchein.</string>
+    <string name="preset_caption_animation_hint">Naya caption kaise aayega. Baad me har caption ke liye ise badal sakte hain.</string>
+    <string name="caption_box_narrower">Box patla karein</string>
+    <string name="caption_box_wider">Box chauda karein</string>
     <string name="caption_colour_choice">%1$s akshar</string>
 
     <!-- cm-preset-manager: making, editing and deleting presets. -->

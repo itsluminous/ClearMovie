@@ -617,7 +617,7 @@
     <string name="caption_place_top">Top</string>
     <string name="caption_place_middle">Middle</string>
     <string name="caption_place_bottom">Bottom</string>
-    <string name="caption_place_hint">Or drag the box on the picture.</string>
+    <string name="caption_place_hint">Or drag the box on the picture. Drag a handle on its edge to make it wider or narrower.</string>
     <string name="caption_size_value">%1$d%%</string>
     <string name="caption_size_smaller">Smaller</string>
     <string name="caption_size_bigger">Bigger</string>
@@ -628,7 +628,10 @@
     <string name="caption_outline">Outline</string>
     <string name="caption_background">Band behind the words</string>
     <string name="caption_reset">Reset to preset style</string>
-    <string name="caption_box_description">Caption box. Drag it to move the caption, or use Place.</string>
+    <string name="caption_box_description">Caption box. Drag it to move the caption, or drag a handle on its edge or corner to change its size.</string>
+    <string name="preset_caption_animation_hint">How a new caption comes in. You can change it for each caption later.</string>
+    <string name="caption_box_narrower">Make the box narrower</string>
+    <string name="caption_box_wider">Make the box wider</string>
     <string name="caption_colour_choice">%1$s text</string>
 
     <!-- cm-preset-manager: making, editing and deleting presets. -->

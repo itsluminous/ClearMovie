@@ -46,6 +46,9 @@ class CaptionBitmapRenderer(
     /** The canvas's width in layout units: 1920 for landscape, 1080 upright or square. */
     private val logicalCanvasWidth = shape.size(CanvasShape.REFERENCE_SHORT_SIDE).first.toDouble()
 
+    /** The canvas's height in layout units: 1080 for landscape, 1920 upright. */
+    private val logicalCanvasHeight = shape.size(CanvasShape.REFERENCE_SHORT_SIDE).second.toDouble()
+
     fun caption(
         text: String,
         style: CaptionStyle,
@@ -89,6 +92,54 @@ class CaptionBitmapRenderer(
      */
     fun fontKey(fontId: String): String = if (typefaces?.isBundled(fontId) == true) "noto" else "system"
 
+    /**
+     * The height (in units of the canvas height) a caption box [w] wide (in
+     * units of the canvas width) needs to show [text] in [style] at its own
+     * size, every line, with the padding and outline room [caption] leaves,
+     * and a little to spare so that rounding to a smaller export's pixels
+     * never makes it shrink there. The editor keeps a box at least this tall
+     * while it is resized, so the words keep their size (cm-caption-box).
+     */
+    fun boxHeightFor(
+        text: String,
+        style: CaptionStyle,
+        w: Double,
+    ): Double {
+        val layoutWidth = max(1, (w * logicalCanvasWidth - 2 * PADDING_PX).toInt())
+        val paint = textPaint(style).apply { textSize = style.sizePx.toFloat() }
+        val outline = style.outline?.takeIf { it.widthPx > 0 }?.widthPx ?: 0
+        val needed = layout(text, paint, layoutWidth, style).height + 2 * PADDING_PX + 2 * outline + FIT_SLACK_PX
+        return needed / logicalCanvasHeight
+    }
+
+    private fun textPaint(style: CaptionStyle) =
+        TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.LINEAR_TEXT_FLAG).apply {
+            typeface = typeface(style.font)
+            color = style.color.toAndroid()
+        }
+
+    private fun layout(
+        text: String,
+        p: TextPaint,
+        layoutWidth: Int,
+        style: CaptionStyle,
+    ): StaticLayout {
+        val align =
+            when (style.align) {
+                TextAlign.START -> Layout.Alignment.ALIGN_NORMAL
+                TextAlign.CENTER -> Layout.Alignment.ALIGN_CENTER
+                TextAlign.END -> Layout.Alignment.ALIGN_OPPOSITE
+            }
+        return StaticLayout.Builder
+            .obtain(text, 0, text.length, p, layoutWidth)
+            .setAlignment(align)
+            .setIncludePad(false)
+            .setUseLineSpacingFromFallbacks(true)
+            .setBreakStrategy(LineBreaker.BREAK_STRATEGY_BALANCED)
+            .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+            .build()
+    }
+
     private fun drawText(
         canvas: Canvas,
         text: String,
@@ -105,35 +156,15 @@ class CaptionBitmapRenderer(
         val outline = style.outline?.takeIf { it.widthPx > 0 }
         // The outline is stroked around the glyphs, so it needs its width of room at the box's edges too.
         val room = (logicalH - 2 * pad - 2 * (outline?.widthPx ?: 0)).coerceAtLeast(1f)
-        val paint =
-            TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.LINEAR_TEXT_FLAG).apply {
-                typeface = typeface(style.font)
-                color = style.color.toAndroid()
-            }
-        val align =
-            when (style.align) {
-                TextAlign.START -> Layout.Alignment.ALIGN_NORMAL
-                TextAlign.CENTER -> Layout.Alignment.ALIGN_CENTER
-                TextAlign.END -> Layout.Alignment.ALIGN_OPPOSITE
-            }
-
-        fun layout(p: TextPaint) =
-            StaticLayout.Builder
-                .obtain(text, 0, text.length, p, layoutWidth)
-                .setAlignment(align)
-                .setIncludePad(false)
-                .setUseLineSpacingFromFallbacks(true)
-                .setBreakStrategy(LineBreaker.BREAK_STRATEGY_BALANCED)
-                .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
-                .build()
+        val paint = textPaint(style)
         val wanted = style.sizePx.toFloat()
         var size = wanted
         paint.textSize = size
-        var fill = layout(paint)
+        var fill = layout(text, paint, layoutWidth, style)
         while (fill.height > room && size > wanted * MIN_FIT) {
             size = max(wanted * MIN_FIT, size * FIT_STEP)
             paint.textSize = size
-            fill = layout(paint)
+            fill = layout(text, paint, layoutWidth, style)
         }
         val top = ((logicalH - fill.height) / 2f).coerceAtLeast(0f)
         canvas.withClip(0, 0, width, height) {
@@ -147,14 +178,18 @@ class CaptionBitmapRenderer(
                         strokeJoin = Paint.Join.ROUND
                         color = o.color.toAndroid()
                     }
-                layout(stroke).draw(this)
+                layout(text, stroke, layoutWidth, style).draw(this)
             }
             fill.draw(this)
         }
     }
 
     companion object {
-        private const val PADDING_PX = 16
+        /** The room kept between a caption's box and its words, on every side, in 1080-line pixels. */
+        const val PADDING_PX = 16
+
+        /** Room [boxHeightFor] adds for rounding: a 480-line export rounds a box down by up to about 2 of these. */
+        private const val FIT_SLACK_PX = 4
         private const val OPAQUE = Color.BLACK
 
         /** Text is drawn no smaller than this share of its size to fit its box. */

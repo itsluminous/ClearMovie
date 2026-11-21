@@ -7,8 +7,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -23,6 +25,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -33,13 +36,17 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.domain.model.AnimKind
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionAttachment
 import com.itsluminous.clearmovie.domain.model.CaptionFont
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.CaptionStyleOverride
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Fixtures
+import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.PipPlacement
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
@@ -140,6 +147,9 @@ class CaptionEditorTest {
 
     private fun EditorHarness.style(): CaptionStyle = caption().style.resolve(project.captionDefaults)
 
+    /** Inside [r], allowing for boxes being stored to 1/10000 of the canvas. */
+    private fun NormRect.inside(r: NormRect) = x >= r.x - 2e-4 && y >= r.y - 2e-4 && x + w <= r.x + r.w + 2e-4 && y + h <= r.y + r.h + 2e-4
+
     private fun SemanticsNodeInteraction.heightDp(): Float {
         val b = getUnclippedBoundsInRoot()
         return (b.bottom - b.top).value
@@ -160,13 +170,13 @@ class CaptionEditorTest {
                 assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.TEXT, c.id))
                 compose.onNodeWithTag(CAPTION_BOX_TAG).assertExists()
                 // Every tab is there, one line high, and at least 48 dp to touch.
-                for (t in CaptionTab.entries) {
+                for (t in CaptionTab.EDITOR) {
                     val node = compose.onNodeWithTag(captionTabTag(t)).assertExists()
                     assertThat(node.heightDp()).isAtLeast(47.5f)
                 }
                 panel(TEXT_FIELD_TAG).performTextInput("नमस्ते")
                 assertThat(h.caption().text).isEqualTo("नमस्ते")
-                for (t in CaptionTab.entries) tab(t)
+                for (t in CaptionTab.EDITOR) tab(t)
                 panel(PANEL_DONE_TAG).performClick()
                 compose.waitForIdle()
                 assertThat(h.state!!.panel).isNull()
@@ -520,7 +530,7 @@ class CaptionEditorTest {
         }
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
-        for (t in CaptionTab.entries) {
+        for (t in CaptionTab.EDITOR) {
             tab(t)
             val b = compose.onNodeWithTag(captionTabTag(t)).getUnclippedBoundsInRoot()
             assertThat((b.right - b.left).value).isAtLeast(47.5f)
@@ -545,5 +555,114 @@ class CaptionEditorTest {
         while (h.catchUp()) compose.waitForIdle()
         h.lagging = false
         assertThat(h.caption().text).isEqualTo("Cuts")
+    }
+
+    // cm-caption-box -------------------------------------------------------------------------------
+
+    @Test
+    fun `a new caption starts with the preset's start animation, or none when the preset has none`() {
+        for (kind in listOf(AnimKind.POP, null)) {
+            val preset = Fixtures.preset.copy(effects = Fixtures.preset.effects.copy(textStart = kind))
+            val p =
+                ProjectFactory
+                    .fromPreset(Fixtures.PROJECT_ID, preset, Fixtures.presetMedia, SequentialIds("c"))
+                    .addToMain(listOf(Fixtures.photo("p1")))
+            val h = show(p)
+            h.select("p1")
+            tapBar(EditAction.ADD_CAPTION)
+            assertThat(
+                h
+                    .caption()
+                    .animations.start
+                    ?.kind,
+            ).isEqualTo(kind)
+            panel(PANEL_CANCEL_TAG).performClick()
+            compose.waitForIdle()
+        }
+    }
+
+    /** The caption box's right handle (the middle of its right edge), in the box node's own coordinates. */
+    private fun TouchInjectionScope.rightHandle() = centerRight - Offset(2f, 0f)
+
+    @Test
+    fun `dragging the right handle makes the box narrower and the words wrap at their size`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(TEXT_FIELD_TAG).performTextInput("नमस्ते दुनिया, यह एक लंबा कैप्शन है")
+        val before = h.style().box
+        compose.onNodeWithTag(CAPTION_BOX_TAG).performTouchInput { swipe(rightHandle(), rightHandle() - Offset(width * 0.5f, 0f), 300) }
+        compose.waitForIdle()
+        val after = h.style().box
+        assertThat(after.x).isWithin(1e-4).of(before.x)
+        assertThat(after.w).isLessThan(before.w * 0.75)
+        // The text keeps its size (the box's height for the extra lines is CaptionBoxHeightTest's, with real fonts).
+        assertThat(after.h).isAtLeast(before.h)
+        assertThat(h.style().sizePx).isEqualTo(defaults.sizePx)
+        assertThat(after.inside(safe)).isTrue()
+        // A long drag stops at the narrowest box.
+        compose.onNodeWithTag(CAPTION_BOX_TAG).performTouchInput { swipe(rightHandle(), rightHandle() - Offset(5000f, 0f), 300) }
+        compose.waitForIdle()
+        assertThat(h.style().box.w).isWithin(2e-4).of(CaptionPlaces.minWidth(defaults.sizePx, CanvasShape.LANDSCAPE))
+        // Adding, typing and resizing in one visit are one undo step.
+        panel(PANEL_DONE_TAG).performClick()
+        compose.waitForIdle()
+        h.actions.undo()
+        compose.waitForIdle()
+        assertThat(h.project.captions()).isEmpty()
+    }
+
+    @Test
+    fun `a selected caption's box can be resized on the preview, each drag one undo step`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(TEXT_FIELD_TAG).performTextInput("Kept")
+        panel(PANEL_DONE_TAG).performClick()
+        compose.waitForIdle()
+        val c = h.caption()
+        // Selected, its editor closed, the playhead on it: the box shows with its handles.
+        h.state!!.selected = c.id
+        h.playheadUs = (c.startMs + 100) * 1000
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isNull()
+        val before = h.style().box
+        compose.onNodeWithTag(CAPTION_BOX_TAG).performTouchInput { swipe(rightHandle(), rightHandle() - Offset(width * 0.3f, 0f), 300) }
+        compose.waitForIdle()
+        val narrower = h.style().box
+        assertThat(narrower.w).isLessThan(before.w)
+        compose.onNodeWithTag(CAPTION_BOX_TAG).performTouchInput { swipe(center, center + Offset(0f, -100f), 300) }
+        compose.waitForIdle()
+        assertThat(h.style().box.y).isLessThan(narrower.y)
+        // Undo takes back the move, then the resize; the caption itself stays.
+        h.actions.undo()
+        compose.waitForIdle()
+        assertThat(h.style().box).isEqualTo(narrower)
+        h.actions.undo()
+        compose.waitForIdle()
+        assertThat(h.style().box).isEqualTo(before)
+        assertThat(h.caption().text).isEqualTo("Kept")
+        // Away from the caption's time the box is not offered.
+        h.playheadUs = 0
+        compose.waitForIdle()
+        compose.onNodeWithTag(CAPTION_BOX_TAG).assertDoesNotExist()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `TalkBack can make the box wider and narrower`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        val before = h.style().box
+        compose.onNodeWithTag(CAPTION_BOX_TAG).performCustomAccessibilityActionWithLabel(
+            androidx.test.core.app.ApplicationProvider
+                .getApplicationContext<android.content.Context>()
+                .getString(R.string.caption_box_narrower),
+        )
+        compose.waitForIdle()
+        val narrower = h.style().box
+        assertThat(narrower.w).isWithin(2e-4).of(before.w - 0.1)
+        assertThat(narrower.x + narrower.w / 2).isWithin(2e-4).of(before.x + before.w / 2)
     }
 }

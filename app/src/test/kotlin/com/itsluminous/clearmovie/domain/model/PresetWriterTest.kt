@@ -53,6 +53,9 @@ class PresetWriterTest {
                 bundled.copy(caption = CaptionStyle.STANDARD.copy(align = TextAlign.END, font = CaptionFont.SERIF.id, sizePx = 120)),
                 bundled.copy(caption = CaptionStyle(outline = TextOutline(ArgbColor(0x80FF0000L), 0), background = null)),
                 bundled.copy(effects = EffectDefaults()),
+                // cm-caption-box: the animation a new caption starts with, and none.
+                bundled.copy(effects = bundled.effects.copy(textStart = AnimKind.POP)),
+                bundled.copy(effects = bundled.effects.copy(textStart = null)),
                 bundled.copy(effects = EffectDefaults(mainTransition = Transition(TransitionKind.FADE_BLACK, 1500))),
                 bundled.copy(photoDurationMs = 5000, defaultFit = Fit.FIT_BLUR, ducking = DuckingSpec(-6.0, -10.0, -30.0, 0, 5000)),
                 bundled.copy(export = ExportSpec(height = 720, fps = 25, audioSampleRate = 44100, audioBitrate = 128_000)),

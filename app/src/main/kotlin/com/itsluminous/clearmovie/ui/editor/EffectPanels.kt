@@ -415,35 +415,7 @@ internal fun AnimationPanel(
         if (callbacks.edit { setAnimation(clip.id, tab, kind?.let(::anim)) }) preview(wanted)
     }
 
-    val picture = itemPicture(clip, thumbnail, MaterialTheme.colorScheme.primaryContainer)
-    val clock = tileClock()
-    val choices = clip.animationChoices(tab)
-    val plain = listOf<AnimKind?>(null) + choices.filter { animationDirection(it) == null }
-    EvenGrid(plain, ANIMATION_COLUMNS) { kind ->
-        val label = stringResource(kind?.let(::animationName) ?: R.string.effect_none)
-        EffectTile(
-            label = label,
-            description = label,
-            selected = current?.kind == kind,
-            tag = animationTileTag(tab, kind),
-            onClick = { choose(kind) },
-        ) { animationTileFrame(clip, tab, kind, wanted, clock.longValue, picture) }
-    }
-    val directed = choices.filter { animationDirection(it) != null }
-    if (directed.isNotEmpty()) {
-        val heading = stringResource(animationName(directed.first()))
-        GroupHeading(heading)
-        EvenGrid(directed, ANIMATION_COLUMNS) { kind ->
-            val label = stringResource(directionName(animationDirection(kind)!!))
-            EffectTile(
-                label = label,
-                description = stringResource(R.string.effect_tile_with_direction, heading, label),
-                selected = current?.kind == kind,
-                tag = animationTileTag(tab, kind),
-                onClick = { choose(kind) },
-            ) { animationTileFrame(clip, tab, kind, wanted, clock.longValue, picture) }
-        }
-    }
+    AnimationChoices(clip, tab, current?.kind, wanted, thumbnail, ::choose)
     if (tab != AnimSlot.DURING) {
         Spacer(Modifier.height(12.dp))
         LengthSlider(
@@ -459,6 +431,53 @@ internal fun AnimationPanel(
                 if (callbacks.edit { setAnimation(clip.id, tab, a.copy(durationMs = len)) }) preview(len)
             },
         )
+    }
+}
+
+/**
+ * The animations that may go in [slot] on [clip], as moving tiles: None and
+ * the plain ones, then the ones with a direction under their name, the one
+ * in use ([current]) outlined. [lengthMs] is how long a tile plays it. The
+ * Animation panel uses it, and so does a preset's caption style editor for
+ * the animation new captions start with (cm-caption-box).
+ */
+@Composable
+internal fun AnimationChoices(
+    clip: Clip,
+    slot: AnimSlot,
+    current: AnimKind?,
+    lengthMs: Long,
+    thumbnail: ThumbSource,
+    onChoose: (AnimKind?) -> Unit,
+) {
+    val picture = itemPicture(clip, thumbnail, MaterialTheme.colorScheme.primaryContainer)
+    val clock = tileClock()
+    val choices = clip.animationChoices(slot)
+    val plain = listOf<AnimKind?>(null) + choices.filter { animationDirection(it) == null }
+    EvenGrid(plain, ANIMATION_COLUMNS) { kind ->
+        val label = stringResource(kind?.let(::animationName) ?: R.string.effect_none)
+        EffectTile(
+            label = label,
+            description = label,
+            selected = current == kind,
+            tag = animationTileTag(slot, kind),
+            onClick = { onChoose(kind) },
+        ) { animationTileFrame(clip, slot, kind, lengthMs, clock.longValue, picture) }
+    }
+    val directed = choices.filter { animationDirection(it) != null }
+    if (directed.isNotEmpty()) {
+        val heading = stringResource(animationName(directed.first()))
+        GroupHeading(heading)
+        EvenGrid(directed, ANIMATION_COLUMNS) { kind ->
+            val label = stringResource(directionName(animationDirection(kind)!!))
+            EffectTile(
+                label = label,
+                description = stringResource(R.string.effect_tile_with_direction, heading, label),
+                selected = current == kind,
+                tag = animationTileTag(slot, kind),
+                onClick = { onChoose(kind) },
+            ) { animationTileFrame(clip, slot, kind, lengthMs, clock.longValue, picture) }
+        }
     }
 }
 

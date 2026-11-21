@@ -362,10 +362,25 @@ fun EditorScreen(
             onDismiss = { renaming = false },
         )
     }
+    // A caption selected (its editor closed) and showing at the playhead, while paused: its box can be moved
+    // and resized on the preview too (cm-caption-box), each drag one undo step.
+    val selectedCaption =
+        (selectedClip as? TextClip)?.takeIf {
+            editingCaption == null &&
+                !playhead.playing &&
+                playheadMs in it.startMs until it.endMs &&
+                project?.trackOf(it.id)?.enabled != false
+        }
     val previewWithBox: @Composable (Modifier) -> Unit = { m ->
         Box(m.clipToBounds()) {
             preview(Modifier.fillMaxSize())
-            if (editingCaption != null && project != null) CaptionBoxOverlay(editingCaption, project, captionWindow, actions)
+            if (project != null) {
+                if (editingCaption != null) {
+                    CaptionBoxOverlay(editingCaption, project, captionWindow, actions)
+                } else if (selectedCaption != null) {
+                    CaptionBoxOverlay(selectedCaption, project, captionWindow, actions, editing = false)
+                }
+            }
         }
     }
     // In the small floating preview the box only shows: dragging there moves the window, as everywhere else.

@@ -6,7 +6,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -58,14 +57,15 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -99,6 +99,9 @@ import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
 import com.itsluminous.clearmovie.ui.components.MoreBelow
+import com.itsluminous.clearmovie.ui.components.RectAnchor
+import com.itsluminous.clearmovie.ui.components.RectGrip
+import com.itsluminous.clearmovie.ui.components.ResizableRect
 import com.itsluminous.clearmovie.ui.components.labelFits
 import com.itsluminous.clearmovie.ui.components.rememberLabelLines
 import com.itsluminous.clearmovie.ui.preset.PresetNames
@@ -128,8 +131,26 @@ fun captionFontTag(font: CaptionFont) = "caption_font_${font.name}"
 
 fun captionColourTag(index: Int) = "caption_colour_$index"
 
-/** The editor's tabs, in order. */
-enum class CaptionTab { WORDS, PLACE, SIZE, FONT, COLOUR }
+/**
+ * The caption editors' tabs, in order. A caption's own editor has [EDITOR]
+ * (its animation is the bar's Animation, as for any item); a preset's
+ * caption style editor has every one, [ANIMATION] being the start animation
+ * new captions get (cm-caption-box).
+ */
+enum class CaptionTab {
+    WORDS,
+    PLACE,
+    SIZE,
+    FONT,
+    COLOUR,
+    ANIMATION,
+    ;
+
+    companion object {
+        val EDITOR = listOf(WORDS, PLACE, SIZE, FONT, COLOUR)
+        val PRESET = entries.toList()
+    }
+}
 
 /** The text colours offered, on a checkerboard; named for TalkBack. */
 val CAPTION_COLOURS: List<Pair<ArgbColor, Int>> =
@@ -310,7 +331,7 @@ internal fun ColumnScope.CaptionPanel(
     )
     var ownTab by rememberSaveable(caption.id.value) { mutableStateOf(CaptionTab.WORDS.name) }
     val tabName = visit?.captionTab ?: ownTab
-    val tab = CaptionTab.entries.firstOrNull { it.name == tabName } ?: CaptionTab.WORDS
+    val tab = CaptionTab.EDITOR.firstOrNull { it.name == tabName } ?: CaptionTab.WORDS
     CaptionTabBar(tab) { if (visit != null) visit.captionTab = it.name else ownTab = it.name }
     // Below the title and the tabs, which stay put, the tab's content and Reset scroll when the room is short.
     val scroll = rememberScrollState()
@@ -345,6 +366,11 @@ internal fun ColumnScope.CaptionPanel(
                     CaptionTab.COLOUR -> {
                         ColourTab(style, ::restyle)
                     }
+
+                    // A caption's animation is the bar's Animation (not one of this editor's tabs).
+                    CaptionTab.ANIMATION -> {
+                        Unit
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -365,26 +391,27 @@ internal fun ColumnScope.CaptionPanel(
 @Composable
 internal fun CaptionTabBar(
     tab: CaptionTab,
+    tabs: List<CaptionTab> = CaptionTab.EDITOR,
     onTab: (CaptionTab) -> Unit,
 ) {
-    val labels = CaptionTab.entries.map { stringResource(tabLabel(it)) }
+    val labels = tabs.map { stringResource(tabLabel(it)) }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val room = maxWidth / CaptionTab.entries.size - TAB_LABEL_ROOM
+        val room = maxWidth / tabs.size - TAB_LABEL_ROOM
         val roomPx = with(density) { room.roundToPx() }
         val scrolls =
             labels.flatMap { it.split(' ') }.any { word ->
                 !labelFits(measurer, word, labelStyle.copy(fontSize = MIN_LABEL_FONT_SIZE), roomPx)
             }
         val lines = if (scrolls) 1 else rememberLabelLines(labels, labelStyle, room, density)
-        CaptionTabs(tab, labels, scrolls, lines, scrollTabWidth = maxWidth / SCROLLING_TABS_SHOWN, onTab = onTab)
+        CaptionTabs(tab, labels, scrolls, lines, scrollTabWidth = maxWidth / SCROLLING_TABS_SHOWN, tabs = tabs, onTab = onTab)
     }
 }
 
 /**
- * The caption editor's tabs: five equal tabs across the width; or, when a name cannot fit a fifth of it,
+ * The caption editor's [tabs] ([labels] in the same order): equal tabs across the width; or, when a name cannot fit its share,
  * a scrolling row of equal tabs, [scrollTabWidth] each, three and a half in sight so the cut one says there
  * are more, every name kept (drawn smaller to fit when it must).
  */
@@ -395,11 +422,13 @@ internal fun CaptionTabs(
     scrolls: Boolean,
     lines: Int,
     scrollTabWidth: Dp = 96.dp,
+    tabs: List<CaptionTab> = CaptionTab.EDITOR,
     onTab: (CaptionTab) -> Unit,
 ) {
-    val tabs: @Composable () -> Unit = {
-        for (t in CaptionTab.entries) {
-            val label = labels[t.ordinal]
+    val shown = tabs.indexOf(tab).coerceAtLeast(0)
+    val row: @Composable () -> Unit = {
+        for ((i, t) in tabs.withIndex()) {
+            val label = labels[i]
             Tab(
                 selected = t == tab,
                 onClick = { onTab(t) },
@@ -427,14 +456,14 @@ internal fun CaptionTabs(
     }
     if (scrolls) {
         PrimaryScrollableTabRow(
-            selectedTabIndex = tab.ordinal,
+            selectedTabIndex = shown,
             containerColor = Color.Transparent,
             edgePadding = 0.dp,
             modifier = Modifier.testTag(CAPTION_PANEL_TAG),
-        ) { tabs() }
+        ) { row() }
     } else {
-        PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
-            tabs()
+        PrimaryTabRow(selectedTabIndex = shown, containerColor = Color.Transparent, modifier = Modifier.testTag(CAPTION_PANEL_TAG)) {
+            row()
         }
     }
 }
@@ -466,6 +495,7 @@ private fun tabLabel(tab: CaptionTab): Int =
         CaptionTab.SIZE -> R.string.caption_tab_size
         CaptionTab.FONT -> R.string.caption_tab_font
         CaptionTab.COLOUR -> R.string.caption_tab_colour
+        CaptionTab.ANIMATION -> R.string.action_animation
     }
 
 private fun tabIcon(tab: CaptionTab): Int =
@@ -475,6 +505,7 @@ private fun tabIcon(tab: CaptionTab): Int =
         CaptionTab.SIZE -> R.drawable.ic_format_size
         CaptionTab.FONT -> R.drawable.ic_font_download
         CaptionTab.COLOUR -> R.drawable.ic_format_color_text
+        CaptionTab.ANIMATION -> R.drawable.ic_animation
     }
 
 /** Characters a caption may not hold (see TextRules) are left out as they are typed or pasted. */
@@ -855,10 +886,18 @@ private fun Modifier.checkerboard(cell: Dp = 8.dp): Modifier =
     }
 
 /**
- * The caption's box over the preview while its editor is open: a dashed
- * outline the user drags to move the caption, inside the frame window's
- * safe area, snapping to the preset's place. The Place tab does the same
- * without dragging.
+ * The undo step a drag of caption [id]'s box makes while the caption is only
+ * selected (its editor closed): each drag is a step of its own.
+ */
+fun captionBoxMergeKey(id: ClipId) = "caption-box:${id.value}"
+
+/**
+ * The caption's box over the preview: while its editor is open ([editing],
+ * part of the visit's undo step), or while it is selected and shows at the
+ * playhead (each drag one undo step). A dashed outline the user drags to
+ * move the caption, inside the frame window's safe area, snapping to the
+ * preset's place, with handles on its edges and corners to change its size
+ * (cm-caption-box). The Place tab moves it without dragging.
  */
 @Composable
 internal fun CaptionBoxOverlay(
@@ -868,30 +907,39 @@ internal fun CaptionBoxOverlay(
     callbacks: EditorCallbacks,
     modifier: Modifier = Modifier,
     draggable: Boolean = true,
+    editing: Boolean = true,
 ) {
     val defaults = project.captionDefaults
     val style = caption.style.resolve(defaults)
     val latest by rememberUpdatedState(style)
+    val key = if (editing) captionMergeKey(caption.id) else captionBoxMergeKey(caption.id)
     CaptionBoxDrag(
         style = style,
+        text = caption.text,
         usual = defaults.box,
         safe = CaptionPlaces.safeArea(window, defaults.box, LocalCanvasShape.current.aspect),
         showSample = caption.text.isBlank(),
         dragKey = caption.id,
         modifier = modifier,
         draggable = draggable,
+        // A drag while the caption is only selected is one undo step; in the editor it joins the visit.
+        onDragEnd = { if (!editing) callbacks.endMerge() },
     ) { next ->
-        callbacks.editMerged(captionMergeKey(caption.id)) {
+        callbacks.editMerged(key) {
             setCaptionStyle(caption.id, CaptionStyleOverride.between(defaults, latest.copy(box = next)))
         }
     }
 }
 
 /**
- * A caption box drawn over a picture of the canvas, and dragged: the box of
- * [style], kept inside [safe] and snapping to [usual], each move handed to
- * [onBox]. With [showSample] (no words yet) a faint sample shows the style.
- * The caption editor and the preset's caption style editor both use it.
+ * A caption box drawn over a picture of the canvas, moved and resized: the
+ * box of [style], kept inside [safe] and snapping to [usual], each change
+ * handed to [onBox] and [onDragEnd] called when a drag (or an accessibility
+ * action) ends. A resize keeps the words ([text], or the sample when blank)
+ * at their size: the box is never made shorter than they need at its new
+ * width ([CaptionPlaces.resized]), measured by the export's own renderer.
+ * With [showSample] (no words yet) a faint sample shows the style. The
+ * caption editor and the preset's caption style editor both use it.
  */
 @Composable
 internal fun CaptionBoxDrag(
@@ -901,23 +949,46 @@ internal fun CaptionBoxDrag(
     showSample: Boolean,
     dragKey: Any,
     modifier: Modifier = Modifier,
+    text: String = "",
     draggable: Boolean = true,
+    onDragEnd: () -> Unit = {},
     onBox: (NormRect) -> Unit,
 ) {
     val latest by rememberUpdatedState(style)
     val move by rememberUpdatedState(onBox)
+    val end by rememberUpdatedState(onDragEnd)
     var start by remember { mutableStateOf<NormRect?>(null) }
-    var moved by remember { mutableStateOf(Offset.Zero) }
     var snapped by remember { mutableStateOf(false) }
-    val primary = MaterialTheme.colorScheme.primary
     val description = stringResource(R.string.caption_box_description)
+    val wider = stringResource(R.string.caption_box_wider)
+    val narrower = stringResource(R.string.caption_box_narrower)
     val sample = stringResource(R.string.caption_font_sample)
+    val renderer = rememberCaptionRenderer()
+    val shape = LocalCanvasShape.current
+    val words = text.ifBlank { sample }
+
+    fun change(
+        from: NormRect,
+        grip: RectGrip,
+        dx: Double,
+        dy: Double,
+    ): Pair<NormRect, Boolean> {
+        if (grip == RectGrip.BODY) return CaptionPlaces.dragged(from, dx, dy, safe, usual)
+        val minW = CaptionPlaces.minWidth(latest.sizePx, shape)
+        return CaptionPlaces.resized(from, grip, dx, dy, safe, usual, minW) { w -> renderer.boxHeightFor(words, latest, w) }
+    }
+
+    /** Wider or narrower by [step] of the canvas, both sides alike: for TalkBack, which cannot drag. */
+    fun widen(step: Double): Boolean {
+        val one = change(latest.box, RectGrip.RIGHT, step / 2, 0.0).first
+        val both = change(one, RectGrip.LEFT, -step / 2, 0.0).first
+        if (both != latest.box) move(both)
+        end()
+        return true
+    }
     BoxWithConstraints(modifier.fillMaxSize()) {
         val w = maxWidth
         val h = maxHeight
-        // Read inside the drag, so a preview that changed size (the keyboard opened) moves the box at the finger's speed.
-        val widthPx by rememberUpdatedState(constraints.maxWidth.toFloat())
-        val heightPx by rememberUpdatedState(constraints.maxHeight.toFloat())
         val box = style.box
         if (start != null) {
             // While dragging: the safe area, and the preset's place when the box sits on it.
@@ -940,74 +1011,56 @@ internal fun CaptionBoxDrag(
                 }
             }
         }
-        val boxH = h * box.h.toFloat()
-        // The hit area is at least 48 dp tall, centred on a thinner box.
-        val extra = ((48.dp - boxH) / 2).coerceAtLeast(0.dp)
-        Box(
-            Modifier
-                .offset(w * box.x.toFloat(), h * box.y.toFloat() - extra)
-                .size(w * box.w.toFloat(), boxH + extra * 2)
-                .then(if (draggable) Modifier.semantics { contentDescription = description }.testTag(CAPTION_BOX_TAG) else Modifier)
-                .pointerInput(dragKey, safe, usual, draggable) {
-                    if (!draggable) return@pointerInput
-                    detectDragGestures(
-                        onDragStart = {
-                            start = latest.box
-                            moved = Offset.Zero
-                        },
-                        onDragEnd = {
-                            start = null
-                            snapped = false
-                        },
-                        onDragCancel = {
-                            start = null
-                            snapped = false
-                        },
-                    ) { change, amount ->
-                        change.consume()
-                        val from = start ?: return@detectDragGestures
-                        // Each move is turned into canvas units at the preview's size then, so a resize part way never jumps.
-                        moved += Offset(amount.x / widthPx, amount.y / heightPx)
-                        val (next, snap) = CaptionPlaces.dragged(from, moved.x.toDouble(), moved.y.toDouble(), safe, usual)
-                        snapped = snap
-                        if (next != latest.box) move(next)
-                    }
-                },
-        ) {
-            // A caption with no words yet shows a faint sample, so its place, size, font and colour show at once.
-            if (showSample) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(boxH)
-                        .align(Alignment.Center)
-                        .alpha(BLANK_SAMPLE_ALPHA),
-                ) { CaptionImage(sample, style) }
-            }
-            Canvas(Modifier.fillMaxWidth().height(boxH).align(Alignment.Center)) {
-                val dash = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 5.dp.toPx()))
-                drawRoundRect(Color.Black.copy(alpha = 0.6f), cornerRadius = CornerRadius(4.dp.toPx()), style = Stroke(4.dp.toPx()))
-                drawRoundRect(primary, cornerRadius = CornerRadius(4.dp.toPx()), style = Stroke(2.dp.toPx(), pathEffect = dash))
-            }
-            // The handle sits inside the box's right end, so it is never cut off at the top of the picture.
+        // A caption with no words yet shows a faint sample, so its place, size, font and colour show at once.
+        if (showSample) {
+            Box(
+                Modifier
+                    .offset(w * box.x.toFloat(), h * box.y.toFloat())
+                    .size(w * box.w.toFloat(), h * box.h.toFloat())
+                    .alpha(BLANK_SAMPLE_ALPHA),
+            ) { CaptionImage(sample, style) }
+        }
+        // The box as TalkBack and tests find it (at least 48 dp tall); the touches go to the handles below.
+        RectAnchor(
+            box,
+            w,
+            h,
             if (draggable) {
-                Box(
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 4.dp)
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(primary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painterResource(R.drawable.ic_open_with),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
+                Modifier
+                    .semantics {
+                        contentDescription = description
+                        customActions =
+                            listOf(
+                                CustomAccessibilityAction(wider) { widen(A11Y_STEP) },
+                                CustomAccessibilityAction(narrower) { widen(-A11Y_STEP) },
+                            )
+                    }.testTag(CAPTION_BOX_TAG)
+            } else {
+                Modifier
+            },
+        )
+        ResizableRect(
+            rect = box,
+            enabled = draggable,
+            dashed = true,
+            gestureKey = dragKey,
+            onDragStart = {
+                start = latest.box
+                snapped = false
+            },
+            onDragEnd = {
+                start = null
+                snapped = false
+                end()
+            },
+        ) { grip, dx, dy ->
+            val from = start ?: return@ResizableRect
+            val (next, snap) = change(from, grip, dx, dy)
+            snapped = snap
+            if (next != latest.box) move(next)
         }
     }
 }
+
+/** How much wider or narrower one TalkBack action makes the box, in units of the canvas width. */
+private const val A11Y_STEP = 0.1

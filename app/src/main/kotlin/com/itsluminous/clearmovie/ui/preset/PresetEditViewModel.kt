@@ -12,8 +12,11 @@ import com.itsluminous.clearmovie.data.preset.PresetSaveResult
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.domain.model.AnimKind
+import com.itsluminous.clearmovie.domain.model.AnimSlot
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
+import com.itsluminous.clearmovie.domain.model.EffectDefaults
 import com.itsluminous.clearmovie.domain.model.LocalizedText
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
@@ -49,6 +52,8 @@ data class PresetEditUi(
     val draftName: String? = null,
     val draftStyle: CaptionStyle? = null,
     val draftWords: String? = null,
+    /** The effect defaults with a new start animation for new captions (cm-caption-box), null while unchanged. */
+    val draftEffects: EffectDefaults? = null,
     /** A new shape (cm-aspect-ratio), for a preset the user made that no video uses yet. */
     val draftShape: CanvasShape? = null,
     /** How many videos were made from this preset; while any is, its shape stays. */
@@ -62,6 +67,9 @@ data class PresetEditUi(
 ) {
     val preset: Preset? get() = definition?.preset
     val style: CaptionStyle? get() = draftStyle ?: preset?.caption
+
+    /** The animation a new caption starts with: the draft's, else the preset's (null is none). */
+    val captionAnimation: AnimKind? get() = (draftEffects ?: preset?.effects)?.textStart
 
     /** The shape shown: the draft's, else the preset's. */
     val shape: CanvasShape get() = draftShape ?: preset?.shape ?: CanvasShape.LANDSCAPE
@@ -115,6 +123,7 @@ class PresetEditViewModel
                     draftName = savedState[KEY_NAME],
                     draftStyle = savedState.get<String>(KEY_STYLE)?.let(::decodeStyle),
                     draftWords = savedState[KEY_WORDS],
+                    draftEffects = savedState.get<String>(KEY_EFFECTS)?.let(::decodeEffects),
                     draftShape = savedState.get<String>(KEY_SHAPE)?.let { n -> CanvasShape.entries.firstOrNull { it.name == n } },
                 ),
             )
@@ -169,19 +178,34 @@ class PresetEditViewModel
             uiState.update { it.copy(draftShape = shape) }
         }
 
+        /** The animation a new caption starts with ([kind] null for none): only start animations a caption may have. */
+        fun setCaptionAnimation(kind: AnimKind?) {
+            if (kind != null && (AnimSlot.START !in kind.slots || kind.photoOnly)) return
+            val ui = uiState.value
+            val effects = (ui.draftEffects ?: ui.preset?.effects ?: return).copy(textStart = kind)
+            setEffects(effects)
+        }
+
+        private fun setEffects(effects: EffectDefaults?) {
+            savedState[KEY_EFFECTS] = effects?.let { ProjectCodec.json.encodeToString(EffectDefaults.serializer(), it) }
+            uiState.update { it.copy(draftEffects = effects) }
+        }
+
         fun setWords(words: String) {
             savedState[KEY_WORDS] = words
             uiState.update { it.copy(draftWords = words) }
         }
 
-        /** Puts the caption style back to the preset's saved one (the draft only). */
+        /** Puts the caption style, words and caption animation back to what they were (the draft only). */
         fun revertStyle(
             style: CaptionStyle?,
             words: String?,
+            effects: EffectDefaults?,
         ) {
             savedState[KEY_STYLE] = style?.let { ProjectCodec.json.encodeToString(CaptionStyle.serializer(), it) }
             savedState[KEY_WORDS] = words
             uiState.update { it.copy(draftStyle = style, draftWords = words) }
+            setEffects(effects)
         }
 
         /**
@@ -251,7 +275,8 @@ class PresetEditViewModel
             savedState[KEY_STYLE] = null
             savedState[KEY_WORDS] = null
             savedState[KEY_SHAPE] = null
-            uiState.update { it.copy(draftName = null, draftStyle = null, draftWords = null, draftShape = null) }
+            savedState[KEY_EFFECTS] = null
+            uiState.update { it.copy(draftName = null, draftStyle = null, draftWords = null, draftShape = null, draftEffects = null) }
         }
 
         private fun loadStill(
@@ -278,6 +303,7 @@ class PresetEditViewModel
             private const val KEY_STYLE = "draftStyle"
             private const val KEY_WORDS = "draftWords"
             private const val KEY_SHAPE = "draftShape"
+            private const val KEY_EFFECTS = "draftEffects"
             private const val STILL_AT_US = 1_000_000L
             private const val STILL_WIDTH = 640
             private const val STILL_HEIGHT = 360
@@ -287,6 +313,9 @@ class PresetEditViewModel
 
             private fun decodeStyle(text: String): CaptionStyle? =
                 runCatching { ProjectCodec.json.decodeFromString(CaptionStyle.serializer(), text) }.getOrNull()
+
+            private fun decodeEffects(text: String): EffectDefaults? =
+                runCatching { ProjectCodec.json.decodeFromString(EffectDefaults.serializer(), text) }.getOrNull()
 
             /** A name the preset can carry: one line that shows something, at most [PresetParser.MAX_DISPLAY_NAME] long. */
             fun isUsableName(name: String): Boolean {
@@ -310,7 +339,8 @@ class PresetEditViewModel
                 val words = ui.draftWords?.trim()?.takeIf { it != shownWords.trim() }
                 val style = ui.draftStyle?.takeIf { it != preset.caption }
                 val shape = ui.draftShape?.takeIf { it != preset.shape }
-                if (name == null && words == null && style == null && shape == null) return null
+                val effects = ui.draftEffects?.takeIf { it != preset.effects }
+                if (name == null && words == null && style == null && shape == null && effects == null) return null
                 return preset.copy(
                     displayName = name?.let(LocalizedText::same) ?: preset.displayName,
                     defaultText =
@@ -321,6 +351,7 @@ class PresetEditViewModel
                         },
                     caption = style ?: preset.caption,
                     shape = shape ?: preset.shape,
+                    effects = effects ?: preset.effects,
                 )
             }
 

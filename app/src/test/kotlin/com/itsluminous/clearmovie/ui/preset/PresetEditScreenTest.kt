@@ -25,8 +25,11 @@ import com.itsluminous.clearmovie.data.preset.PresetBinding
 import com.itsluminous.clearmovie.data.preset.PresetDefinition
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.domain.model.AnimKind
+import com.itsluminous.clearmovie.domain.model.AnimSlot
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
+import com.itsluminous.clearmovie.domain.model.EffectDefaults
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.LocalizedText
 import com.itsluminous.clearmovie.domain.model.Preset
@@ -36,6 +39,7 @@ import com.itsluminous.clearmovie.testing.AtSize
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.components.shapeOptionTag
 import com.itsluminous.clearmovie.ui.editor.CaptionTab
+import com.itsluminous.clearmovie.ui.editor.animationTileTag
 import com.itsluminous.clearmovie.ui.editor.captionTabTag
 import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
 import org.junit.Rule
@@ -67,6 +71,7 @@ class PresetEditScreenTest {
         var back = 0
         var style: CaptionStyle? = null
         var words: String? = null
+        var animation: AnimKind? = AnimKind.ZOOM_OUT
     }
 
     private fun show(
@@ -92,17 +97,42 @@ class PresetEditScreenTest {
                             calls.words = it
                             ui = ui.copy(draftWords = it)
                         },
-                        onRevertCaption = { st, w -> ui = ui.copy(draftStyle = st, draftWords = w) },
+                        onRevertCaption = { st, w, e -> ui = ui.copy(draftStyle = st, draftWords = w, draftEffects = e) },
                         onFiles = { calls.files++ },
                         onSave = { n, w -> calls.saved = n to w },
                         onDelete = { calls.deleted++ },
                         onBack = { calls.back++ },
                         onDismissMessage = {},
+                        onCaptionAnimation = {
+                            calls.animation = it
+                            ui = ui.copy(draftEffects = (ui.draftEffects ?: definition.preset.effects).copy(textStart = it))
+                        },
                     )
                 }
             }
+            shownUi = ui
         }
         return calls
+    }
+
+    private var shownUi: PresetEditUi? = null
+
+    /** The node tagged [tag], scrolled into sight when it sits in something that scrolls. */
+    private fun inSight(tag: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        val node = compose.onNodeWithTag(tag)
+        val scrolls =
+            compose
+                .onAllNodes(
+                    androidx.compose.ui.test
+                        .hasTestTag(tag) and
+                        androidx.compose.ui.test
+                            .hasAnyAncestor(
+                                androidx.compose.ui.test
+                                    .hasScrollAction(),
+                            ),
+                ).fetchSemanticsNodes()
+                .isNotEmpty()
+        return if (scrolls) node.performScrollTo() else node
     }
 
     @Test
@@ -173,6 +203,47 @@ class PresetEditScreenTest {
     }
 
     @Test
+    fun `the caption style editor sets the animation new captions start with, None included, and Cancel puts it back`() {
+        val calls =
+            show(
+                PresetDefinition(
+                    own.copy(effects = EffectDefaults(textStart = AnimKind.FADE_IN)),
+                    PresetDefinition.Source.USER,
+                    builtIn = false,
+                ),
+            )
+        compose.onNodeWithTag(PRESET_CAPTION_CHANGE_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(captionTabTag(CaptionTab.ANIMATION)).performClick()
+        compose.onNodeWithText(s(R.string.preset_caption_animation_hint)).assertIsDisplayed()
+        // The preset's own animation is the one marked; only start animations a caption may have are offered.
+        compose.onNodeWithTag(animationTileTag(AnimSlot.START, AnimKind.FADE_IN)).performScrollTo().assertIsSelected()
+        compose.onNodeWithTag(animationTileTag(AnimSlot.START, AnimKind.KEN_BURNS_IN)).assertDoesNotExist()
+        compose.onNodeWithTag(animationTileTag(AnimSlot.START, AnimKind.FADE_OUT)).assertDoesNotExist()
+        compose.onNodeWithTag(animationTileTag(AnimSlot.START, AnimKind.POP)).performScrollTo().performClick()
+        assertThat(calls.animation).isEqualTo(AnimKind.POP)
+        compose.waitForIdle()
+        assertThat(shownUi!!.captionAnimation).isEqualTo(AnimKind.POP)
+        compose.onNodeWithTag(animationTileTag(AnimSlot.START, null)).performScrollTo().performClick()
+        assertThat(calls.animation).isNull()
+        compose.waitForIdle()
+        assertThat(shownUi!!.captionAnimation).isNull()
+        // Cancel: the preset's own animation again, and nothing to save.
+        compose.onNodeWithText(s(R.string.action_cancel)).performClick()
+        compose.waitForIdle()
+        assertThat(shownUi!!.captionAnimation).isEqualTo(AnimKind.FADE_IN)
+        compose.onNodeWithContentDescription(s(R.string.action_back)).performClick()
+        assertThat(calls.back).isEqualTo(1)
+    }
+
+    @Test
+    fun `the Animation tab fits at font scale 2 on a phone`() {
+        show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false), ScreenSize.COMPACT, 2f)
+        compose.onNodeWithTag(PRESET_CAPTION_CHANGE_TAG).performScrollTo().performClick()
+        inSight(captionTabTag(CaptionTab.ANIMATION)).assertHeightIsAtLeast(48.dp).performClick()
+        inSight(animationTileTag(AnimSlot.START, AnimKind.BOUNCE)).assertIsDisplayed()
+    }
+
+    @Test
     fun `Change files opens the files in two panes`() = filesAt(ScreenSize.MEDIUM, 1f)
 
     @Test
@@ -201,7 +272,7 @@ class PresetEditScreenTest {
                     onName = {},
                     onStyle = {},
                     onWords = {},
-                    onRevertCaption = { _, _ -> },
+                    onRevertCaption = { _, _, _ -> },
                     onFiles = {},
                     onSave = { _, _ -> },
                     onDelete = {},
@@ -265,6 +336,19 @@ class PresetEditScreenTest {
                 "x",
             )!!
         assertThat(cleared.defaultText).isNull()
+        // The caption animation is a change only when it differs; None is stored as none.
+        assertThat(PresetEditViewModel.changedPreset(own, ui.copy(draftEffects = own.effects), "Spasht Dhaara", "")).isNull()
+        val none = PresetEditViewModel.changedPreset(own, ui.copy(draftEffects = own.effects.copy(textStart = null)), "Spasht Dhaara", "")
+        assertThat(none!!.effects.textStart).isNull()
+        assertThat(none.effects.photoDuring).isEqualTo(own.effects.photoDuring)
+        val pop =
+            PresetEditViewModel.changedPreset(
+                own,
+                ui.copy(draftEffects = own.effects.copy(textStart = AnimKind.POP)),
+                "Spasht Dhaara",
+                "",
+            )
+        assertThat(pop!!.effects.textStart).isEqualTo(AnimKind.POP)
         // A name that shows nothing is never stored.
         assertThat(PresetEditViewModel.changedPreset(own, ui.copy(draftName = "\u200B"), "Spasht Dhaara", "")).isNull()
         assertThat(PresetEditViewModel.isUsableName("x".repeat(61))).isFalse()
@@ -313,7 +397,7 @@ class PresetEditScreenTest {
                     onName = {},
                     onStyle = { ui = ui.copy(draftStyle = it) },
                     onWords = {},
-                    onRevertCaption = { _, _ -> },
+                    onRevertCaption = { _, _, _ -> },
                     onFiles = {},
                     onSave = { _, _ -> },
                     onDelete = {},
