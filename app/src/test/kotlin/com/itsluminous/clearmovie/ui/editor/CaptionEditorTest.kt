@@ -357,6 +357,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Hello")
         compose.onNodeWithTag(EDITOR_TITLE_TAG).assertIsNotEnabled().performClick()
         compose.waitForIdle()
@@ -629,6 +630,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("नमस्ते दुनिया, यह एक लंबा कैप्शन है")
         val before = h.style().box
         compose.onNodeWithTag(CAPTION_BOX_TAG).performTouchInput { swipe(rightHandle(), rightHandle() - Offset(width * 0.5f, 0f), 300) }
@@ -657,6 +659,7 @@ class CaptionEditorTest {
         val h = show()
         h.select("p1")
         tapBar(EditAction.ADD_CAPTION)
+        h.clearNewWords()
         panel(TEXT_FIELD_TAG).performTextInput("Kept")
         panel(PANEL_DONE_TAG).performClick()
         compose.waitForIdle()
