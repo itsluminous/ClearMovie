@@ -12,6 +12,7 @@ their imports.
 | --- | --- | --- |
 | `domain.model` | The project and preset model (below), `ThemeMode`, `AppSettings`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `render.plan` | `RenderPlanBuilder` and the `RenderPlan` it makes, and the preview's `PreviewSchedule`: pure Kotlin | `android.*`, `androidx.*`, Media3, or any other app layer but `domain` |
+| `domain.record` | `RecordingSync`: lining a voice recording up with the picture: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `domain.export` | The export's rules: the three sizes (`ExportQuality`), the free-space rule, the gallery file name, the time left: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `render.media3` | The Media3 mapping: `CompositionFactory`, the GL effects, the gain processor, `RenderExporter`, `VideoExport` (hardware first, then software) | |
 | `render.preview` | The layered editor preview (`LayeredPreviewEngine`, `StillLoader`) and the exact draft (`ExactDraft`) | |
@@ -20,6 +21,7 @@ their imports.
 | `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard`, `NewVideos` (new drafts), `ShareDrafts` (a share's pending draft), `ProjectMedia` (a project's files) | `ui` |
 | `data.preset` | `PresetStore`, the key-colour check, `LoudnessMeter`, `MediaProbe` | `ui` |
 | `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants, `newMainItems` (picked items to clips); for shares `ShareLinks`, `ShareTypes`, `CaptureOrder` and `CaptureDates`, `PendingShare` | `ui` |
+| `data.record` | `VoiceRecorder` (microphone to AAC in M4A), `MicSource` and `AudioRecordMic`, `VoiceRecordings` (the files, and removing unused ones) | `ui` |
 | `data.files` | `AppFiles` (where files live), `SafeFileName`, `StorageUsage` | `ui` |
 | `data.export` | `ExportStore`: the export's hidden-then-shown entry in `Movies/ClearMovie` | `ui` |
 | `work` | `ExportWorker` (the foreground worker), `ExportPipeline` (what one export does), its notifications and Stop receiver | |
@@ -450,6 +452,35 @@ the screen; the playhead is saved by `EditorViewModel`.
   for "+", Replace and Add are taken in by the view model with `MediaIntake`
   and `newMainItems`, and the links are kept in the saved state until they are
   on MAIN.
+- **Record voice.** A voice row's chooser ("+" or Add here) also offers
+  Record voice. The microphone permission is asked for only then, after a
+  plain-language explanation; refused for good, a dialog says where in
+  Settings to allow it. `VoiceRecordingController` (owned by the view model,
+  so a rotation keeps recording) opens the microphone with a 3 s countdown on
+  screen, then plays the preview from the playhead with its sound off
+  (`LayeredPreviewEngine.monitorGain`, so nothing goes back into the
+  microphone; the export is unchanged). It reads the preview's position every
+  8 ms until the picture has moved, and `RecordingSync` works out the moment
+  the first picture showed (the median over a dozen readings); the
+  microphone's capture timestamps (`AudioRecord.getTimestamp`, or the arrival
+  times when there are none) give the frame captured then, and
+  `VoiceRecorder` drops every frame before it, plus the AAC encoder's 2048
+  frames of priming (46 ms at 44.1 kHz), which players decode as silence at
+  the start. The recording ends at Stop, Back, the end of the video, a
+  preview that is moved or held up for more than 3 s, a phone call taking the
+  microphone, or the app going to the background, and keeps what was said
+  up to then. While it runs the panel shows the time, a large Stop and
+  Cancel, and the rest of the editor takes no touches. The clip goes at the
+  playhead, never moved in time, on the voice row it was asked from when it
+  is free, else the first free voice row, else a new one (`addRecording`),
+  as one undo step. The file is `voice-<token>.m4a` (mono AAC-LC, 96 kbit/s)
+  in the project's own media folder, written as `.part` and renamed when
+  complete; `VoiceRecordings.sweepUnused` removes recordings the video no
+  longer plays when the editor opens or leaves it (no undo can bring them
+  back then), never while an export runs. The sync is checked by
+  `VoiceRecorderSyncTest` (a click 1 s after the picture is 1 s into the
+  file) and by hand with `RecordVoiceRealCheck` (`-e cm.recordsync true`),
+  which records over real clips through the editor and exports.
 - **Fit with blur.** The export blurs the background with a separable
   Gaussian at an eighth of the window (`BlurPasses`, two passes before
   `PlacementEffect`'s own); the preview draws the picture shrunk and stretched

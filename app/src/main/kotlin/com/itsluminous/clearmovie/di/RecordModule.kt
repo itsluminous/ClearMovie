@@ -1,6 +1,8 @@
 package com.itsluminous.clearmovie.di
 
 import android.content.Context
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.work.WorkManager
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.record.AudioRecordMic
@@ -25,6 +27,7 @@ object RecordModule {
     @Volatile
     var testMics: MicSources? = null
 
+    @OptIn(UnstableApi::class)
     @Provides
     @Singleton
     fun provideVoiceRecordings(

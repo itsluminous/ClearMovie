@@ -133,6 +133,7 @@ What has shipped, and what is still to come:
 - [x] Photo duration
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
 - [x] Audio overlay with volume, fade and automatic ducking
+- [x] Record voice: speak over the video as it plays, lined up with the picture (done on `main`, ships in 0.0.2)
 - [x] Captions with preset defaults, drag-to-place, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
 - [x] Preview that shrinks, or floats as a small window, when all rows need room
@@ -155,6 +156,9 @@ What has shipped, and what is still to come:
 - **Your media stays put.** Photos and videos are read from your gallery where they are.
   The only files copied into the app are your preset files, and items the gallery can't
   share permanently.
+- **The microphone only when you record.** It is asked for the first time you tap
+  Record voice, used only while the recording panel shows, and recordings stay
+  inside the app.
 - **No proprietary dependencies.** It is built on AndroidX and Jetpack Media3, with no Firebase or Play Services.
 - **No watermarks.**
 

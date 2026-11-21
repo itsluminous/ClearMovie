@@ -219,7 +219,8 @@ internal fun RecordingPanel(
                         )
                     }
                     Text(
-                        durationText(ui.elapsedMs / 1000 * 1_000_000),
+                        // Rounded as the playhead's time is, so the two read alike.
+                        durationText(ui.elapsedMs * 1000),
                         style = MaterialTheme.typography.displayMedium,
                     )
                     Text(

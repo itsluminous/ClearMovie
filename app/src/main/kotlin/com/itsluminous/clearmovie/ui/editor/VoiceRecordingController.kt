@@ -1,6 +1,7 @@
 package com.itsluminous.clearmovie.ui.editor
 
 import androidx.annotation.OptIn
+import androidx.annotation.VisibleForTesting
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.data.record.VoiceRecorder
 import com.itsluminous.clearmovie.data.record.VoiceRecordings
@@ -153,6 +154,7 @@ internal class VoiceRecordingController(
                 while (isActive) {
                     val now = nanoTime()
                     val sample = RecordingSync.Sample(now, engine.positionUs)
+                    onSample?.invoke(sample.wallNs, sample.positionUs)
                     var start = pictureStartNs
                     if (start == null) {
                         samples += sample
@@ -259,6 +261,11 @@ internal class VoiceRecordingController(
     }
 
     companion object {
+        /** Tests only: each reading of the preview while recording (the moment, and the video's time then). */
+        @VisibleForTesting
+        @Volatile
+        var onSample: ((wallNs: Long, positionUs: Long) -> Unit)? = null
+
         const val COUNTDOWN_S = 3
         private const val SECOND_MS = 1000L
 

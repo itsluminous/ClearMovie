@@ -484,7 +484,7 @@
     <string name="record_countdown_body">रिकॉर्डिंग %1$s से शुरू होगी। आपके बोलते समय वीडियो की अपनी आवाज़ बंद रहेगी।</string>
     <string name="record_recording">रिकॉर्ड हो रहा है</string>
     <string name="record_progress">%1$s से शुरू। वीडियो का %2$s बाकी।</string>
-    <string name="record_stop">रोकें</string>
+    <string name="record_stop">रिकॉर्डिंग रोकें</string>
     <string name="record_saving">रिकॉर्डिंग सेव हो रही है</string>
     <string name="mic_title">माइक्रोफ़ोन इस्तेमाल करें?</string>
     <string name="mic_body">ClearMovie आपकी आवाज़ तभी रिकॉर्ड करता है जब इस स्क्रीन पर \"रिकॉर्ड हो रहा है\" लिखा हो। रिकॉर्डिंग इसी फ़ोन पर, ClearMovie के अंदर रहती है।</string>

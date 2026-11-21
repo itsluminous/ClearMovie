@@ -371,6 +371,6 @@ class VoiceRecorder(
          * later, so the words still land on their picture. Measured on the
          * export (see docs/architecture.md, Voice recording).
          */
-        const val ENCODER_DELAY_FRAMES = 0L
+        const val ENCODER_DELAY_FRAMES = 2048L
     }
 }

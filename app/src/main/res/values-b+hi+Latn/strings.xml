@@ -492,7 +492,7 @@
     <string name="record_countdown_body">Recording %1$s se shuru hogi. Aapke bolte samay video ki apni awaaz band rahegi.</string>
     <string name="record_recording">Recording ho rahi hai</string>
     <string name="record_progress">%1$s se shuru. Video ka %2$s baaki.</string>
-    <string name="record_stop">Stop karein</string>
+    <string name="record_stop">Recording rokein</string>
     <string name="record_saving">Recording save ho rahi hai</string>
     <string name="mic_title">Microphone use karein?</string>
     <string name="mic_body">ClearMovie aapki awaaz tabhi record karta hai jab is screen par \"Recording ho rahi hai\" likha ho. Recording isi phone par, ClearMovie ke andar rehti hai.</string>
