@@ -137,4 +137,16 @@ class RectDragTest {
         assertThat(RectDrag.handlePoint(r, RectGrip.BOTTOM).first).isWithin(1e-9).of(0.5)
         assertThat(RectDrag.handlePoint(r, RectGrip.BOTTOM).second).isWithin(1e-9).of(0.6)
     }
+
+    @Test
+    fun `a handle kept in from the picture's edge is held by its dot, even on a thin box`() {
+        // 500 x 40 px near the bottom of the picture (450..490): the bottom handle's dot is drawn at 464, inside the box.
+        val thin = NormRect(0.25, 0.9, 0.5, 0.08)
+        val hs = handles(thin)
+        val (bx, by) = RectDrag.handlePx(thin, RectGrip.BOTTOM, w, h, 36f)
+        assertThat(by).isWithin(0.01f).of(h - 36f)
+        assertThat(RectDrag.gripAt(thin, hs, bx, by + 4f, w, h, reach, bodyMin, insetPx = 36f, dotPx = 36f)).isEqualTo(RectGrip.BOTTOM)
+        // Its middle, away from the dots, still moves it.
+        assertThat(RectDrag.gripAt(thin, hs, 350f, 470f, w, h, reach, bodyMin, insetPx = 36f, dotPx = 36f)).isEqualTo(RectGrip.BODY)
+    }
 }

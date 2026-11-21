@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -690,7 +691,8 @@ private fun ColumnScope.CaptionStyleEditor(
             CaptionPlaces.safeArea(frameWindow, usual, shape.aspect),
             CaptionPlaces.safeArea(frameWindow, null, shape.aspect),
         )
-    val restyle: (CaptionStyle) -> Unit = { onStyle(fit(style, it)) }
+    val latestStyle by rememberUpdatedState(style)
+    val restyle: (CaptionStyle) -> Unit = { onStyle(fit(latestStyle, it)) }
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
         when (tab) {
             CaptionTab.WORDS -> {
@@ -716,8 +718,9 @@ private fun ColumnScope.CaptionStyleEditor(
                         refitBox(preset.caption.box, preset.shape, LocalCanvasShape.current),
                         LocalCanvasShape.current.aspect,
                     ),
-                    onStyle,
+                    restyle,
                     PRESET_PLACES,
+                    inner = CaptionPlaces.safeArea(frameWindow, null, shape.aspect),
                 )
             }
 

@@ -96,6 +96,7 @@ import com.itsluminous.clearmovie.domain.model.deleteClip
 import com.itsluminous.clearmovie.domain.model.setCaptionStyle
 import com.itsluminous.clearmovie.domain.model.setText
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
+import com.itsluminous.clearmovie.render.media3.CaptionBitmapRenderer
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
 import com.itsluminous.clearmovie.ui.components.MoreBelow
@@ -106,6 +107,7 @@ import com.itsluminous.clearmovie.ui.components.labelFits
 import com.itsluminous.clearmovie.ui.components.rememberLabelLines
 import com.itsluminous.clearmovie.ui.preset.PresetNames
 import java.util.Locale
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 // The caption editor (cm-captions, ARCHITECTURE section 11.1): the panel and
@@ -311,8 +313,10 @@ internal fun ColumnScope.CaptionPanel(
             CaptionPlaces.safeArea(window, null, aspect),
         )
 
+    val latestStyle by rememberUpdatedState(style)
+
     fun restyle(wanted: CaptionStyle) {
-        val fitted = fit(style, wanted)
+        val fitted = fit(latestStyle, wanted)
         callbacks.editMerged(key) { setCaptionStyle(caption.id, CaptionStyleOverride.between(defaults, fitted)) }
     }
     // The caption as the visit found it, kept with the editor screen's state (so a rotation that moves this
@@ -359,8 +363,9 @@ internal fun ColumnScope.CaptionPanel(
                         PlaceTab(
                             style,
                             defaults.box,
-                            CaptionPlaces.safeArea(window, defaults.box, LocalCanvasShape.current.aspect),
+                            CaptionPlaces.safeArea(window, defaults.box, aspect),
                             ::restyle,
+                            inner = CaptionPlaces.safeArea(window, null, aspect),
                         )
                     }
 
@@ -392,9 +397,10 @@ internal fun ColumnScope.CaptionPanel(
 
 /**
  * The style after a change from [old] to [wanted]: when the change makes the
- * words bigger (size, font or outline), its box grows to hold [words] at
- * their size, the way a resize does (cm-caption-box); otherwise [wanted] as
- * it is. [usual], [safe] and [inner] are as for [CaptionBoxDrag].
+ * words bigger (size, font or outline) or puts the box elsewhere (a Place
+ * chip), its box grows to hold [words] at their size, the way a resize does
+ * (cm-caption-box); otherwise [wanted] as it is. It only grows: a box the
+ * user made taller stays so. [usual], [safe] and [inner] are as for [CaptionBoxDrag].
  */
 @Composable
 internal fun rememberCaptionFit(
@@ -409,7 +415,8 @@ internal fun rememberCaptionFit(
         { old, wanted ->
             val bigger =
                 wanted.sizePx != old.sizePx || wanted.font != old.font || wanted.outline?.widthPx != old.outline?.widthPx
-            if (!bigger || wanted.box != old.box) {
+            // Bigger words, or a box put somewhere else (a Place chip): the box holds the words at their size.
+            if (!bigger && wanted.box == old.box) {
                 wanted
             } else {
                 val need = renderer.boxHeightFor(latestWords, wanted, wanted.box.w)
@@ -624,15 +631,17 @@ internal fun PlaceTab(
     safe: NormRect,
     restyle: (CaptionStyle) -> Unit,
     places: List<CaptionPlace> = CaptionPlace.entries,
+    inner: NormRect = safe,
 ) {
     // A place that gives the same box as an earlier one (Bottom when the preset's own place is at the bottom)
     // is left out, so no two chips do the same thing.
     val places =
         places.distinctBy { place ->
             // Compared as stored (to 1/10000 of the canvas), so a preset box with more digits still matches.
-            CaptionPlaces.box(place, usual, safe, style.box).let { b -> listOf(b.x, b.y, b.w, b.h).map { Math.round(it * 10000) } }
+            // At the preset's own size, so the chips shown stay the same whatever the caption's size.
+            CaptionPlaces.box(place, usual, safe, usual, inner).let { b -> listOf(b.x, b.y, b.w, b.h).map { Math.round(it * 10000) } }
         }
-    val current = CaptionPlaces.placeOf(style.box, usual, safe, places)
+    val current = CaptionPlaces.placeOf(style.box, usual, safe, places, inner)
     // Across when every name fits its chip; two by two otherwise, so no name is ever cut short.
     val labels = places.map { stringResource(placeLabel(it)) }
     val measurer = rememberTextMeasurer()
@@ -653,7 +662,7 @@ internal fun PlaceTab(
                         val label = labels[places.indexOf(place)]
                         FilterChip(
                             selected = place == current,
-                            onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe, style.box))) },
+                            onClick = { restyle(style.copy(box = CaptionPlaces.box(place, usual, safe, style.box, inner))) },
                             label = {
                                 AutoSizeLabel(
                                     label,
@@ -1000,7 +1009,10 @@ internal fun CaptionBoxDrag(
     val move by rememberUpdatedState(onBox)
     val end by rememberUpdatedState(onDragEnd)
     var start by remember { mutableStateOf<NormRect?>(null) }
+    var held by remember { mutableStateOf<RectGrip?>(null) }
     var bounds by remember { mutableStateOf(safe) }
+    // The narrowest the box may go in this drag, worked out once for the box it started from.
+    var narrowest by remember { mutableStateOf<Pair<NormRect, Double>?>(null) }
     var snapped by remember { mutableStateOf(false) }
     val description = stringResource(R.string.caption_box_description)
     val wider = stringResource(R.string.caption_box_wider)
@@ -1012,6 +1024,8 @@ internal fun CaptionBoxDrag(
     // The words' height at a width, kept while the words and style stay (a drag asks once per pixel of width).
     val heights = remember(words, style.sizePx, style.font, style.outline, renderer) { HashMap<Long, Double>() }
 
+    fun need(w: Double): Double = heights.getOrPut(Math.round(w * 10_000)) { renderer.boxHeightFor(words, latest, w) }
+
     fun change(
         from: NormRect,
         grip: RectGrip,
@@ -1021,10 +1035,18 @@ internal fun CaptionBoxDrag(
         val area = CaptionPlaces.dragBounds(from, grip, inner, safe, usual)
         bounds = area
         if (grip == RectGrip.BODY) return CaptionPlaces.dragged(from, dx, dy, area, usual)
-        val minW = CaptionPlaces.minWidth(latest.sizePx, shape)
-        return CaptionPlaces.resized(from, grip, dx, dy, area, usual, minW) { w ->
-            heights.getOrPut(Math.round(w * 10_000)) { renderer.boxHeightFor(words, latest, w) }
-        }
+        val minW =
+            narrowest?.takeIf { it.first == from }?.second ?: run {
+                // Never so narrow that the words, drawn as small as a caption gets, no longer fit (on the strip).
+                val smallest = latest.copy(sizePx = ceil(latest.sizePx * CaptionBitmapRenderer.MIN_FIT).toInt())
+                val m =
+                    CaptionPlaces.narrowestFitting(CaptionPlaces.minWidth(latest.sizePx, shape), from.w, area.h) { w ->
+                        renderer.boxHeightFor(words, smallest, w)
+                    }
+                narrowest = from to m
+                m
+            }
+        return CaptionPlaces.resized(from, grip, dx, dy, area, usual, minW) { w -> need(w) }
     }
 
     /** Wider or narrower by [step] of the canvas, both sides alike: for TalkBack, which cannot drag. */
@@ -1094,12 +1116,21 @@ internal fun CaptionBoxDrag(
             enabled = draggable,
             dashed = true,
             gestureKey = dragKey,
+            vertical = CaptionPlaces.dragBounds(box, RectGrip.BOTTOM, inner, safe, usual).h > box.h + 1e-4,
             onDragStart = {
                 start = latest.box
+                held = it
                 snapped = false
             },
             onDragEnd = {
+                // Moved somewhere with more room (off the strip into the picture): the box holds its words again.
+                if (held == RectGrip.BODY && start != null) {
+                    val b = latest.box
+                    val grown = CaptionPlaces.grown(b, need(b.w), CaptionPlaces.dragBounds(b, RectGrip.BOTTOM, inner, safe, usual))
+                    if (grown != b) move(grown)
+                }
                 start = null
+                held = null
                 snapped = false
                 end()
             },

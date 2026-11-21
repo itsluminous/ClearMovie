@@ -70,26 +70,65 @@ object CaptionPlaces {
 
     /**
      * The box for [place]: the preset's [usual] box itself, or a box the size of [current] (the caption's
-     * own, so a box the user resized keeps its size; the preset's by default) moved into [safe], at the
-     * preset box's left edge where it fits.
+     * own, so a box the user resized keeps its size; the preset's by default) moved to the top, middle or
+     * bottom of [safe], keeping its left edge where it fits. With [inner], the frame window's own safe
+     * area (cm-caption-box): when the preset's place is on the frame's strip, a box that is not the strip's
+     * size goes to the top, middle or bottom of the picture instead ([dragBounds]), so it never straddles
+     * the strip and the photo.
      */
     fun box(
         place: CaptionPlace,
         usual: NormRect,
         safe: NormRect,
         current: NormRect = usual,
+        inner: NormRect = safe,
     ): NormRect {
         if (place == CaptionPlace.USUAL) return usual
-        val w = minOf(current.w, safe.w)
-        val h = minOf(current.h, safe.h)
-        val x = usual.x.coerceIn(safe.x, maxOf(safe.x, safe.x + safe.w - w))
+        val onStrip = !within(usual, inner)
+        val fitsStrip = current.w <= safe.w + TOLERANCE && current.h <= usual.h + TOLERANCE
+        val area = if (onStrip && !fitsStrip) picture(inner, safe) else safe
+        val w = minOf(current.w, area.w)
+        val h = minOf(current.h, area.h)
+        val x = current.x.coerceIn(area.x, maxOf(area.x, area.x + area.w - w))
         val y =
             when (place) {
-                CaptionPlace.TOP -> safe.y
-                CaptionPlace.MIDDLE -> safe.y + (safe.h - h) / 2
-                else -> safe.y + safe.h - h
+                CaptionPlace.TOP -> area.y
+                CaptionPlace.MIDDLE -> area.y + (area.h - h) / 2
+                else -> area.y + area.h - h
             }
         return NormRect(x, y, w, h).rounded()
+    }
+
+    /** The picture a caption may be resized in: [inner]'s height, across it and the strip's band ([safe]). */
+    private fun picture(
+        inner: NormRect,
+        safe: NormRect,
+    ): NormRect {
+        val left = minOf(inner.x, safe.x)
+        val right = maxOf(inner.x + inner.w, safe.x + safe.w)
+        return NormRect(left, inner.y, right - left, inner.h)
+    }
+
+    /**
+     * The narrowest width from [from] up to [to] at which the words still fit in [room] of height when
+     * drawn as small as a caption is drawn to fit ([shrunkNeed], their height at that size, in units of
+     * the canvas height): narrowing a caption past it would cut words off. [from] when they fit there.
+     */
+    fun narrowestFitting(
+        from: Double,
+        to: Double,
+        room: Double,
+        shrunkNeed: (w: Double) -> Double,
+    ): Double {
+        if (to <= from || shrunkNeed(from) <= room + TOLERANCE) return from
+        if (shrunkNeed(to) > room + TOLERANCE) return to
+        var lo = from
+        var hi = to
+        repeat(14) {
+            val mid = (lo + hi) / 2
+            if (shrunkNeed(mid) <= room + TOLERANCE) hi = mid else lo = mid
+        }
+        return Math.ceil(hi * PRECISION) / PRECISION
     }
 
     /** The place among [places] that [box] is at, or null when it was dragged somewhere else. */
@@ -98,7 +137,8 @@ object CaptionPlaces {
         usual: NormRect,
         safe: NormRect,
         places: List<CaptionPlace> = CaptionPlace.entries,
-    ): CaptionPlace? = places.firstOrNull { same(box(it, usual, safe, box), box) }
+        inner: NormRect = safe,
+    ): CaptionPlace? = places.firstOrNull { same(box(it, usual, safe, box, inner), box) }
 
     /**
      * [start] moved by ([dx], [dy]) and kept inside [safe] (a box larger than
@@ -144,6 +184,7 @@ object CaptionPlaces {
     ): NormRect {
         if (box.h >= need - TOLERANCE) return box
         val h = minOf(need, maxOf(box.h, bounds.h))
+        if (h <= box.h + TOLERANCE) return box
         val top = (box.y + box.h / 2 - h / 2).coerceIn(minOf(bounds.y, box.y), maxOf(bounds.y, bounds.y + bounds.h - h))
         return NormRect(box.x, top, box.w, h).rounded()
     }
@@ -170,9 +211,7 @@ object CaptionPlaces {
         usual: NormRect? = null,
     ): NormRect {
         // The picture: the window's height, and its width joined with the strip's (which may reach a little further).
-        val left = minOf(inner.x, safe.x)
-        val right = maxOf(inner.x + inner.w, safe.x + safe.w)
-        val picture = NormRect(left, inner.y, right - left, inner.h)
+        val picture = picture(inner, safe)
         if (grip == RectGrip.BODY) {
             // Compared as stored (to 1/10000 of the canvas), as boxes are.
             val acrossStrip = box.x >= safe.x - TOLERANCE && box.x + box.w <= safe.x + safe.w + TOLERANCE

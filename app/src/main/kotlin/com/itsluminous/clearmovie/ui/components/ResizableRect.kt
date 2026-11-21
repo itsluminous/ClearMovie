@@ -148,8 +148,10 @@ object RectDrag {
 
     /**
      * What a touch at ([xPx], [yPx]) on a picture [widthPx] x [heightPx]
-     * holds. The middle of [r] (all but [reachPx], or a quarter, from each
-     * side) always moves it, so a thin box is still moved by its middle; then
+     * holds. A touch on a handle's drawn dot (within [dotPx] of its centre)
+     * holds that handle. Then the middle of [r] (all but [reachPx], or a
+     * quarter, from each side) moves it, so a thin box is still moved by its
+     * middle; then
      * the nearest of [handles] within [reachPx]; then the body when the touch
      * is on [r] (at least [bodyMinPx] each way, centred); else nothing, so the
      * touch is left to whatever is under the picture.
@@ -164,7 +166,15 @@ object RectDrag {
         reachPx: Float,
         bodyMinPx: Float,
         insetPx: Float = 0f,
+        dotPx: Float = 0f,
     ): RectGrip? {
+        val near =
+            handles
+                .map { g ->
+                    val (hx, hy) = handlePx(r, g, widthPx, heightPx, insetPx)
+                    g to hypot((hx - xPx).toDouble(), (hy - yPx).toDouble())
+                }.sortedBy { it.second }
+        near.firstOrNull()?.takeIf { it.second <= dotPx }?.let { return it.first }
         val l = r.x * widthPx
         val t = r.y * heightPx
         val w = r.w * widthPx
@@ -172,13 +182,7 @@ object RectDrag {
         val insetX = minOf(reachPx.toDouble(), w / 4)
         val insetY = minOf(reachPx.toDouble(), h / 4)
         if (xPx > l + insetX && xPx < l + w - insetX && yPx > t + insetY && yPx < t + h - insetY) return RectGrip.BODY
-        handles
-            .map { g ->
-                val (hx, hy) = handlePx(r, g, widthPx, heightPx, insetPx)
-                g to hypot((hx - xPx).toDouble(), (hy - yPx).toDouble())
-            }.filter { it.second <= reachPx }
-            .minByOrNull { it.second }
-            ?.let { return it.first }
+        near.firstOrNull()?.takeIf { it.second <= reachPx }?.let { return it.first }
         val padX = ((bodyMinPx - w) / 2).coerceAtLeast(0.0)
         val padY = ((bodyMinPx - h) / 2).coerceAtLeast(0.0)
         val inside = xPx >= l - padX && xPx <= l + w + padX && yPx >= t - padY && yPx <= t + h + padY
@@ -265,7 +269,9 @@ object RectDrag {
  * down, in normalised units; the caller works out the new rectangle from the
  * one the drag started on, so clamping never drifts. [onDragEnd] follows
  * every drag, finished or cancelled. Without [enabled] only the outline
- * shows. [corners] and [edges] choose the kinds of handle offered.
+ * shows. [corners] and [edges] choose the kinds of handle offered; without
+ * [vertical] only the handles that change the width (left, right and the
+ * corners) are offered, for a box whose height cannot change.
  */
 @Composable
 fun ResizableRect(
@@ -274,6 +280,7 @@ fun ResizableRect(
     enabled: Boolean = true,
     corners: Boolean = true,
     edges: Boolean = true,
+    vertical: Boolean = true,
     dashed: Boolean = false,
     gestureKey: Any? = null,
     onDragStart: (RectGrip) -> Unit = {},
@@ -295,7 +302,9 @@ fun ResizableRect(
         val middleRoom = with(density) { RectDrag.MIDDLE_ROOM.toPx() }
         val inset = with(density) { RectDrag.EDGE_INSET.toPx() }
         val shown =
-            RectDrag.handles((rect.w * widthPx).toFloat(), (rect.h * heightPx).toFloat(), cornerRoom, edgeRoom, corners, edges, middleRoom)
+            RectDrag
+                .handles((rect.w * widthPx).toFloat(), (rect.h * heightPx).toFloat(), cornerRoom, edgeRoom, corners, edges, middleRoom)
+                .filter { vertical || it.left || it.right }
         val latestHandles by rememberUpdatedState(shown)
         val latestW by rememberUpdatedState(widthPx)
         val latestH by rememberUpdatedState(heightPx)
@@ -334,6 +343,8 @@ fun ResizableRect(
             }
             val reach = with(density) { RectDrag.REACH.toPx() }
             val bodyMin = with(density) { RectDrag.BODY_MIN.toPx() }
+            // A touch on a drawn handle (its dot and a little around it) is always that handle.
+            val dotReach = with(density) { HANDLE_DOT.toPx() }
             Box(
                 Modifier.fillMaxSize().pointerInput(gestureKey) {
                     awaitEachGesture {
@@ -349,6 +360,7 @@ fun ResizableRect(
                                 reach,
                                 bodyMin,
                                 inset,
+                                dotReach,
                             ) ?: return@awaitEachGesture
                         var total = Offset.Zero
                         val first =

@@ -286,4 +286,31 @@ class CaptionPlacesTest {
         // Moving it is still free to go up into the picture.
         assertThat(CaptionPlaces.dragBounds(narrow, RectGrip.BODY, inner, band, strip)).isEqualTo(band)
     }
+
+    @Test
+    fun `on the strip a place keeps a strip-sized box there, and puts a bigger one in the picture`() {
+        val strip = NormRect(0.15, 0.7981, 0.83, 0.1222)
+        val band = CaptionPlaces.safeArea(window, strip)
+        val inner = CaptionPlaces.safeArea(window)
+        val wide = NormRect(0.03, 0.3, 0.9, 0.2)
+        val bottom = CaptionPlaces.box(CaptionPlace.BOTTOM, strip, band, wide, inner)
+        assertThat(bottom.w).isWithin(2e-4).of(0.9)
+        assertThat(bottom.y + bottom.h).isWithin(2e-4).of(inner.y + inner.h)
+        assertThat(bottom.x).isWithin(2e-4).of(0.03)
+        // The strip's own size stays on the strip at Bottom, as before.
+        val own = CaptionPlaces.box(CaptionPlace.BOTTOM, strip, band, strip, inner)
+        assertThat(own.y + own.h).isWithin(2e-4).of(band.y + band.h)
+        assertThat(CaptionPlaces.placeOf(bottom, strip, band, inner = inner)).isEqualTo(CaptionPlace.BOTTOM)
+    }
+
+    @Test
+    fun `the narrowest width keeps the words in the room when drawn smallest`() {
+        // Half-size words need half the lines: 0.35 of the width a line, 0.05 a line.
+        val shrunk = { w: Double -> Math.ceil(0.35 / w - 1e-9) * 0.05 }
+        val n = CaptionPlaces.narrowestFitting(0.1, 0.8, 0.1, shrunk)
+        assertThat(n).isWithin(2e-4).of(0.175)
+        assertThat(shrunk(n)).isAtMost(0.1 + 1e-9)
+        assertThat(CaptionPlaces.narrowestFitting(0.1, 0.8, 1.0, shrunk)).isEqualTo(0.1)
+        assertThat(CaptionPlaces.narrowestFitting(0.1, 0.3, 0.01, shrunk)).isEqualTo(0.3)
+    }
 }

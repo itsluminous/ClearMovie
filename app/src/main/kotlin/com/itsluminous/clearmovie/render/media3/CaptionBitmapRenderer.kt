@@ -105,7 +105,8 @@ class CaptionBitmapRenderer(
         style: CaptionStyle,
         w: Double,
     ): Double {
-        val layoutWidth = max(1, (w * logicalCanvasWidth - 2 * PADDING_PX).toInt())
+        // Worked out exactly as drawText does it (in Float), so both wrap at the same width.
+        val layoutWidth = max(1, ((w * logicalCanvasWidth).toFloat() - 2 * PADDING_PX.toFloat()).toInt())
         val paint = textPaint(style).apply { textSize = style.sizePx.toFloat() }
         val outline = style.outline?.takeIf { it.widthPx > 0 }?.widthPx ?: 0
         val needed = layout(text, paint, layoutWidth, style).height + 2 * PADDING_PX + 2 * outline + FIT_SLACK_PX
