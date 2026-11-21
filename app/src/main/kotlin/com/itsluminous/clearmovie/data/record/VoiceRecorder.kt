@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.data.record
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.util.Log
@@ -39,7 +40,12 @@ class VoiceRecorder(
         /** How the capture timestamps were known: from the microphone, or estimated from arrival times. */
         val timestamps: String,
     ) {
-        val durationMs: Long get() = RecordingSync.msOf(frames, sampleRate)
+        /**
+         * How long the file plays for what was recorded: its frames, and the
+         * encoder's priming in front of them (which stands for the frames
+         * dropped at the start, so the last words are not cut off).
+         */
+        val durationMs: Long get() = if (frames <= 0) 0 else RecordingSync.msOf(frames + ENCODER_DELAY_FRAMES, sampleRate)
     }
 
     @Volatile
@@ -189,11 +195,12 @@ class VoiceRecorder(
             }
             ok = encoder.close()
         } catch (e: IOException) {
-            Log.w(TAG, "Recording failed", e)
+            // The kind only: the message can name the app's private file.
+            Log.w(TAG, "Recording failed: ${e.javaClass.simpleName}")
         } catch (e: IllegalStateException) {
-            Log.w(TAG, "Recording failed", e)
+            Log.w(TAG, "Recording failed: ${e.javaClass.simpleName}")
         } catch (e: MediaCodec.CodecException) {
-            Log.w(TAG, "Recording failed", e)
+            Log.w(TAG, "Recording failed: ${e.javaClass.simpleName}")
         } finally {
             encoder.release()
             mic.release()
@@ -251,8 +258,18 @@ class VoiceRecorder(
                 }
             file.parentFile?.mkdirs()
             muxer = MediaMuxer(file.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            // Android's own AAC encoder, whose priming (ENCODER_DELAY_FRAMES) is known; another only if it is missing.
+            val name = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.firstOrNull { it.isEncoder && it.name in KNOWN_ENCODERS }?.name
             codec =
-                MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC).apply {
+                (
+                    if (name !=
+                        null
+                    ) {
+                        MediaCodec.createByCodecName(name)
+                    } else {
+                        MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+                    }
+                ).apply {
                     configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                     start()
                 }
@@ -362,7 +379,7 @@ class VoiceRecorder(
         private const val BIT_RATE = 96_000
         private const val TIMEOUT_US = 10_000L
         private const val EOS_TRIES = 200
-        private const val JOIN_MS = 5_000L
+        private const val JOIN_MS = 3_000L
         private const val LATE_STOP_NS = 1_500_000_000L
 
         /**
@@ -372,5 +389,8 @@ class VoiceRecorder(
          * export (see docs/architecture.md, Voice recording).
          */
         const val ENCODER_DELAY_FRAMES = 2048L
+
+        /** Android's software AAC encoder (Codec2, then the older OMX name), which every phone has. */
+        private val KNOWN_ENCODERS = setOf("c2.android.aac.encoder", "OMX.google.aac.encoder")
     }
 }

@@ -178,17 +178,19 @@ internal fun TimedInsertPanel(
             ) {
                 pick()
             }
-            // A voice row can also record one (cm-record-voice), from the playhead, where the video will play from.
+            // A voice row can also record one (cm-record-voice): from the playhead, or, at a "+" after an item, from
+            // that item's end, as the other things put there go; the video plays from there while it records.
             if (track.audioRole == AudioRole.VOICE && track.presetRole == null) {
+                val from = if (anchor != null && side == InsertSide.AFTER) anchor.endMs else playheadMs
                 Choice(
                     stringResource(R.string.record_voice),
-                    stringResource(R.string.record_voice_body, durationText(playheadMs * 1000)),
+                    stringResource(R.string.record_voice_body, durationText(from * 1000)),
                     null,
                     R.drawable.ic_record_voice,
                     insertOptionTag(RECORD_OPTION),
                 ) {
                     onPanel(null)
-                    callbacks.recordVoice(track.id, playheadMs)
+                    callbacks.recordVoice(track.id, from)
                 }
             }
         }

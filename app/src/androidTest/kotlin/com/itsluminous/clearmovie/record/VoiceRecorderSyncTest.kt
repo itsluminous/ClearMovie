@@ -35,8 +35,8 @@ class VoiceRecorderSyncTest {
         assertThat(result.ok).isTrue()
         assertThat(result.timestamps).isEqualTo("microphone")
         assertThat(mic.released).isTrue()
-        // What was recorded up to the stop, and nothing after it.
-        assertThat(abs(result.durationMs - 2_000)).isAtMost(30)
+        // What was recorded up to the stop (the file plays it after the encoder's priming), and nothing after it.
+        assertThat(abs(result.durationMs - 2_000 - VoiceRecorder.ENCODER_DELAY_FRAMES * 1000 / 44_100)).isAtMost(30)
 
         val pcm = RenderHarness.decodeAudio(file)
         val onset = pcm.mono.indexOfFirst { abs(it) > 0.3f }

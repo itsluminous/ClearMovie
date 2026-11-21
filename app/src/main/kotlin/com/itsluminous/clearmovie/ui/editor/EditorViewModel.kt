@@ -355,7 +355,8 @@ class EditorViewModel
                     delay(SAVE_POSITION_MS)
                     if (engine.schedule != null) {
                         savedState[KEY_POSITION] = engine.positionUs
-                        savedState[KEY_PLAYING] = engine.isPlaying
+                        // A recording is not brought back after a process death: neither is its playing.
+                        savedState[KEY_PLAYING] = engine.isPlaying && !voice.active
                     }
                 }
             }

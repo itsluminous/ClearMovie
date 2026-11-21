@@ -150,6 +150,10 @@ import kotlin.math.sqrt
 
 /** Test tags. */
 const val EDITOR_TIMELINE_TAG = "editor_timeline"
+
+/** How the parts of the editor out of use while a voice is recorded are dimmed (Material's disabled level, and lighter for the timeline). */
+private const val LOCKED_ALPHA = 0.38f
+private const val LOCKED_TIMELINE_ALPHA = 0.6f
 const val EDITOR_EXPORT_TAG = "editor_export"
 const val EDITOR_PREVIEW_BOX_TAG = "editor_preview_box"
 const val EDITOR_POPUP_TAG = "editor_preview_popup"
@@ -219,7 +223,9 @@ fun EditorScreen(
 ) {
     val project = ui.project
     // While a voice is recorded (cm-record-voice) its panel takes the bar's place, and the rest stays in sight but takes no touches.
-    val lock = if (recording != null) Modifier.lockedForRecording() else Modifier
+    val lock = if (recording != null) Modifier.lockedForRecording(LOCKED_ALPHA) else Modifier
+    // The timeline less so: the playhead running along the rows stays easy to follow.
+    val lockTimeline = if (recording != null) Modifier.lockedForRecording(LOCKED_TIMELINE_ALPHA) else Modifier
     val slots = ui.slots
     // The preview's shape follows the video's (cm-aspect-ratio).
     val canvasAspect = (project?.shape ?: CanvasShape.LANDSCAPE).aspect.toFloat()
@@ -641,7 +647,7 @@ fun EditorScreen(
             val hidden = rows.filter { it.key in layout?.hiddenRows.orEmpty() }
 
             val timeline: @Composable (Modifier) -> Unit = { m ->
-                Column(m.testTag(EDITOR_TIMELINE_TAG).then(lock)) {
+                Column(m.testTag(EDITOR_TIMELINE_TAG).then(lockTimeline)) {
                     Banners(ui, actions::fixPreset)
                     if (!ui.hasContent) EmptyHint(actions::pickToAdd)
                     TimelineView(

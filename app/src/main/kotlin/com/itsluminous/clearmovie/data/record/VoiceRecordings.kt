@@ -24,6 +24,7 @@ class VoiceRecordings(
     /** True while an export may still be reading this video's files: nothing is removed then. */
     private val exportBusy: () -> Boolean,
     private val random: SecureRandom = SecureRandom(),
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
     /** A recording being made: [part] is written, [ref] names the finished file. */
     data class Pending(
@@ -57,7 +58,8 @@ class VoiceRecordings(
 
     /**
      * Removes the recordings in [project]'s folder that it no longer plays,
-     * and any recording left half-written (an app killed while recording).
+     * and any recording left half-written (an app killed while recording,
+     * so its part file is over [PART_AGE_MS] old).
      * Only files named as recordings are touched; nothing at all while an
      * export is running. Returns how many went.
      */
@@ -69,9 +71,14 @@ class VoiceRecordings(
         var removed = 0
         for (name in names) {
             val recording = VoiceRecordingFiles.isRecording(name)
-            val half = name.endsWith(AppFiles.PART) && VoiceRecordingFiles.isRecording(name.removeSuffix(AppFiles.PART))
+            val file = File(dir, name)
+            // A part file still being written (a recording just started) is young: only an old one is left over.
+            val half =
+                name.endsWith(AppFiles.PART) &&
+                    VoiceRecordingFiles.isRecording(name.removeSuffix(AppFiles.PART)) &&
+                    now() - file.lastModified() > PART_AGE_MS
             if ((recording && name !in inUse) || half) {
-                if (File(dir, name).delete()) removed++
+                if (file.delete()) removed++
             }
         }
         return removed
@@ -79,6 +86,9 @@ class VoiceRecordings(
 
     private companion object {
         const val TOKEN_LENGTH = 16
+
+        /** A recording's part file older than this was left by an app that was stopped while recording. */
+        const val PART_AGE_MS = 10L * 60 * 1000
         const val ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
     }
 }

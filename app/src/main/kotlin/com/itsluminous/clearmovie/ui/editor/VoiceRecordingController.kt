@@ -105,6 +105,9 @@ internal class VoiceRecordingController(
     private val samples = mutableListOf<RecordingSync.Sample>()
     private var pictureStartNs: Long? = null
 
+    /** When Play was asked for: the start used if the picture never shows moving (a part that can't be played). */
+    private var playAskedNs: Long? = null
+
     /** Starts a recording from [atMs] of the video, for voice row [row] (null: the first free one). */
     fun start(
         row: TrackId?,
@@ -122,6 +125,7 @@ internal class VoiceRecordingController(
         this.row = row
         samples.clear()
         pictureStartNs = null
+        playAskedNs = null
         val startMs = startUs / 1000
         val p = recordings.newRecording(projectId)
         val r = recordings.recorder(p)
@@ -148,6 +152,7 @@ internal class VoiceRecordingController(
                     delay(SECOND_MS)
                 }
                 engine.monitorGain = 0f
+                playAskedNs = nanoTime()
                 engine.play()
                 stateFlow.value = RecordingUi.Recording(startMs, 0, (durationUs - startUs) / 1000)
                 var shown = 0L
@@ -157,8 +162,9 @@ internal class VoiceRecordingController(
                     onSample?.invoke(sample.wallNs, sample.positionUs)
                     var start = pictureStartNs
                     if (start == null) {
-                        samples += sample
-                        if (samples.count { it.positionUs >= startUs + RecordingSync.MIN_MOVE_US } >= SYNC_SAMPLES) {
+                        // Only readings after the picture moved count, and a dozen are enough.
+                        if (sample.positionUs >= startUs + RecordingSync.MIN_MOVE_US) samples += sample
+                        if (samples.size >= SYNC_SAMPLES) {
                             start = RecordingSync.playbackStartNs(samples, startUs)
                             pictureStartNs = start
                             start?.let(r::startAt)
@@ -166,9 +172,9 @@ internal class VoiceRecordingController(
                     }
                     if (now - shown >= SHOW_EVERY_NS) {
                         shown = now
-                        val elapsed = start?.let { ((now - it) / 1_000_000).coerceAtLeast(0) } ?: 0
-                        stateFlow.value =
-                            RecordingUi.Recording(startMs, elapsed, ((durationUs - sample.positionUs) / 1000).coerceAtLeast(0))
+                        // Both from the picture's time, so they add up to what the playback strip shows.
+                        val at = sample.positionUs.coerceIn(startUs, durationUs)
+                        stateFlow.value = RecordingUi.Recording(startMs, (at - startUs) / 1000, (durationUs - at) / 1000)
                     }
                     val ended = sample.positionUs >= durationUs - END_SLACK_US || !engine.isPlaying
                     val moved = start != null && RecordingSync.leftTheRecording(sample, start, startUs)
@@ -215,14 +221,15 @@ internal class VoiceRecordingController(
         val p = pending
         recorder = null
         pending = null
-        val start = pictureStartNs ?: RecordingSync.playbackStartNs(samples, startUs)
+        // The picture's start; if it never showed moving, when Play was asked for (kept, lined up as well as can be).
+        val start = pictureStartNs ?: RecordingSync.playbackStartNs(samples, startUs) ?: playAskedNs
         val startMs = now.startMs
         if (r == null || p == null) {
             stateFlow.value = null
             return
         }
         if (!keep || now is RecordingUi.Countdown || start == null) {
-            // Nothing to keep: cancelled, or stopped before the picture moved.
+            // Nothing to keep: cancelled, or stopped in the countdown.
             stateFlow.value = null
             engine.seekTo(startUs)
             scope.launch(Dispatchers.IO + NonCancellable) {
@@ -237,6 +244,8 @@ internal class VoiceRecordingController(
             val kept = result.ok && withContext(Dispatchers.IO + NonCancellable) { recordings.keep(p) }
             val clip = recordingClip(RandomIds.clipId(), p.ref, startMs, result.durationMs, durationUs / 1000)
             val placed = if (kept && clip != null) place(clip, row) else null
+            // A refused placement has been said already ("That can't be done"): nothing more to add.
+            val refused = kept && clip != null && placed == null
             if (placed == null) {
                 withContext(Dispatchers.IO + NonCancellable) { recordings.discard(p) }
             }
@@ -247,6 +256,10 @@ internal class VoiceRecordingController(
                 placed != null -> {
                     onPlaced(placed)
                     if (interrupted) onNote(RecordingNote.KEPT_AFTER_INTERRUPTION)
+                }
+
+                refused -> {
+                    Unit
                 }
 
                 spokenMs < TOO_SHORT_MS -> {

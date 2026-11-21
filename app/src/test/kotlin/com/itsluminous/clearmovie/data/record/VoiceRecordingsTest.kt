@@ -78,7 +78,8 @@ class VoiceRecordingsTest {
         val deleted = MediaRef.Copied("voice-bbbbbbbb22222222.m4a")
         val kept = write(used.relPath)
         val gone = write(deleted.relPath)
-        val half = write("voice-cccccccc33333333.m4a.part")
+        val half = write("voice-cccccccc33333333.m4a.part").apply { setLastModified(System.currentTimeMillis() - 11 * 60 * 1000) }
+        val writing = write("voice-eeeeeeee55555555.m4a.part")
         val photo = write("photo-1.jpg")
         val song = write("song.m4a")
         val p = project(used, deleted).deleteClip(ClipId("a1"))
@@ -86,6 +87,8 @@ class VoiceRecordingsTest {
         assertThat(kept.exists()).isTrue()
         assertThat(gone.exists()).isFalse()
         assertThat(half.exists()).isFalse()
+        // A recording still being written (a part file just made) is left alone.
+        assertThat(writing.exists()).isTrue()
         assertThat(photo.exists()).isTrue()
         assertThat(song.exists()).isTrue()
     }

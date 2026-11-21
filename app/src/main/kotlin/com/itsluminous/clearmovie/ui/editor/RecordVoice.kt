@@ -39,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +66,7 @@ import com.itsluminous.clearmovie.ui.components.durationText
 const val RECORDING_PANEL_TAG = "recording_panel"
 const val RECORDING_STOP_TAG = "recording_stop"
 const val RECORDING_CANCEL_TAG = "recording_cancel"
+const val RECORDING_DISCARD_TAG = "recording_discard"
 const val MIC_RATIONALE_TAG = "mic_rationale"
 const val MIC_CONTINUE_TAG = "mic_continue"
 const val MIC_OFF_TAG = "mic_off"
@@ -164,8 +166,10 @@ internal fun rememberRecordVoice(onStart: (TrackId, Long) -> Unit): (TrackId, Lo
 /**
  * The recording panel, in place of the bar while a voice is recorded: the
  * countdown, then a red dot with the time said so far, where it started and
- * how much video is left, a large Stop and Cancel. Nothing else on the
- * screen can be used meanwhile (see [EditorScreen]'s `recording`).
+ * how much video is left, a large Stop and Cancel. The panel keeps its size
+ * from the countdown to the recording, so nothing moves as the user starts
+ * to speak. Cancel after a few seconds of speaking asks first. Nothing else
+ * on the screen can be used meanwhile (see [EditorScreen]'s `recording`).
  */
 @Composable
 internal fun RecordingPanel(
@@ -174,62 +178,50 @@ internal fun RecordingPanel(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var confirmCancel by rememberSaveable { mutableStateOf(false) }
+    val cancel = {
+        if (ui is RecordingUi.Recording && ui.elapsedMs >= CONFIRM_CANCEL_AFTER_MS) confirmCancel = true else onCancel()
+    }
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth().testTag(RECORDING_PANEL_TAG)) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            Modifier.fillMaxWidth().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val start = durationText(ui.startMs * 1000)
+            // The heading is read out when it changes (Get ready, then Recording); the numbers are not, every second.
+            val announce =
+                Modifier.semantics {
+                    heading()
+                    liveRegion = LiveRegionMode.Polite
+                }
             when (ui) {
                 is RecordingUi.Countdown -> {
-                    Text(
-                        stringResource(R.string.record_get_ready),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.semantics { heading() },
-                    )
+                    Text(stringResource(R.string.record_get_ready), style = MaterialTheme.typography.titleMedium, modifier = announce)
                     val said = pluralStringResource(R.plurals.record_starts_in, ui.secondsLeft, ui.secondsLeft)
                     Text(
                         ui.secondsLeft.toString(),
                         style = MaterialTheme.typography.displayMedium,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier =
-                            Modifier.semantics {
-                                contentDescription = said
-                                liveRegion = LiveRegionMode.Polite
-                            },
+                        modifier = Modifier.semantics { contentDescription = said },
                     )
-                    Text(
-                        stringResource(R.string.record_countdown_body, start),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                    Buttons(recording = false, onStop, onCancel)
+                    Body(stringResource(R.string.record_countdown_body, start))
+                    Buttons(recording = false, onStop, cancel)
                 }
 
                 is RecordingUi.Recording -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = announce) {
                         Box(Modifier.size(12.dp).background(MaterialTheme.colorScheme.error, CircleShape))
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            stringResource(R.string.record_recording),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.semantics { heading() },
-                        )
+                        Text(stringResource(R.string.record_recording), style = MaterialTheme.typography.titleMedium)
                     }
                     Text(
                         // Rounded as the playhead's time is, so the two read alike.
                         durationText(ui.elapsedMs * 1000),
                         style = MaterialTheme.typography.displayMedium,
                     )
-                    Text(
-                        stringResource(R.string.record_progress, start, durationText(ui.leftMs * 1000)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                    Buttons(recording = true, onStop, onCancel)
+                    Body(stringResource(R.string.record_progress, start, durationText(ui.leftMs * 1000)))
+                    Buttons(recording = true, onStop, cancel)
                 }
 
                 is RecordingUi.Saving -> {
@@ -239,48 +231,88 @@ internal fun RecordingPanel(
             }
         }
     }
+    if (confirmCancel && ui is RecordingUi.Recording) {
+        AlertDialog(
+            onDismissRequest = { confirmCancel = false },
+            title = { Text(stringResource(R.string.record_discard_title)) },
+            text = { Text(stringResource(R.string.record_discard_body)) },
+            confirmButton = {
+                TextButton(onClick = { confirmCancel = false }) { Text(stringResource(R.string.record_keep_recording)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        confirmCancel = false
+                        onCancel()
+                    },
+                    modifier = Modifier.testTag(RECORDING_DISCARD_TAG),
+                ) { Text(stringResource(R.string.record_discard)) }
+            },
+        )
+    }
 }
 
-/** Cancel, and Stop once the recording runs: the same row in both, so nothing moves when Stop appears. */
+/** The panel's line under the time: always two lines high, so the countdown and the recording panels are one size. */
+@Composable
+private fun Body(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        minLines = 2,
+    )
+}
+
+/** Cancel and Stop, the same row throughout: Stop shows from the countdown, and works once the recording runs. */
 @Composable
 private fun Buttons(
     recording: Boolean,
     onStop: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag(RECORDING_CANCEL_TAG)) {
             Text(stringResource(R.string.action_cancel), textAlign = TextAlign.Center)
         }
-        if (recording) {
-            Button(
-                onClick = onStop,
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
-                modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag(RECORDING_STOP_TAG),
-            ) {
-                Icon(painterResource(R.drawable.ic_stop), contentDescription = null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.record_stop), textAlign = TextAlign.Center)
-            }
+        Button(
+            onClick = onStop,
+            enabled = recording,
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            modifier =
+                Modifier
+                    .weight(
+                        1f,
+                    ).heightIn(min = 56.dp)
+                    .then(if (recording) Modifier.testTag(RECORDING_STOP_TAG) else Modifier),
+        ) {
+            Icon(painterResource(R.drawable.ic_stop), contentDescription = null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.record_stop), textAlign = TextAlign.Center)
         }
     }
 }
 
+/** Cancel asks first once this much has been said. */
+private const val CONFIRM_CANCEL_AFTER_MS = 3_000L
+
 /**
- * A part of the editor while a voice is recorded: still seen, but it takes
+ * A part of the editor while a voice is recorded: still seen, dimmed to
+ * [dim] so it reads as out of use, but it takes
  * no touches (each is used up before the controls inside see it) and
  * TalkBack skips it, so nothing can move the picture under the recording.
  */
-internal fun Modifier.lockedForRecording(): Modifier =
-    pointerInput(Unit) {
-        awaitPointerEventScope {
-            while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
-        }
-    }.clearAndSetSemantics {}
+internal fun Modifier.lockedForRecording(dim: Float): Modifier =
+    alpha(dim)
+        .pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+            }
+        }.clearAndSetSemantics {}
 
 private tailrec fun Context.findActivityForMic(): Activity? =
     when (this) {
