@@ -630,7 +630,19 @@ fun TimelineView(
                     }
                 }
             }
-            RowsToggle(hiddenRows, allRowsRequested, hiddenRows.isNotEmpty() || allRowsRequested, metrics, actions)
+            // "N more" counts the rows not wholly in view where the rows are scrolled to now (cm-timeline-scroll).
+            val outOfView =
+                remember(shown, bands, hiddenRows) {
+                    derivedStateOf {
+                        val d = density.density
+                        val top = rowScroll.value
+                        val bottom = top + rowScroll.viewportSize
+                        val out = shown.filterIndexed { i, _ -> bands[i].topDp * d < top - 1 || bands[i].bottomDp * d > bottom + 1 }
+                        if (out.isEmpty() || rowScroll.viewportSize == 0) hiddenRows else out
+                    }
+                }
+            // Read inside the control, so a scroll recomposes only it.
+            RowsToggle({ outOfView.value }, allRowsRequested, hiddenRows.isNotEmpty() || allRowsRequested, metrics, actions)
         }
     }
 }
@@ -2250,13 +2262,14 @@ private fun PlusButton(
 
 @Composable
 private fun RowsToggle(
-    hidden: List<TimelineRow>,
+    hiddenNow: () -> List<TimelineRow>,
     allRowsRequested: Boolean,
     show: Boolean,
     metrics: RowMetrics,
     actions: TimelineActions,
 ) {
     if (!show) return
+    val hidden = hiddenNow()
     val label =
         if (allRowsRequested) {
             stringResource(R.string.timeline_show_fewer_rows)
