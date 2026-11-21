@@ -40,7 +40,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -91,6 +91,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.media.MediaStatus
 import com.itsluminous.clearmovie.domain.model.CanvasShape
@@ -122,6 +123,7 @@ import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.render.plan.frameWindow
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
 import com.itsluminous.clearmovie.ui.components.ShapeOutline
 import com.itsluminous.clearmovie.ui.components.durationText
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
@@ -174,7 +176,6 @@ const val TIME_TAG = "editor_time"
 const val EDITOR_TOP_BAR_TAG = "editor_top_bar"
 const val UNDO_TAG = "editor_undo"
 const val REDO_TAG = "editor_redo"
-const val EXACT_TAG = "editor_exact"
 const val EMPTY_ADD_TAG = "editor_empty_add"
 const val EDITOR_MORE_TAG = "editor_more"
 const val EDITOR_MENU_SHAPE_TAG = "editor_menu_shape"
@@ -199,8 +200,6 @@ interface EditorActions : EditorCallbacks {
     /** Stops the preview where it is (nothing happens when it is not playing). */
     fun pause() = Unit
 
-    fun exact()
-
     fun fixPreset()
 
     /** "Video shape" from More options (cm-aspect-ratio). */
@@ -212,9 +211,8 @@ interface EditorActions : EditorCallbacks {
 
 /**
  * The editor (requirement 4, ARCHITECTURE sections 11.1 to 11.7): the top
- * bar with Back, the title (a tap renames the video), Undo, Redo, Save video
- * and More options;
- * the preview with Play, the time and the zoom buttons; the timeline; and the
+ * bar with Back, the title (a tap renames the video), Undo, Redo and More
+ * options; the preview with Play, the time and Export; the timeline; and the
  * contextual bar, or the panel of the action being used. On a phone held
  * upright the preview is on top and shrinks as the rows need room
  * ([PreviewLayout]); when all rows are asked for and they don't fit, it
@@ -1023,9 +1021,9 @@ private fun replaceTrimmed(
 
 /**
  * The editor's top bar (kupraki's request): Back, the title (a tap renames
- * the video), Undo above Redo, Save video (the download arrow, which opens
- * the export sheet) and More options. Material's small top app bar, 64 dp
- * tall whatever the title ([barHeight]: 56 dp on a phone held sideways,
+ * the video), Undo and Redo side by side, and More options. Export is in the
+ * playback strip ([Controls]). Material's small top app bar, 64 dp tall
+ * whatever the title ([barHeight]: 56 dp on a phone held sideways,
  * cm-timeline-scroll); the window insets are already applied around it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1061,14 +1059,7 @@ private fun TopBar(
             }
         },
         actions = {
-            UndoRedo(ui, actions, barHeight)
-            IconButton(onClick = actions::export, modifier = Modifier.size(TOUCH).testTag(EDITOR_EXPORT_TAG)) {
-                Icon(
-                    painterResource(R.drawable.ic_download),
-                    contentDescription = stringResource(R.string.editor_export),
-                    modifier = Modifier.size(ICON),
-                )
-            }
+            UndoRedo(ui, actions)
             MoreOptions(ui, actions, onRename, canRename)
         },
         expandedHeight = barHeight,
@@ -1151,53 +1142,41 @@ private fun MoreOptions(
 }
 
 /**
- * Undo above Redo, one icon each, stacked with no gap so the title has their
- * width (kupraki's call). Two 48 dp buttons cannot stack in the 64 dp bar, so
- * each is 48 dp wide and half the bar tall: the one place in the editor a
- * touch target is under 48 dp tall. In the 56 dp bar of a phone held sideways
- * ([barHeight], cm-timeline-scroll) they sit side by side instead, 48 dp each
- * way, where the wider pane leaves the title room. Each is named for TalkBack.
+ * Undo and Redo side by side (kupraki's request), icons only, each a 48 dp
+ * Material icon button, named for TalkBack and off when there is nothing to
+ * undo or redo.
  */
 @Composable
 private fun UndoRedo(
     ui: EditorUi,
     actions: EditorActions,
-    barHeight: Dp,
 ) {
-    if (barHeight < TOP_BAR_HEIGHT) {
-        Row {
-            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, TOUCH, actions::undo)
-            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, TOUCH, actions::redo)
-        }
-        return
-    }
-    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-        Column(Modifier.width(TOUCH)) {
-            StackedIcon(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, barHeight / 2, actions::undo)
-            StackedIcon(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, barHeight / 2, actions::redo)
-        }
+    Row {
+        HistoryButton(R.drawable.ic_undo, R.string.action_undo, ui.canUndo, UNDO_TAG, actions::undo)
+        HistoryButton(R.drawable.ic_redo, R.string.action_redo, ui.canRedo, REDO_TAG, actions::redo)
     }
 }
 
 @Composable
-private fun StackedIcon(
+private fun HistoryButton(
     icon: Int,
     label: Int,
     enabled: Boolean,
     tag: String,
-    height: Dp,
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(TOUCH, height).testTag(tag)) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(tag)) {
         Icon(painterResource(icon), contentDescription = stringResource(label), modifier = Modifier.size(ICON))
     }
 }
 
 /**
- * The playback strip under the preview: Play, the time, and "As exported"
- * at the far end, spread across one row that never wraps. At very large text
- * (more than 1.5x) As exported keeps only its icon, still named for TalkBack;
- * Play keeps its word whenever the row fits with it. Zooming is in the bar below (with Fit all) and by pinching.
+ * The playback strip under the preview: Play, the time, and Export (the
+ * upload arrow, which opens the export sheet) at the far end, spread across
+ * one row of 48 dp buttons that never grows. Export's word shrinks to fit,
+ * then takes two lines at the smallest size; only when even that does not
+ * fit does Export keep just its icon, then Play, each still named for
+ * TalkBack. Zooming is in the bar below (with Fit all) and by pinching.
  */
 @Composable
 private fun Controls(
@@ -1213,8 +1192,7 @@ private fun Controls(
     val duration = playhead.durationUs.coerceAtLeast(1)
     val playLabel = stringResource(if (playhead.playing) R.string.action_pause else R.string.action_play)
     val playIcon = if (playhead.playing) R.drawable.ic_pause else R.drawable.ic_play
-    val exactLabel = stringResource(R.string.editor_exact)
-    val exactShort = stringResource(R.string.editor_exact_short)
+    val exportLabel = stringResource(R.string.editor_export)
     val labels = MaterialTheme.typography.labelLarge
     val timeStyle = MaterialTheme.typography.titleSmall
     val measurer = rememberTextMeasurer()
@@ -1222,12 +1200,15 @@ private fun Controls(
     // Play keeps one width whether it says Play or Pause, so the time never shifts when it is pressed.
     val playWords = listOf(stringResource(R.string.action_play), stringResource(R.string.action_pause))
     val playTextDp = with(density) { playWords.maxOf { measurer.measure(it, labels).size.width }.toDp() }
-    val exactTextDp =
+    // The narrowest Export's word can be: its widest word at the smallest label size (two lines at most).
+    val exportMinTextDp =
         with(density) {
-            measurer
-                .measure(exactShort, labels)
-                .size.width
-                .toDp()
+            val smallest = labels.copy(fontSize = MIN_LABEL_FONT_SIZE, letterSpacing = 0.sp)
+            exportLabel
+                .split(' ')
+                .filter { it.isNotEmpty() }
+                .maxOfOrNull { measurer.measure(it, smallest).size.width }
+                ?.toDp() ?: 0.dp
         }
     // The time is measured at its widest ("total of total"), so the choice does not flip as it plays.
     val timeDp =
@@ -1239,16 +1220,17 @@ private fun Controls(
         }
     val playMinWidth = 12.dp + ICON + 8.dp + playTextDp + 16.dp
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        // Words on Play and As exported only when the whole row fits with them (any language, any text size).
-        // The strip's own padding (8 + 8), Play, the time with its padding (8 + 8), As exported.
-        val needed = 16.dp + playMinWidth + 16.dp + timeDp + (12.dp + ICON + 8.dp + exactTextDp + 12.dp)
-        // As exported gives up its word first; Play keeps its own while the row still fits (the main action).
-        val exactIconOnly = density.fontScale > ICON_ONLY_FONT_SCALE || needed > maxWidth
+        // The strip's own padding (8 + 8) and the time with its padding (8 + 8).
+        val fixed = 16.dp + 16.dp + timeDp
+        // Export keeps a word while it fits at the smallest size beside Play's word; it gives way first.
+        val exportIconOnly = fixed + playMinWidth + EXPORT_CHROME + exportMinTextDp > maxWidth
         // Play keeps its word whenever the row still fits with it, at any text size: it is the one he looks for.
-        val playIconOnly = 16.dp + playMinWidth + 16.dp + timeDp + TOUCH > maxWidth
+        val playIconOnly = fixed + playMinWidth + TOUCH > maxWidth
+        // The room Export's word has: what Play and the time leave, less Export's icon and padding.
+        val exportTextMax = (maxWidth - fixed - (if (playIconOnly) TOUCH else playMinWidth) - EXPORT_CHROME).coerceAtLeast(0.dp)
         TransportRow(
             playIconOnly,
-            exactIconOnly,
+            exportIconOnly,
             enabled,
             actions,
             playLabel,
@@ -1258,8 +1240,8 @@ private fun Controls(
             seekLabel,
             playhead,
             duration,
-            exactLabel,
-            exactShort,
+            exportLabel,
+            exportTextMax,
         )
     }
 }
@@ -1267,7 +1249,7 @@ private fun Controls(
 @Composable
 private fun TransportRow(
     playIconOnly: Boolean,
-    exactIconOnly: Boolean,
+    exportIconOnly: Boolean,
     enabled: Boolean,
     actions: EditorActions,
     playLabel: String,
@@ -1277,8 +1259,8 @@ private fun TransportRow(
     seekLabel: String,
     playhead: PlayheadUi,
     duration: Long,
-    exactLabel: String,
-    exactShort: String,
+    exportLabel: String,
+    exportTextMax: Dp,
 ) {
     Row(
         Modifier
@@ -1322,20 +1304,25 @@ private fun TransportRow(
                     }
                 },
         )
-        if (exactIconOnly) {
-            IconButton(onClick = actions::exact, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(EXACT_TAG)) {
-                Icon(painterResource(R.drawable.ic_visibility), contentDescription = exactLabel, modifier = Modifier.size(ICON))
+        // Export is always on, as it was in the top bar: the export sheet says when there is nothing to save yet.
+        if (exportIconOnly) {
+            // In the primary colour, as when it has its word, so it looks the same at every text size.
+            IconButton(
+                onClick = actions::export,
+                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.size(TOUCH).testTag(EDITOR_EXPORT_TAG),
+            ) {
+                Icon(painterResource(R.drawable.ic_export), contentDescription = exportLabel, modifier = Modifier.size(ICON))
             }
         } else {
             TextButton(
-                onClick = actions::exact,
-                enabled = enabled,
+                onClick = actions::export,
                 contentPadding = PaddingValues(horizontal = 12.dp),
-                modifier = Modifier.height(TOUCH).testTag(EXACT_TAG).semantics { contentDescription = exactLabel },
+                modifier = Modifier.height(TOUCH).testTag(EDITOR_EXPORT_TAG),
             ) {
-                Icon(painterResource(R.drawable.ic_visibility), contentDescription = null, modifier = Modifier.size(ICON))
+                Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
                 Spacer(Modifier.width(8.dp))
-                AutoSizeLabel(exactShort, style = MaterialTheme.typography.labelLarge)
+                AutoSizeLabel(exportLabel, Modifier.widthIn(max = exportTextMax), style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -1345,8 +1332,8 @@ private fun TransportRow(
 private val ICON = 24.dp
 private val TOUCH = 48.dp
 
-/** Above this text size the strip's buttons drop their words (keeping them for TalkBack) so it stays one row. */
-private const val ICON_ONLY_FONT_SCALE = 1.5f
+/** Export's padding, icon and the gap before its word (12 + 24 + 8 + 12). */
+private val EXPORT_CHROME = 56.dp
 
 /** The most of an upright window an open panel takes. */
 private const val PANEL_SHARE = 0.3

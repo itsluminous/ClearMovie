@@ -132,8 +132,8 @@
     <string name="pick_adding">Aapki photos aur videos add ho rahi hain</string>
     <string name="pick_out_of_space">Copy karte waqt phone ki jagah khatam ho gayi, isliye kuch add nahi hua. Thodi jagah khaali karein aur phir se koshish karein.</string>
     <string name="editor_title_new">Naya video</string>
-    <!-- The download arrow in the editor's top bar, read by TalkBack: it opens the export sheet. -->
-    <string name="editor_export">Video save karein</string>
+    <!-- The button with the upload arrow at the end of the editor's playback strip, beside Play: it opens the export sheet. -->
+    <string name="editor_export">Export karein</string>
     <string name="export_title">Apna video save karein</string>
     <string name="export_choose_body">Ek size chunein. Bada wala TV par zyada saaf dikhta hai; chhota wala jaldi bheja jaata hai.</string>
     <string name="export_quality_best">Sabse achha</string>
@@ -182,9 +182,6 @@
     </plurals>
     <string name="editor_time">%2$s me se %1$s</string>
     <string name="editor_seek">Video kahan tak chala</string>
-    <string name="editor_exact">Bilkul export jaisa play karein</string>
-    <string name="editor_exact_preparing">Yeh hissa taiyaar ho raha hai</string>
-    <string name="editor_exact_failed">Yeh hissa taiyaar nahi ho saka. Kripya phir se koshish karein.</string>
     <string name="editor_row_main">Photos aur videos</string>
     <string name="editor_item_photo">Photo</string>
     <string name="editor_item_video">Video</string>
@@ -385,8 +382,6 @@
         <item quantity="one">Saari rows dikhayein (%1$d aur)</item>
         <item quantity="other">Saari rows dikhayein (%1$d aur)</item>
     </plurals>
-    <!-- Short label under an icon: plays a short part exactly as the export will look. -->
-    <string name="editor_exact_short">Jaisa banega</string>
     <!-- An item and its place among the photos, videos and cards: "Video 2". -->
     <string name="timeline_item_numbered">%1$s %2$d</string>
     <string name="editor_cant_do_that">Is par yeh nahi ho sakta.</string>

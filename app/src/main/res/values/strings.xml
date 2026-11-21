@@ -150,8 +150,8 @@
     <string name="pick_adding">Adding your photos and videos</string>
     <string name="pick_out_of_space">Your phone ran out of space while copying, so nothing was added. Free up some space and try again.</string>
     <string name="editor_title_new">New video</string>
-    <!-- The download arrow in the editor's top bar, read by TalkBack: it opens the export sheet. -->
-    <string name="editor_export">Save video</string>
+    <!-- The button with the upload arrow at the end of the editor's playback strip, beside Play: it opens the export sheet. -->
+    <string name="editor_export">Export</string>
     <string name="export_title">Save your video</string>
     <string name="export_choose_body">Choose a size. A bigger one looks sharper on a TV; a smaller one is quicker to send.</string>
     <string name="export_quality_best">Best</string>
@@ -202,9 +202,6 @@
     <string name="editor_time">%1$s of %2$s</string>
     <!-- For screen readers: the slider that moves through the video. -->
     <string name="editor_seek">Playback position</string>
-    <string name="editor_exact">Play exactly as exported</string>
-    <string name="editor_exact_preparing">Getting this part ready</string>
-    <string name="editor_exact_failed">This part couldn\'t be made ready. Please try again.</string>
     <string name="editor_row_main">Photos &amp; videos</string>
     <string name="editor_item_photo">Photo</string>
     <string name="editor_item_video">Video</string>
@@ -424,8 +421,6 @@
         <item quantity="one">Show all rows (%1$d more)</item>
         <item quantity="other">Show all rows (%1$d more)</item>
     </plurals>
-    <!-- Short label under an icon: plays a short part exactly as the export will look. -->
-    <string name="editor_exact_short">As exported</string>
     <!-- An item and its place among the photos, videos and cards: "Video 2". -->
     <string name="timeline_item_numbered">%1$s %2$d</string>
     <string name="editor_cant_do_that">That can\'t be done to this item.</string>

@@ -87,7 +87,7 @@ class TransitionRenderTest {
     }
 
     /**
-     * The "Play exactly as exported" draft: 2 s around the second crossfade's
+     * A slice of the plan (RenderPlan.slice): 2 s around the second crossfade's
      * midpoint, at 360p. The slice starts in the middle of both clips, so the
      * blend at its 1 s mark must match the full export's 4.5 s.
      */

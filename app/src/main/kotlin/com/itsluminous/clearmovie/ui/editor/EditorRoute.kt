@@ -45,7 +45,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -70,7 +69,6 @@ import com.itsluminous.clearmovie.domain.model.Side
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.ui.components.PlayFileDialog
-import com.itsluminous.clearmovie.ui.components.WorkDialog
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.itemName
 import com.itsluminous.clearmovie.ui.export.ExportBlock
@@ -98,7 +96,6 @@ fun EditorRoute(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val preview by viewModel.engine.state.collectAsStateWithLifecycle()
-    val draft by viewModel.draft.collectAsStateWithLifecycle()
     val intake by viewModel.intake.state.collectAsStateWithLifecycle()
     val recording by viewModel.recording.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -261,8 +258,6 @@ fun EditorRoute(
                 override fun togglePlay() = viewModel.togglePlay()
 
                 override fun pause() = viewModel.pause()
-
-                override fun exact() = viewModel.requestDraft()
 
                 override fun openShape() {
                     viewModel.pause()
@@ -456,27 +451,6 @@ fun EditorRoute(
             text = { Text(stringResource(R.string.pick_out_of_space)) },
             confirmButton = { TextButton(onClick = { outOfSpace = false }) { Text(stringResource(R.string.action_ok)) } },
         )
-    }
-    when (val d = draft) {
-        is DraftState.Preparing -> {
-            WorkDialog(stringResource(R.string.editor_exact_preparing), d.percent / 100f, viewModel::cancelDraft)
-        }
-
-        is DraftState.Ready -> {
-            PlayFileDialog(d.file.toUri(), stringResource(R.string.editor_exact), audioOnly = false, onClose = viewModel::closeDraft)
-        }
-
-        DraftState.Failed -> {
-            AlertDialog(
-                onDismissRequest = viewModel::closeDraft,
-                text = { Text(stringResource(R.string.editor_exact_failed)) },
-                confirmButton = { TextButton(onClick = viewModel::closeDraft) { Text(stringResource(R.string.action_ok)) } },
-            )
-        }
-
-        DraftState.Idle -> {
-            Unit
-        }
     }
 }
 

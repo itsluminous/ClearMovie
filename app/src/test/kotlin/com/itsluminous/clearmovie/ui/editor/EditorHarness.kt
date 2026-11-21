@@ -101,10 +101,6 @@ class EditorHarness(
                 calls += "play"
             }
 
-            override fun exact() {
-                calls += "exact"
-            }
-
             override fun fixPreset() {
                 calls += "fix"
             }

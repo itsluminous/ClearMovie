@@ -49,8 +49,8 @@ import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
 import kotlinx.coroutines.delay
 
 /**
- * Plays one file in a dialog: a preset part on the review screen, or the
- * exact draft. It starts playing at once; Play/Pause and Close are large
+ * Plays one file in a dialog: a preset part on the review screen or in the
+ * editor. It starts playing at once; Play/Pause and Close are large
  * labelled buttons. [audioOnly] shows a sound icon instead of a picture.
  */
 @OptIn(ExperimentalMaterial3Api::class)

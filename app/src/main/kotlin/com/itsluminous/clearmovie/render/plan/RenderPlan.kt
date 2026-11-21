@@ -14,7 +14,7 @@ import com.itsluminous.clearmovie.domain.model.TrackId
 /**
  * Everything needed to draw and mix a project (ARCHITECTURE section 7), as
  * plain data. `CompositionFactory` turns it into one Media3 `Composition` for
- * Transformer (the export, and short exact drafts made from a [slice]). The
+ * Transformer (the export, and render tests of a [slice]). The
  * live editor preview draws the same plan in layers instead.
  *
  * Every time is in microseconds on the video's timeline. Every layer covers
@@ -40,7 +40,7 @@ data class RenderPlan(
 
     /**
      * The part of this plan from [fromUs] to [toUs], as a plan of its own that
-     * starts at 0: the "Play exactly as exported" draft around the playhead.
+     * starts at 0, for rendering a short part of the video (render tests).
      * Pictures and sounds cut at the front start later in their media and in
      * their clip (so transitions and envelopes stay in step).
      */

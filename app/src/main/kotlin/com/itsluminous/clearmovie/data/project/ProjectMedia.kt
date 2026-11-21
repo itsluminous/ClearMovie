@@ -13,7 +13,7 @@ import com.itsluminous.clearmovie.render.media3.MediaResolver
 import com.itsluminous.clearmovie.render.plan.LoudnessTable
 import javax.inject.Inject
 
-/** Everything the preview and the exact draft need to open one project's media. */
+/** Everything the preview needs to open one project's media. */
 data class ProjectMediaSet(
     /** The preset as the project plays it (with an adjusted key colour), or null without one. */
     val preset: Preset?,

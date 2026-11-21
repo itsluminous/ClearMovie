@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -77,10 +77,28 @@ class EditorMenuTest {
     private fun openMenu() = compose.onNodeWithTag(EDITOR_MORE_TAG).performClick()
 
     @Test
-    fun `the download arrow opens the export sheet`() {
-        val h = show()
-        compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertIsDisplayed().performClick()
-        assertThat(h.calls).containsExactly("export")
+    fun `Export in the playback strip opens the export sheet, at every size and text size, even with nothing to play`() {
+        var shown by mutableStateOf(ScreenSize.COMPACT to 1f)
+        var harness by mutableStateOf(EditorHarness(project, Fixtures.preset))
+        compose.setContent { key(shown, harness) { harness.At(shown.first, shown.second) } }
+        for (scale in listOf(1f, 2f)) {
+            for (size in ScreenSize.entries) {
+                for (p in listOf(project, ProjectFactory.blank(Fixtures.PROJECT_ID))) {
+                    val h = EditorHarness(p, Fixtures.preset).also { it.title = "Party" }
+                    shown = size to scale
+                    harness = h
+                    compose.waitForIdle()
+                    compose
+                        .onNodeWithTag(EDITOR_EXPORT_TAG)
+                        .assertIsDisplayed()
+                        .assertIsEnabled()
+                        .assertHasClickAction()
+                        .performClick()
+                    assertThat(h.calls).containsExactly("export")
+                    compose.onNodeWithTag(PLAY_TAG).assertExists()
+                }
+            }
+        }
     }
 
     @Test
@@ -299,9 +317,9 @@ class EditorMenuTest {
 
     @Test
     @Config(qualifiers = "hi-w1300dp-h1300dp-xxhdpi")
-    fun `in Hindi the arrow, the menu and the dialog speak Hindi`() {
+    fun `in Hindi Export, the menu and the dialog speak Hindi`() {
         show()
-        compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertContentDescriptionEquals("वीडियो सेव करें")
+        compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertTextEquals("एक्सपोर्ट करें")
         openMenu()
         compose.onNodeWithText("वीडियो का नाम बदलें").assertIsDisplayed()
         compose.onNodeWithText("वीडियो की आकृति").assertIsDisplayed()

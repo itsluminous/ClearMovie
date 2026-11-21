@@ -11,14 +11,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Constraints
@@ -45,7 +43,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The editor's top bar (kupraki's request): Undo stacked above Redo, and a
+ * The editor's top bar (kupraki's request): Undo beside Redo, and a
  * title that stays at full size when it fits, shrinks to stay on one line,
  * and only then takes a second line, without the bar ever growing.
  */
@@ -305,27 +303,21 @@ class EditorTopBarTest {
     }
 
     @Test
-    fun `Undo sits above Redo, each 48 dp wide and half the bar tall, named, and off with nothing to undo or redo`() {
+    fun `Undo and Redo sit side by side, each 48 dp, named, and off with nothing to undo or redo`() {
         for (scale in listOf(1f, 2f)) {
             for (size in ScreenSize.entries) {
                 show(VERY_LONG, size, scale)
                 val undo = compose.onNodeWithTag(UNDO_TAG).assertIsDisplayed().getUnclippedBoundsInRoot()
                 val redo = compose.onNodeWithTag(REDO_TAG).assertIsDisplayed().getUnclippedBoundsInRoot()
                 val bar = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).getUnclippedBoundsInRoot()
-                assertThat(undo.left.value).isWithin(0.5f).of(redo.left.value)
-                assertThat(undo.bottom.value).isWithin(0.5f).of(redo.top.value)
-                assertThat(undo.top.value).isWithin(0.5f).of(bar.top.value)
-                assertThat(redo.bottom.value).isWithin(0.5f).of(bar.bottom.value)
+                // One row: Redo right after Undo, both centred in the bar.
+                assertThat(redo.left.value).isWithin(0.5f).of(undo.right.value)
                 for (b in listOf(undo, redo)) {
                     assertThat((b.right - b.left).value).isWithin(0.5f).of(48f)
-                    assertThat((b.bottom - b.top).value).isWithin(0.5f).of(32f)
+                    assertThat((b.bottom - b.top).value).isWithin(0.5f).of(48f)
+                    assertThat(((b.top + b.bottom) / 2).value).isWithin(0.5f).of(((bar.top + bar.bottom) / 2).value)
                 }
-                // Between the title and Save video.
-                val title = compose.onNodeWithTag(EDITOR_TITLE_TAG).getUnclippedBoundsInRoot()
-                val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).getUnclippedBoundsInRoot()
-                assertThat(undo.left.value).isAtLeast(title.right.value)
-                assertThat(export.left.value).isAtLeast(undo.right.value)
-                // A new video has nothing to undo or redo (stepping through edits: EditorScreenTest).
+                // A new video has nothing to undo or redo (stepping through edits: EditorMenuTest).
                 compose.onNodeWithTag(UNDO_TAG).assertIsNotEnabled()
                 compose.onNodeWithTag(REDO_TAG).assertIsNotEnabled()
                 // Named for TalkBack as before.
@@ -336,7 +328,7 @@ class EditorTopBarTest {
     }
 
     @Test
-    fun `the bar reads Back, the title, Undo and Redo, Save video, More options, left to right, each 48 dp wide`() {
+    fun `the bar reads Back, the title, Undo, Redo, More options, left to right, each 48 dp wide, with no Export`() {
         for (scale in listOf(1f, 2f)) {
             for (size in ScreenSize.entries) {
                 show(VERY_LONG, size, scale)
@@ -344,25 +336,21 @@ class EditorTopBarTest {
                 val back = compose.onNodeWithContentDescription(context.getString(R.string.action_back)).getUnclippedBoundsInRoot()
                 val room = compose.onNodeWithTag(EDITOR_TITLE_ROOM_TAG).getUnclippedBoundsInRoot()
                 val undo = compose.onNodeWithTag(UNDO_TAG).getUnclippedBoundsInRoot()
-                val save =
-                    compose
-                        .onNodeWithTag(EDITOR_EXPORT_TAG)
-                        .assertIsDisplayed()
-                        .assertContentDescriptionEquals(context.getString(R.string.editor_export))
-                        .getUnclippedBoundsInRoot()
+                val redo = compose.onNodeWithTag(REDO_TAG).getUnclippedBoundsInRoot()
                 val more = compose.onNodeWithTag(EDITOR_MORE_TAG).getUnclippedBoundsInRoot()
                 assertThat(room.left.value).isAtLeast(back.right.value - 0.5f)
                 assertThat(undo.left.value).isAtLeast(room.right.value - 0.5f)
-                assertThat(save.left.value).isWithin(0.5f).of(undo.right.value)
-                assertThat(more.left.value).isWithin(0.5f).of(save.right.value)
-                // Material's 4 dp top app bar edge either side; no word on Save video, only the download arrow.
+                assertThat(more.left.value).isWithin(0.5f).of(redo.right.value)
+                // Material's 4 dp top app bar edge either side.
                 assertThat(back.left.value).isWithin(0.5f).of(bar.left.value + 4f)
                 assertThat(more.right.value).isWithin(0.5f).of(bar.right.value - 4f)
-                for (b in listOf(back, save, more)) {
+                for (b in listOf(back, undo, redo, more)) {
                     assertThat((b.right - b.left).value).isWithin(0.5f).of(48f)
                     assertThat((b.bottom - b.top).value).isWithin(0.5f).of(48f)
                 }
-                compose.onNodeWithText(context.getString(R.string.editor_export)).assertDoesNotExist()
+                // Export moved to the playback strip: nothing of it is left in the bar.
+                val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).getUnclippedBoundsInRoot()
+                assertThat(export.top.value).isAtLeast(bar.bottom.value - 0.5f)
                 // The title has everything between Back and Undo but Material's 4 dp title inset either side.
                 assertThat((undo.left - back.right - (room.right - room.left)).value).isWithin(0.5f).of(8f)
             }

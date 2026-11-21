@@ -124,8 +124,8 @@
     <string name="pick_adding">आपकी फ़ोटो और वीडियो जोड़ी जा रही हैं</string>
     <string name="pick_out_of_space">कॉपी करते समय फ़ोन की जगह खत्म हो गई, इसलिए कुछ नहीं जोड़ा गया। थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
     <string name="editor_title_new">नया वीडियो</string>
-    <!-- The download arrow in the editor's top bar, read by TalkBack: it opens the export sheet. -->
-    <string name="editor_export">वीडियो सेव करें</string>
+    <!-- The button with the upload arrow at the end of the editor's playback strip, beside Play: it opens the export sheet. -->
+    <string name="editor_export">एक्सपोर्ट करें</string>
     <string name="export_title">अपना वीडियो सेव करें</string>
     <string name="export_choose_body">एक साइज़ चुनें। बड़ा वाला टीवी पर ज़्यादा साफ़ दिखता है; छोटा वाला जल्दी भेजा जाता है।</string>
     <string name="export_quality_best">सबसे अच्छा</string>
@@ -174,9 +174,6 @@
     </plurals>
     <string name="editor_time">%2$s में से %1$s</string>
     <string name="editor_seek">वीडियो कहाँ तक चला</string>
-    <string name="editor_exact">ठीक वैसा चलाएँ जैसा एक्सपोर्ट होगा</string>
-    <string name="editor_exact_preparing">यह हिस्सा तैयार हो रहा है</string>
-    <string name="editor_exact_failed">यह हिस्सा तैयार नहीं हो सका। कृपया फिर से कोशिश करें।</string>
     <string name="editor_row_main">फ़ोटो और वीडियो</string>
     <string name="editor_item_photo">फ़ोटो</string>
     <string name="editor_item_video">वीडियो</string>
@@ -377,8 +374,6 @@
         <item quantity="one">सभी पंक्तियाँ दिखाएँ (%1$d और)</item>
         <item quantity="other">सभी पंक्तियाँ दिखाएँ (%1$d और)</item>
     </plurals>
-    <!-- Short label under an icon: plays a short part exactly as the export will look. -->
-    <string name="editor_exact_short">जैसा बनेगा</string>
     <!-- An item and its place among the photos, videos and cards: "Video 2". -->
     <string name="timeline_item_numbered">%1$s %2$d</string>
     <string name="editor_cant_do_that">इस पर यह नहीं हो सकता।</string>

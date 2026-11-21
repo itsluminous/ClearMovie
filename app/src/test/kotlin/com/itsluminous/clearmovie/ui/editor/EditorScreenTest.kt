@@ -161,13 +161,18 @@ class EditorScreenTest {
         val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertIsDisplayed().bounds()
         val more = compose.onNodeWithTag(EDITOR_MORE_TAG).assertIsDisplayed().bounds()
         val timeline = compose.onNodeWithTag(TIMELINE_TAG).bounds()
-        // Save video sits at the top right of the screen (of the right pane in two panes), More options after it.
+        val redo = compose.onNodeWithTag(REDO_TAG).assertIsDisplayed().bounds()
+        // More options sits at the top right of the screen (of the right pane in two panes), Redo before it.
         assertThat(more.right.v()).isWithin(8f).of(size.size.width.value)
-        assertThat(export.right.v()).isWithin(0.5f).of(more.left.v())
-        assertThat(export.top.v()).isLessThan(size.size.height.value / 4)
+        assertThat(redo.right.v()).isWithin(0.5f).of(more.left.v())
+        assertThat(more.bottom.v()).isAtMost(preview.top.v() + 1f)
+        // Export is right under the preview, at the strip's far end (the left pane's in two panes).
+        assertThat(export.top.v()).isAtLeast(preview.bottom.v() - 1f)
+        val strip = compose.onNodeWithTag(TRANSPORT_TAG).bounds()
+        assertThat(export.right.v()).isWithin(16f).of(strip.right.v())
+        assertThat(strip.top.v()).isAtLeast(preview.bottom.v() - 1f)
         if (size == ScreenSize.COMPACT) {
-            assertThat(export.bottom.v()).isAtMost(preview.top.v() + 1f)
-            assertThat(timeline.top.v()).isAtLeast(preview.bottom.v())
+            assertThat(timeline.top.v()).isAtLeast(export.bottom.v())
         } else {
             assertThat(timeline.left.v()).isAtLeast(preview.right.v() - 1f)
             assertThat(preview.left.v()).isLessThan(size.size.width.value / 4)
@@ -423,7 +428,7 @@ class EditorScreenTest {
     fun `the playback strip stays one row in Hindi at 1_3 and 1_5`() = assertStripOneRow(listOf(1.3f, 1.5f))
 
     @Test
-    fun `on a small 320 dp phone Play keeps its word and As exported gives way first`() {
+    fun `on a small 320 dp phone Play and Export keep their words in one row`() {
         val h = harness()
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(320.dp, 640.dp))) {
@@ -432,7 +437,7 @@ class EditorScreenTest {
         }
         compose.waitForIdle()
         compose.onNodeWithText(s(R.string.action_play)).assertIsDisplayed()
-        compose.onNodeWithContentDescription(s(R.string.editor_exact)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.editor_export)).assertIsDisplayed()
         val strip = compose.onNodeWithTag(TRANSPORT_TAG).bounds()
         assertThat((strip.bottom - strip.top).v()).isAtMost(64f)
     }
@@ -442,17 +447,24 @@ class EditorScreenTest {
             val strip = compose.onNodeWithTag(TRANSPORT_TAG).bounds()
             val play = compose.onNodeWithTag(PLAY_TAG).bounds()
             val time = compose.onNodeWithTag(TIME_TAG).bounds()
-            val exact = compose.onNodeWithTag(EXACT_TAG).bounds()
+            val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).bounds()
             // One row: everything centred on one line, and the strip no taller than one 56 dp row plus a little.
-            for (b in listOf(time, exact)) {
+            for (b in listOf(time, export)) {
                 assertThat(((b.top + b.bottom) / 2).v()).isWithin(2f).of(((play.top + play.bottom) / 2).v())
             }
             assertThat((strip.bottom - strip.top).v()).isAtMost(64f)
-            // Spread: Play at the start, As exported at the far end.
+            // Spread: Play at the start, Export at the far end, the time between them.
             assertThat((play.left - strip.left).v()).isAtMost(16f)
-            assertThat((strip.right - exact.right).v()).isAtMost(16f)
-            // Play is a compact 48 dp control, not a tall blob.
+            assertThat((strip.right - export.right).v()).isAtMost(16f)
+            assertThat(time.left.v()).isAtLeast(play.right.v() - 0.5f)
+            assertThat(export.left.v()).isAtLeast(time.right.v() - 0.5f)
+            // Play and Export are compact 48 dp controls, not tall blobs.
             assertThat((play.bottom - play.top).v()).isWithin(1f).of(48f)
+            assertThat((export.bottom - export.top).v()).isWithin(1f).of(48f)
+            // Export is in the strip only, not in the top bar as well.
+            assertThat(compose.onAllNodesWithTag(EDITOR_EXPORT_TAG).fetchSemanticsNodes()).hasSize(1)
+            val bar = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).bounds()
+            assertThat(export.top.v()).isAtLeast(bar.bottom.v() - 0.5f)
             // Zoom is in the bar, once each, and nowhere in the strip.
             for (a in listOf(EditAction.ZOOM_IN, EditAction.ZOOM_OUT, EditAction.FIT_ALL)) {
                 assertThat(compose.onAllNodesWithTag(barActionTag(a)).fetchSemanticsNodes().size).isAtMost(1)
@@ -778,15 +790,9 @@ class EditorScreenTest {
     @Test
     fun `main controls are at least 48 dp to touch and bar buttons at least the bar's minimum wide, at font scale 2`() {
         forEachSize(fontScales = listOf(1f, 2f)) { _, h ->
-            for (tag in listOf(EDITOR_EXPORT_TAG, PLAY_TAG, EXACT_TAG)) {
+            for (tag in listOf(EDITOR_EXPORT_TAG, PLAY_TAG, UNDO_TAG, REDO_TAG)) {
                 val b = compose.onNodeWithTag(tag).bounds()
                 assertThat((b.bottom - b.top).v()).isAtLeast(47.5f)
-                assertThat((b.right - b.left).v()).isAtLeast(47.5f)
-            }
-            // Undo and Redo are stacked in the 64 dp top bar (kupraki's call): 48 dp wide, half the bar tall.
-            for (tag in listOf(UNDO_TAG, REDO_TAG)) {
-                val b = compose.onNodeWithTag(tag).bounds()
-                assertThat((b.bottom - b.top).v()).isWithin(0.5f).of(32f)
                 assertThat((b.right - b.left).v()).isAtLeast(47.5f)
             }
             selectItem(h, "v2")
@@ -846,7 +852,11 @@ class EditorScreenTest {
             assertThat((b.bottom - b.top).v()).isWithin(0.5f).of(48f)
             assertThat((b.right - b.left).v()).isWithin(0.5f).of(48f)
         }
-        for (tag in listOf(EDITOR_EXPORT_TAG, PLAY_TAG, EXACT_TAG)) {
+        // Export is in the Play bar, beside Play, at its far end.
+        val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).bounds()
+        assertThat(export.top.v()).isAtLeast(sidePlay.top.v() - 0.5f)
+        assertThat(export.bottom.v()).isAtMost(sidePlay.bottom.v() + 0.5f)
+        for (tag in listOf(EDITOR_EXPORT_TAG, PLAY_TAG)) {
             val b = compose.onNodeWithTag(tag).bounds()
             assertThat((b.bottom - b.top).v()).isAtLeast(47.5f)
         }

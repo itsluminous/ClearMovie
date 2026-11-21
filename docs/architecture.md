@@ -15,7 +15,7 @@ their imports.
 | `domain.record` | `RecordingSync`: lining a voice recording up with the picture: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `domain.export` | The export's rules: the three sizes (`ExportQuality`), the free-space rule, the gallery file name, the time left: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `render.media3` | The Media3 mapping: `CompositionFactory`, the GL effects, the gain processor, `RenderExporter`, `VideoExport` (hardware first, then software) | |
-| `render.preview` | The layered editor preview (`LayeredPreviewEngine`, `StillLoader`) and the exact draft (`ExactDraft`) | |
+| `render.preview` | The layered editor preview (`LayeredPreviewEngine`, `StillLoader`) | |
 | `data.settings` | `SettingsRepository` and its DataStore implementation | `ui` |
 | `data.db` | The Room database `ClearMovieDatabase` (projects, session, preset bindings and definitions, persisted link grants) | `ui` |
 | `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard`, `NewVideos` (new drafts), `ShareDrafts` (a share's pending draft), `ProjectMedia` (a project's files) | `ui` |
@@ -193,7 +193,8 @@ Rendering has two layers, both under `render`:
   dip to silence for a fade through black or white), and
   ducking computed from the timeline (music lowered under clip sound and under
   voice, everything under the closing message, clip sound and voice never
-  lowered by music). `RenderPlan.slice` cuts a plan for a short exact draft.
+  lowered by music). `RenderPlan.slice` cuts a plan to a part of the video
+  (render tests use it).
 - **`render.media3`** maps a plan to one Media3 `Composition` for Transformer
   (`CompositionFactory`, `RenderExporter`). Media3's compositor draws the
   first sequence on top, so layers are emitted top first, under one
@@ -259,8 +260,7 @@ correction.
 The live editor preview does not play this composition: Media3's multi-input
 `CompositionPlayer` (1.11.1) shows no frame after a seek and freezes when a
 lower layer goes from a video to a photo. The editor therefore previews MAIN
-in a plain player with the other rows drawn over it, and offers an exact draft
-(a sliced plan, exported at a low height) on request.
+in a plain player with the other rows drawn over it.
 
 ### The layered preview
 
@@ -327,7 +327,7 @@ rather than not at all.
 
 ## Export
 
-The editor's Save video button (the download arrow in its top bar) opens the export sheet (`ui.export`): three sizes,
+The editor's Export button (the upload arrow at the end of the playback strip, beside Play) opens the export sheet (`ui.export`): three sizes,
 **Best** (1080p30, about 12 Mb/s), **Good** (720p30, about 6 Mb/s, suggested)
 and **Small** (480p30, about 2.5 Mb/s), each with its estimated size and, when
 the phone is too full for it, how much to free. Save starts `ExportWorker`
@@ -443,14 +443,14 @@ few threads of their own, so a provider that hangs costs only its items.
 ## The editor
 
 `EditorScreen` has the top bar, Material's small top app bar (Back, the title,
-Undo stacked above Redo, Save video and More options; the bar is always 64 dp
+Undo and Redo side by side, and More options; the bar is always 64 dp
 tall, 56 dp on a phone held sideways, so the title shrinks to stay on one line, down to 14 sp (less at the
 largest text sizes, so two lines still fit), before it takes a second line). A tap on the title, or More options > Rename video, opens the
 rename dialog (`RenameDialog`); the new name is an edit like any other, so Undo
 takes it back. More options also holds Video shape and Settings, which opens
 the settings screen over the editor; Back returns to it as it was. Below the
-bar come the preview with Play, the time and the Zoom out / Zoom in / Fit all buttons,
-the timeline, and the contextual bar or, while one is open, the panel of the
+bar come the preview with Play, the time and Export, the timeline, and the
+contextual bar (with Zoom out / Zoom in / Fit all) or, while one is open, the panel of the
 action in use. Its on-screen state (`EditorScreenState`: selection, open panel,
 zoom and scroll, "Show all rows", the floating preview's corner) is saved with
 the screen; the playhead is saved by `EditorViewModel`.

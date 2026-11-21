@@ -98,8 +98,6 @@ class EditorScreenshots {
 
             override fun togglePlay() = Unit
 
-            override fun exact() = Unit
-
             override fun fixPreset() = Unit
 
             override fun edit(change: Project.() -> Project): Boolean = false

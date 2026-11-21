@@ -55,8 +55,7 @@ fun interface SourceProbe {
 
 /**
  * Maps a [RenderPlan] to one Media3 [Composition] (ARCHITECTURE section 7)
- * for `Transformer`: the export, and the short exact draft behind "Play
- * exactly as exported" (a [RenderPlan.slice] at a low height).
+ * for `Transformer`: the export (and, in render tests, a [RenderPlan.slice]).
  *
  * The live editor preview does NOT use this composition: the cm-render spike
  * found that Media3's multi-input `CompositionPlayer` (1.11.1 and

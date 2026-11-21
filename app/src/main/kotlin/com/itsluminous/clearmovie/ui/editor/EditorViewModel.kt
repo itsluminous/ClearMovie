@@ -66,7 +66,6 @@ import com.itsluminous.clearmovie.render.media3.MediaResolver
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import com.itsluminous.clearmovie.render.plan.Source
-import com.itsluminous.clearmovie.render.preview.ExactDraft
 import com.itsluminous.clearmovie.render.preview.LayeredPreviewEngine
 import com.itsluminous.clearmovie.render.preview.StillLoader
 import com.itsluminous.clearmovie.ui.frame.FRAME_LOOK_STILL_WIDTH
@@ -114,21 +113,6 @@ data class EditorUi(
     val slots: List<MainSlot> get() = project?.mainLayout().orEmpty()
 
     val hasContent: Boolean get() = slots.any { it.clip is PhotoClip || it.clip is VideoClip || it.clip is CardClip }
-}
-
-/** "Play exactly as exported". */
-sealed interface DraftState {
-    data object Idle : DraftState
-
-    data class Preparing(
-        val percent: Int,
-    ) : DraftState
-
-    data class Ready(
-        val file: File,
-    ) : DraftState
-
-    data object Failed : DraftState
 }
 
 sealed interface EditorEvent {
@@ -260,10 +244,6 @@ class EditorViewModel
 
         /** Photos and videos being taken in for "+", Replace or Add. */
         val intake = MediaIntake(mediaAccess, viewModelScope)
-
-        private val draftState = MutableStateFlow<DraftState>(DraftState.Idle)
-        val draft: StateFlow<DraftState> = draftState.asStateFlow()
-        private var draftJob: Job? = null
 
         private val eventChannel = Channel<EditorEvent>(Channel.BUFFERED)
         val events: Flow<EditorEvent> = eventChannel.receiveAsFlow()
@@ -886,51 +866,7 @@ class EditorViewModel
         override fun onCleared() {
             voice.release()
             intake.cancel()
-            draftJob?.cancel()
             engine.release()
-        }
-
-        /** Renders the exact draft around the playhead. */
-        fun requestDraft() {
-            if (draftJob?.isActive == true) return
-            val project = uiState.value.project ?: return
-            val set = media ?: return
-            engine.pause()
-            val at = engine.positionUs
-            draftState.value = DraftState.Preparing(0)
-            draftJob =
-                viewModelScope.launch {
-                    val plan =
-                        runCatching {
-                            RenderPlanBuilder(
-                                set.preset,
-                                set.loudness,
-                            ).build(project, shortSide = ExactDraft.HEIGHT)
-                        }.getOrNull()
-                    if (plan == null || plan.durationUs <= 0) {
-                        draftState.value = DraftState.Failed
-                        return@launch
-                    }
-                    draftState.value =
-                        when (
-                            val r =
-                                ExactDraft(
-                                    context,
-                                ).render(plan, at, set.resolver) { p -> draftState.value = DraftState.Preparing(p) }
-                        ) {
-                            is ExactDraft.Result.Done -> DraftState.Ready(r.file)
-                            ExactDraft.Result.Failed -> DraftState.Failed
-                        }
-                }
-        }
-
-        fun cancelDraft() {
-            draftJob?.cancel()
-            draftState.value = DraftState.Idle
-        }
-
-        fun closeDraft() {
-            draftState.value = DraftState.Idle
         }
 
         /** Back: writes the project and leaves the editor. */
