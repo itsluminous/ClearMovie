@@ -198,7 +198,8 @@ class RowEndPlusDeviceTest {
                 "$k ${b.left}-${b.right}"
             }} timeline ${timeline.left}-${timeline.right}",
         )
-        assertWithMessage("rows with a plus in view").that(boxes.size).isAtLeast(3)
+        // Sideways at least MAIN and one more row are whole in view (the preset's frame row has no "+").
+        assertWithMessage("rows with a plus in view").that(boxes.size).isAtLeast(2)
         for ((key, b) in boxes) {
             assertWithMessage("left of $key").that(b.left.value).isWithin(1f).of(
                 boxes
