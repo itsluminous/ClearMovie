@@ -334,6 +334,17 @@ class EditorViewModel
         private var pendingPreviewUs: Long? = null
         private var previewFallback: Job? = null
 
+        // Before the first init: its coroutine can reach suggestShape while the view model is still being made
+        // (an open project is read without suspending), and these must exist by then.
+        private val suggestion = MutableStateFlow<CanvasShape?>(null)
+
+        /**
+         * The shape the first-time question suggests (cm-aspect-ratio): the
+         * one that suits the first photo or video, landscape until that is known.
+         */
+        val suggestedShape: StateFlow<CanvasShape?> = suggestion.asStateFlow()
+        private var suggesting: Job? = null
+
         init {
             viewModelScope.launch {
                 val opened = repository.open(projectId)
@@ -438,15 +449,6 @@ class EditorViewModel
             session.undo()?.let(::write)
             publishHistory()
         }
-
-        private val suggestion = MutableStateFlow<CanvasShape?>(null)
-
-        /**
-         * The shape the first-time question suggests (cm-aspect-ratio): the
-         * one that suits the first photo or video, landscape until that is known.
-         */
-        val suggestedShape: StateFlow<CanvasShape?> = suggestion.asStateFlow()
-        private var suggesting: Job? = null
 
         private fun suggestShape(project: Project) {
             if (!project.askShape || suggesting != null) return
