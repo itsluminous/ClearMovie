@@ -232,9 +232,12 @@ class RecordVoiceDeviceTest {
                 // The new activity shows the same recording, still running.
                 waitFor(hasTestTag(RECORDING_STOP_TAG))
                 assertThat(mic.released).isFalse()
+                // It goes on recording in the new activity.
+                Thread.sleep(RECORD_MS)
+                assertThat(mic.released).isFalse()
                 compose.onNodeWithTag(RECORDING_STOP_TAG).performClick()
                 compose.waitUntil(TIMEOUT_MS) { clipOnVoiceRow() != null }
-                assertThat(clipOnVoiceRow()!!.durationMs).isAtLeast(1_000L)
+                assertThat(clipOnVoiceRow()!!.durationMs).isAtLeast(RECORD_MS)
             }
         } finally {
             automation.setRotation(UiAutomation.ROTATION_UNFREEZE)
