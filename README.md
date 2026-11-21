@@ -83,8 +83,8 @@ In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
 - **Your own presets** - make a new preset from Home, and edit or delete any preset there.
   A new install starts with none: New preset comes first on Home. An install that had the
   Event frame keeps it as a preset like any other. Each
-  preset keeps a caption style (words, place, size, font, colour, outline and band) that new
-  captions start from, with a live preview.
+  preset keeps a caption style (words, place, size, font, colour, outline, band and the
+  animation it comes in with) that new captions start from, with a live preview.
 - **Share from your gallery** - select photos and videos in the gallery, tap Share, and
   choose ClearMovie. They open on the timeline in the order they were taken.
 - **A timeline that stays simple** - photos and videos on one row you reorder by dragging,
@@ -95,7 +95,9 @@ In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
   (trim, split, speed, loop, photo duration, volume, text, transition, animation, replace,
   delete). It scrolls sideways when there are more.
 - **Captions** - start from the preset's position, font and size, then change any of
-  them. Hindi (Devanagari) and English fonts are included.
+  them. Drag a caption's box to move it, or a handle on its edge to make it wider or
+  narrower; the words wrap again at their size. Hindi (Devanagari) and English fonts are
+  included.
 - **Transitions and animations** - crossfades, fades, wipes, slides and zooms between
   items, and gentle zooms or fade-ins on single items, each with a live preview.
 - **Background music and ducking** - the frame's music plays under the whole video and
@@ -135,7 +137,7 @@ What has shipped, and what is still to come:
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
 - [x] Audio overlay with volume, fade and automatic ducking
 - [x] Record voice: speak over the video as it plays, lined up with the picture (done on `main`, ships in 0.0.2)
-- [x] Captions with preset defaults, drag-to-place, fonts, size, colours, outline and background
+- [x] Captions with preset defaults, drag-to-place, drag-to-resize, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
 - [x] Preview that shrinks, or floats as a small window, when all rows need room
 

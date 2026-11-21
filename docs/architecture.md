@@ -280,9 +280,16 @@ lays it out for players:
   to its box, so wrapping, size, outline and band match the export. A
   schedule that differs only in its captions is taken without reloading any
   player (`LayeredPreviewEngine.updateCaptions`), so typing and styling show
-  at once. While the caption editor is open, its box is outlined on the
-  preview and can be dragged inside the frame window's safe area
-  (`CaptionPlaces`), snapping to the preset's place.
+  at once. While the caption editor is open, or a caption is selected and
+  shows at the paused playhead, its box is outlined on the preview with
+  handles (`ui/components/ResizableRect.kt`, shared with the preset's
+  caption style editor): the box moves inside the frame window's safe area
+  (`CaptionPlaces`), snapping to the preset's place, and a handle resizes it.
+  A resize keeps the text size: the box is never made shorter than its
+  words need at the new width (`CaptionBitmapRenderer.boxHeightFor`, the
+  export's own measurement), so the preview and every export size wrap it
+  alike. A preset's caption style also sets `effects.textStart`, the start
+  animation new captions get (`withEffectDefaultsFor`).
 
 `LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. It takes its
 players from a `PreviewPlayerFactory` (`ExoPreviewPlayers` in the app), so
