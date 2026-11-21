@@ -230,6 +230,7 @@ interface TimelineActions {
     fun addHere(
         key: String,
         atMs: Long? = null,
+        otherRow: Boolean = false,
     ) {}
 
     /** A row dragged by its icon: to [toIndex] of the screen order (counted with the row taken out). */
@@ -817,7 +818,8 @@ private class LatestActions(
     override fun addHere(
         key: String,
         atMs: Long?,
-    ) = latest().addHere(key, atMs)
+        otherRow: Boolean,
+    ) = latest().addHere(key, atMs, otherRow)
 
     override fun moveRow(
         key: String,
@@ -1569,8 +1571,11 @@ private fun rowPlus(
     val length =
         when (row.type) {
             RowType.TEXT -> Limits.DEFAULT_TEXT_MS
+
             RowType.PIP -> photoMs
-            else -> Limits.MIN_CLIP_MS
+
+            // Not known until picked (or recorded): a second, so a sound added near the end is heard.
+            else -> RowEndPlus.MIN_SEEN_MS
         }
     return when (val t = RowEndPlus.timed(row.clips, cursorMs, length, videoMs)) {
         is EndPlusTarget.At -> if (row.clips.isEmpty()) RowPlus.Empty(t.atMs) else RowPlus.At(t.atMs, t.full)
@@ -1630,7 +1635,7 @@ private fun act(
         }
 
         is RowPlus.At -> {
-            actions.addHere(row.key, plus.atMs)
+            actions.addHere(row.key, plus.atMs, otherRow = plus.full)
         }
 
         is RowPlus.After -> {

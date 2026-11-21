@@ -35,8 +35,9 @@ data class MainEndTarget(
  * rules are tested on the JVM.
  *
  * - A row other than MAIN: at the cursor when the row is free there for the
- *   new item's length ([lengthMs]: 3 s for a caption or a photo; one moment
- *   for a sound or a frame, whose length is known only once it is picked).
+ *   new item's length ([lengthMs]: 3 s for a caption, the project's photo
+ *   length for a photo; a second for a sound or a frame, whose length is
+ *   known only once it is picked).
  *   Otherwise right after the item under the cursor (or the next one, when
  *   the cursor is in a gap too short), and past every item that still leaves
  *   no room: the first place right of the cursor where it fits. A picked file

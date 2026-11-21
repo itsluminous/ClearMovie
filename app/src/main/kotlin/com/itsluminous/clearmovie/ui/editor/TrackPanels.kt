@@ -63,6 +63,7 @@ import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.ui.components.durationText
 import com.itsluminous.clearmovie.ui.components.preciseDurationText
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
+import com.itsluminous.clearmovie.ui.editor.timeline.RowEndPlus
 import com.itsluminous.clearmovie.ui.editor.timeline.RowType
 import com.itsluminous.clearmovie.ui.editor.timeline.TimelineRow
 import com.itsluminous.clearmovie.ui.editor.timeline.rowLook
@@ -121,13 +122,13 @@ internal fun TimedInsertPanel(
             val where = stringResource(timedItemName(null, anchor))
             stringResource(if (side == InsertSide.BEFORE) R.string.insert_title_before else R.string.insert_title_after, where)
         } else if (open.atMs != null) {
-            // From a row's "+": the time it adds at, fixed when the "+" was tapped; "another row" when this one is
-            // taken there, as the model then puts it on another row of its kind.
+            // From a row's "+": the time it adds at, fixed when the "+" was tapped; "another row" when the "+" said the
+            // row is full there, as the model then puts it on another row of its kind.
             val time = durationText(open.atMs * 1000)
-            if (track.isFree(open.atMs, open.atMs + Limits.MIN_CLIP_MS)) {
-                stringResource(R.string.timeline_add_at, nameOf(track, rows), time)
-            } else {
+            if (open.otherRow) {
                 stringResource(R.string.timeline_add_other_row, stringResource(rowLook(rowTypeOf(track)).second), time)
+            } else {
+                stringResource(R.string.timeline_add_at, nameOf(track, rows), time)
             }
         } else {
             stringResource(R.string.add_here_title, nameOf(track, rows))
@@ -152,10 +153,23 @@ internal fun TimedInsertPanel(
                 val id = RandomIds.clipId()
                 val ok =
                     callbacks.editMerged(captionMergeKey(id)) {
-                        // Never past the end of the video: near it, the new caption ends with the video.
-                        val from = if (anchor != null && side == InsertSide.AFTER) anchor.endMs else hereMs
-                        val left = (mainLayout().lastOrNull()?.endMs ?: 0L) - from
-                        val length = if (left >= Limits.MIN_CLIP_MS) minOf(Limits.DEFAULT_TEXT_MS, left) else Limits.DEFAULT_TEXT_MS
+                        // Near the end of the video the new caption ends with it (where it starts from a known time: after
+                        // an item, or Add here; before an item it ends where that item starts).
+                        val from =
+                            when {
+                                anchor == null -> hereMs
+                                side == InsertSide.AFTER -> anchor.endMs
+                                else -> null
+                            }
+                        val left = from?.let { (mainLayout().lastOrNull()?.endMs ?: 0L) - it }
+                        val length =
+                            if (left != null &&
+                                left >= RowEndPlus.MIN_SEEN_MS
+                            ) {
+                                minOf(Limits.DEFAULT_TEXT_MS, left)
+                            } else {
+                                Limits.DEFAULT_TEXT_MS
+                            }
                         val made = TextClip(id, 0, length, newCaptionWords())
                         val placed =
                             if (anchor != null) {

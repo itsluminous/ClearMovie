@@ -91,6 +91,8 @@ data class OpenPanel(
     val side: InsertSide? = null,
     val trackId: TrackId? = null,
     val atMs: Long? = null,
+    /** "Add here" on a row full there: the new item goes on another row of its kind, and the chooser says so. */
+    val otherRow: Boolean = false,
 )
 
 /**
@@ -167,6 +169,7 @@ class EditorScreenState(
                         s.captionStartText,
                         s.captionStartStyle,
                         s.panel?.atMs,
+                        s.panel?.otherRow,
                     )
                 },
                 restore = { saved ->
@@ -184,6 +187,7 @@ class EditorScreenState(
                                     (v[3] as String?)?.let { InsertSide.valueOf(it) },
                                     panelTrack?.let(::TrackId),
                                     (v.getOrNull(15) as Long?)?.takeIf { it >= 0 },
+                                    v.getOrNull(16) as Boolean? ?: false,
                                 )
                             }.getOrNull()
                         } else {

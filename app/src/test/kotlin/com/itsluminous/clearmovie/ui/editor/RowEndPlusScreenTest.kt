@@ -345,6 +345,54 @@ class RowEndPlusScreenTest {
     }
 
     @Test
+    fun `a caption ending the video in a short gap: the plus and the chooser both say another row, and it goes there`() {
+        val total = project.mainLayout().last().endMs
+        // "The End" from 2.5 s before the end: the last 3 s are taken.
+        val end = project.addText("The End", total - 2500, 2500, ids)
+        val h = EditorHarness(end, Fixtures.preset)
+        compose.setContent { h.At(ScreenSize.EXPANDED, 1f) }
+        compose.waitForIdle()
+        val row = h.project.rowOf(h.project.captionId("The End"))
+        at(h, total - 1000)
+        val at = total - 3000
+        val seconds = (at + 500) / 1000
+        val time = context.getString(R.string.duration_minutes_seconds, seconds / 60, seconds % 60)
+        val said = context.getString(R.string.timeline_add_other_row, context.getString(R.string.timeline_row_text), time)
+        assertThat(description(row)).isEqualTo(said)
+        tapEnd(row)
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = row, atMs = at, otherRow = true))
+        compose.onNodeWithText(said).assertExists()
+        val made = newCaption(h)
+        assertThat(made.startMs).isEqualTo(at)
+        assertThat(h.project.rowOf(made.id)).isNotEqualTo(row)
+    }
+
+    @Test
+    fun `a caption added before an item keeps its full length whatever the cursor`() {
+        val h = show()
+        val hello = h.project.captionId("hello")
+        at(
+            h,
+            h.project
+                .mainLayout()
+                .last()
+                .endMs,
+        )
+        compose.runOnIdle { h.state!!.selected = hello }
+        compose.waitForIdle()
+        compose
+            .onNodeWithTag(
+                com.itsluminous.clearmovie.ui.editor.timeline
+                    .timedPlusTag(hello, InsertSide.BEFORE),
+                useUnmergedTree = true,
+            ).performClick()
+        compose.waitForIdle()
+        val made = newCaption(h)
+        assertThat(made.endMs - made.startMs).isEqualTo(3000)
+        assertThat(made.endMs).isEqualTo(h.project.clip(hello)!!.startMs)
+    }
+
+    @Test
     fun `while playing, TalkBack's plus adds where it said, at the time play started from`() {
         val h = show()
         val textRow = h.project.rowOf(h.project.captionId("hello"))
