@@ -627,7 +627,7 @@ class PresetStore(
             val info = gateway.describe(uri) ?: return@withContext SlotBindResult.Unreadable
             // Used where it is (cm-frame-area) when the preset says so and the link's read grant can be kept;
             // otherwise copied, as before.
-            if (!copiesFiles(id) && grants?.persist(uri) == true) {
+            if (!copiesFiles(id) && MediaRef.isSafeContentUri(uri.toString()) && grants?.persist(uri) == true) {
                 return@withContext bindLinked(id, slot, preset, uri, info)
             }
             val free = freeBytes()
@@ -674,12 +674,7 @@ class PresetStore(
                 currentCoroutineContext().ensureActive()
                 // A preset the user made has the shipped frame's window until its own frame is measured.
                 // The kept Event frame keeps the window its definition names.
-                val ownWindow =
-                    frame
-                        ?.takeIf { bundled().none { b -> b.id == id } }
-                        ?.let { KeyColorCheck.window(facts.frames) }
-                        ?.takeIf { w -> !w.sameAs(frame.contentRect) }
-                val check = frame?.let { KeyColorCheck.measure(facts.frames, ownWindow ?: it.contentRect, it.key.color) }
+                val (ownWindow, check) = measureFrame(id, frame, facts)
                 val entity =
                     PresetBindingEntity(
                         presetId = id.value,
@@ -717,7 +712,7 @@ class PresetStore(
                     copied.file.delete()
                     return@withContext SlotBindResult.NotEnoughSpace(size + CopyBudget.RESERVE_BYTES, freeBytes())
                 }
-                if (ownWindow != null) {
+                if (ownWindow != null && frame != null) {
                     // The frame plays either way; a window that could not be stored keeps the copied one.
                     withContext(NonCancellable) {
                         val row = db.presets().definition(id.value)
@@ -908,7 +903,7 @@ class PresetStore(
             return SlotBindResult.WrongKind
         }
         currentCoroutineContext().ensureActive()
-        val check = frame?.let { KeyColorCheck.measure(facts.frames, it.contentRect, it.key.color) }
+        val (ownWindow, check) = measureFrame(id, frame, facts)
         val entity =
             PresetBindingEntity(
                 presetId = id.value,
@@ -941,11 +936,40 @@ class PresetStore(
                         return@withContext false
                     }
                 if (previous != null) forget(id, slot, previous, keepLink = link)
+                if (ownWindow != null && frame != null) {
+                    // As for a copy: the frame plays either way; a window that could not be stored keeps the old one.
+                    val row = db.presets().definition(id.value)
+                    write(
+                        preset.copy(frame = frame.copy(contentRect = ownWindow)),
+                        row?.createdAt ?: 0L,
+                        row?.retiredAt,
+                        row?.copyFiles ?: true,
+                    )
+                }
                 true
             }
         if (!committed) return SlotBindResult.Unreadable
         val fileShape = CanvasShape.suiting(facts.shownWidth, facts.shownHeight)?.takeIf { facts.hasVideo && it != preset.shape }
         return SlotBindResult.Bound(toBinding(id, entity)!!, fileShape)
+    }
+
+    /**
+     * A frame file's own green window (for a preset the user made, whose
+     * window is the built-in frame's until its own is measured) and the
+     * key-colour check against it; both null for any other slot.
+     */
+    private fun measureFrame(
+        id: PresetId,
+        frame: com.itsluminous.clearmovie.domain.model.FrameSpec?,
+        facts: ProbeResult,
+    ): Pair<NormRect?, KeyColorCheck?> {
+        frame ?: return null to null
+        val ownWindow =
+            KeyColorCheck
+                .window(facts.frames)
+                ?.takeIf { bundled().none { b -> b.id == id } }
+                ?.takeIf { w -> !w.sameAs(frame.contentRect) }
+        return ownWindow to KeyColorCheck.measure(facts.frames, ownWindow ?: frame.contentRect, frame.key.color)
     }
 
     /**

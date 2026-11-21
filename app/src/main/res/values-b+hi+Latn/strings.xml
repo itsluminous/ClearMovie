@@ -663,10 +663,11 @@
     <string name="frame_look_picked">Chuna gaya rang</string>
     <string name="frame_look_still">Frame video. Kisi rang ko hatane ke liye us par tap karein.</string>
     <string name="frame_look_box">Photo ki jagah. Hilane ke liye kheenchein.</string>
-    <string name="frame_look_corner">Photo ki jagah ka kona. Size badalne ke liye kheenchein.</string>
     <string name="preset_slot_frame_look">Rang aur jagah</string>
     <string name="preset_copy_title">Files ki copy rakhein</string>
     <string name="preset_copy_body">Off: preset aapki files wahin se use karta hai jahan woh hain, isliye woh extra jagah nahin leti. Agar aap koi file hatate ya delete karte hain, to ClearMovie use phir se maangega. On: ClearMovie apni copy rakhta hai.</string>
     <string name="preset_setup_body_linked">Har file apne phone se ek baar chunein. ClearMovie use wahin se use karta hai, isliye use wahin rehne dein.</string>
     <string name="preset_guide_step_done_linked">ClearMovie har file ko wahin se use karta hai, isliye files phone par hi rehne dein.</string>
+    <string name="bar_key_colour">Rang</string>
+    <string name="bar_picture_area">Jagah</string>
 </resources>

@@ -92,6 +92,7 @@ import com.itsluminous.clearmovie.domain.model.MediaClip
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
+import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.domain.model.TextClip
@@ -231,6 +232,9 @@ interface EditorCallbacks {
         trackId: TrackId,
         atMs: Long,
     ) = Unit
+
+    /** The preset frame's own window (in units of its picture), for its look when this video has not set one. */
+    fun presetFrameArea(): NormRect? = null
 
     /** A picture of frame [clip]'s video at [atUs], for its look (cm-frame-area); null when it can't be read. */
     suspend fun frameStill(
@@ -399,7 +403,7 @@ fun EditPanel(
                                 durationMs = frame.sourceDurationMs,
                                 initialKey =
                                     frame.key ?: KeySpec(DEFAULT_KEY_GREEN, FrameSpec.DEFAULT_TOLERANCE, FrameSpec.DEFAULT_SOFTNESS),
-                                initialArea = frame.area,
+                                initialArea = frame.area ?: callbacks.presetFrameArea().takeIf { track.presetRole == PresetRole.FRAME },
                                 startTab = if (open.panel == Panel.FRAME_AREA) FrameLookTab.AREA else FrameLookTab.COLOUR,
                                 loadStill = { callbacks.frameStill(frame, it) },
                                 onDone = { key, area ->

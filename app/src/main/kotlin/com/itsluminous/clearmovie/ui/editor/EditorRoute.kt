@@ -60,6 +60,7 @@ import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.MediaRef
+import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
@@ -366,6 +367,11 @@ fun EditorRoute(
                     viewModel.pause()
                     latestAskToRecord(trackId, atMs)
                 }
+
+                override fun presetFrameArea(): NormRect? =
+                    viewModel.ui.value.preset
+                        ?.frame
+                        ?.contentRect
 
                 override suspend fun frameStill(
                     clip: OverlayClip,

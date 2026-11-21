@@ -89,6 +89,8 @@ data class SetupUi(
     val message: SetupMessage? = null,
     /** The frame's look is being set (cm-frame-area): asked when the frame is chosen, and from its row. */
     val frameLook: Boolean = false,
+    /** The look was opened because the frame file was just chosen: its area then starts from the picked colour. */
+    val frameJustChosen: Boolean = false,
     /** Whether the files chosen are copied into the app (else used where they are). */
     val copiesFiles: Boolean = true,
 ) {
@@ -140,7 +142,10 @@ class PresetSetupViewModel
                     Routes.ARG_SHARE_DRAFT,
                 )?.let { runCatching { ProjectId(it) }.getOrNull() }
 
-        private val uiState = MutableStateFlow(SetupUi(frameLook = savedState[KEY_FRAME_LOOK] ?: false))
+        private val uiState =
+            MutableStateFlow(
+                SetupUi(frameLook = savedState[KEY_FRAME_LOOK] ?: false, frameJustChosen = savedState[KEY_FRAME_NEW] ?: false),
+            )
         val ui: StateFlow<SetupUi> = uiState.asStateFlow()
 
         private val eventChannel = Channel<SetupEvent>(Channel.BUFFERED)
@@ -161,13 +166,17 @@ class PresetSetupViewModel
         }
 
         /** Opens the frame's look (its colour and picture area), once its file is ready. */
-        fun openFrameLook() = setFrameLook(true)
+        fun openFrameLook() = setFrameLook(true, justChosen = false)
 
         fun closeFrameLook() = setFrameLook(false)
 
-        private fun setFrameLook(open: Boolean) {
+        private fun setFrameLook(
+            open: Boolean,
+            justChosen: Boolean = false,
+        ) {
             savedState[KEY_FRAME_LOOK] = open
-            uiState.update { it.copy(frameLook = open) }
+            savedState[KEY_FRAME_NEW] = open && justChosen
+            uiState.update { it.copy(frameLook = open, frameJustChosen = open && justChosen) }
         }
 
         /** A picture of the frame file at [atUs], for its look. */
@@ -216,7 +225,7 @@ class PresetSetupViewModel
             when (result) {
                 is SlotBindResult.Bound -> {
                     // A frame just chosen asks once which colour to remove and where photos go (cm-frame-area).
-                    if (slot == PresetSlot.FRAME) setFrameLook(true)
+                    if (slot == PresetSlot.FRAME) setFrameLook(true, justChosen = true)
                     if (result.fileShape != null) SetupMessage.ShapeDiffers else null
                 }
 
@@ -329,6 +338,7 @@ class PresetSetupViewModel
 
         companion object {
             private const val KEY_FRAME_LOOK = "frameLook"
+            private const val KEY_FRAME_NEW = "frameJustChosen"
             val VIDEO = arrayOf("video/*")
             val AUDIO = arrayOf("audio/*")
 

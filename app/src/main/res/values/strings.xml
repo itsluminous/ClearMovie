@@ -707,10 +707,11 @@
     <string name="frame_look_picked">Colour chosen</string>
     <string name="frame_look_still">The frame video. Tap a colour to remove it.</string>
     <string name="frame_look_box">Picture area. Drag to move it.</string>
-    <string name="frame_look_corner">Corner of the picture area. Drag to change its size.</string>
     <string name="preset_slot_frame_look">Colour and area</string>
     <string name="preset_copy_title">Keep a copy of the files</string>
     <string name="preset_copy_body">Off: the preset uses your files where they are, so they take no extra space. If you move or delete one, ClearMovie asks for it again. On: ClearMovie keeps its own copies.</string>
     <string name="preset_setup_body_linked">Choose each file from your phone once. ClearMovie uses it where it is, so leave it there.</string>
     <string name="preset_guide_step_done_linked">ClearMovie uses each file where it is, so leave the files on the phone.</string>
+    <string name="bar_key_colour">Colour</string>
+    <string name="bar_picture_area">Area</string>
 </resources>

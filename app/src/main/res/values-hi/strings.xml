@@ -655,10 +655,11 @@
     <string name="frame_look_picked">चुना गया रंग</string>
     <string name="frame_look_still">फ़्रेम वीडियो। किसी रंग को हटाने के लिए उस पर टैप करें।</string>
     <string name="frame_look_box">फ़ोटो की जगह। हिलाने के लिए खींचें।</string>
-    <string name="frame_look_corner">फ़ोटो की जगह का कोना। आकार बदलने के लिए खींचें।</string>
     <string name="preset_slot_frame_look">रंग और जगह</string>
     <string name="preset_copy_title">फ़ाइलों की कॉपी रखें</string>
     <string name="preset_copy_body">बंद: प्रीसेट आपकी फ़ाइलें वहीं से इस्तेमाल करता है जहाँ वे हैं, इसलिए वे ज़्यादा जगह नहीं लेतीं। अगर आप कोई फ़ाइल हटाते या मिटाते हैं, तो ClearMovie उसे फिर से माँगेगा। चालू: ClearMovie अपनी कॉपी रखता है।</string>
     <string name="preset_setup_body_linked">हर फ़ाइल अपने फ़ोन से एक बार चुनें। ClearMovie उसे वहीं से इस्तेमाल करता है, इसलिए उसे वहीं रहने दें।</string>
     <string name="preset_guide_step_done_linked">ClearMovie हर फ़ाइल को वहीं से इस्तेमाल करता है, इसलिए फ़ाइलें फ़ोन पर ही रहने दें।</string>
+    <string name="bar_key_colour">रंग</string>
+    <string name="bar_picture_area">जगह</string>
 </resources>

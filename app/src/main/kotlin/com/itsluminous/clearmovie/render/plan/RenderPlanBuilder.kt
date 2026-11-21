@@ -234,8 +234,10 @@ class RenderPlanBuilder(
         slot: MainSlot,
         durUs: Long,
     ): VisualSegment.Picture {
-        val prev = ctx.slots.getOrNull(slot.index - 1)?.clip
-        val window = windowFor(ctx, slot.startMs, slot.startMs + slot.durationMs)
+        val prevSlot = ctx.slots.getOrNull(slot.index - 1)
+        val prev = prevSlot?.clip
+        // Where the item before it was drawn, so the held picture does not jump at the cut (cm-frame-area).
+        val window = prevSlot?.let { windowFor(ctx, it.startMs, it.startMs + it.durationMs) } ?: ctx.window
         return when (prev) {
             is VideoClip -> {
                 val lastUs = (prev.trimEndMs * US - FRAME_US).coerceAtLeast(prev.trimStartMs * US)

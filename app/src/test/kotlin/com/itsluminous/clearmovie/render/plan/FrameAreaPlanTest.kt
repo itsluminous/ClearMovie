@@ -178,4 +178,26 @@ class FrameAreaPlanTest {
         assertThat(keys.flatten().toSet()).containsExactly(magenta, null)
         assertThat(schedule.overlays.map { it.trackId }.toSet()).containsExactly(row)
     }
+
+    @Test
+    fun `a spoken ending holds the last picture where it was drawn, not where the ending's own time would put it`() {
+        val ids = SequentialIds("k")
+        val p0 =
+            ProjectFactory
+                .fromPreset(Fixtures.PROJECT_ID, Fixtures.preset.copy(intro = null), PresetMedia(frameMs = 4000, endingMs = 3000), ids)
+                .addToMain(listOf(photo("p")), ids = ids)
+        val frame = p0.byRole(PresetRole.FRAME).clips.single() as OverlayClip
+        val p1 = p0.setFrameLook(frame.id, magenta, area)
+        val held =
+            RenderPlanBuilder(Fixtures.preset.copy(intro = null))
+                .build(p1)
+                .visual
+                .filter { it.role == LayerRole.MAIN || it.role == LayerRole.MAIN_B }
+                .flatMap { it.segments }
+                .filterIsInstance<VisualSegment.Picture>()
+                .filter { it.source is Source.Photo }
+                .map { (it.placement as Placement.Window).rect }
+        assertThat(held).hasSize(2)
+        assertThat(held.toSet()).containsExactly(area)
+    }
 }

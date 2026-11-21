@@ -116,7 +116,8 @@ fun PresetSetupRoute(
         FrameLookDialog(
             durationMs = frame.durationMs,
             initialKey = key,
-            initialArea = ui.preset?.frame?.contentRect,
+            // A frame just chosen: the area follows the colour picked; opened again later, it starts where it was set.
+            initialArea = if (ui.frameJustChosen) null else ui.preset?.frame?.contentRect,
             startTab = FrameLookTab.COLOUR,
             loadStill = viewModel::frameStill,
             onDone = viewModel::saveFrameLook,

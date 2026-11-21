@@ -298,8 +298,8 @@ fun barLabel(action: EditAction): Int =
         EditAction.MUTE_ROW -> R.string.bar_mute_row
         EditAction.LOWER_MUSIC -> R.string.bar_lower_music
         EditAction.FRAME_ON -> R.string.bar_frame_on
-        EditAction.KEY_COLOUR -> R.string.action_key_colour
-        EditAction.PICTURE_AREA -> R.string.action_picture_area
+        EditAction.KEY_COLOUR -> R.string.bar_key_colour
+        EditAction.PICTURE_AREA -> R.string.bar_picture_area
         EditAction.MOVE_EARLIER -> R.string.action_move_earlier
         EditAction.MOVE_LATER -> R.string.action_move_later
         EditAction.MOVE_TO_ROW -> R.string.bar_move_to_row
