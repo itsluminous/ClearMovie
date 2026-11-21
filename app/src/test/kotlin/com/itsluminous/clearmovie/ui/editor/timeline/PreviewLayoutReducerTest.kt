@@ -173,4 +173,19 @@ class PreviewLayoutReducerTest {
         assertThat(s.layout).isNull()
         assertThat(s.allRowsRequested).isTrue()
     }
+
+    @Test
+    fun `an upright or square video's preview is as tall as the rows leave room for, never past its shape`() {
+        // cm-aspect-ratio: the natural preview is the full width at the video's shape.
+        assertThat(PreviewLayoutReducer.fullPreviewDp(411.0, 9.0 / 16)).isWithin(1e-9).of(411.0 * 16 / 9)
+        assertThat(PreviewLayoutReducer.fullPreviewDp(411.0, 1.0)).isWithin(1e-9).of(411.0)
+        val few = rows(2)
+        val upright = measured(PreviewLayoutState(), input(few).copy(canvasAspect = 9.0 / 16)).layout
+        // 730 dp tall does not fit with the rows: the preview takes the room the rows leave.
+        assertThat(upright).isInstanceOf(PreviewLayout.Shrunk::class.java)
+        val space = 891.0 - 300.0 - PreviewLayoutReducer.rowsHeight(input(few), few)
+        assertThat((upright as PreviewLayout.Shrunk).previewDp).isWithin(1e-9).of(space)
+        val square = measured(PreviewLayoutState(), input(few, chrome = 200.0).copy(canvasAspect = 1.0)).layout
+        assertThat(square).isEqualTo(PreviewLayout.Full(411.0, few.map { it.key }))
+    }
 }

@@ -69,6 +69,9 @@ sealed interface SetupMessage {
 
     /** The new video could not be started (the phone is full). */
     data object NotSaved : SetupMessage
+
+    /** The frame chosen is not the preset's shape (cm-aspect-ratio): it is kept, and will look stretched. */
+    data object FrameShapeDiffers : SetupMessage
 }
 
 data class SetupUi(
@@ -157,7 +160,7 @@ class PresetSetupViewModel
                 }
             when (result) {
                 is SlotBindResult.Bound -> {
-                    null
+                    if (result.frameShape != null) SetupMessage.FrameShapeDiffers else null
                 }
 
                 SlotBindResult.WrongKind -> {

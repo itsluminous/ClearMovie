@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.itsluminous.clearmovie.data.preset.PresetParts
 import com.itsluminous.clearmovie.data.preset.PresetStore
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetParser
@@ -33,6 +34,7 @@ data class PresetCreateUi(
     val intro: Boolean = true,
     val frame: Boolean = true,
     val ending: EndingChoice = EndingChoice.VOICE,
+    val shape: CanvasShape = CanvasShape.LANDSCAPE,
     val busy: Boolean = false,
     val failed: Boolean = false,
 ) {
@@ -61,6 +63,9 @@ class PresetCreateViewModel
                     ending =
                         savedState.get<String>(KEY_ENDING)?.let { n -> EndingChoice.entries.firstOrNull { it.name == n } }
                             ?: EndingChoice.VOICE,
+                    shape =
+                        savedState.get<String>(KEY_SHAPE)?.let { n -> CanvasShape.entries.firstOrNull { it.name == n } }
+                            ?: CanvasShape.LANDSCAPE,
                 ),
             )
         val ui: StateFlow<PresetCreateUi> = uiState.asStateFlow()
@@ -91,12 +96,21 @@ class PresetCreateViewModel
             uiState.update { it.copy(ending = choice) }
         }
 
+        fun setShape(shape: CanvasShape) {
+            savedState[KEY_SHAPE] = shape.name
+            uiState.update { it.copy(shape = shape) }
+        }
+
         fun create() {
             val ui = uiState.value
             if (!ui.canCreate) return
             uiState.update { it.copy(busy = true, failed = false) }
             viewModelScope.launch {
-                val id = presetStore.create(ui.name, PresetParts(intro = ui.intro, frame = ui.frame, ending = ui.ending.kind))
+                val id =
+                    presetStore.create(
+                        ui.name,
+                        PresetParts(intro = ui.intro, frame = ui.frame, ending = ui.ending.kind, shape = ui.shape),
+                    )
                 if (id != null) created.send(id)
                 uiState.update { it.copy(busy = false, failed = id == null) }
             }
@@ -107,5 +121,6 @@ class PresetCreateViewModel
             const val KEY_INTRO = "intro"
             const val KEY_FRAME = "frame"
             const val KEY_ENDING = "ending"
+            const val KEY_SHAPE = "shape"
         }
     }

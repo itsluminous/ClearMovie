@@ -12,6 +12,9 @@ data class ProbeResult(
     val frames: List<FrameSample> = emptyList(),
     /** Integrated loudness of the audio track, or null without audio (or when it could not be measured). */
     val loudnessLufs: Double? = null,
+    /** The picture's width and height as it is shown (rotation applied); 0 when unknown or without pictures. */
+    val shownWidth: Int = 0,
+    val shownHeight: Int = 0,
 )
 
 /**

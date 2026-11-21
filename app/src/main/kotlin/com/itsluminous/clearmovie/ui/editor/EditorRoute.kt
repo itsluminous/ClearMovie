@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,11 +50,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.EndingClip
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.IntroClip
+import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
+import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Side
 import com.itsluminous.clearmovie.domain.model.TrackId
@@ -90,6 +94,7 @@ fun EditorRoute(
     val snackbar = remember { SnackbarHostState() }
     val screen = rememberEditorScreenState()
     var exportInfo by rememberSaveable { mutableStateOf(false) }
+    var shapeDialog by rememberSaveable { mutableStateOf(false) }
     var notSaved by rememberSaveable { mutableStateOf(false) }
     var outOfSpace by rememberSaveable { mutableStateOf(false) }
     var playingPart by rememberSaveable { mutableStateOf<String?>(null) }
@@ -220,6 +225,11 @@ fun EditorRoute(
 
                 override fun exact() = viewModel.requestDraft()
 
+                override fun openShape() {
+                    viewModel.pause()
+                    shapeDialog = true
+                }
+
                 override fun fixPreset() {
                     viewModel.ui.value.project
                         ?.presetId
@@ -307,21 +317,39 @@ fun EditorRoute(
                 }
             }
         }
-    EditorScreen(
-        ui = ui,
-        title = title,
-        playhead = PlayheadUi(preview.positionUs, preview.durationUs, preview.playing),
-        preview = { modifier ->
-            val schedule = ui.schedule
-            if (schedule != null) {
-                LayeredPreview(viewModel.engine, schedule, preview, viewModel.stills, viewModel.resolver, modifier)
-            }
-        },
-        thumbnail = viewModel::stripFrame,
-        actions = actions,
-        state = screen,
-        snackbar = snackbar,
-    )
+    // The shape the preview and its caption images are drawn for (cm-aspect-ratio).
+    CompositionLocalProvider(LocalCanvasShape provides (ui.project?.shape ?: CanvasShape.LANDSCAPE)) {
+        EditorScreen(
+            ui = ui,
+            title = title,
+            playhead = PlayheadUi(preview.positionUs, preview.durationUs, preview.playing),
+            preview = { modifier ->
+                val schedule = ui.schedule
+                if (schedule != null) {
+                    LayeredPreview(viewModel.engine, schedule, preview, viewModel.stills, viewModel.resolver, modifier)
+                }
+            },
+            thumbnail = viewModel::stripFrame,
+            actions = actions,
+            state = screen,
+            snackbar = snackbar,
+        )
+    }
+    val project = ui.project
+    if (project?.askShape == true) {
+        val suggested by viewModel.suggestedShape.collectAsStateWithLifecycle()
+        FirstShapeDialog(suggested, onChoose = viewModel::chooseFirstShape)
+    } else if (shapeDialog && project != null) {
+        ChangeShapeDialog(
+            current = project.shape,
+            frameShape = frameShapeOf(project, ui.preset),
+            onChange = {
+                shapeDialog = false
+                viewModel.changeShape(it)
+            },
+            onDismiss = { shapeDialog = false },
+        )
+    }
     MediaIntakeDialogs(
         state = intake,
         onCopyAnyway = viewModel.intake::copyAnyway,
@@ -383,6 +411,16 @@ fun EditorRoute(
             Unit
         }
     }
+}
+
+/** The shape the video's preset frame is made for, while the video has that frame; else null. */
+internal fun frameShapeOf(
+    project: Project,
+    preset: Preset?,
+): CanvasShape? {
+    if (preset?.frame == null) return null
+    val hasFrame = project.tracks.any { it.presetRole == PresetRole.FRAME && it.clips.isNotEmpty() }
+    return preset.shape.takeIf { hasFrame }
 }
 
 /** What the editor already knows stops an export: nothing to save, a missing preset file, a missing photo or video. */

@@ -590,4 +590,25 @@
     <string name="preset_discard_body">Is preset me kiye gaye badlav abhi save nahi hue hain.</string>
     <string name="preset_discard">Chhod dein</string>
     <string name="preset_keep_editing">Badalte rahein</string>
+    <!-- cm-aspect-ratio: the video's shape. -->
+    <string name="shape_landscape">Landscape</string>
+    <string name="shape_landscape_body">Chauda, TV jaisa</string>
+    <string name="shape_portrait">Portrait</string>
+    <string name="shape_portrait_body">Lamba, seedhe pakde phone jaisa</string>
+    <string name="shape_square">Square</string>
+    <string name="shape_square_body">Jitna chauda, utna hi ooncha</string>
+    <string name="shape_first_title">Aapka video kis shape ka ho?</string>
+    <string name="shape_first_body">Ise baad me upar \"More options\" se badal sakte hain.</string>
+    <string name="action_continue">Aage badhein</string>
+    <string name="editor_more">More options</string>
+    <string name="editor_menu_shape">Video ka shape</string>
+    <string name="shape_change_title">Video ka shape</string>
+    <string name="shape_change">Badlein</string>
+    <string name="shape_change_frame_off">Is preset ka frame kisi aur shape ke liye bana hai, isliye woh band ho jayega. Undo karne par wapas aa jayega.</string>
+    <string name="shape_change_frame_on">Is preset ka frame phir se chalu ho jayega.</string>
+    <string name="shape_change_captions">Captions chaudai me apni jagah par rahenge.</string>
+    <string name="preset_shape_title">Video ka shape</string>
+    <string name="preset_shape_body">Is preset se bane videos isi shape ke honge. Frame aur intro bhi isi shape ke chunein.</string>
+    <string name="preset_shape_fixed">Is preset se videos ban chuke hain, isliye iska shape %1$s hi rahega.</string>
+    <string name="setup_frame_shape_mismatch">Yeh frame is preset ke videos ke shape (%1$s) ka nahi hai, isliye khincha hua dikhega. Aap doosri file chun sakte hain.</string>
 </resources>

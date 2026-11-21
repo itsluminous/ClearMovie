@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.ui.editor
 
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.NormRect
 import kotlin.math.abs
 
@@ -15,7 +16,8 @@ enum class CaptionPlace {
 /**
  * Where a caption's box may go and the boxes the editor's place choices
  * give (cm-captions). All of it is in normalised canvas units (0..1 on each
- * axis of the 16:9 canvas). Pure, so the rules are unit-tested.
+ * axis of the video's canvas, whatever its shape). Pure, so the rules are
+ * unit-tested.
  *
  * The safe area is the frame's window (or the whole canvas without a
  * frame) less a small margin, so a caption never touches the frame's
@@ -34,18 +36,18 @@ object CaptionPlaces {
     /** How near (in canvas units) a dragged box snaps to the preset's box. */
     const val SNAP = 0.02
 
-    private const val CANVAS_ASPECT = 16.0 / 9.0
-
     /**
      * [window] less [MARGIN] on every side (the horizontal margin is as many
-     * pixels as the vertical one); with the preset's [usual] box outside it,
-     * the band from the window's top to that box, as wide as the box.
+     * pixels as the vertical one on a canvas [aspect] wide per unit of
+     * height); with the preset's [usual] box outside it, the band from the
+     * window's top to that box, as wide as the box.
      */
     fun safeArea(
         window: NormRect,
         usual: NormRect? = null,
+        aspect: Double = CanvasShape.LANDSCAPE.aspect,
     ): NormRect {
-        val mx = minOf(MARGIN / CANVAS_ASPECT, window.w / 4)
+        val mx = minOf(MARGIN / aspect, window.w / 4)
         val my = minOf(MARGIN, window.h / 4)
         val inner = NormRect(window.x + mx, window.y + my, window.w - 2 * mx, window.h - 2 * my)
         if (usual == null || !usual.isValid) return inner

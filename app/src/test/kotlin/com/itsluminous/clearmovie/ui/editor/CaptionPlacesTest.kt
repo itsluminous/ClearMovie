@@ -112,4 +112,14 @@ class CaptionPlacesTest {
         assertThat(CaptionPlaces.placeOf(usual, usual, safe, places)).isNull()
         assertThat(CaptionPlaces.placeOf(CaptionPlaces.box(CaptionPlace.TOP, usual, safe), usual, safe, places)).isEqualTo(CaptionPlace.TOP)
     }
+
+    @Test
+    fun `the margin is the same number of pixels both ways on an upright or square canvas`() {
+        // cm-aspect-ratio: 2% of the height is MARGIN / aspect of the width.
+        for (aspect in listOf(9.0 / 16, 1.0, 16.0 / 9)) {
+            val safe = CaptionPlaces.safeArea(NormRect.FULL, aspect = aspect)
+            assertThat(safe.y).isWithin(1e-12).of(CaptionPlaces.MARGIN)
+            assertThat(safe.x).isWithin(1e-12).of(CaptionPlaces.MARGIN / aspect)
+        }
+    }
 }

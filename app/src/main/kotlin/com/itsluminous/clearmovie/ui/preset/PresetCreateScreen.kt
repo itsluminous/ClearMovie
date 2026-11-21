@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 
@@ -71,6 +72,7 @@ fun PresetCreateRoute(
         onIntro = viewModel::setIntro,
         onFrame = viewModel::setFrame,
         onEnding = viewModel::setEnding,
+        onShape = viewModel::setShape,
         onCreate = viewModel::create,
         onBack = onBack,
     )
@@ -91,6 +93,7 @@ fun PresetCreateScreen(
     onEnding: (EndingChoice) -> Unit,
     onCreate: () -> Unit,
     onBack: () -> Unit,
+    onShape: (CanvasShape) -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -151,6 +154,7 @@ fun PresetCreateScreen(
                         }
                     }
                 }
+                PresetShapeCard(ui.shape, enabled = true, onShape = onShape)
                 if (ui.failed) {
                     Text(
                         stringResource(R.string.preset_create_failed),

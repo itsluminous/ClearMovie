@@ -12,6 +12,7 @@ import com.itsluminous.clearmovie.data.preset.PresetSaveResult
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.LocalizedText
 import com.itsluminous.clearmovie.domain.model.Preset
@@ -20,6 +21,7 @@ import com.itsluminous.clearmovie.domain.model.PresetParser
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectCodec
 import com.itsluminous.clearmovie.domain.model.TextRules
+import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -47,6 +49,10 @@ data class PresetEditUi(
     val draftName: String? = null,
     val draftStyle: CaptionStyle? = null,
     val draftWords: String? = null,
+    /** A new shape (cm-aspect-ratio), for a preset the user made that no video uses yet. */
+    val draftShape: CanvasShape? = null,
+    /** How many videos were made from this preset; while any is, its shape stays. */
+    val videosUsing: Int = 0,
     /** The frame file's picture with its green window cut out, for the caption preview. */
     val frameStill: Bitmap? = null,
     val busy: Boolean = false,
@@ -56,6 +62,12 @@ data class PresetEditUi(
 ) {
     val preset: Preset? get() = definition?.preset
     val style: CaptionStyle? get() = draftStyle ?: preset?.caption
+
+    /** The shape shown: the draft's, else the preset's. */
+    val shape: CanvasShape get() = draftShape ?: preset?.shape ?: CanvasShape.LANDSCAPE
+
+    /** Only a preset the user made, and only while no video uses it, can change its shape. */
+    val canChangeShape: Boolean get() = definition?.builtIn == false && videosUsing == 0
 }
 
 enum class PresetEditMessage { NOT_SAVED, RESET_DONE }
@@ -91,6 +103,7 @@ class PresetEditViewModel
                     draftName = savedState[KEY_NAME],
                     draftStyle = savedState.get<String>(KEY_STYLE)?.let(::decodeStyle),
                     draftWords = savedState[KEY_WORDS],
+                    draftShape = savedState.get<String>(KEY_SHAPE)?.let { n -> CanvasShape.entries.firstOrNull { it.name == n } },
                 ),
             )
         val ui: StateFlow<PresetEditUi> = uiState.asStateFlow()
@@ -114,7 +127,8 @@ class PresetEditViewModel
                     return@launch
                 }
                 val status = presetStore.status(presetId)
-                uiState.update { it.copy(definition = definition, status = status) }
+                val videos = presetStore.videosUsing(presetId)
+                uiState.update { it.copy(definition = definition, status = status, videosUsing = videos) }
                 loadStill(status, definition.preset)
             }
         }
@@ -128,6 +142,19 @@ class PresetEditViewModel
         fun setStyle(style: CaptionStyle) {
             savedState[KEY_STYLE] = ProjectCodec.json.encodeToString(CaptionStyle.serializer(), style)
             uiState.update { it.copy(draftStyle = style) }
+        }
+
+        /**
+         * A new shape for the preset's videos (only while [PresetEditUi.canChangeShape]): its caption
+         * place moves with it, as a video's does when its shape changes.
+         */
+        fun setShape(shape: CanvasShape) {
+            val ui = uiState.value
+            if (!ui.canChangeShape || shape == ui.shape) return
+            val style = ui.style ?: return
+            setStyle(style.copy(box = refitBox(style.box, ui.shape, shape)))
+            savedState[KEY_SHAPE] = shape.name
+            uiState.update { it.copy(draftShape = shape) }
         }
 
         fun setWords(words: String) {
@@ -224,7 +251,8 @@ class PresetEditViewModel
             savedState[KEY_NAME] = null
             savedState[KEY_STYLE] = null
             savedState[KEY_WORDS] = null
-            uiState.update { it.copy(draftName = null, draftStyle = null, draftWords = null) }
+            savedState[KEY_SHAPE] = null
+            uiState.update { it.copy(draftName = null, draftStyle = null, draftWords = null, draftShape = null) }
         }
 
         private fun loadStill(
@@ -250,6 +278,7 @@ class PresetEditViewModel
             private const val KEY_NAME = "draftName"
             private const val KEY_STYLE = "draftStyle"
             private const val KEY_WORDS = "draftWords"
+            private const val KEY_SHAPE = "draftShape"
             private const val STILL_AT_US = 1_000_000L
             private const val STILL_WIDTH = 640
             private const val STILL_HEIGHT = 360
@@ -281,7 +310,8 @@ class PresetEditViewModel
                 val name = ui.draftName?.trim()?.takeIf { it != shownName.trim() && isUsableName(it) }
                 val words = ui.draftWords?.trim()?.takeIf { it != shownWords.trim() }
                 val style = ui.draftStyle?.takeIf { it != preset.caption }
-                if (name == null && words == null && style == null) return null
+                val shape = ui.draftShape?.takeIf { it != preset.shape }
+                if (name == null && words == null && style == null && shape == null) return null
                 return preset.copy(
                     displayName = name?.let(LocalizedText::same) ?: preset.displayName,
                     defaultText =
@@ -291,6 +321,7 @@ class PresetEditViewModel
                             else -> LocalizedText.same(words)
                         },
                     caption = style ?: preset.caption,
+                    shape = shape ?: preset.shape,
                 )
             }
 

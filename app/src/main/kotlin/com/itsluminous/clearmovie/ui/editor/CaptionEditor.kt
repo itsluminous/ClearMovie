@@ -321,11 +321,30 @@ internal fun ColumnScope.CaptionPanel(
             // in a short panel (a phone held sideways) Reset stays in sight instead.
             Column(Modifier.fillMaxWidth().heightIn(min = if (roomy) TAB_CONTENT_MIN else 0.dp)) {
                 when (tab) {
-                    CaptionTab.WORDS -> WordsTab(caption, callbacks, key)
-                    CaptionTab.PLACE -> PlaceTab(style, defaults.box, CaptionPlaces.safeArea(window, defaults.box), ::restyle)
-                    CaptionTab.SIZE -> SizeTab(caption.id, caption.text, style, defaults, ::restyle)
-                    CaptionTab.FONT -> FontTab(style, ::restyle)
-                    CaptionTab.COLOUR -> ColourTab(style, ::restyle)
+                    CaptionTab.WORDS -> {
+                        WordsTab(caption, callbacks, key)
+                    }
+
+                    CaptionTab.PLACE -> {
+                        PlaceTab(
+                            style,
+                            defaults.box,
+                            CaptionPlaces.safeArea(window, defaults.box, LocalCanvasShape.current.aspect),
+                            ::restyle,
+                        )
+                    }
+
+                    CaptionTab.SIZE -> {
+                        SizeTab(caption.id, caption.text, style, defaults, ::restyle)
+                    }
+
+                    CaptionTab.FONT -> {
+                        FontTab(style, ::restyle)
+                    }
+
+                    CaptionTab.COLOUR -> {
+                        ColourTab(style, ::restyle)
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -856,7 +875,7 @@ internal fun CaptionBoxOverlay(
     CaptionBoxDrag(
         style = style,
         usual = defaults.box,
-        safe = CaptionPlaces.safeArea(window, defaults.box),
+        safe = CaptionPlaces.safeArea(window, defaults.box, LocalCanvasShape.current.aspect),
         showSample = caption.text.isBlank(),
         dragKey = caption.id,
         modifier = modifier,

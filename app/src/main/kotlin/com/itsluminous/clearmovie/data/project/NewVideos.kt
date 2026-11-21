@@ -42,7 +42,7 @@ class NewVideos
         }
 
         suspend fun blank(): NewVideoResult {
-            val project = ProjectFactory.blank(ProjectId(RandomIds.next()))
+            val project = ProjectFactory.blank(ProjectId(RandomIds.next()), askShape = true)
             return if (projects.createDraft(project, inEditor = false)) NewVideoResult.Created(project.id) else NewVideoResult.NotSaved
         }
     }

@@ -73,7 +73,7 @@ class ShareDrafts
                 }
             val base =
                 if (preset == null) {
-                    ProjectFactory.blank(draft)
+                    ProjectFactory.blank(draft, askShape = true)
                 } else {
                     if (!presets.status(preset).isReady) return ShareChoice.NeedsSetup
                     val definition = presets.effectivePreset(preset) ?: return ShareChoice.NeedsSetup

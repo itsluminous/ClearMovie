@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -40,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
@@ -69,6 +72,8 @@ fun PlayFileDialog(
             }
         }
     var playing by remember(player) { mutableStateOf(savedPlaying) }
+    // The picture's own shape (cm-aspect-ratio: an upright or square video too), so it is never stretched.
+    var videoAspect by remember(player) { mutableFloatStateOf(16f / 9f) }
     // Kept up to date while it plays: the saved state is written before the dialog goes away.
     LaunchedEffect(player) {
         while (true) {
@@ -82,6 +87,12 @@ fun PlayFileDialog(
             object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     playing = isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
+                }
+
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    if (videoSize.width > 0 && videoSize.height > 0) {
+                        videoAspect = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+                    }
                 }
             }
         player.addListener(listener)
@@ -97,8 +108,15 @@ fun PlayFileDialog(
         Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 720.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(title, style = MaterialTheme.typography.titleLarge)
+                // A landscape picture fills the width; an upright or square one sits in a square, and never
+                // takes more than about half the screen's height (a phone held sideways).
+                val maxHeight = (LocalConfiguration.current.screenHeightDp * MAX_HEIGHT_SHARE).dp
                 Box(
-                    Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(media.previewBackground),
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = maxHeight)
+                        .aspectRatio(maxOf(1f, videoAspect))
+                        .background(media.previewBackground),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (audioOnly) {
@@ -112,7 +130,7 @@ fun PlayFileDialog(
                         AndroidView(
                             factory = { TextureView(it).also { v -> player.setVideoTextureView(v) } },
                             onRelease = { player.clearVideoTextureView(it) },
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.aspectRatio(videoAspect),
                         )
                     }
                 }
@@ -137,3 +155,6 @@ fun PlayFileDialog(
 }
 
 private const val SAVE_MS = 300L
+
+/** The picture takes at most this share of the screen's height. */
+private const val MAX_HEIGHT_SHARE = 0.5f

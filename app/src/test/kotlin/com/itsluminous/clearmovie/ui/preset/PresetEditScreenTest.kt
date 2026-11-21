@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.R
@@ -22,6 +25,7 @@ import com.itsluminous.clearmovie.data.preset.PresetBinding
 import com.itsluminous.clearmovie.data.preset.PresetDefinition
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.LocalizedText
@@ -30,6 +34,7 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.testing.AtSize
 import com.itsluminous.clearmovie.testing.ScreenSize
+import com.itsluminous.clearmovie.ui.components.shapeOptionTag
 import com.itsluminous.clearmovie.ui.editor.CaptionTab
 import com.itsluminous.clearmovie.ui.editor.captionTabTag
 import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
@@ -283,5 +288,80 @@ class PresetEditScreenTest {
         // A name that shows nothing is never stored.
         assertThat(PresetEditViewModel.changedPreset(own, ui.copy(draftName = "\u200B"), "Spasht Dhaara", "")).isNull()
         assertThat(PresetEditViewModel.isUsableName("x".repeat(61))).isFalse()
+    }
+
+    @Test
+    fun `a new preset offers the video shapes, landscape first chosen, at font scale 2`() {
+        run {
+            val scale = 2f
+            var ui by mutableStateOf(PresetCreateUi())
+            compose.setContent {
+                AtSize(ScreenSize.COMPACT, scale) {
+                    ClearMovieTheme(dynamicColor = false) {
+                        PresetCreateScreen(
+                            ui = ui,
+                            onName = { ui = ui.copy(name = it) },
+                            onIntro = {},
+                            onFrame = {},
+                            onEnding = {},
+                            onCreate = {},
+                            onBack = {},
+                            onShape = { ui = ui.copy(shape = it) },
+                        )
+                    }
+                }
+            }
+            compose.onNodeWithTag(shapeOptionTag(CanvasShape.LANDSCAPE)).performScrollTo().assertIsSelected()
+            compose
+                .onNodeWithTag(shapeOptionTag(CanvasShape.PORTRAIT))
+                .performScrollTo()
+                .assertHeightIsAtLeast(48.dp)
+                .performClick()
+            assertThat(ui.shape).isEqualTo(CanvasShape.PORTRAIT)
+            compose.onNodeWithTag(shapeOptionTag(CanvasShape.PORTRAIT)).assertIsSelected()
+        }
+    }
+
+    @Test
+    fun `a preset the user made can change its shape until a video uses it, and the built-in one shows none`() {
+        val mine = PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false)
+        var ui by mutableStateOf(PresetEditUi(definition = mine, status = ready))
+        compose.setContent {
+            ClearMovieTheme(dynamicColor = false) {
+                PresetEditScreen(
+                    ui = ui,
+                    onName = {},
+                    onStyle = { ui = ui.copy(draftStyle = it) },
+                    onWords = {},
+                    onRevertCaption = { _, _ -> },
+                    onFiles = {},
+                    onSave = { _, _ -> },
+                    onDelete = {},
+                    onReset = {},
+                    onBack = {},
+                    onDismissMessage = {},
+                    onShape = { ui = ui.copy(draftShape = it) },
+                )
+            }
+        }
+        compose
+            .onNodeWithTag(shapeOptionTag(CanvasShape.SQUARE))
+            .performScrollTo()
+            .assertIsEnabled()
+            .performClick()
+        assertThat(ui.shape).isEqualTo(CanvasShape.SQUARE)
+        assertThat(PresetEditViewModel.changedPreset(own, ui, "Spasht Dhaara", "")!!.shape).isEqualTo(CanvasShape.SQUARE)
+        // Once a video uses it, the shape stays, and says so.
+        ui = PresetEditUi(definition = mine, status = ready, videosUsing = 2)
+        compose.waitForIdle()
+        compose.onNodeWithTag(shapeOptionTag(CanvasShape.SQUARE)).performScrollTo().assertIsNotEnabled()
+        compose
+            .onNodeWithText(context.getString(R.string.preset_shape_fixed, s(R.string.shape_landscape)))
+            .performScrollTo()
+            .assertIsDisplayed()
+        // The built-in preset is made for its frame's shape: no choice is shown.
+        ui = PresetEditUi(definition = PresetDefinition(Fixtures.preset, PresetDefinition.Source.BUNDLED, builtIn = true), status = ready)
+        compose.waitForIdle()
+        compose.onNodeWithTag(PRESET_SHAPE_TAG).assertDoesNotExist()
     }
 }

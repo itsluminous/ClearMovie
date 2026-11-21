@@ -109,6 +109,10 @@ class EditorHarness(
                 calls += "fix"
             }
 
+            override fun openShape() {
+                calls += "shape"
+            }
+
             override fun edit(change: Project.() -> Project): Boolean = apply(null, change)
 
             override fun editMerged(

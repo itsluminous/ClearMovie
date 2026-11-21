@@ -64,7 +64,7 @@ import com.itsluminous.clearmovie.render.preview.PreviewState
 import com.itsluminous.clearmovie.render.preview.StillLoader
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
 
-/** Test tag of the preview's 16:9 canvas. */
+/** Test tag of the preview's canvas (the video's shape). */
 const val PREVIEW_TAG = "editor_preview"
 
 /** Test tag of a caption's box in the preview. */
@@ -74,7 +74,8 @@ const val PREVIEW_CAPTION_TAG = "editor_preview_caption"
 const val PREVIEW_PIP_TAG = "editor_preview_pip"
 
 /**
- * The layered preview (render decision D1): a 16:9 canvas on which the rows
+ * The layered preview (render decision D1): a canvas of the video's shape (laid
+ * out by the caller, cm-aspect-ratio) on which the rows
  * are drawn in stacking order, bottom first, as the export draws them. MAIN
  * is the plain player's picture placed where the plan puts it (full frame
  * for the intro, into the frame's window for the user's items, cropped or
@@ -490,7 +491,9 @@ private fun OverlayLayer(
         val pip = placement as? Placement.Pip
         val size = state.overlaySizes.getOrNull(index)
         val aspect = if (size != null && size.height > 0) size.width * size.pixelWidthHeightRatio / size.height else null
-        PlacedBox(pip, w, h, framed = pip != null && visible) { winW, winH ->
+        // A preset frame made for another shape sits at its own shape in its box; others cover the canvas.
+        val rect = pip?.rect ?: (placement as? Placement.Box)?.rect
+        PlacedBox(rect, w, h, framed = pip != null && visible, tagged = pip != null) { winW, winH ->
             val (cw, ch) = if (pip == null || aspect == null) winW to winH else fitted(aspect, pip.rotation, winW, winH, Fit.FILL_CROP)
             AndroidView(
                 // Not opaque: the keyed window shows the rows below through it.
@@ -513,37 +516,41 @@ private fun OverlayLayer(
     val still = lane.stillAt(state.positionUs)
     if (still != null && !visible) {
         val pip = still.placement as? Placement.Pip
-        PlacedBox(pip, w, h, framed = pip != null) { _, _ ->
+        PlacedBox(pip?.rect, w, h, framed = pip != null, tagged = pip != null) { _, _ ->
             Still(still.source, Fit.FILL_CROP, pip?.rotation ?: Rotation.R0, stills, resolver, pip?.rect ?: NormRect.FULL)
         }
     }
 }
 
-/** A box at a picture-in-picture rectangle (with its white border), or over the whole canvas. */
+/**
+ * A box at [rect] (a picture-in-picture rectangle, with its white border when
+ * [framed], or a preset frame's own-shape box), or over the whole canvas.
+ */
 @Composable
 private fun PlacedBox(
-    pip: Placement.Pip?,
+    rect: NormRect?,
     w: Dp,
     h: Dp,
     framed: Boolean,
+    tagged: Boolean,
     content: @Composable androidx.compose.foundation.layout.BoxScope.(Dp, Dp) -> Unit,
 ) {
-    if (pip == null) {
+    if (rect == null) {
         Box(Modifier.fillMaxSize()) { content(w, h) }
         return
     }
-    val winW = w * pip.rect.w.toFloat()
-    val winH = h * pip.rect.h.toFloat()
+    val winW = w * rect.w.toFloat()
+    val winH = h * rect.h.toFloat()
     Box(
         Modifier
-            .offset(w * pip.rect.x.toFloat(), h * pip.rect.y.toFloat())
+            .offset(w * rect.x.toFloat(), h * rect.y.toFloat())
             .size(winW, winH)
             .clipToBounds()
-            .testTag(PREVIEW_PIP_TAG),
+            .then(if (tagged) Modifier.testTag(PREVIEW_PIP_TAG) else Modifier),
     ) {
         content(winW, winH)
-        // The export's thin white border, scaled from its 1080-line canvas.
-        if (framed) Box(Modifier.fillMaxSize().border(BorderStroke((h.value * PIP_BORDER_LINES / CANVAS_LINES).dp, Color.White)))
+        // The export's thin white border, scaled from its canvas's 1080-pixel short side.
+        if (framed) Box(Modifier.fillMaxSize().border(BorderStroke((minOf(w, h).value * PIP_BORDER_LINES / CANVAS_LINES).dp, Color.White)))
     }
 }
 

@@ -12,6 +12,7 @@ import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.media.MediaCopier
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.LocalizedText
@@ -21,6 +22,7 @@ import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.TextBackground
+import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.testing.FakeMediaProvider
 import com.itsluminous.clearmovie.testing.FakeOtherAppProvider
 import com.itsluminous.clearmovie.testing.fileDatabase
@@ -193,6 +195,52 @@ class PresetManagerStoreTest {
             // A value the parser would refuse never reaches the disk.
             assertThat(store.save(edited.copy(caption = style.copy(sizePx = 9999)))).isEqualTo(PresetSaveResult.Invalid)
             assertThat(store.definition(id)!!.preset).isEqualTo(edited)
+        }
+
+    @Test
+    fun `a new preset takes its shape, with the caption place refitted, and keeps it until a video uses it`() =
+        runBlocking<Unit> {
+            val template = store.definition(builtIn)!!.preset
+            assertThat(template.shape).isEqualTo(CanvasShape.LANDSCAPE)
+            val id = store.create("Upright", PresetParts(shape = CanvasShape.SQUARE))!!
+            val made = store.definition(id)!!.preset
+            assertThat(made.shape).isEqualTo(CanvasShape.SQUARE)
+            assertThat(made.caption.box).isEqualTo(refitBox(template.caption.box, CanvasShape.LANDSCAPE, CanvasShape.SQUARE))
+            // Its shape is written to its preset.json, and read back.
+            val json =
+                files
+                    .presetDir(id)
+                    .listFiles()!!
+                    .single { it.name.startsWith("preset-") }
+                    .readText()
+            assertThat(json).contains("\"shape\": \"square\"")
+            // No video uses it yet: its shape may change.
+            assertThat(store.save(made.copy(shape = CanvasShape.PORTRAIT))).isInstanceOf(PresetSaveResult.Saved::class.java)
+            assertThat(store.definition(id)!!.preset.shape).isEqualTo(CanvasShape.PORTRAIT)
+            videoFrom(id)
+            assertThat(store.videosUsing(id)).isEqualTo(1)
+            assertThat(store.save(made.copy(shape = CanvasShape.LANDSCAPE))).isEqualTo(PresetSaveResult.Invalid)
+            assertThat(store.definition(id)!!.preset.shape).isEqualTo(CanvasShape.PORTRAIT)
+            // Its other fields still save.
+            assertThat(store.save(store.definition(id)!!.preset.copy(displayName = LocalizedText.same("Tall"))))
+                .isInstanceOf(PresetSaveResult.Saved::class.java)
+        }
+
+    @Test
+    fun `a frame of another shape than the preset's is kept, and setup is told`() =
+        runBlocking<Unit> {
+            val id = store.create("Upright", PresetParts(shape = CanvasShape.PORTRAIT))!!
+            probe.shown = 1920 to 1080
+            val wide = store.bindSlot(id, PresetSlot.FRAME, file("wide.mp4", ByteArray(700) { 2 }, "video/mp4"))
+            assertThat((wide as SlotBindResult.Bound).frameShape).isEqualTo(CanvasShape.LANDSCAPE)
+            assertThat(store.status(id).slots[PresetSlot.FRAME]).isInstanceOf(SlotStatus.Ready::class.java)
+            probe.shown = 1080 to 1920
+            val tall = store.bindSlot(id, PresetSlot.FRAME, file("tall.mp4", ByteArray(700) { 4 }, "video/mp4"))
+            assertThat((tall as SlotBindResult.Bound).frameShape).isNull()
+            // An intro of any shape says nothing: it is fitted whole.
+            probe.shown = 1920 to 1080
+            val intro = store.bindSlot(id, PresetSlot.INTRO, file("intro.mp4", ByteArray(500) { 1 }, "video/mp4"))
+            assertThat((intro as SlotBindResult.Bound).frameShape).isNull()
         }
 
     @Test

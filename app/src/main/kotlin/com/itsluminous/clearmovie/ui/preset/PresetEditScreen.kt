@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,12 +72,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.NormRect
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectCodec
+import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.editor.CaptionBoxDrag
 import com.itsluminous.clearmovie.ui.editor.CaptionImage
@@ -86,6 +89,7 @@ import com.itsluminous.clearmovie.ui.editor.CaptionTab
 import com.itsluminous.clearmovie.ui.editor.CaptionTabBar
 import com.itsluminous.clearmovie.ui.editor.ColourTab
 import com.itsluminous.clearmovie.ui.editor.FontTab
+import com.itsluminous.clearmovie.ui.editor.LocalCanvasShape
 import com.itsluminous.clearmovie.ui.editor.PanelTitle
 import com.itsluminous.clearmovie.ui.editor.PlaceTab
 import com.itsluminous.clearmovie.ui.editor.SizeTab
@@ -135,6 +139,7 @@ fun PresetEditRoute(
         onName = viewModel::setName,
         onStyle = viewModel::setStyle,
         onWords = viewModel::setWords,
+        onShape = viewModel::setShape,
         onRevertCaption = viewModel::revertStyle,
         onFiles = { onFiles(viewModel.presetId) },
         onSave = viewModel::save,
@@ -176,6 +181,42 @@ fun PresetEditScreen(
     onReset: () -> Unit,
     onBack: () -> Unit,
     onDismissMessage: () -> Unit,
+    onShape: (CanvasShape) -> Unit = {},
+) {
+    // Captions are drawn for the preset's own shape (cm-aspect-ratio).
+    CompositionLocalProvider(LocalCanvasShape provides ui.shape) {
+        PresetEditContent(
+            ui,
+            onName,
+            onStyle,
+            onWords,
+            onRevertCaption,
+            onFiles,
+            onSave,
+            onDelete,
+            onReset,
+            onBack,
+            onDismissMessage,
+            onShape,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PresetEditContent(
+    ui: PresetEditUi,
+    onName: (String) -> Unit,
+    onStyle: (CaptionStyle) -> Unit,
+    onWords: (String) -> Unit,
+    onRevertCaption: (CaptionStyle?, String?) -> Unit,
+    onFiles: () -> Unit,
+    onSave: (shownName: String, shownWords: String) -> Unit,
+    onDelete: () -> Unit,
+    onReset: () -> Unit,
+    onBack: () -> Unit,
+    onDismissMessage: () -> Unit,
+    onShape: (CanvasShape) -> Unit,
 ) {
     val definition = ui.definition
     val preset = ui.preset
@@ -268,14 +309,17 @@ fun PresetEditScreen(
             }
             val style = ui.style ?: preset.caption
             val frameWindow = preset.frame?.contentRect ?: NormRect.FULL
+            val aspect = ui.shape.aspect.toFloat()
+            // The preset's own caption place, on the shape being chosen.
+            val usualBox = refitBox(preset.caption.box, preset.shape, ui.shape)
             val preview: @Composable (editing: Boolean, modifier: Modifier) -> Unit = { editing, modifier ->
                 PresetCaptionPreview(
                     modifier = modifier,
                     still = ui.frameStill,
                     style = style,
                     words = words,
-                    usual = preset.caption.box,
-                    safe = CaptionPlaces.safeArea(frameWindow, preset.caption.box),
+                    usual = usualBox,
+                    safe = CaptionPlaces.safeArea(frameWindow, usualBox, ui.shape.aspect),
                     editing = editing,
                     presetKey = preset.id.value,
                     onBox = { onStyle(style.copy(box = it)) },
@@ -299,14 +343,14 @@ fun PresetEditScreen(
                 if (window.twoPane) {
                     Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         BoxWithConstraints(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.Center) {
-                            preview(true, Modifier.width(minOf(maxWidth, maxHeight * 16f / 9f)))
+                            preview(true, Modifier.width(minOf(maxWidth, maxHeight * aspect)))
                         }
                         Column(Modifier.weight(1f).fillMaxSize()) { editor() }
                     }
                 } else {
                     // The picture takes at most a third of the height (less while the keyboard is up), so the
                     // tabs and the words field always have room, at any text size.
-                    val pictureWidth = minOf(maxWidth - 32.dp, maxHeight * PREVIEW_SHARE * 16f / 9f)
+                    val pictureWidth = minOf(maxWidth - 32.dp, maxHeight * PREVIEW_SHARE * aspect)
                     Column(
                         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -338,7 +382,11 @@ fun PresetEditScreen(
                 captionOpen = true
             }
             val captions: @Composable () -> Unit = {
-                CaptionsCard(preview = { preview(false, Modifier.fillMaxWidth()) }, onChange = openCaption)
+                // An upright or square picture is narrower than the card, so it never fills the screen on its own.
+                CaptionsCard(preview = { preview(false, Modifier.fillMaxWidth(minOf(1f, aspect))) }, onChange = openCaption)
+            }
+            val shapeCard: @Composable () -> Unit = {
+                if (definition?.builtIn == false) PresetShapeCard(ui.shape, enabled = ui.canChangeShape, onShape = onShape)
             }
             val files: @Composable () -> Unit = { FilesCard(ui.status, onFiles) }
             val save: @Composable () -> Unit = {
@@ -352,13 +400,14 @@ fun PresetEditScreen(
                 // The picture on the left, as large as the height allows; everything else scrolls on the right.
                 Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     BoxWithConstraints(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                        preview(false, Modifier.width(minOf(maxWidth, maxHeight * 16f / 9f)))
+                        preview(false, Modifier.width(minOf(maxWidth, maxHeight * aspect)))
                     }
                     Column(
                         Modifier.weight(1f).verticalScroll(rememberScrollState()).testTag(PRESET_EDIT_LIST_TAG),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         nameField()
+                        shapeCard()
                         CaptionsCard(preview = null, onChange = openCaption)
                         files()
                         save()
@@ -375,6 +424,7 @@ fun PresetEditScreen(
                 ) {
                     Column(Modifier.widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         nameField()
+                        shapeCard()
                         captions()
                         files()
                         save()
@@ -561,7 +611,7 @@ private fun PresetCaptionPreview(
     val sample = stringResource(R.string.caption_font_sample)
     BoxWithConstraints(
         modifier
-            .aspectRatio(16f / 9f)
+            .aspectRatio(LocalCanvasShape.current.aspect.toFloat())
             .clip(RoundedCornerShape(8.dp))
             .background(media.previewBackground)
             .testTag(PRESET_CAPTION_PREVIEW_TAG),
@@ -626,7 +676,17 @@ private fun ColumnScope.CaptionStyleEditor(
             }
 
             CaptionTab.PLACE -> {
-                PlaceTab(style, preset.caption.box, CaptionPlaces.safeArea(frameWindow, preset.caption.box), onStyle, PRESET_PLACES)
+                PlaceTab(
+                    style,
+                    refitBox(preset.caption.box, preset.shape, LocalCanvasShape.current),
+                    CaptionPlaces.safeArea(
+                        frameWindow,
+                        refitBox(preset.caption.box, preset.shape, LocalCanvasShape.current),
+                        LocalCanvasShape.current.aspect,
+                    ),
+                    onStyle,
+                    PRESET_PLACES,
+                )
             }
 
             CaptionTab.SIZE -> {

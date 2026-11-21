@@ -28,8 +28,10 @@ data class LayoutInput(
     val toggleDp: Double,
     /** The row holding the selected item, which is kept on screen first after MAIN. */
     val selectedRow: String? = null,
-    /** The width the 16:9 preview gets when stacked. */
+    /** The width the preview gets when stacked. */
     val previewWidthDp: Double = windowWidthDp,
+    /** The video's width over its height (cm-aspect-ratio): 16:9, upright 9:16 or square. */
+    val canvasAspect: Double = 16.0 / 9.0,
 )
 
 /** Where the preview is and which rows show. */
@@ -46,7 +48,7 @@ sealed interface PreviewLayout {
         override val hiddenRows: List<String>,
     ) : PreviewLayout
 
-    /** Stacked, with the natural 16:9 preview and every row. */
+    /** Stacked, with the natural preview (the full width, at the video's shape) and every row. */
     data class Full(
         val previewDp: Double,
         override val visibleRows: List<String>,
@@ -133,7 +135,11 @@ object PreviewLayoutReducer {
         return if (planned < fullPreviewDp) planned else min(fullPreviewDp, MIN_PREVIEW_DP)
     }
 
-    fun fullPreviewDp(widthDp: Double): Double = widthDp * 9 / 16
+    /** The preview's natural height: the whole width at the video's shape ([aspect], width over height). */
+    fun fullPreviewDp(
+        widthDp: Double,
+        aspect: Double = 16.0 / 9.0,
+    ): Double = widthDp / aspect
 
     fun reduce(
         state: PreviewLayoutState,
@@ -181,7 +187,7 @@ object PreviewLayoutReducer {
             return state.copy(layout = layout)
         }
         val space = input.windowHeightDp - input.chromeHeightDp
-        val full = fullPreviewDp(input.previewWidthDp)
+        val full = fullPreviewDp(input.previewWidthDp, input.canvasAspect)
         val min = minPreviewDp(input.windowHeightDp, full)
         return when {
             full + rowsDp <= space -> {

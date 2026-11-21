@@ -82,6 +82,17 @@ class PresetParserTest {
     }
 
     @Test
+    fun `a preset names its video shape, landscape when it does not, and an unknown one is an error`() {
+        // cm-aspect-ratio: the bundled preset says landscape; every older preset.json has no shape.
+        assertThat(ok(bundled).preset.shape).isEqualTo(CanvasShape.LANDSCAPE)
+        assertThat(ok(bundledWith("shape", null)).preset.shape).isEqualTo(CanvasShape.LANDSCAPE)
+        assertThat(ok(bundledWith("shape", "\"portrait\"")).preset.shape).isEqualTo(CanvasShape.PORTRAIT)
+        assertThat(ok(bundledWith("shape", "\"square\"")).preset.shape).isEqualTo(CanvasShape.SQUARE)
+        assertThat(errors(bundledWith("shape", "\"cinema\""))).isNotEmpty()
+        assertThat(errors(bundledWith("shape", "3"))).isNotEmpty()
+    }
+
+    @Test
     fun `the bundled preset contains no personal text`() {
         val p = ok(bundled).preset
         // Its name is a string resource, present in all three languages; it has no literal name. Its only words

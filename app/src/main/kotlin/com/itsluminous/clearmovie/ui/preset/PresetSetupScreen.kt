@@ -49,8 +49,10 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.preset.PresetStore
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.ui.components.WorkDialog
+import com.itsluminous.clearmovie.ui.components.shapeName
 import com.itsluminous.clearmovie.ui.components.sizeText
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
 import com.itsluminous.clearmovie.ui.navigation.FlowStep
@@ -150,7 +152,7 @@ fun PresetSetupScreen(
             val side: @Composable (withGuide: Boolean) -> Unit = { withGuide ->
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (withGuide && ui.firstTime) Guide()
-                    ui.message?.let { MessageCard(it, onDismissMessage) }
+                    ui.message?.let { MessageCard(it, onDismissMessage, ui.preset?.shape ?: CanvasShape.LANDSCAPE) }
                     // A preset.json adjusts a preset the app ships; one the user made is edited in the app instead.
                     if (ui.preset
                             ?.id
@@ -277,6 +279,7 @@ private fun DefinitionCard(
 private fun MessageCard(
     message: SetupMessage,
     onDismiss: () -> Unit,
+    presetShape: CanvasShape = CanvasShape.LANDSCAPE,
 ) {
     val good = message == SetupMessage.DefinitionAdded
     val text =
@@ -315,6 +318,10 @@ private fun MessageCard(
 
             SetupMessage.NotSaved -> {
                 stringResource(R.string.new_video_not_saved)
+            }
+
+            SetupMessage.FrameShapeDiffers -> {
+                stringResource(R.string.setup_frame_shape_mismatch, stringResource(shapeName(presetShape)))
             }
         }
     Card(

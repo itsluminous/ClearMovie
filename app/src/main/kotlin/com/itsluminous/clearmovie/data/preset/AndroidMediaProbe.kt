@@ -49,7 +49,10 @@ class AndroidMediaProbe(
                         emptyList()
                     }
                 val lufs = if (measureLoudness && hasAudio) orNullUnlessCancelled { loudness(file) } else null
-                ProbeResult(durationMs * 1000, mime, hasVideo, hasAudio, frames, lufs)
+                val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                val turned = (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0) % 180 != 0
+                ProbeResult(durationMs * 1000, mime, hasVideo, hasAudio, frames, lufs, if (turned) h else w, if (turned) w else h)
             } catch (e: CancellationException) {
                 // A CancellationException is a RuntimeException: let it cancel.
                 throw e

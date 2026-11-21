@@ -372,6 +372,9 @@ class PresetStoreTest {
         var hasVideo = true
         var lastFrameAt: List<Double>? = null
 
+        /** The picture's size as shown (cm-aspect-ratio); 0 x 0 says nothing about its shape. */
+        var shown: Pair<Int, Int> = 0 to 0
+
         /**
          * Makes the next probe run until its caller is cancelled and then return
          * normally anyway, like a decoder that swallows the cancellation: the
@@ -400,6 +403,8 @@ class PresetStoreTest {
                 hasAudio = true,
                 frames = if (frameAt.isEmpty()) emptyList() else frames,
                 loudnessLufs = if (measureLoudness) -14.5 else null,
+                shownWidth = if (audioOnly) 0 else shown.first,
+                shownHeight = if (audioOnly) 0 else shown.second,
             )
         }
     }

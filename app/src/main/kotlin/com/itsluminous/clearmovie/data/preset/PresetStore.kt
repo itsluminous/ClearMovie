@@ -15,6 +15,7 @@ import com.itsluminous.clearmovie.data.media.CopyFailedException
 import com.itsluminous.clearmovie.data.media.MediaCopier
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.domain.model.ArgbColor
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.EndingSpec
 import com.itsluminous.clearmovie.domain.model.IntroSpec
@@ -28,6 +29,7 @@ import com.itsluminous.clearmovie.domain.model.PresetParseResult
 import com.itsluminous.clearmovie.domain.model.PresetParser
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.PresetWriter
+import com.itsluminous.clearmovie.domain.model.refitBox
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -68,6 +70,8 @@ data class PresetParts(
     val frame: Boolean = true,
     /** Null for no ending. */
     val ending: EndingKind? = EndingKind.AUDIO,
+    /** The shape of the videos it makes (cm-aspect-ratio). */
+    val shape: CanvasShape = CanvasShape.LANDSCAPE,
 )
 
 sealed interface PresetSaveResult {
@@ -156,8 +160,13 @@ data class PresetStatus(
 }
 
 sealed interface SlotBindResult {
+    /**
+     * [frameShape] is set when a frame was chosen whose own shape is not the
+     * preset's (cm-aspect-ratio): it is kept, and setup says it will look stretched.
+     */
     data class Bound(
         val binding: PresetBinding,
+        val frameShape: CanvasShape? = null,
     ) : SlotBindResult
 
     data object UnknownPreset : SlotBindResult
@@ -294,6 +303,9 @@ class PresetStore(
                     intro = IntroSpec.takeIf { parts.intro },
                     frame = frame.takeIf { parts.frame },
                     ending = parts.ending?.let(::EndingSpec),
+                    shape = parts.shape,
+                    // The template's caption place, on the new shape (its frame's window is measured when the frame is chosen).
+                    caption = template.caption.copy(box = refitBox(template.caption.box, template.shape, parts.shape)),
                 )
             (write(preset, createdAt = clock()) as? PresetSaveResult.Saved)?.preset?.id
         }
@@ -303,6 +315,7 @@ class PresetStore(
      * style and words, and anything else a preset holds. For a preset the
      * app ships this is an edited copy, which Reset removes. The parts (intro,
      * frame, ending) must stay as they are: videos made from it play them.
+     * Its shape may change only while no video uses it (cm-aspect-ratio).
      */
     suspend fun save(preset: Preset): PresetSaveResult =
         withContext(dispatcher) {
@@ -312,6 +325,9 @@ class PresetStore(
                 (same.frame == null) != (preset.frame == null) ||
                 same.ending?.kind != preset.ending?.kind
             ) {
+                return@withContext PresetSaveResult.Invalid
+            }
+            if (same.shape != preset.shape && db.presets().projectsUsing(preset.id.value) > 0) {
                 return@withContext PresetSaveResult.Invalid
             }
             val row = db.presets().definition(preset.id.value)
@@ -327,6 +343,9 @@ class PresetStore(
             runCatching { files.presetFile(id, row.fileName).delete() }
             true
         }
+
+    /** How many videos were made from [id]: while any is, its shape stays (cm-aspect-ratio). */
+    suspend fun videosUsing(id: PresetId): Int = withContext(dispatcher) { db.presets().projectsUsing(id.value) }
 
     /**
      * Deletes a preset the user made. A video made from it keeps working:
@@ -585,7 +604,9 @@ class PresetStore(
                         write(preset.copy(frame = frame.copy(contentRect = ownWindow)), row?.createdAt ?: 0L, row?.retiredAt)
                     }
                 }
-                SlotBindResult.Bound(toBinding(id, entity)!!)
+                val frameShape =
+                    CanvasShape.suiting(facts.shownWidth, facts.shownHeight)?.takeIf { frame != null && it != preset.shape }
+                SlotBindResult.Bound(toBinding(id, entity)!!, frameShape)
             } catch (e: Throwable) {
                 copied.file.delete()
                 throw e

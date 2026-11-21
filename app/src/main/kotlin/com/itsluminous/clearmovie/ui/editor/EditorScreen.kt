@@ -33,6 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -86,6 +88,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.media.MediaStatus
+import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -112,6 +115,7 @@ import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.render.plan.frameWindow
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.ShapeOutline
 import com.itsluminous.clearmovie.ui.components.durationText
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
 import com.itsluminous.clearmovie.ui.editor.timeline.ClipActions
@@ -139,6 +143,7 @@ import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /** Test tags. */
 const val EDITOR_TIMELINE_TAG = "editor_timeline"
@@ -158,6 +163,8 @@ const val UNDO_TAG = "editor_undo"
 const val REDO_TAG = "editor_redo"
 const val EXACT_TAG = "editor_exact"
 const val EMPTY_ADD_TAG = "editor_empty_add"
+const val EDITOR_MORE_TAG = "editor_more"
+const val EDITOR_MENU_SHAPE_TAG = "editor_menu_shape"
 
 /** The playhead and play state the controls show. */
 data class PlayheadUi(
@@ -180,6 +187,9 @@ interface EditorActions : EditorCallbacks {
     fun exact()
 
     fun fixPreset()
+
+    /** "Video shape" from More options (cm-aspect-ratio). */
+    fun openShape() = Unit
 }
 
 /**
@@ -205,6 +215,8 @@ fun EditorScreen(
 ) {
     val project = ui.project
     val slots = ui.slots
+    // The preview's shape follows the video's (cm-aspect-ratio).
+    val canvasAspect = (project?.shape ?: CanvasShape.LANDSCAPE).aspect.toFloat()
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     // A selection whose item or row went away (an undo, a delete) is dropped.
@@ -603,6 +615,7 @@ fun EditorScreen(
                     rows = rows.map { RowSpec(it.key, metrics.heightOf(it.type), it.type == RowType.MAIN) },
                     toggleDp = metrics.toggleDp,
                     selectedRow = focusRow?.value,
+                    canvasAspect = canvasAspect.toDouble(),
                 )
             LaunchedEffect(input) { state.layoutEvent(LayoutEvent.Measured(input)) }
             // Worked out now from this frame's measurements (the reducer is pure), so a frame never shows the
@@ -737,7 +750,7 @@ fun EditorScreen(
                             .windowInsetsPadding(WindowInsets.safeDrawing.pane(left = true)),
                     ) {
                         Box(Modifier.weight(1f).fillMaxWidth().testTag(EDITOR_PREVIEW_BOX_TAG), contentAlignment = Alignment.Center) {
-                            previewWithBox(Modifier.aspectRatio(16f / 9f))
+                            previewWithBox(Modifier.aspectRatio(canvasAspect))
                         }
                         Surface(Modifier.fillMaxWidth()) { controls(Modifier) }
                     }
@@ -762,7 +775,7 @@ fun EditorScreen(
                                 is PreviewLayout.Shrunk -> layout.previewDp
                                 is PreviewLayout.Partial -> layout.previewDp
                                 is PreviewLayout.Floating -> 0.0
-                                else -> windowWidth * 9 / 16
+                                else -> PreviewLayoutReducer.fullPreviewDp(windowWidth, canvasAspect.toDouble())
                             }
                         if (layout !is PreviewLayout.Floating) {
                             Box(
@@ -773,7 +786,7 @@ fun EditorScreen(
                                     .testTag(EDITOR_PREVIEW_BOX_TAG),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                previewWithBox(Modifier.fillMaxHeight().aspectRatio(16f / 9f, matchHeightConstraintsFirst = true))
+                                previewWithBox(Modifier.fillMaxHeight().aspectRatio(canvasAspect, matchHeightConstraintsFirst = true))
                             }
                         }
                         controls(Modifier)
@@ -789,6 +802,7 @@ fun EditorScreen(
                             preview = floatingPreview,
                             onMoved = { state.layoutEvent(LayoutEvent.PopupMoved(it)) },
                             onClose = { state.layoutEvent(LayoutEvent.ShowFewerRows) },
+                            aspect = canvasAspect,
                         )
                     }
                 }
@@ -942,6 +956,7 @@ private fun TopBar(
         }
         EditorTitle(title, TOP_BAR_HEIGHT, Modifier.weight(1f))
         UndoRedo(ui, actions)
+        MoreOptions(ui, actions)
         Button(
             onClick = actions::export,
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -956,6 +971,48 @@ private fun TopBar(
 
 /** The editor's top bar is Material's small top app bar height, whatever the title. */
 private val TOP_BAR_HEIGHT = 64.dp
+
+/** The floating preview's width, as a share of the window's, for a landscape video. */
+private const val POPUP_WIDTH_SHARE = 0.45f
+
+/** The floating preview is never narrower than its Move and Close buttons. */
+private val POPUP_MIN_WIDTH = 112.dp
+
+/**
+ * More options (cm-aspect-ratio): the editor's rarely used settings, out of
+ * the way of the everyday controls. For now, Video shape.
+ */
+@Composable
+private fun MoreOptions(
+    ui: EditorUi,
+    actions: EditorActions,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { open = true },
+            enabled = ui.project != null,
+            modifier = Modifier.size(TOUCH).testTag(EDITOR_MORE_TAG),
+        ) {
+            Icon(
+                painterResource(R.drawable.ic_more_vert),
+                contentDescription = stringResource(R.string.editor_more),
+                modifier = Modifier.size(ICON),
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.editor_menu_shape), style = MaterialTheme.typography.bodyLarge) },
+                leadingIcon = { ShapeOutline(ui.project?.shape ?: CanvasShape.LANDSCAPE, MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = {
+                    open = false
+                    actions.openShape()
+                },
+                modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_MENU_SHAPE_TAG),
+            )
+        }
+    }
+}
 
 /**
  * Undo above Redo, one icon each, stacked with no gap so the title has their
@@ -1215,11 +1272,14 @@ private fun FloatingPreview(
     preview: @Composable (Modifier) -> Unit,
     onMoved: (PopupCorner) -> Unit,
     onClose: () -> Unit,
+    aspect: Float = 16f / 9f,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val w = maxWidth * 0.45f
-        val h = w * 9f / 16f + 48.dp
+        // A landscape picture takes 45% of the width; an upright or square one is narrower, so it
+        // covers about as much of the rows, and never narrower than its two buttons.
+        val w = (maxWidth * POPUP_WIDTH_SHARE * minOf(1f, sqrt(aspect / (16f / 9f)))).coerceAtLeast(POPUP_MIN_WIDTH)
+        val h = w / aspect + 48.dp
         val margin = 12.dp
 
         fun place(c: PopupCorner): IntOffset =
@@ -1283,7 +1343,7 @@ private fun FloatingPreview(
                     ),
         ) {
             Column {
-                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) { preview(Modifier.fillMaxSize()) }
+                Box(Modifier.fillMaxWidth().aspectRatio(aspect)) { preview(Modifier.fillMaxSize()) }
                 Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = { onMoved(nextCorner(corner)) },

@@ -28,6 +28,13 @@ class PresetWriterTest {
     }
 
     @Test
+    fun `every shape reads back, and a landscape preset is written without one as before`() {
+        for (shape in CanvasShape.entries) assertThat(roundTrip(Fixtures.preset.copy(shape = shape)).shape).isEqualTo(shape)
+        assertThat(PresetWriter.write(Fixtures.preset)).doesNotContain("\"shape\"")
+        assertThat(PresetWriter.write(Fixtures.preset.copy(shape = CanvasShape.PORTRAIT))).contains("\"shape\": \"portrait\"")
+    }
+
+    @Test
     fun `every kind of part, caption and effect reads back unchanged`() {
         val frame = requireNotNull(bundled.frame)
         val variants =
