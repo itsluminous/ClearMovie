@@ -125,8 +125,9 @@ Android types, so all of it is tested on the JVM.
   free. Captions made on a text row ("+", "Add here") are free and keep
   their times. Dragging a whole caption's handle detaches only that side
   (`CaptionAttachment.detachedStartMs` / `detachedEndMs`): it keeps its own
-  time while the other side follows the item; both detached, the caption is
-  free. Match item gives it both sides back.
+  time while the other side follows the item, and follows it again when let
+  go exactly on the item's edge. Both detached, the caption is free. While
+  one side is detached, Match item gives it both sides back.
 - **Handles** (`Resize.kt`). Every item off MAIN can be resized by side:
   `resizeRange` gives each handle's limits (neighbours on its row, the
   video's start and end, 0.5 s or 0.3 s for video and sound, and its file
@@ -135,8 +136,9 @@ Android types, so all of it is tested on the JVM.
   side that was not dragged (`detachedStartMs` / `detachedEndMs` on the clip,
   next to its `anchor`).
 - **Lower for talk.** A music row's `lowerToDb` is the level its music goes
-  down to under voices and videos' own sound; without one the project's
-  `DuckingSpec` levels apply (-20 dB under a voice, -12 dB under a video). A style stores only what differs from the preset's
+  down to under voices, videos' own sound and the closing message; without
+  one the project's `DuckingSpec` levels apply (-20 dB under a voice or the
+  closing message, -12 dB under a video). A style stores only what differs from the preset's
   (`CaptionStyleOverride.between`), so Reset to preset clears it.
 - **Undo.** `ProjectEditor` applies one edit per undo step (50 kept), and
   accepts a result only if `validate()` finds no broken invariant.
