@@ -148,8 +148,9 @@ class PresetFilesInPlaceTest {
         }
 
     @Test
-    fun `presets the app ships keep copying their files`() =
+    fun `the Event frame an older install keeps goes on copying its files`() =
         runBlocking<Unit> {
+            assertThat(store.adoptShipped(PresetId("event-frame"))).isTrue()
             assertThat(store.copiesFiles(PresetId("event-frame"))).isTrue()
             store.bindSlot(PresetId("event-frame"), PresetSlot.FRAME, file("Frame-White.mp4"))
             assertThat(frame(PresetId("event-frame")).isLinked).isFalse()
