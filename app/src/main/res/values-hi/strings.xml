@@ -124,7 +124,8 @@
     <string name="pick_adding">आपकी फ़ोटो और वीडियो जोड़ी जा रही हैं</string>
     <string name="pick_out_of_space">कॉपी करते समय फ़ोन की जगह खत्म हो गई, इसलिए कुछ नहीं जोड़ा गया। थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
     <string name="editor_title_new">नया वीडियो</string>
-    <string name="editor_export">एक्सपोर्ट</string>
+    <!-- The download arrow in the editor's top bar, read by TalkBack: it opens the export sheet. -->
+    <string name="editor_export">वीडियो सेव करें</string>
     <string name="export_title">अपना वीडियो सेव करें</string>
     <string name="export_choose_body">एक साइज़ चुनें। बड़ा वाला टीवी पर ज़्यादा साफ़ दिखता है; छोटा वाला जल्दी भेजा जाता है।</string>
     <string name="export_quality_best">सबसे अच्छा</string>
@@ -621,6 +622,10 @@
     <string name="action_continue">आगे बढ़ें</string>
     <string name="editor_more">और विकल्प</string>
     <string name="editor_menu_shape">वीडियो की आकृति</string>
+    <string name="editor_menu_rename">वीडियो का नाम बदलें</string>
+    <string name="editor_rename_label">नाम</string>
+    <string name="editor_rename_needed">इस वीडियो का नाम लिखें</string>
+    <string name="editor_rename_confirm">नाम बदलें</string>
     <string name="shape_change_title">वीडियो की आकृति</string>
     <string name="shape_change">बदलें</string>
     <string name="shape_change_frame_off">इस प्रीसेट का फ़्रेम किसी और आकृति के लिए बना है, इसलिए वह बंद हो जाएगा। \"वापस लें\" से वह फिर आ जाएगा।</string>

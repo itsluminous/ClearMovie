@@ -298,7 +298,7 @@ rather than not at all.
 
 ## Export
 
-The editor's Export button opens the export sheet (`ui.export`): three sizes,
+The editor's Save video button (the download arrow in its top bar) opens the export sheet (`ui.export`): three sizes,
 **Best** (1080p30, about 12 Mb/s), **Good** (720p30, about 6 Mb/s, suggested)
 and **Small** (480p30, about 2.5 Mb/s), each with its estimated size and, when
 the phone is too full for it, how much to free. Save starts `ExportWorker`
@@ -413,11 +413,14 @@ few threads of their own, so a provider that hangs costs only its items.
 
 ## The editor
 
-`EditorScreen` has the top bar (Back, the title, Undo stacked above Redo, and
-Export at the top right; the bar is always 64 dp tall, so the title shrinks to
-stay on one line, down to 14 sp (less at the largest text sizes, so two
-lines still fit), before it takes a second line),
-the preview with Play, the time and the Zoom out / Zoom in / Fit all buttons,
+`EditorScreen` has the top bar, Material's small top app bar (Back, the title,
+Undo stacked above Redo, Save video and More options; the bar is always 64 dp
+tall, so the title shrinks to stay on one line, down to 14 sp (less at the
+largest text sizes, so two lines still fit), before it takes a second line). A tap on the title, or More options > Rename video, opens the
+rename dialog (`RenameDialog`); the new name is an edit like any other, so Undo
+takes it back. More options also holds Video shape and Settings, which opens
+the settings screen over the editor; Back returns to it as it was. Below the
+bar come the preview with Play, the time and the Zoom out / Zoom in / Fit all buttons,
 the timeline, and the contextual bar or, while one is open, the panel of the
 action in use. Its on-screen state (`EditorScreenState`: selection, open panel,
 zoom and scroll, "Show all rows", the floating preview's corner) is saved with

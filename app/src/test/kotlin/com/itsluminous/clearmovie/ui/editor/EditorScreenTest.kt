@@ -159,9 +159,11 @@ class EditorScreenTest {
         show(size, fontScale)
         val preview = compose.onNodeWithTag(PREVIEW_TAG).assertIsDisplayed().bounds()
         val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertIsDisplayed().bounds()
+        val more = compose.onNodeWithTag(EDITOR_MORE_TAG).assertIsDisplayed().bounds()
         val timeline = compose.onNodeWithTag(TIMELINE_TAG).bounds()
-        // Export sits at the top right of the screen (of the right pane in two panes).
-        assertThat(export.right.v()).isWithin(16f).of(size.size.width.value)
+        // Save video sits at the top right of the screen (of the right pane in two panes), More options after it.
+        assertThat(more.right.v()).isWithin(8f).of(size.size.width.value)
+        assertThat(export.right.v()).isWithin(0.5f).of(more.left.v())
         assertThat(export.top.v()).isLessThan(size.size.height.value / 4)
         if (size == ScreenSize.COMPACT) {
             assertThat(export.bottom.v()).isAtMost(preview.top.v() + 1f)

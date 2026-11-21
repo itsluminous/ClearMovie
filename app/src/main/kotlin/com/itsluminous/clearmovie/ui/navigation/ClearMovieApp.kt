@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.ui.navigation
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -185,7 +186,9 @@ fun ClearMovieApp(
             PresetEditRoute(
                 onFiles = { navController.navigate(Routes.setup(it, newVideo = false)) },
                 onBack = { navController.popBackStack() },
-                onDeleted = { if (!navController.popBackStack(Routes.HOME, inclusive = false)) navController.navigate(Routes.HOME) },
+                // Back to where it was opened from (Home, or Settings, which the editor can open too): going
+                // straight Home would close an editor below without saving or ending its session.
+                onDeleted = { if (!navController.popBackStack()) navController.navigate(Routes.HOME) },
             )
         }
         composable(Routes.SETTINGS) {
@@ -244,10 +247,15 @@ fun ClearMovieApp(
                         defaultValue = false
                     },
                 ),
-        ) {
+        ) { entry ->
+            // Seeded with the entry on top now, so the editor never sees "nothing on top" for a frame.
+            val top by navController.currentBackStackEntryFlow.collectAsState(navController.currentBackStackEntry)
             EditorRoute(
                 onClosed = { if (!navController.popBackStack(Routes.HOME, inclusive = false)) navController.navigate(Routes.HOME) },
                 onFixPreset = { navController.navigate(Routes.setup(it, newVideo = false)) },
+                // More options > Settings: the settings screen over the editor; its Back comes back here.
+                onOpenSettings = dropUnlessResumed { navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                atTop = top?.id == entry.id,
             )
         }
     }

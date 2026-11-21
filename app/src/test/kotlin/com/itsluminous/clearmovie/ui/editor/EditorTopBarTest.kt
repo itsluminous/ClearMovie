@@ -7,15 +7,18 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Constraints
@@ -111,18 +114,22 @@ class EditorTopBarTest {
 
     /**
      * Whether [title] fits on one line of the title's room at [size] (sp), measured exactly as the title
-     * was laid out (its own style, density, fonts and direction, from its layout), only the size changed.
+     * was laid out (its own style, density, fonts, direction and width, from its layout), only the size
+     * changed. The width is the one the words had: the room less the tap area's padding either side.
      */
     private fun fitsOnOneLine(
         title: String,
         size: Float,
     ): Boolean {
-        val roomPx =
+        val input = titleLayout().layoutInput
+        val roomPx = input.constraints.maxWidth
+        val room =
             compose
                 .onNodeWithTag(EDITOR_TITLE_ROOM_TAG)
                 .fetchSemanticsNode()
                 .size.width
-        val input = titleLayout().layoutInput
+        // The words are measured in the room the bar gives the title, less the tap area's padding.
+        assertThat(roomPx).isLessThan(room)
         val measurer = TextMeasurer(input.fontFamilyResolver, input.density, input.layoutDirection)
         val layout =
             measurer.measure(
@@ -313,7 +320,7 @@ class EditorTopBarTest {
                     assertThat((b.right - b.left).value).isWithin(0.5f).of(48f)
                     assertThat((b.bottom - b.top).value).isWithin(0.5f).of(32f)
                 }
-                // Between the title and Export.
+                // Between the title and Save video.
                 val title = compose.onNodeWithTag(EDITOR_TITLE_TAG).getUnclippedBoundsInRoot()
                 val export = compose.onNodeWithTag(EDITOR_EXPORT_TAG).getUnclippedBoundsInRoot()
                 assertThat(undo.left.value).isAtLeast(title.right.value)
@@ -328,10 +335,63 @@ class EditorTopBarTest {
         }
     }
 
+    @Test
+    fun `the bar reads Back, the title, Undo and Redo, Save video, More options, left to right, each 48 dp wide`() {
+        for (scale in listOf(1f, 2f)) {
+            for (size in ScreenSize.entries) {
+                show(VERY_LONG, size, scale)
+                val bar = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).getUnclippedBoundsInRoot()
+                val back = compose.onNodeWithContentDescription(context.getString(R.string.action_back)).getUnclippedBoundsInRoot()
+                val room = compose.onNodeWithTag(EDITOR_TITLE_ROOM_TAG).getUnclippedBoundsInRoot()
+                val undo = compose.onNodeWithTag(UNDO_TAG).getUnclippedBoundsInRoot()
+                val save =
+                    compose
+                        .onNodeWithTag(EDITOR_EXPORT_TAG)
+                        .assertIsDisplayed()
+                        .assertContentDescriptionEquals(context.getString(R.string.editor_export))
+                        .getUnclippedBoundsInRoot()
+                val more = compose.onNodeWithTag(EDITOR_MORE_TAG).getUnclippedBoundsInRoot()
+                assertThat(room.left.value).isAtLeast(back.right.value - 0.5f)
+                assertThat(undo.left.value).isAtLeast(room.right.value - 0.5f)
+                assertThat(save.left.value).isWithin(0.5f).of(undo.right.value)
+                assertThat(more.left.value).isWithin(0.5f).of(save.right.value)
+                // Material's 4 dp top app bar edge either side; no word on Save video, only the download arrow.
+                assertThat(back.left.value).isWithin(0.5f).of(bar.left.value + 4f)
+                assertThat(more.right.value).isWithin(0.5f).of(bar.right.value - 4f)
+                for (b in listOf(back, save, more)) {
+                    assertThat((b.right - b.left).value).isWithin(0.5f).of(48f)
+                    assertThat((b.bottom - b.top).value).isWithin(0.5f).of(48f)
+                }
+                compose.onNodeWithText(context.getString(R.string.editor_export)).assertDoesNotExist()
+                // The title has everything between Back and Undo but Material's 4 dp title inset either side.
+                assertThat((undo.left - back.right - (room.right - room.left)).value).isWithin(0.5f).of(8f)
+            }
+        }
+    }
+
+    @Test
+    fun `the title is a button named Rename video, its tap area inside the bar at every text size`() {
+        for (scale in listOf(1f, 1.5f, 2f)) {
+            for (title in listOf(SHORT, VERY_LONG, HINDI)) {
+                show(title, ScreenSize.COMPACT, scale)
+                val node = compose.onNodeWithTag(EDITOR_TITLE_TAG).fetchSemanticsNode()
+                assertThat(node.config[SemanticsProperties.Role]).isEqualTo(Role.Button)
+                assertThat(node.config[SemanticsActions.OnClick].label).isEqualTo(context.getString(R.string.editor_menu_rename))
+                assertThat(node.config.getOrNull(SemanticsProperties.Heading)).isNotNull()
+                val tap = compose.onNodeWithTag(EDITOR_TITLE_TAG).getUnclippedBoundsInRoot()
+                val bar = compose.onNodeWithTag(EDITOR_TOP_BAR_TAG).getUnclippedBoundsInRoot()
+                assertThat((tap.bottom - tap.top).value).isAtLeast(47.5f)
+                assertThat(tap.top.value).isAtLeast(bar.top.value - 0.5f)
+                assertThat(tap.bottom.value).isAtMost(bar.bottom.value + 0.5f)
+                assertThat(barHeight()).isWithin(0.5f).of(64f)
+            }
+        }
+    }
+
     private companion object {
         const val SHORT = "Party"
-        const val LONG = "Asha's party"
-        const val LONG_TOO = "Ravi's party!"
+        const val LONG = "Asha's birthday party"
+        const val LONG_TOO = "Ravi and Meera's party"
         const val VERY_LONG = "Riya and Arjun's wedding sangeet night with the whole family at the Jaipur farmhouse, December 2026"
         const val HINDI = "रिया और अर्जुन की शादी का संगीत, पूरे परिवार के साथ जयपुर फार्महाउस में, दिसंबर 2026"
     }

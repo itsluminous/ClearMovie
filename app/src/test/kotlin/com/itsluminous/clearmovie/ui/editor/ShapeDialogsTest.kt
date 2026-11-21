@@ -137,7 +137,7 @@ class ShapeDialogsTest {
                 .assertHeightIsAtLeast(48.dp)
                 .performClick()
             assertThat(harness.calls).contains("shape")
-            // The title and Export stay in the bar beside it.
+            // The title and Save video stay in the bar beside it.
             compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertIsDisplayed()
         }
     }

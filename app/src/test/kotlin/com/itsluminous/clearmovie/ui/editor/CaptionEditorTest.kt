@@ -329,6 +329,27 @@ class CaptionEditorTest {
     private fun isLightBand(c: ArgbColor) = (c.argb and 0xFFFFFFL) == 0xFFFFFFL
 
     @Test
+    fun `while a caption is being written the title and Rename video do nothing, so the visit stays whole`() {
+        val h = show()
+        h.select("p1")
+        tapBar(EditAction.ADD_CAPTION)
+        panel(TEXT_FIELD_TAG).performTextInput("Hello")
+        compose.onNodeWithTag(EDITOR_TITLE_TAG).assertIsNotEnabled().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(RENAME_DIALOG_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(EDITOR_MORE_TAG).performClick()
+        compose.onNodeWithTag(EDITOR_MENU_RENAME_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(EDITOR_MENU_SHAPE_TAG).performClick()
+        compose.waitForIdle()
+        // The caption editor is still open with its words, and its Cancel still takes the whole visit back.
+        assertThat(h.state!!.panel?.panel).isEqualTo(Panel.TEXT)
+        panel(PANEL_CANCEL_TAG).performClick()
+        compose.waitForIdle()
+        assertThat(h.project.captions()).isEmpty()
+        assertThat(h.project.name).isNull()
+    }
+
+    @Test
     fun `Cancel takes a new caption away, and an existing caption's changes back`() {
         val h = show()
         h.select("p1")

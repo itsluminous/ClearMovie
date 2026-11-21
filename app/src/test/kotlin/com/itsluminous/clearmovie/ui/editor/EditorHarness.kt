@@ -64,7 +64,7 @@ class EditorHarness(
         private set
     var playheadUs by mutableStateOf(0L)
 
-    /** The title the top bar shows. */
+    /** The title the top bar shows for an unnamed video; a named one shows its name, as in the app. */
     var title by mutableStateOf("Party")
     var state: EditorScreenState? = null
 
@@ -111,6 +111,10 @@ class EditorHarness(
 
             override fun openShape() {
                 calls += "shape"
+            }
+
+            override fun openSettings() {
+                calls += "settings"
             }
 
             override fun edit(change: Project.() -> Project): Boolean = apply(null, change)
@@ -256,7 +260,7 @@ class EditorHarness(
         val ui = ui()
         EditorScreen(
             ui = ui,
-            title = title,
+            title = project.name ?: title,
             playhead = PlayheadUi(playheadUs, (ui.slots.lastOrNull()?.endMs ?: 0) * 1000, false),
             preview = { m -> Box(m.background(Color.Black).testTag(PREVIEW_TAG)) },
             thumbnail = { _, _ -> null },

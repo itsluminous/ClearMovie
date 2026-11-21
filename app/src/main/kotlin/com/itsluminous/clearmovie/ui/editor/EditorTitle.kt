@@ -1,7 +1,13 @@
 package com.itsluminous.clearmovie.ui.editor
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.modifiers.TextAutoSizeLayoutScope
 import androidx.compose.material3.MaterialTheme
@@ -10,8 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -20,6 +28,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
@@ -35,7 +44,7 @@ const val EDITOR_TITLE_ROOM_TAG = "editor_title_room"
 /**
  * The smallest size the editor's title is drawn at, at usual text sizes.
  * 14 sp is Material's smallest title style (titleSmall), the size of the
- * Export label beside it, and still clear for Devanagari's vowel marks.
+ * labels on the buttons, and still clear for Devanagari's vowel marks.
  * At the largest text sizes two lines of 14 sp do not fit the bar, so the
  * smallest size goes lower there, just far enough for two lines
  * ([titleMinSize]); on screen it is then still larger than 14 sp at usual
@@ -81,12 +90,20 @@ private const val TITLE_MAX_LINES = 2
  *   chosen so that two lines always fit the bar's height.
  *
  * It is centred in the bar's height, and TalkBack reads the whole title.
+ *
+ * The title is also a button (kupraki's request): a tap opens Rename, named
+ * [clickLabel] for TalkBack. Its ripple covers the words with
+ * [TITLE_PADDING] either side and is at least 48 dp each way, inside the
+ * bar, so it never makes the bar taller.
  */
 @Composable
 internal fun EditorTitle(
     title: String,
     barHeight: Dp,
+    onClick: () -> Unit,
+    clickLabel: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val style = MaterialTheme.typography.titleLarge
     val full = if (style.fontSize.isSpecified) style.fontSize else TITLE_FULL_FALLBACK
@@ -99,14 +116,23 @@ internal fun EditorTitle(
         with(density) {
             ((barHeight.toPx() - TITLE_FIT_SLACK_PX) / titleLinePx(min)).toInt().coerceIn(1, TITLE_MAX_LINES)
         }
-    Box(modifier.height(barHeight).testTag(EDITOR_TITLE_ROOM_TAG), contentAlignment = Alignment.CenterStart) {
+    Box(modifier.fillMaxWidth().height(barHeight).testTag(EDITOR_TITLE_ROOM_TAG), contentAlignment = Alignment.CenterStart) {
         Text(
             title,
             style = style.copy(lineHeight = TITLE_LINE_HEIGHT),
             maxLines = lines,
             overflow = TextOverflow.Ellipsis,
             autoSize = remember(full, min, probe) { ShrinkThenWrapTitle(full, min, probe) },
-            modifier = Modifier.semantics { heading() }.testTag(EDITOR_TITLE_TAG),
+            modifier =
+                Modifier
+                    .heightIn(min = TITLE_TOUCH)
+                    .widthIn(min = TITLE_TOUCH)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(enabled = enabled, onClickLabel = clickLabel, role = Role.Button, onClick = onClick)
+                    .wrapContentHeight()
+                    .padding(horizontal = TITLE_PADDING)
+                    .semantics { heading() }
+                    .testTag(EDITOR_TITLE_TAG),
         )
     }
 }
@@ -175,3 +201,9 @@ private class ShrinkThenWrapTitle(
 }
 
 private val TITLE_FULL_FALLBACK = 22.sp
+
+/** The title's tap area is at least a touch target each way. */
+private val TITLE_TOUCH = 48.dp
+
+/** Room either side of the words inside the title's ripple. */
+private val TITLE_PADDING = 8.dp

@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.IdlingPolicies
@@ -39,7 +40,13 @@ import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.export.ExportHarness
 import com.itsluminous.clearmovie.ui.editor.EDITOR_EXPORT_TAG
+import com.itsluminous.clearmovie.ui.editor.EDITOR_MENU_SETTINGS_TAG
+import com.itsluminous.clearmovie.ui.editor.EDITOR_MORE_TAG
+import com.itsluminous.clearmovie.ui.editor.EDITOR_TITLE_TAG
 import com.itsluminous.clearmovie.ui.editor.PREVIEW_TAG
+import com.itsluminous.clearmovie.ui.editor.RENAME_CONFIRM_TAG
+import com.itsluminous.clearmovie.ui.editor.RENAME_FIELD_TAG
+import com.itsluminous.clearmovie.ui.editor.UNDO_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_PROGRESS_TAG
 import com.itsluminous.clearmovie.ui.export.EXPORT_SAVE_TAG
 import com.itsluminous.clearmovie.ui.home.HOME_LIST_TAG
@@ -227,6 +234,24 @@ class ReopenRecreateDeviceTest {
             editorShown()
             scenario.recreate()
             editorShown()
+            // Rename from the title, then More options > Settings (while the preview is still, so Compose
+            // goes idle for the clicks): Back brings the same editor back, its name and undo history kept.
+            compose.onNodeWithTag(EDITOR_TITLE_TAG).performClick()
+            waitFor(hasTestTag(RENAME_FIELD_TAG))
+            compose.onNodeWithTag(RENAME_FIELD_TAG).performTextReplacement(RENAMED)
+            compose.onNodeWithTag(RENAME_CONFIRM_TAG).performClick()
+            waitFor(hasTestTag(EDITOR_TITLE_TAG).and(hasText(RENAMED)))
+            compose.onNodeWithTag(EDITOR_MORE_TAG).performClick()
+            waitFor(hasTestTag(EDITOR_MENU_SETTINGS_TAG))
+            compose.onNodeWithTag(EDITOR_MENU_SETTINGS_TAG).performClick()
+            waitFor(hasText(s(R.string.settings_title)))
+            compose.waitUntil(
+                TIMEOUT_MS,
+            ) { notYetIfBusy { compose.onAllNodes(hasTestTag(EDITOR_EXPORT_TAG)).fetchSemanticsNodes().isEmpty() } }
+            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            editorShown()
+            waitFor(hasTestTag(EDITOR_TITLE_TAG).and(hasText(RENAMED)))
+            waitFor(hasTestTag(UNDO_TAG).and(isEnabled()))
             previewPlays()
 
             // Back from the reopened editor goes Home.
@@ -462,6 +487,9 @@ class ReopenRecreateDeviceTest {
 
     private companion object {
         const val TIMEOUT_MS = 20_000L
+
+        /** The name the Settings round trip gives the video first. */
+        const val RENAMED = "Asha's birthday"
 
         const val LAUNCH_TIMEOUT_MS = 60_000L
 

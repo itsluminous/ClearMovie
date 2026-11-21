@@ -90,6 +90,8 @@ import com.itsluminous.clearmovie.ui.preset.presetName
 fun EditorRoute(
     onClosed: () -> Unit,
     onFixPreset: (PresetId) -> Unit,
+    onOpenSettings: () -> Unit = {},
+    atTop: Boolean = true,
     viewModel: EditorViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
@@ -221,8 +223,10 @@ fun EditorRoute(
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (context.findActivity()?.isChangingConfigurations != true) viewModel.pause()
     }
-    BackHandler(enabled = screen.panel == null, onBack = viewModel::close)
-    BackHandler(enabled = screen.panel != null) { screen.panel = null }
+    // Only while the editor is the screen on top: in the moment Settings (or the repair screen) is
+    // sliding in over it, Back belongs to that screen, and closing the video then would go Home.
+    BackHandler(enabled = atTop && screen.panel == null, onBack = viewModel::close)
+    BackHandler(enabled = atTop && screen.panel != null) { screen.panel = null }
     // While a voice is recorded, Back is Stop: what was said is kept (cm-record-voice).
     BackHandler(enabled = recording != null, onBack = viewModel::stopRecording)
     // A long commentary must not be cut off by the screen going dark.
@@ -240,6 +244,7 @@ fun EditorRoute(
         return
     }
     val title = ui.project?.name ?: ui.preset?.let { presetName(it) } ?: stringResource(R.string.editor_title_new)
+    val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
     val actions =
         remember(viewModel) {
             object : EditorActions {
@@ -259,6 +264,11 @@ fun EditorRoute(
                 override fun openShape() {
                     viewModel.pause()
                     shapeDialog = true
+                }
+
+                override fun openSettings() {
+                    viewModel.pause()
+                    latestOnOpenSettings()
                 }
 
                 override fun fixPreset() {

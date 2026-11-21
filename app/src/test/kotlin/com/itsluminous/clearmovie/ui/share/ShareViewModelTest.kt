@@ -59,6 +59,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -219,6 +220,13 @@ class ShareViewModelTest {
 
     private fun Made.on(block: ShareViewModel.() -> Unit) = runBlocking(main) { vm.block() }
 
+    /**
+     * Whether the pending share's file is gone, waiting up to [TIMEOUT_MS] for it: the view model
+     * clears it on its own file thread after the flow ends, so a check made at once can beat it.
+     */
+    private fun pendingFileGone(): Boolean =
+        runBlocking { withTimeoutOrNull(TIMEOUT_MS) { while (pendingFile.exists()) kotlinx.coroutines.delay(10) } } != null
+
     /** Receives [intent] and, for a new video, settles the access question as the preset pick does. */
     private fun Made.share(
         intent: Intent,
@@ -263,7 +271,7 @@ class ShareViewModelTest {
             ).containsExactly(MediaRef.Store(a.toString()))
             // cm-flow D5: only the editor puts a video in the session.
             assertThat(repo.launchDecision()).isEqualTo(LaunchDecision.Home)
-            assertThat(pendingFile.exists()).isFalse()
+            assertThat(pendingFileGone()).isTrue()
         }
 
     @Test
@@ -416,7 +424,7 @@ class ShareViewModelTest {
             assertThat(m.vm.state.value).isEqualTo(ShareState.Idle)
             assertThat(repo.projectList().map { it.id }).containsExactly(open)
             assertThat(m.nav).doesNotContain(ShareNav.Home)
-            assertThat(pendingFile.exists()).isFalse()
+            assertThat(pendingFileGone()).isTrue()
         }
 
     @Test

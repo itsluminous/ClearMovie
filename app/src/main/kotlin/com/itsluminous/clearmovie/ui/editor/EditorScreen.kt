@@ -35,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -50,6 +51,8 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -67,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -111,6 +115,7 @@ import com.itsluminous.clearmovie.domain.model.moveClip
 import com.itsluminous.clearmovie.domain.model.moveMainClip
 import com.itsluminous.clearmovie.domain.model.moveRow
 import com.itsluminous.clearmovie.domain.model.removeRow
+import com.itsluminous.clearmovie.domain.model.rename
 import com.itsluminous.clearmovie.domain.model.resizeClip
 import com.itsluminous.clearmovie.domain.model.rotate
 import com.itsluminous.clearmovie.domain.model.setPhotoDuration
@@ -172,6 +177,8 @@ const val EXACT_TAG = "editor_exact"
 const val EMPTY_ADD_TAG = "editor_empty_add"
 const val EDITOR_MORE_TAG = "editor_more"
 const val EDITOR_MENU_SHAPE_TAG = "editor_menu_shape"
+const val EDITOR_MENU_RENAME_TAG = "editor_menu_rename"
+const val EDITOR_MENU_SETTINGS_TAG = "editor_menu_settings"
 
 /** The playhead and play state the controls show. */
 data class PlayheadUi(
@@ -197,11 +204,15 @@ interface EditorActions : EditorCallbacks {
 
     /** "Video shape" from More options (cm-aspect-ratio). */
     fun openShape() = Unit
+
+    /** "Settings" from More options: the app's settings screen; Back comes back here. */
+    fun openSettings() = Unit
 }
 
 /**
  * The editor (requirement 4, ARCHITECTURE sections 11.1 to 11.7): the top
- * bar with Back, Undo, Redo and the always-visible Export at the top right;
+ * bar with Back, the title (a tap renames the video), Undo, Redo, Save video
+ * and More options;
  * the preview with Play, the time and the zoom buttons; the timeline; and the
  * contextual bar, or the panel of the action being used. On a phone held
  * upright the preview is on top and shrinks as the rows need room
@@ -315,6 +326,7 @@ fun EditorScreen(
             if (latestPlayheadMs !in caption.startMs until caption.endMs) actions.seek(caption.startMs + caption.durationMs / 2)
         }
     }
+
     // Back from the top bar leaves the editor with the caption editor still open: its visit ends first,
     // or a new caption left without words would stay behind.
     val topActions: EditorActions =
@@ -330,6 +342,26 @@ fun EditorScreen(
                 }
             }
         }
+    // Rename video, from a tap on the title or More options; kept open across a rotation. Not while a
+    // caption is being written: a stray touch on the title must not end that visit or split its undo step.
+    var renaming by rememberSaveable { mutableStateOf(false) }
+    val canRename = project != null && editingCaption == null
+    val openRename = { if (canRename) renaming = true }
+    if (renaming && project != null) {
+        RenameDialog(
+            current = project.name ?: title,
+            onRename = { name, edited ->
+                renaming = false
+                // One undo step, like any other edit. The same name changes nothing, and neither does
+                // Rename on an unnamed video's stand-in title ("New video", the preset's name) left untouched:
+                // that title is not a name, and it follows the app's language while the video has none.
+                val current = latestProject
+                val unchanged = name == current?.name || (current?.name == null && !edited && name == title)
+                if (current != null && !unchanged) actions.edit { rename(name) }
+            },
+            onDismiss = { renaming = false },
+        )
+    }
     val previewWithBox: @Composable (Modifier) -> Unit = { m ->
         Box(m.clipToBounds()) {
             preview(Modifier.fillMaxSize())
@@ -787,6 +819,8 @@ fun EditorScreen(
                             title,
                             ui,
                             topActions,
+                            openRename,
+                            canRename,
                             Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } }.then(lock),
                         )
                         timeline(Modifier.weight(1f).fillMaxWidth())
@@ -800,6 +834,8 @@ fun EditorScreen(
                             title,
                             ui,
                             topActions,
+                            openRename,
+                            canRename,
                             Modifier.onSizeChanged { topDp = with(density) { it.height.toDp().value } }.then(lock),
                         )
                         val previewDp =
@@ -960,46 +996,59 @@ private fun replaceTrimmed(
         else -> project
     }
 
+/**
+ * The editor's top bar (kupraki's request): Back, the title (a tap renames
+ * the video), Undo above Redo, Save video (the download arrow, which opens
+ * the export sheet) and More options. Material's small top app bar, 64 dp
+ * tall whatever the title; the window insets are already applied around it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(
     title: String,
     ui: EditorUi,
     actions: EditorActions,
+    onRename: () -> Unit,
+    canRename: Boolean,
     modifier: Modifier,
 ) {
-    val exportStyle = MaterialTheme.typography.labelLarge
-    val exportWord = stringResource(R.string.editor_export)
     // One height in every language and at every text size: the title fits itself to the room it has
     // (EditorTitle) rather than making the bar taller.
-    Row(
-        modifier
-            .fillMaxWidth()
-            .height(TOP_BAR_HEIGHT)
-            .testTag(EDITOR_TOP_BAR_TAG)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        IconButton(onClick = actions::back) {
-            Icon(
-                painterResource(R.drawable.ic_arrow_back),
-                contentDescription = stringResource(R.string.action_back),
-                modifier = Modifier.size(ICON),
+    TopAppBar(
+        title = {
+            EditorTitle(
+                title,
+                TOP_BAR_HEIGHT,
+                onClick = onRename,
+                clickLabel = stringResource(R.string.editor_menu_rename),
+                enabled = canRename,
             )
-        }
-        EditorTitle(title, TOP_BAR_HEIGHT, Modifier.weight(1f))
-        UndoRedo(ui, actions)
-        MoreOptions(ui, actions)
-        Button(
-            onClick = actions::export,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_EXPORT_TAG),
-        ) {
-            Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
-            Spacer(Modifier.width(8.dp))
-            AutoSizeLabel(exportWord, style = exportStyle)
-        }
-    }
+        },
+        navigationIcon = {
+            IconButton(onClick = actions::back, modifier = Modifier.size(TOUCH)) {
+                Icon(
+                    painterResource(R.drawable.ic_arrow_back),
+                    contentDescription = stringResource(R.string.action_back),
+                    modifier = Modifier.size(ICON),
+                )
+            }
+        },
+        actions = {
+            UndoRedo(ui, actions)
+            IconButton(onClick = actions::export, modifier = Modifier.size(TOUCH).testTag(EDITOR_EXPORT_TAG)) {
+                Icon(
+                    painterResource(R.drawable.ic_download),
+                    contentDescription = stringResource(R.string.editor_export),
+                    modifier = Modifier.size(ICON),
+                )
+            }
+            MoreOptions(ui, actions, onRename, canRename)
+        },
+        expandedHeight = TOP_BAR_HEIGHT,
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+        modifier = modifier.fillMaxWidth().testTag(EDITOR_TOP_BAR_TAG),
+    )
 }
 
 /** The editor's top bar is Material's small top app bar height, whatever the title. */
@@ -1012,15 +1061,20 @@ private const val POPUP_WIDTH_SHARE = 0.45f
 private val POPUP_MIN_WIDTH = 112.dp
 
 /**
- * More options (cm-aspect-ratio): the editor's rarely used settings, out of
- * the way of the everyday controls. For now, Video shape.
+ * More options: what the editor needs now and then, out of the way of the
+ * everyday controls. Rename video (also a tap on the title), Video shape
+ * (cm-aspect-ratio) and Settings, each with its icon.
  */
 @Composable
 private fun MoreOptions(
     ui: EditorUi,
     actions: EditorActions,
+    onRename: () -> Unit,
+    canRename: Boolean,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
+    val itemStyle = MaterialTheme.typography.bodyLarge
+    val iconTint = MaterialTheme.colorScheme.onSurfaceVariant
     Box {
         IconButton(
             onClick = { open = true },
@@ -1035,13 +1089,32 @@ private fun MoreOptions(
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.editor_menu_shape), style = MaterialTheme.typography.bodyLarge) },
-                leadingIcon = { ShapeOutline(ui.project?.shape ?: CanvasShape.LANDSCAPE, MaterialTheme.colorScheme.onSurfaceVariant) },
+                text = { Text(stringResource(R.string.editor_menu_rename), style = itemStyle) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_edit), contentDescription = null, modifier = Modifier.size(ICON)) },
+                onClick = {
+                    open = false
+                    onRename()
+                },
+                enabled = canRename,
+                modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_MENU_RENAME_TAG),
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.editor_menu_shape), style = itemStyle) },
+                leadingIcon = { ShapeOutline(ui.project?.shape ?: CanvasShape.LANDSCAPE, iconTint) },
                 onClick = {
                     open = false
                     actions.openShape()
                 },
                 modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_MENU_SHAPE_TAG),
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.action_settings), style = itemStyle) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_settings), contentDescription = null, modifier = Modifier.size(ICON)) },
+                onClick = {
+                    open = false
+                    actions.openSettings()
+                },
+                modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_MENU_SETTINGS_TAG),
             )
         }
     }

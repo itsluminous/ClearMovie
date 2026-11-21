@@ -107,7 +107,8 @@ In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
   timeline on the right. The home and preset screens use the extra width too. A wide window
   on a tablet, foldable or in split-screen gets the same layout.
 - **Autosave** - work is saved as you go and recovered after a crash. Your videos are
-  listed under "My videos" (naming them comes later).
+  listed under "My videos"; tap a video's title in the editor to give it a name (new on
+  `main`, coming in 0.0.2).
 - **Hardware-accelerated export** - Best (1080p), Good (720p) or Small (480p), saved
   to your gallery and ready to play or share.
 
@@ -140,7 +141,7 @@ What has shipped, and what is still to come:
 
 **Saving and export**
 - [x] Autosave and crash recovery
-- [ ] Named projects in "My videos"
+- [x] Named projects in "My videos": tap the title in the editor, or More options > Rename video (done on `main`, ships in 0.0.2)
 - [x] Export at Best, Good or Small size with hardware encoding; keeps running if you rotate or leave the app
 - [x] Saved to Movies/ClearMovie, then Play and Share buttons
 

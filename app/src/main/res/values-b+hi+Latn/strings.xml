@@ -132,7 +132,8 @@
     <string name="pick_adding">Aapki photos aur videos add ho rahi hain</string>
     <string name="pick_out_of_space">Copy karte waqt phone ki jagah khatam ho gayi, isliye kuch add nahi hua. Thodi jagah khaali karein aur phir se koshish karein.</string>
     <string name="editor_title_new">Naya video</string>
-    <string name="editor_export">Export</string>
+    <!-- The download arrow in the editor's top bar, read by TalkBack: it opens the export sheet. -->
+    <string name="editor_export">Video save karein</string>
     <string name="export_title">Apna video save karein</string>
     <string name="export_choose_body">Ek size chunein. Bada wala TV par zyada saaf dikhta hai; chhota wala jaldi bheja jaata hai.</string>
     <string name="export_quality_best">Sabse achha</string>
@@ -629,6 +630,10 @@
     <string name="action_continue">Aage badhein</string>
     <string name="editor_more">More options</string>
     <string name="editor_menu_shape">Video ka shape</string>
+    <string name="editor_menu_rename">Video ka naam badlein</string>
+    <string name="editor_rename_label">Naam</string>
+    <string name="editor_rename_needed">Is video ka naam likhein</string>
+    <string name="editor_rename_confirm">Naam badlein</string>
     <string name="shape_change_title">Video ka shape</string>
     <string name="shape_change">Badlein</string>
     <string name="shape_change_frame_off">Is preset ka frame kisi aur shape ke liye bana hai, isliye woh band ho jayega. Undo karne par wapas aa jayega.</string>
