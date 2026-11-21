@@ -225,7 +225,10 @@ class ShareDeviceTest {
     private fun readyHeader(items: Int) = waitFor(hasText(q(R.plurals.share_ready, items)))
 
     private fun startWithoutPreset() {
-        compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(s(R.string.home_start_blank)))
+        // Home's cards wait for the presets to be read (cm-home-presets).
+        compose.waitUntil(TIMEOUT_MS) {
+            runCatching { compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(s(R.string.home_start_blank))) }.isSuccess
+        }
         tap(s(R.string.home_start_blank))
         waitFor(hasTestTag(EDITOR_TIMELINE_TAG))
     }

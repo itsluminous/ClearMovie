@@ -289,7 +289,8 @@ class UxTour {
 
     private fun homeScrollTo(text: String) {
         waitFor(hasTestTag(HOME_LIST_TAG))
-        compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(text))
+        // Home's cards wait for the presets to be read (cm-home-presets).
+        compose.waitUntil(TIMEOUT_MS) { runCatching { compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(text)) }.isSuccess }
     }
 
     private fun back() {

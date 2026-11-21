@@ -269,6 +269,9 @@ class ExportDeviceTest {
         assertThat(result.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString())
             .isEqualTo(h.context.getString(R.string.notification_export_done_title))
         assertThat(result.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString()).contains("Notified")
+        // WorkManager takes the foreground (progress) notification down just after the worker ends, so it may still
+        // be showing when the result arrives: it must be gone shortly after.
+        waitFor("progress notification gone", 10) { manager.activeNotifications.none { it.id == ExportNotifications.PROGRESS_ID } }
         assertThat(manager.activeNotifications.none { it.id == ExportNotifications.PROGRESS_ID }).isTrue()
         manager.cancel(ExportNotifications.RESULT_ID)
     }

@@ -146,6 +146,14 @@ class FlowDeviceTest {
         count: Int = 1,
     ) = compose.waitUntil(TIMEOUT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().size >= count }
 
+    /** Home's cards wait for the presets to be read (cm-home-presets): scroll to [text] once it is there. */
+    private fun scrollHomeTo(text: String) {
+        waitFor(hasTestTag(HOME_LIST_TAG))
+        compose.waitUntil(TIMEOUT_MS) {
+            runCatching { compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(text)) }.isSuccess
+        }
+    }
+
     private fun texts(part: String): List<String> =
         compose
             .onAllNodes(hasText(part, substring = true))
@@ -177,8 +185,7 @@ class FlowDeviceTest {
             ),
         )
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitFor(hasTestTag(HOME_LIST_TAG))
-            compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(s(R.string.home_start_blank)))
+            scrollHomeTo(s(R.string.home_start_blank))
             compose.onNodeWithText(s(R.string.home_start_blank)).performClick()
 
             itemsShown(photos = 2, videos = 1)
@@ -216,8 +223,7 @@ class FlowDeviceTest {
             ),
         )
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitFor(hasTestTag(HOME_LIST_TAG))
-            compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(s(R.string.home_start_blank)))
+            scrollHomeTo(s(R.string.home_start_blank))
             compose.onNodeWithText(s(R.string.home_start_blank)).performClick()
             itemsShown(photos = 2, videos = 1)
 
@@ -261,8 +267,7 @@ class FlowDeviceTest {
     fun aCaptionBeingTypedSurvivesARecreation() {
         pickerAnswers(listOf(insert("fixtures/photo_blue.png", "image/png"), insert("fixtures/photo_quadrants.png", "image/png")))
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            waitFor(hasTestTag(HOME_LIST_TAG))
-            compose.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText(s(R.string.home_start_blank)))
+            scrollHomeTo(s(R.string.home_start_blank))
             compose.onNodeWithText(s(R.string.home_start_blank)).performClick()
             itemsShown(photos = 2, videos = 0)
             compose.onAllNodes(hasContentDescription(s(R.string.editor_item_photo) + ",", substring = true)).onFirst().performClick()
