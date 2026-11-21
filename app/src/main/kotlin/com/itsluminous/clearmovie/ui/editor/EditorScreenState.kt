@@ -62,6 +62,9 @@ enum class Panel {
     /** Fade in and out for a sound. */
     FADE,
 
+    /** Lower for talk on a music row: on or off, and how low (cm-timeline-handles). */
+    TALK_LOWER,
+
     /** Where a picture-in-picture item sits, and how big. */
     PIP_PLACE,
 

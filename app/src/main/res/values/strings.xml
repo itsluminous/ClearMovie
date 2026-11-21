@@ -491,6 +491,11 @@
     <string name="action_lower_music">Lower music when people talk</string>
     <!-- The same, short enough for a bar button (two lines of about 64 dp at 10 sp). -->
     <string name="bar_lower_music">Lower for talk</string>
+    <!-- cm-timeline-handles: the Lower for talk popup, Match item, and on/off for TalkBack. -->
+    <string name="talk_level">Music level while people talk</string>
+    <string name="bar_follow_item">Match item</string>
+    <string name="state_on">On</string>
+    <string name="state_off">Off</string>
     <string name="action_frame_on">Show frame</string>
     <string name="action_move_earlier">Earlier</string>
     <string name="action_move_later">Later</string>

@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
+import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -343,6 +344,16 @@ fun EditPanel(
 
                     Panel.FADE -> {
                         (clip as? AudioClip)?.let { FadePanel(it, callbacks, close) }
+                    }
+
+                    Panel.TALK_LOWER -> {
+                        if (track.audioRole ==
+                            AudioRole.MUSIC
+                        ) {
+                            TalkLowerPanel(track, project, callbacks, close)
+                        } else {
+                            LaunchedEffect(open) { close() }
+                        }
                     }
 
                     Panel.PIP_PLACE -> {

@@ -111,6 +111,7 @@ import com.itsluminous.clearmovie.domain.model.moveClip
 import com.itsluminous.clearmovie.domain.model.moveMainClip
 import com.itsluminous.clearmovie.domain.model.moveRow
 import com.itsluminous.clearmovie.domain.model.removeRow
+import com.itsluminous.clearmovie.domain.model.resizeClip
 import com.itsluminous.clearmovie.domain.model.rotate
 import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.trimVideo
@@ -139,6 +140,7 @@ import com.itsluminous.clearmovie.ui.editor.timeline.TrimEdge
 import com.itsluminous.clearmovie.ui.editor.timeline.TrimMath
 import com.itsluminous.clearmovie.ui.editor.timeline.ZoomState
 import com.itsluminous.clearmovie.ui.editor.timeline.itemName
+import com.itsluminous.clearmovie.ui.editor.timeline.model
 import com.itsluminous.clearmovie.ui.editor.timeline.rowName
 import com.itsluminous.clearmovie.ui.layout.AdaptiveScreen
 import com.itsluminous.clearmovie.ui.theme.LocalMediaColors
@@ -410,6 +412,14 @@ fun EditorScreen(
                     toRow: String,
                 ) {
                     actions.edit { moveClip(id, startMs, TrackId(toRow)) }
+                }
+
+                override fun resize(
+                    id: ClipId,
+                    edge: TrimEdge,
+                    toMs: Long,
+                ) {
+                    actions.edit { resizeClip(id, edge.model(), toMs) }
                 }
 
                 override fun seek(ms: Long) = actions.seek(ms)

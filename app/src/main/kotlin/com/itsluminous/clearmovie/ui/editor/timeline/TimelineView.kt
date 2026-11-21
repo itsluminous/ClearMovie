@@ -36,6 +36,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +81,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -91,6 +94,7 @@ import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
 import com.itsluminous.clearmovie.domain.model.PhotoClip
+import com.itsluminous.clearmovie.domain.model.ResizeEdge
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.durationText
@@ -99,6 +103,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** Test tags. */
 const val TIMELINE_TAG = "timeline"
@@ -221,6 +226,13 @@ interface TimelineActions {
         startMs: Long,
         toRow: String,
     ) {}
+
+    /** A handle of an item on a row other than MAIN let go: its [edge] goes to [toMs] (inside the item's limits). */
+    fun resize(
+        id: ClipId,
+        edge: TrimEdge,
+        toMs: Long,
+    ) {}
 }
 
 /** Heights at a font scale (ARCHITECTURE section 11.3: MAIN 72 dp, others 48 dp, growing with the text). */
@@ -321,11 +333,13 @@ fun TimelineView(
         LaunchedEffect(selected) {
             val sel = selected ?: return@LaunchedEffect
             val onMain = slots.any { it.clip.id == sel }
+            val timed = rows.firstNotNullOfOrNull { r -> r.clips.firstOrNull { it.id == sel } }
             val span =
                 slots.firstOrNull { it.clip.id == sel }?.let { it.startMs to it.endMs }
-                    ?: rows.firstNotNullOfOrNull { r -> r.clips.firstOrNull { it.id == sel }?.let { it.startMs to it.endMs } }
+                    ?: timed?.let { it.startMs to it.endMs }
                     ?: return@LaunchedEffect
-            val outward = if (onMain) TimelineGeometry.DISPLACE_DP else TimelineGeometry.PLUS_HIT_DP / 2
+            // Beyond the trim handles on MAIN, and on any other row's item that has them.
+            val outward = if (onMain || timed?.resize != null) TimelineGeometry.DISPLACE_DP else TimelineGeometry.PLUS_HIT_DP / 2
             val room = outward + TimelineGeometry.PLUS_HIT_DP / 2 - PAD_DP
             val left = z.xOf(span.first.toDouble())
             val right = z.xOf(span.second.toDouble())
@@ -352,6 +366,9 @@ fun TimelineView(
         var drag by remember { mutableStateOf<DragPreview?>(null) }
         var rowDrag by remember { mutableStateOf<RowDragPreview?>(null) }
         var timedDrag by remember { mutableStateOf<TimedDragPreview?>(null) }
+        // Read only by the row being trimmed, so a handle drag recomposes that row, not the whole timeline.
+        val timedTrim = remember { mutableStateOf<TimedTrimPreview?>(null) }
+        val timedTrimming by remember { derivedStateOf { timedTrim.value != null } }
         // The layout during a trim shows the trimmed item at its new length.
         val shownSlots = trim?.let { t -> relayout(slots, t.index, TrimMath.dragged(slots[t.index].clip, t.edge, t.deltaMs)) } ?: slots
         val shownSpans =
@@ -401,6 +418,7 @@ fun TimelineView(
                 timedPlus,
                 rows.map { it.key },
                 playheadMs,
+                selected,
             ),
         )
 
@@ -426,6 +444,7 @@ fun TimelineView(
                                     drag = { drag = it },
                                     row = { rowDrag = it },
                                     timed = { timedDrag = it },
+                                    timedTrim = { timedTrim.value = it },
                                 ),
                             touched = { touching = it },
                         )
@@ -466,7 +485,7 @@ fun TimelineView(
                                             drag,
                                         )
                                     } else {
-                                        TimedRowContent(row, z, selected, playheadMs, timedDrag, latestActions)
+                                        TimedRowContent(row, z, selected, playheadMs, timedDrag, timedTrim, latestActions)
                                     }
                                 }
                             }
@@ -480,7 +499,7 @@ fun TimelineView(
                 // The layer reaches above the rows for a "+" lifted to MAIN's top edge over a transition marker.
                 val lift = TimelineGeometry.ABOVE_ROW_DP
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = drag == null && rowDrag == null && timedDrag == null && trim == null,
+                    visible = drag == null && rowDrag == null && timedDrag == null && trim == null && !timedTrimming,
                     enter = fadeIn(),
                     exit = fadeOut(),
                 ) {
@@ -616,6 +635,12 @@ private class LatestActions(
         startMs: Long,
         toRow: String,
     ) = latest().moveTimed(id, startMs, toRow)
+
+    override fun resize(
+        id: ClipId,
+        edge: TrimEdge,
+        toMs: Long,
+    ) = latest().resize(id, edge, toMs)
 }
 
 private fun MainClip.isContent() = this is PhotoClip || this is VideoClip || this is CardClip
@@ -660,18 +685,42 @@ private data class TimedDragPreview(
     val toRow: String,
 )
 
+/**
+ * A handle of item [id] on row [key] dragged by [deltaMs]: the item as it
+ * will be on release, kept inside its limits (the same ones the model uses).
+ */
+private data class TimedTrimPreview(
+    val id: ClipId,
+    val key: String,
+    val edge: TrimEdge,
+    val deltaMs: Double,
+) {
+    fun target(clip: RowClip): Long {
+        val now = if (edge == TrimEdge.START) clip.startMs else clip.endMs
+        val range = clip.resize ?: return now
+        return range.clamp(edge.model(), (now + deltaMs).roundToLong())
+    }
+
+    fun span(clip: RowClip): Pair<Long, Long> = if (edge == TrimEdge.START) target(clip) to clip.endMs else clip.startMs to target(clip)
+}
+
+/** The model's name for a handle's side. */
+fun TrimEdge.model(): ResizeEdge = if (this == TrimEdge.START) ResizeEdge.START else ResizeEdge.END
+
 /** Where the pointer handler shows what a drag will do. */
 private class Previews(
     val trim: (TrimPreview?) -> Unit,
     val drag: (DragPreview?) -> Unit,
     val row: (RowDragPreview?) -> Unit,
     val timed: (TimedDragPreview?) -> Unit,
+    val timedTrim: (TimedTrimPreview?) -> Unit,
 ) {
     fun clear() {
         trim(null)
         drag(null)
         row(null)
         timed(null)
+        timedTrim(null)
     }
 }
 
@@ -689,6 +738,7 @@ private data class Current(
     val timedPlus: Map<String, List<TimedPlus>>,
     val allKeys: List<String>,
     val playheadMs: Long,
+    val selectedId: ClipId?,
 ) {
     fun row(key: String): TimelineRow? = shown.firstOrNull { it.key == key }
 
@@ -861,7 +911,11 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         GestureMode.TRIM -> {
                             val ch = event.changes.firstOrNull { it.id == first.id }
                             val sel = c.selectedIndex
-                            if (ch != null && sel != null) {
+                            if (ch != null && start is Hit.OnTimedTrim) {
+                                trimDelta = dp(ch.position.x - first.position.x) * c.zoom.msPerDp
+                                val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
+                                previews.timedTrim(TimedTrimPreview(start.id, start.key, edge, trimDelta))
+                            } else if (ch != null && sel != null) {
                                 trimDelta = dp(ch.position.x - first.position.x) * c.zoom.msPerDp
                                 val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
                                 previews.trim(TrimPreview(sel, edge, trimDelta))
@@ -974,7 +1028,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 }
 
                                 // A tap on a trim handle keeps the item selected (it is about to be dragged).
-                                is Hit.OnTrim -> {
+                                is Hit.OnTrim, is Hit.OnTimedTrim -> {
                                     Unit
                                 }
 
@@ -1000,7 +1054,21 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                             when (before) {
                                 GestureMode.TRIM -> {
                                     val sel = c.selectedIndex
-                                    if (sel != null) {
+                                    if (start is Hit.OnTimedTrim) {
+                                        // Where the finger let go, which may be further than the last move seen.
+                                        event.changes.firstOrNull { it.id == first.id }?.let { ch ->
+                                            trimDelta = dp(ch.position.x - first.position.x) * c.zoom.msPerDp
+                                        }
+                                        val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
+                                        val clip = c.row(start.key)?.clips?.firstOrNull { it.id == start.id }
+                                        if (clip != null) {
+                                            val preview = TimedTrimPreview(start.id, start.key, edge, trimDelta)
+                                            val now = if (edge == TrimEdge.START) clip.startMs else clip.endMs
+                                            val to = preview.target(clip)
+                                            if (to != now) actions.resize(start.id, edge, to)
+                                        }
+                                        previews.timedTrim(null)
+                                    } else if (sel != null) {
                                         val edge = if (start.kind == GestureStart.TRIM_START) TrimEdge.START else TrimEdge.END
                                         actions.trim(c.slots[sel].clip.id, edge, trimDelta)
                                     }
@@ -1161,6 +1229,13 @@ private sealed interface Hit {
         override val kind: GestureStart,
     ) : Hit
 
+    /** A trim handle of the selected item [id] on row [key], a row other than MAIN. */
+    data class OnTimedTrim(
+        val key: String,
+        val id: ClipId,
+        override val kind: GestureStart,
+    ) : Hit
+
     data object OnRuler : Hit {
         override val kind get() = GestureStart.RULER
     }
@@ -1228,7 +1303,7 @@ private fun hit(
         ) {
             return Hit.OnRowAdd(row.key)
         }
-        return when (val t = TimedRowGeometry.hitTest(row.clips, c.timedPlus[row.key].orEmpty(), c.zoom, sx)) {
+        return when (val t = TimedRowGeometry.hitTest(row.clips, c.timedPlus[row.key].orEmpty(), c.zoom, sx, c.selectedId)) {
             is TimedHit.Plus -> {
                 val at = c.zoom.timeAt(sx)
                 val under =
@@ -1241,6 +1316,10 @@ private fun hit(
 
             is TimedHit.Clip -> {
                 Hit.OnTimedClip(row.key, t.id)
+            }
+
+            is TimedHit.Handle -> {
+                Hit.OnTimedTrim(row.key, t.id, if (t.start) GestureStart.TRIM_START else GestureStart.TRIM_END)
             }
 
             TimedHit.Space -> {
@@ -1545,7 +1624,9 @@ private const val TEXT_SHOWN = 60
 /**
  * A row other than MAIN: its items at their times, each one a TalkBack stop
  * that selects it (and, held, opens its menu). The item being dragged moves
- * with the finger in time; the row it would land on is outlined.
+ * with the finger in time; the row it would land on is outlined. The
+ * selected item has a trim handle on each side; while one is dragged the
+ * item is drawn at the length it will have.
  */
 @Composable
 private fun TimedRowContent(
@@ -1554,8 +1635,10 @@ private fun TimedRowContent(
     selected: ClipId?,
     playheadMs: Long,
     drag: TimedDragPreview?,
+    trimState: State<TimedTrimPreview?>,
     actions: TimelineActions,
 ) {
+    val trim = trimState.value?.takeIf { it.key == row.key }
     val media = LocalMediaColors.current
     val (fill, on) =
         when (row.type) {
@@ -1571,8 +1654,9 @@ private fun TimedRowContent(
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         for (clip in row.clips) {
             val dragged = drag?.id == clip.id
-            val x = PAD_DP + zoom.xOf(clip.startMs.toDouble()) + if (dragged) drag.dxDp else 0.0
-            val w = (clip.endMs - clip.startMs) / zoom.msPerDp
+            val (shownStart, shownEnd) = if (trim?.id == clip.id) trim.span(clip) else clip.startMs to clip.endMs
+            val x = PAD_DP + zoom.xOf(shownStart.toDouble()) + if (dragged) drag.dxDp else 0.0
+            val w = (shownEnd - shownStart) / zoom.msPerDp
             if (x + w < -64 || w <= 0) continue
             val isSelected = clip.id == selected
             val words = clip.text?.takeIf { it.isNotBlank() }?.take(TEXT_SHOWN)
@@ -1640,6 +1724,10 @@ private fun TimedRowContent(
                         )
                     }
                 }
+            }
+            if (isSelected && !dragged && clip.resize != null) {
+                val left = PAD_DP + zoom.xOf(shownStart.toDouble())
+                TrimHandlePair(left, left + w, vertical = 5.dp)
             }
         }
     }
@@ -1920,37 +2008,41 @@ private fun TrimHandles(
     geometry: TimelineGeometry,
     index: Int,
 ) {
+    TrimHandlePair(PAD_DP + geometry.left(index), PAD_DP + geometry.right(index), vertical = 4.dp)
+}
+
+/**
+ * The two trim handles of the selected item, drawn on its inner edges from
+ * [leftDp] to [rightDp] (in the row): 24 dp each, the item's height less
+ * [vertical] at top and bottom. Drag targets only (the timeline's handler
+ * hits them, 48 dp wide); TalkBack trims from the bar's panels or the item's
+ * menu instead.
+ */
+@Composable
+private fun TrimHandlePair(
+    leftDp: Double,
+    rightDp: Double,
+    vertical: Dp,
+) {
     val primary = MaterialTheme.colorScheme.primary
     val onPrimary = MaterialTheme.colorScheme.onPrimary
-    for ((edge, x) in listOf(TrimEdge.START to geometry.left(index), TrimEdge.END to geometry.right(index) - TimelineGeometry.HANDLE_DP)) {
+    for ((edge, x) in listOf(TrimEdge.START to leftDp, TrimEdge.END to rightDp - TimelineGeometry.HANDLE_DP)) {
+        val outer = 8.dp
+        val shape =
+            if (edge == TrimEdge.START) {
+                RoundedCornerShape(topStart = outer, bottomStart = outer)
+            } else {
+                RoundedCornerShape(topEnd = outer, bottomEnd = outer)
+            }
         Box(
             Modifier
-                .offset(x = (PAD_DP + x).dp)
+                .offset(x = x.dp)
                 .width(TimelineGeometry.HANDLE_DP.dp)
                 .fillMaxHeight()
-                .padding(vertical = 4.dp)
-                .clip(
-                    RoundedCornerShape(
-                        if (edge ==
-                            TrimEdge.START
-                        ) {
-                            8.dp
-                        } else {
-                            0.dp
-                        },
-                        if (edge ==
-                            TrimEdge.END
-                        ) {
-                            8.dp
-                        } else {
-                            0.dp
-                        },
-                        if (edge == TrimEdge.END) 8.dp else 0.dp,
-                        if (edge == TrimEdge.START) 8.dp else 0.dp,
-                    ),
-                ).background(primary)
+                .padding(vertical = vertical)
+                .clip(shape)
+                .background(primary)
                 .testTag(if (edge == TrimEdge.START) TRIM_START_TAG else TRIM_END_TAG)
-                // A drag target only; TalkBack trims from the bar's Trim or Duration panel.
                 .clearAndSetSemantics { },
             contentAlignment = Alignment.Center,
         ) {

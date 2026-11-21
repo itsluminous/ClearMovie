@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -205,6 +206,8 @@ private fun BarButton(
 ) {
     val label = stringResource(barLabel(action.action))
     val checked = action.checked
+    val onLabel = stringResource(R.string.state_on)
+    val offLabel = stringResource(R.string.state_off)
     // These paddings set the label's width; ContextualBar's labelPx subtracts the same ones.
     Column(
         Modifier
@@ -215,6 +218,12 @@ private fun BarButton(
             .then(
                 if (checked == null) {
                     Modifier.clickable(enabled = action.enabled, role = Role.Button) { onAction(action.action) }
+                } else if (action.opensPanel) {
+                    // Looks like a switch, but opens its popup: TalkBack hears a button and whether it is on.
+                    Modifier
+                        .background(if (checked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                        .semantics { stateDescription = if (checked) onLabel else offLabel }
+                        .clickable(enabled = action.enabled, role = Role.Button) { onAction(action.action) }
                 } else {
                     // A switch: TalkBack says whether it is on; it looks pressed while on.
                     Modifier
@@ -295,6 +304,7 @@ fun barLabel(action: EditAction): Int =
         EditAction.FADE -> R.string.action_fade
         EditAction.POSITION -> R.string.action_position
         EditAction.ADD_CAPTION -> R.string.action_add_caption
+        EditAction.FOLLOW_ITEM -> R.string.bar_follow_item
     }
 
 fun barIcon(action: EditAction): Int =
@@ -341,6 +351,7 @@ fun barIcon(action: EditAction): Int =
         EditAction.FADE -> R.drawable.ic_fade
         EditAction.POSITION -> R.drawable.ic_open_with
         EditAction.ADD_CAPTION -> R.drawable.ic_closed_caption
+        EditAction.FOLLOW_ITEM -> R.drawable.ic_link
     }
 
 /** Room between a label and its button's edge: [OUTER_PADDING] outside the ripple, the rest inside. */

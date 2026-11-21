@@ -41,7 +41,7 @@ enum class EditAction {
     /** A switch: the row's sound is off. */
     MUTE_ROW,
 
-    /** A switch: "Lower music when people talk", on a music row. */
+    /** "Lower music when people talk", on a music row: opens its popup (on or off, and how low); shows whether it is on. */
     LOWER_MUSIC,
 
     /** A switch: the preset frame is shown. */
@@ -54,6 +54,9 @@ enum class EditAction {
 
     /** cm-captions: a caption attached to the selected photo or video. */
     ADD_CAPTION,
+
+    /** cm-timeline-handles: a caption with a side detached covers its photo or video whole again. */
+    FOLLOW_ITEM,
 }
 
 /** What is selected, as far as the bar is concerned. */
@@ -85,12 +88,15 @@ enum class SelectionKind {
 
 /**
  * One button: [enabled] is false where the action can't apply here (Move
- * left on the first item). [checked] makes it a switch, on or off.
+ * left on the first item). [checked] makes it a switch, on or off; with
+ * [opensPanel] it only shows that state, and a tap opens its popup instead
+ * of switching it.
  */
 data class BarAction(
     val action: EditAction,
     val enabled: Boolean = true,
     val checked: Boolean? = null,
+    val opensPanel: Boolean = false,
 )
 
 /** What a selected row allows, for [ClipActions.forRow]. */
@@ -119,6 +125,8 @@ data class TimedFacts(
     val isMusic: Boolean = false,
     val lowerWhenTalking: Boolean = true,
     val frameOn: Boolean = true,
+    /** A caption with a side detached from its photo or video (Match item). */
+    val canFollow: Boolean = false,
 )
 
 /**
@@ -231,7 +239,9 @@ object ClipActions {
         val delete = listOf(BarAction(EditAction.DELETE))
         return when (kind) {
             SelectionKind.TEXT -> {
-                listOf(EditAction.EDIT_TEXT, EditAction.ANIMATION).map(::BarAction) + moves + delete
+                listOf(BarAction(EditAction.EDIT_TEXT)) +
+                    listOfNotNull(BarAction(EditAction.FOLLOW_ITEM).takeIf { facts.canFollow }) +
+                    BarAction(EditAction.ANIMATION) + moves + delete
             }
 
             SelectionKind.PIP_PHOTO -> {
@@ -252,7 +262,7 @@ object ClipActions {
 
             SelectionKind.SOUND -> {
                 listOf(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE).map(::BarAction) +
-                    listOfNotNull(BarAction(EditAction.LOWER_MUSIC, checked = facts.lowerWhenTalking).takeIf { facts.isMusic }) +
+                    listOfNotNull(lowerMusic(facts.lowerWhenTalking).takeIf { facts.isMusic }) +
                     moves + delete
             }
 
@@ -270,12 +280,15 @@ object ClipActions {
         }
     }
 
+    /** Lower for talk: shows whether it is on, and opens its popup. */
+    private fun lowerMusic(on: Boolean) = BarAction(EditAction.LOWER_MUSIC, checked = on, opensPanel = true)
+
     /** The actions for a selected row (its icon was tapped): Add here, its sound, where it is drawn, where it is on screen. */
     fun forRow(row: RowFacts): List<BarAction> =
         buildList {
             add(BarAction(if (row.isMain) EditAction.ADD_MEDIA else EditAction.ADD_HERE))
             if (row.isSound) add(BarAction(EditAction.MUTE_ROW, checked = row.muted))
-            if (row.isMusic) add(BarAction(EditAction.LOWER_MUSIC, checked = row.lowerWhenTalking))
+            if (row.isMusic) add(lowerMusic(row.lowerWhenTalking))
             if (row.isPresetFrame) add(BarAction(EditAction.FRAME_ON, checked = row.enabled))
             if (row.isVisual) {
                 add(BarAction(EditAction.SHOW_ON_TOP, row.canGoForward))

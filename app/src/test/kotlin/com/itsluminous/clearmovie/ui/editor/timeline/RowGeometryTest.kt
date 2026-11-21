@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.ui.editor.timeline
 
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.ResizeRange
 import org.junit.Test
 
 /** The "+" points on rows other than MAIN, and where a row dragged by its icon lands (cm-tracks). */
@@ -142,5 +143,55 @@ class RowGeometryTest {
             .inOrder()
         assertThat(ClipActions.forTimed(SelectionKind.FRAME, facts.copy(frameOn = false)).single().checked).isFalse()
         assertThat(ClipActions.forTimed(SelectionKind.OVERLAY, facts).map { it.action }).contains(EditAction.MOVE_TO_ROW)
+    }
+
+    // ---------------------------------------------------------------- handles (cm-timeline-handles)
+
+    private fun handled(
+        id: String,
+        start: Long,
+        end: Long,
+    ) = clip(id, start, end).copy(resize = ResizeRange(0, end - 500, start + 500, 100_000))
+
+    @Test
+    fun `the selected item's plus moves beyond its handles, never on one, as on MAIN`() {
+        val clips = listOf(handled("a", 1000, 3000), handled("b", 5000, 6000))
+        val points = plus(clips, selected = "a")
+        val (start, end) = TimedRowGeometry.handleHitAreas(clips[0], zoom)!!
+        // 48 dp hit areas: 12 dp outside the item, 24 dp drawn inside, 12 dp more.
+        assertThat(start.start to start.endInclusive).isEqualTo(88.0 to 136.0)
+        assertThat(end.start to end.endInclusive).isEqualTo(264.0 to 312.0)
+        val half = TimelineGeometry.PLUS_HIT_DP / 2
+        for (p in points) {
+            for (h in listOf(start, end)) {
+                assertThat(
+                    p.xDp + half <= h.start - TimelineGeometry.HANDLE_GAP_DP ||
+                        p.xDp - half >= h.endInclusive + TimelineGeometry.HANDLE_GAP_DP,
+                ).isTrue()
+            }
+        }
+        assertThat(
+            points
+                .first {
+                    it.anchor.value == "a" && it.side == InsertSide.BEFORE
+                }.xDp,
+        ).isWithin(1e-9).of(100.0 - TimelineGeometry.DISPLACE_DP)
+        // Without handles (nothing to resize), the plus sits just outside, as before.
+        assertThat(plus(listOf(clip("a", 1000, 3000)), selected = "a").first().xDp).isWithin(1e-9).of(100.0 - half)
+    }
+
+    @Test
+    fun `a touch on a handle is that handle, the nearer one on a narrow item, and only on the selected item`() {
+        val clips = listOf(handled("a", 1000, 3000), handled("n", 4000, 4300))
+        val pa = plus(clips, selected = "a")
+        assertThat(TimedRowGeometry.hitTest(clips, pa, zoom, 110.0, ClipId("a"))).isEqualTo(TimedHit.Handle(ClipId("a"), true))
+        assertThat(TimedRowGeometry.hitTest(clips, pa, zoom, 290.0, ClipId("a"))).isEqualTo(TimedHit.Handle(ClipId("a"), false))
+        assertThat(TimedRowGeometry.hitTest(clips, pa, zoom, 200.0, ClipId("a"))).isEqualTo(TimedHit.Clip(ClipId("a")))
+        // Not selected: the same spot is the item.
+        assertThat(TimedRowGeometry.hitTest(clips, plus(clips), zoom, 110.0, null)).isEqualTo(TimedHit.Clip(ClipId("a")))
+        // A 30 dp item: its two hit areas overlap, the nearer edge wins.
+        val pn = plus(clips, selected = "n")
+        assertThat(TimedRowGeometry.hitTest(clips, pn, zoom, 405.0, ClipId("n"))).isEqualTo(TimedHit.Handle(ClipId("n"), true))
+        assertThat(TimedRowGeometry.hitTest(clips, pn, zoom, 425.0, ClipId("n"))).isEqualTo(TimedHit.Handle(ClipId("n"), false))
     }
 }

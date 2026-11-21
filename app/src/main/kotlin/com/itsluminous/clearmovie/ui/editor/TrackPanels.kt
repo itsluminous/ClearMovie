@@ -54,7 +54,6 @@ import com.itsluminous.clearmovie.domain.model.moveClip
 import com.itsluminous.clearmovie.domain.model.moveClipToNewRow
 import com.itsluminous.clearmovie.domain.model.removeRow
 import com.itsluminous.clearmovie.domain.model.setAudioFades
-import com.itsluminous.clearmovie.domain.model.setLowerWhenTalking
 import com.itsluminous.clearmovie.domain.model.setPip
 import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTrackMuted
@@ -458,9 +457,9 @@ internal fun RowSection(
         }
     }
     if (track.audioRole == AudioRole.MUSIC) {
+        // The same popup as the bar's Lower for talk: on or off, and how low.
         Choice(stringResource(R.string.action_lower_music), null, track.lowerWhenTalking, R.drawable.ic_volume_down, rowMenuTag("lower")) {
-            callbacks.edit { setLowerWhenTalking(track.id, !track.lowerWhenTalking) }
-            close()
+            onPanel(OpenPanel(Panel.TALK_LOWER, trackId = track.id))
         }
     }
     if (track.presetRole == PresetRole.FRAME) {

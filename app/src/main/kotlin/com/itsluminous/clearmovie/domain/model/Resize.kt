@@ -50,12 +50,28 @@ object ResizeRules {
  */
 fun Project.resizeRange(clipId: ClipId): ResizeRange? {
     val track = trackOf(clipId) ?: return null
+    val clip = track.clips.firstOrNull { it.id == clipId } ?: return null
+    return rangeOf(track, clip, totalDurationMs())
+}
+
+/** [resizeRange] of every item on [track] (none on MAIN), with the video's length worked out once. */
+fun Project.resizeRanges(track: Track): Map<ClipId, ResizeRange> {
+    if (!track.type.isTimed) return emptyMap()
+    val total = totalDurationMs()
+    return track.clips.mapNotNull { c -> rangeOf(track, c, total)?.let { c.id to it } }.toMap()
+}
+
+private fun rangeOf(
+    track: Track,
+    clip: Clip,
+    totalMs: Long,
+): ResizeRange? {
     if (!track.type.isTimed) return null
-    val clip = clip(clipId) ?: return null
+    val clipId = clip.id
     if (clip.durationMs <= 0) return null
     val others = track.clips.filter { it.id != clipId && it.durationMs > 0 }
     val floor = others.filter { it.endMs <= clip.startMs }.maxOfOrNull { it.endMs } ?: 0L
-    val ceiling = others.filter { it.startMs >= clip.endMs }.minOfOrNull { it.startMs } ?: max(totalDurationMs(), clip.endMs)
+    val ceiling = others.filter { it.startMs >= clip.endMs }.minOfOrNull { it.startMs } ?: max(totalMs, clip.endMs)
     val shortest = min(clip.durationMs, if (clip is VideoClip || clip is AudioClip) ResizeRules.MIN_MOVING_MS else ResizeRules.MIN_STILL_MS)
     // The longest the item can get from each side, the other side staying put.
     val (fromStart, fromEnd) =

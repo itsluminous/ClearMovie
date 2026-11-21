@@ -10,6 +10,7 @@ import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.ResizeRange
 import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackId
@@ -17,13 +18,15 @@ import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.bringForward
 import com.itsluminous.clearmovie.domain.model.bringToTop
+import com.itsluminous.clearmovie.domain.model.canFollowItem
+import com.itsluminous.clearmovie.domain.model.followItem
 import com.itsluminous.clearmovie.domain.model.moveRow
 import com.itsluminous.clearmovie.domain.model.nudgeClip
 import com.itsluminous.clearmovie.domain.model.nudgedStart
+import com.itsluminous.clearmovie.domain.model.resizeRanges
 import com.itsluminous.clearmovie.domain.model.rotate
 import com.itsluminous.clearmovie.domain.model.sendBackward
 import com.itsluminous.clearmovie.domain.model.sendToBottom
-import com.itsluminous.clearmovie.domain.model.setLowerWhenTalking
 import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTrackMuted
 import com.itsluminous.clearmovie.ui.editor.timeline.BarAction
@@ -83,7 +86,14 @@ fun timelineRows(project: Project): List<TimelineRow> {
         TimelineRow(
             key = t.id.value,
             type = type,
-            clips = if (t.type == TrackType.MAIN) emptyList() else t.clips.map(::rowClip),
+            clips =
+                if (t.type ==
+                    TrackType.MAIN
+                ) {
+                    emptyList()
+                } else {
+                    project.resizeRanges(t).let { r -> t.clips.map { rowClip(it, r[it.id]) } }
+                },
             enabled = t.enabled,
             muted = t.muted,
             number = number,
@@ -93,7 +103,10 @@ fun timelineRows(project: Project): List<TimelineRow> {
     }
 }
 
-private fun rowClip(c: Clip): RowClip =
+private fun rowClip(
+    c: Clip,
+    resize: ResizeRange?,
+): RowClip =
     RowClip(
         c.id,
         c.startMs,
@@ -106,6 +119,7 @@ private fun rowClip(c: Clip): RowClip =
             else -> RowClipKind.PHOTO
         },
         (c as? TextClip)?.text,
+        resize,
     )
 
 /** What the bar treats a clip on a row other than MAIN as. */
@@ -136,6 +150,7 @@ fun timedBar(
             isMusic = track.audioRole == AudioRole.MUSIC,
             lowerWhenTalking = track.lowerWhenTalking,
             frameOn = track.enabled,
+            canFollow = project.canFollowItem(clip.id),
         )
     return ClipActions.forTimed(timedKind(project, clip), facts)
 }
@@ -243,7 +258,7 @@ internal fun onRowAction(
     when (action) {
         EditAction.ADD_HERE -> state.panel = OpenPanel(Panel.INSERT, trackId = track.id)
         EditAction.MUTE_ROW -> actions.edit { setTrackMuted(track.id, !track.muted) }
-        EditAction.LOWER_MUSIC -> actions.edit { setLowerWhenTalking(track.id, !track.lowerWhenTalking) }
+        EditAction.LOWER_MUSIC -> state.panel = OpenPanel(Panel.TALK_LOWER, trackId = track.id)
         EditAction.FRAME_ON -> actions.edit { setTrackEnabled(track.id, !track.enabled) }
         EditAction.MOVE_ROW_UP -> actions.edit { moveRowBy(track.id, -1, shown) }
         EditAction.MOVE_ROW_DOWN -> actions.edit { moveRowBy(track.id, 1, shown) }
@@ -272,7 +287,8 @@ internal fun onTimedAction(
         EditAction.TRIM -> state.panel = OpenPanel(if (clip is AudioClip) Panel.SOUND_TRIM else Panel.TRIM, id)
         EditAction.VOLUME -> state.panel = OpenPanel(Panel.VOLUME, id)
         EditAction.FADE -> state.panel = OpenPanel(Panel.FADE, id)
-        EditAction.LOWER_MUSIC -> actions.edit { setLowerWhenTalking(track.id, !track.lowerWhenTalking) }
+        EditAction.LOWER_MUSIC -> state.panel = OpenPanel(Panel.TALK_LOWER, id, trackId = track.id)
+        EditAction.FOLLOW_ITEM -> actions.edit { followItem(id) }
         EditAction.FRAME_ON -> actions.edit { setTrackEnabled(track.id, !track.enabled) }
         EditAction.MOVE_EARLIER -> actions.edit { nudgeClip(id, -NUDGE_MS) }
         EditAction.MOVE_LATER -> actions.edit { nudgeClip(id, NUDGE_MS) }

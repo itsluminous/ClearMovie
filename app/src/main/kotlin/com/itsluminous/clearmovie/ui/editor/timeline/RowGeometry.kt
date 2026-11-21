@@ -1,18 +1,23 @@
 package com.itsluminous.clearmovie.ui.editor.timeline
 
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.ResizeRange
 import kotlin.math.abs
 
 /** What kind of item a clip on a row other than MAIN is, for its icon, colour and spoken name. */
 enum class RowClipKind { TEXT, PHOTO, VIDEO, OVERLAY, SOUND }
 
-/** One item on a row other than MAIN. [text] is a caption's words. */
+/**
+ * One item on a row other than MAIN. [text] is a caption's words. [resize]
+ * is where its handles may take each side (null: no handles).
+ */
 data class RowClip(
     val id: ClipId,
     val startMs: Long,
     val endMs: Long,
     val kind: RowClipKind,
     val text: String? = null,
+    val resize: ResizeRange? = null,
 )
 
 /** A "+" on a row other than MAIN: a new item goes on [side] of [anchor]; [xDp] is its centre on the time span. */
@@ -32,6 +37,12 @@ sealed interface TimedHit {
         val id: ClipId,
     ) : TimedHit
 
+    /** A trim handle of the selected item: [start] for its start, else its end. */
+    data class Handle(
+        val id: ClipId,
+        val start: Boolean,
+    ) : TimedHit
+
     /** The row, away from its items. */
     data object Space : TimedHit
 }
@@ -41,9 +52,10 @@ sealed interface TimedHit {
  * picture in picture, frame, music, voice), in dp on the time span (the
  * owner's rule, the same as MAIN's): one "+" at the end of the row, after
  * its last item; on the selected item only, one on each side, just outside
- * it; none between unselected items. An empty row's single "+" is drawn by
- * the timeline itself. These rows have no trim handles. Pure, so the rules
- * are tested on the JVM.
+ * it (beyond its trim handles, as on MAIN, when it has them); none between
+ * unselected items. An empty row's single "+" is drawn by the timeline
+ * itself. The selected item's trim handles take its inner edges, 24 dp
+ * drawn and 48 dp to touch. Pure, so the rules are tested on the JVM.
  */
 object TimedRowGeometry {
     fun plusPoints(
@@ -61,16 +73,38 @@ object TimedRowGeometry {
 
         fun TimedPlus.kept() = copy(xDp = xDp.coerceIn(lo, maxOf(lo, hi)))
         val out = mutableListOf<TimedPlus>()
-        // The selected item: one "+" on each side, just outside it, so the item itself stays easy to touch.
-        sorted.firstOrNull { it.id == selected }?.let { c ->
-            out += TimedPlus(c.id, InsertSide.BEFORE, zoom.xOf(c.startMs.toDouble()) - half).kept()
-            out += TimedPlus(c.id, InsertSide.AFTER, zoom.xOf(c.endMs.toDouble()) + half).kept()
+        val sel = sorted.firstOrNull { it.id == selected }
+        val handles = sel?.let { handleHitAreas(it, zoom) }
+        // The selected item: one "+" on each side, just outside it (and its handles), so the item stays easy to touch.
+        sel?.let { c ->
+            val outward = if (handles != null) TimelineGeometry.DISPLACE_DP else half
+            out += TimedPlus(c.id, InsertSide.BEFORE, zoom.xOf(c.startMs.toDouble()) - outward).kept()
+            out += TimedPlus(c.id, InsertSide.AFTER, zoom.xOf(c.endMs.toDouble()) + outward).kept()
         }
-        // One "+" at the end of the row, after its last item.
+        // One "+" at the end of the row, after its last item, never on a handle.
         val last = sorted.maxBy { it.endMs }
         val end = TimedPlus(last.id, InsertSide.AFTER, zoom.xOf(last.endMs.toDouble()) + half).kept()
-        if (out.none { abs(it.xDp - end.xDp) < TimelineGeometry.PLUS_HIT_DP }) out += end
+        val clear =
+            handles == null ||
+                handles.toList().all { h ->
+                    end.xDp + half + TimelineGeometry.HANDLE_GAP_DP <= h.start ||
+                        end.xDp - half - TimelineGeometry.HANDLE_GAP_DP >= h.endInclusive
+                }
+        if (clear && out.none { abs(it.xDp - end.xDp) < TimelineGeometry.PLUS_HIT_DP }) out += end
         return out.sortedBy { it.xDp }
+    }
+
+    /** The selected item's two handle hit areas (x ranges, start then end), or null when it has no handles. */
+    fun handleHitAreas(
+        clip: RowClip,
+        zoom: ZoomState,
+    ): Pair<ClosedFloatingPointRange<Double>, ClosedFloatingPointRange<Double>>? {
+        if (clip.resize == null || clip.endMs <= clip.startMs) return null
+        val l = zoom.xOf(clip.startMs.toDouble())
+        val r = zoom.xOf(clip.endMs.toDouble())
+        val outside = (TimelineGeometry.HANDLE_HIT_DP - TimelineGeometry.HANDLE_DP) / 2
+        return (l - outside)..(l + TimelineGeometry.HANDLE_DP + outside) to
+            (r - TimelineGeometry.HANDLE_DP - outside)..(r + outside)
     }
 
     /** What a touch at [x] (dp on the time span) hits on a row with [clips] and [points]. */
@@ -79,6 +113,7 @@ object TimedRowGeometry {
         points: List<TimedPlus>,
         zoom: ZoomState,
         x: Double,
+        selected: ClipId? = null,
     ): TimedHit {
         val t = zoom.timeAt(x)
         val clip = clips.firstOrNull { t >= it.startMs && t < it.endMs }
@@ -87,6 +122,18 @@ object TimedRowGeometry {
             .filter { abs(it.xDp - x) <= TimelineGeometry.PLUS_HIT_DP / 2 }
             .minByOrNull { abs(it.xDp - x) }
             ?.let { return TimedHit.Plus(it) }
+        // Then the selected item's handles, over whatever is under them; on a narrow item the nearer edge wins.
+        clips.firstOrNull { it.id == selected }?.let { sel ->
+            val (start, end) = handleHitAreas(sel, zoom) ?: return@let
+            val inStart = x in start
+            val inEnd = x in end
+            if (inStart && inEnd) {
+                val nearStart = abs(x - zoom.xOf(sel.startMs.toDouble())) <= abs(x - zoom.xOf(sel.endMs.toDouble()))
+                return TimedHit.Handle(sel.id, nearStart)
+            }
+            if (inStart) return TimedHit.Handle(sel.id, true)
+            if (inEnd) return TimedHit.Handle(sel.id, false)
+        }
         return if (clip != null) TimedHit.Clip(clip.id) else TimedHit.Space
     }
 }
