@@ -88,15 +88,18 @@ internal fun sidesOn(
     startOffset: Long?,
     endOffset: Long?,
 ): Pair<Long, Long> {
-    val start = startOffset?.let { (span.first + it).coerceAtLeast(0L) } ?: span.first
-    val end = endOffset?.let { span.second + it } ?: span.second
+    // Offsets are bounded by validation; the bound here keeps a hostile file's sums from overflowing before it is refused.
+    val bound = -Limits.MAX_MEDIA_MS..Limits.MAX_MEDIA_MS
+    val start = startOffset?.let { (span.first + it.coerceIn(bound)).coerceAtLeast(0L) } ?: span.first
+    val end = endOffset?.let { span.second + it.coerceIn(bound) } ?: span.second
     return heldApart(start, end, startHeld = startOffset != null)
 }
 
 /**
  * [start]..[end] kept at least [Limits.MIN_CLIP_MS] long when one side is
- * held at its own time and the other follows an item that moved past it: the
- * held side stays put and the following side gives way (it comes back when
+ * held at its distance from its edge and the other follows an item that
+ * shrank or moved past it: the held side stays put and the following side
+ * gives way (it comes back when
  * the item does). The start never goes below 0.
  */
 internal fun heldApart(
@@ -250,11 +253,12 @@ internal fun Project.captionsAfterSplit(
         val de = a.detachedEndOffsetMs
         if (a.whole && ds != null && caption.startMs >= second.first) {
             // Its start was detached inside the second part: it is all on the second part now, as far into it.
-            val moved = a.copy(clip = secondId, detachedStartOffsetMs = caption.startMs - second.first)
+            val moved = a.copy(clip = secondId, detachedStartOffsetMs = (caption.startMs - second.first).takeUnless { it == 0L })
             project = project.replaceCaption(trackId, caption.copy(attachedTo = moved))
         } else if (a.whole && de != null && caption.endMs <= first.second) {
             // Its end was detached inside the first part: it stays there, as far from the first part's end.
-            project = project.replaceCaption(trackId, caption.copy(attachedTo = a.copy(detachedEndOffsetMs = caption.endMs - first.second)))
+            val held = a.copy(detachedEndOffsetMs = (caption.endMs - first.second).takeUnless { it == 0L })
+            project = project.replaceCaption(trackId, caption.copy(attachedTo = held))
         } else if (a.whole) {
             // The first part's caption shrinks to it first, so the copy fits on the same row after it.
             // A detached start stays with the first part and a detached end goes with the second.
@@ -301,22 +305,34 @@ internal fun Project.captionsBeforeJoin(
                 keptWhole += twin.id
                 val dropped = project.withTrackClips(trackId, project.requireTrack(trackId).clips.filterNot { it.id == caption.id })
                 // The joined caption keeps the second part's detached end (a split gave each part one side);
-                // the second part's end is the joined item's end, so its distance stays as it is.
+                // the second part's end is the joined item's end (a join is on MAIN, the same transition out), so its
+                // distance stays as it is.
                 if (caption.attachedTo.detachedEndOffsetMs == null) dropped else dropped.withDetachedEnd(twin.id, caption)
             } else {
-                val offset = caption.startMs - firstSpan.first
-                val attached = CaptionAttachment(firstId, offset, whole = false, lengthMs = caption.wantedMs)
-                project.replaceCaption(trackId, caption.copy(attachedTo = attached))
+                project.replaceCaption(trackId, caption.placedOnJoined(firstId, firstSpan, caption.wantedMs))
             }
     }
     for ((trackId, caption) in first) {
         if (caption.attachedTo!!.whole && caption.id !in keptWhole) {
             // Where it is now (a detached start included), for as long as it is now.
-            val attached = CaptionAttachment(firstId, caption.startMs - firstSpan.first, whole = false, lengthMs = caption.durationMs)
-            project = project.replaceCaption(trackId, caption.copy(attachedTo = attached))
+            project = project.replaceCaption(trackId, caption.placedOnJoined(firstId, firstSpan, caption.durationMs))
         }
     }
     return project
+}
+
+/**
+ * A caption on the joined item [firstId] at the time it has now, for
+ * [lengthMs]; one that starts before the item (a start dragged before it) is
+ * free there, as a caption placed outside its item is.
+ */
+private fun TextClip.placedOnJoined(
+    firstId: ClipId,
+    firstSpan: Pair<Long, Long>,
+    lengthMs: Long,
+): TextClip {
+    if (startMs < firstSpan.first) return copy(attachedTo = null)
+    return copy(attachedTo = CaptionAttachment(firstId, startMs - firstSpan.first, whole = false, lengthMs = lengthMs))
 }
 
 /** For "Duplicate": the captions of [originalId], copied onto its copy [copyId]. */
@@ -364,7 +380,10 @@ private fun Project.withDetachedEnd(
 /**
  * A schema 4 project kept a detached side as its time in the video (an
  * unreleased build on main, cm-timeline-handles' first version); from schema
- * 5 it is a distance from the item's edge. The same times, as distances.
+ * 5 it is a distance from the item's edge. The same times, as distances,
+ * measured against the spans as the file has them (a file whose derived
+ * values are stale is repaired after this, so its sides keep the distances
+ * the file showed, not its times).
  */
 internal fun Project.withDetachedSidesAsDistances(): Project {
     val spans = AttachSpans(this)

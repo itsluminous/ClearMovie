@@ -249,7 +249,15 @@ private fun Project.heldOn(
 ): Clip {
     val span = clip.anchor?.let { anchorSpan(it) } ?: return clip
     val (ds, de) = clip.detachedSides
-    val held = if (edge == ResizeEdge.START) start - span.first to de else ds to end - span.second
+    // Let go exactly on the span's edge, a side follows it again, as a caption's does.
+    val held =
+        if (edge ==
+            ResizeEdge.START
+        ) {
+            (start - span.first).takeUnless { it == 0L } to de
+        } else {
+            ds to (end - span.second).takeUnless { it == 0L }
+        }
     val free = held.first != null && held.second != null
     return when (clip) {
         is OverlayClip -> {

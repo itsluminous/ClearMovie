@@ -207,6 +207,35 @@ class HandlesTest {
     }
 
     @Test
+    fun `a join keeps working when a caption's start was dragged before its item`() {
+        var p = captioned()
+        p = p.resizeClip(p.captionId(), ResizeEdge.START, 2000).assertValid()
+        assertThat(p.caption("on b").attachedTo!!.detachedStartOffsetMs).isEqualTo(-1000L)
+        p = p.splitClip(ClipId("b"), 2000, ClipId("b2")).assertValid()
+        val copy =
+            p.tracks
+                .flatMap { it.clips }
+                .filterIsInstance<TextClip>()
+                .single { it.attachedTo?.clip == ClipId("b2") }
+        val editor = ProjectEditor(p.setText(copy.id, "other words"), ids)
+        assertThat(editor.edit { joinClips(ClipId("b"), ClipId("b2")) }).isEqualTo(EditResult.Applied)
+        // It starts before the joined item, so it is free there, at the time it had.
+        assertThat(editor.project.span("on b")).isEqualTo(2000L to 5000L)
+        assertThat(editor.project.caption("on b").attachedTo).isNull()
+    }
+
+    @Test
+    fun `the preset frame's start let go exactly on the video's edge follows it again`() {
+        var p = Fixtures.presetProject(ids).addToMain(listOf(Fixtures.photo("p1", 3000)), ids = ids).assertValid()
+        val frame = p.byRole(PresetRole.FRAME).clips.single()
+        p = p.resizeClip(frame.id, ResizeEdge.START, frame.startMs + 1000)
+        p = p.resizeClip(frame.id, ResizeEdge.START, frame.startMs).assertValid()
+        val back = p.requireClip(frame.id) as OverlayClip
+        assertThat(back.detachedStartOffsetMs to back.detachedEndOffsetMs).isEqualTo(null to null)
+        assertThat(back.anchor).isNotNull()
+    }
+
+    @Test
     fun `a side let go exactly on its item's edge follows it again`() {
         var p = captioned()
         p = p.resizeClip(p.captionId(), ResizeEdge.START, 4000)

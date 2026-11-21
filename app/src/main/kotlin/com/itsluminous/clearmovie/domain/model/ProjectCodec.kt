@@ -39,8 +39,8 @@ class ProjectMigrations(
          * 2 (cm-captions): a caption may be attached to a photo or video
          * (`TextClip.attachedTo`). 3 (cm-aspect-ratio): the video's `shape`,
          * and `askShape`. 4 (cm-timeline-handles): a caption's or a
-         * preset item's side detached by its handle (`detachedStartOffsetMs`,
-         * `detachedEndOffsetMs`), and a music row's `lowerToDb`. 5
+         * preset item's side detached by its handle (`detachedStartMs`,
+         * `detachedEndMs`), and a music row's `lowerToDb`. 5
          * (cm-timeline-handles): a dragged side is a distance from its
          * item's edge rather than a time in the video.
          */

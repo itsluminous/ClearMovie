@@ -96,6 +96,24 @@ class ProjectCodecTest {
     }
 
     @Test
+    fun `a schema 4 preset frame's dragged end reads as the same time, as a distance from the video's end`() {
+        val rich = Fixtures.richProject()
+        val frame = rich.byRole(PresetRole.FRAME).clips.single()
+        val dragged = rich.resizeClip(frame.id, ResizeEdge.END, frame.endMs - 700)
+        val offset = (dragged.requireClip(frame.id) as OverlayClip).detachedEndOffsetMs!!
+        assertThat(offset).isEqualTo(-700L)
+        // The same project as schema 4 wrote it: the end as a time in the video.
+        val v4 =
+            codec
+                .encode(dragged)
+                .replace("\"schemaVersion\": 5", "\"schemaVersion\": 4")
+                .replace("\"detachedEndOffsetMs\": -700", "\"detachedEndMs\": ${frame.endMs - 700}")
+        val read = ok(v4)
+        assertThat(read.fromVersion).isEqualTo(4)
+        assertThat(read.project).isEqualTo(dragged)
+    }
+
+    @Test
     fun `detached sides and a talk level survive a save`() {
         val rich = Fixtures.richProject()
         val music = rich.tracks.first { it.audioRole == AudioRole.MUSIC }
