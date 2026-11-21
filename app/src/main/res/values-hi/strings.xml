@@ -501,7 +501,7 @@
     <string name="record_discard">हटा दें</string>
     <string name="record_no_room">पहले वीडियो में थोड़ा पीछे जाएँ: यहाँ से आगे बोलने के लिए वीडियो नहीं बचा है।</string>
     <string name="insert_overlay">फ़्रेम वीडियो</string>
-    <string name="insert_overlay_body">आपकी फ़ाइलों से। इसके हरे हिस्सों में नीचे का वीडियो दिखेगा।</string>
+    <string name="insert_overlay_body">आपकी फ़ाइलों से। फिर आप उसकी स्क्रीन का रंग चुनते हैं, जिसमें से नीचे का वीडियो दिखता है।</string>
     <string name="fade_title">फ़ेड</string>
     <string name="fade_in">शुरू में फ़ेड: %1$s</string>
     <string name="fade_out">आख़िर में फ़ेड: %1$s</string>
@@ -517,7 +517,7 @@
     <string name="add_row_title">पंक्ति जोड़ें</string>
     <string name="add_row_text_body">वीडियो पर शब्दों के लिए</string>
     <string name="add_row_pip_body">कोने में छोटी फ़ोटो और वीडियो के लिए</string>
-    <string name="add_row_frame_body">हरी खिड़की वाले फ़्रेम वीडियो के लिए</string>
+    <string name="add_row_frame_body">रंगीन स्क्रीन वाले फ़्रेम वीडियो के लिए, जैसे हरी स्क्रीन</string>
     <string name="add_row_music_body">पीछे चलने वाले संगीत के लिए</string>
     <string name="add_row_voice_body">किसी के बोलने के लिए</string>
     <string name="remove_row_title">%1$s हटाएँ?</string>
@@ -644,7 +644,7 @@
     <string name="action_picture_area">फ़ोटो की जगह</string>
     <string name="frame_look_title">यह फ़्रेम सेट करें</string>
     <string name="frame_look_colour_body">जिस रंग को हटाना है, उस पर टैप करें, ताकि आपकी फ़ोटो और वीडियो उसमें से दिखें।</string>
-    <string name="frame_look_area_body">बॉक्स को वहाँ खींचें जहाँ आपकी फ़ोटो और वीडियो दिखने चाहिए। आकार बदलने के लिए कोई कोना खींचें।</string>
+    <string name="frame_look_area_body">बॉक्स को वहाँ खींचें जहाँ आपकी फ़ोटो और वीडियो दिखने चाहिए। आकार बदलने के लिए कोई कोना या किनारा खींचें।</string>
     <string name="frame_look_moment">फ़्रेम वीडियो का पल</string>
     <string name="frame_look_amount">कितना हटाना है</string>
     <string name="frame_look_less">कम</string>
@@ -660,4 +660,5 @@
     <string name="preset_copy_title">फ़ाइलों की कॉपी रखें</string>
     <string name="preset_copy_body">बंद: प्रीसेट आपकी फ़ाइलें वहीं से इस्तेमाल करता है जहाँ वे हैं, इसलिए वे ज़्यादा जगह नहीं लेतीं। अगर आप कोई फ़ाइल हटाते या मिटाते हैं, तो ClearMovie उसे फिर से माँगेगा। चालू: ClearMovie अपनी कॉपी रखता है।</string>
     <string name="preset_setup_body_linked">हर फ़ाइल अपने फ़ोन से एक बार चुनें। ClearMovie उसे वहीं से इस्तेमाल करता है, इसलिए उसे वहीं रहने दें।</string>
+    <string name="preset_guide_step_done_linked">ClearMovie हर फ़ाइल को वहीं से इस्तेमाल करता है, इसलिए फ़ाइलें फ़ोन पर ही रहने दें।</string>
 </resources>

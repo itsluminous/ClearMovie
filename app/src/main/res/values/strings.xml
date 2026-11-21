@@ -553,7 +553,7 @@
     <string name="record_discard">Throw away</string>
     <string name="record_no_room">Go back a little in the video first: there is no video left here to speak over.</string>
     <string name="insert_overlay">Frame video</string>
-    <string name="insert_overlay_body">From your files. Its green parts show the video under it.</string>
+    <string name="insert_overlay_body">From your files. You then choose its screen colour, which shows the video under it.</string>
     <string name="fade_title">Fade</string>
     <string name="fade_in">Fade in: %1$s</string>
     <string name="fade_out">Fade out: %1$s</string>
@@ -569,7 +569,7 @@
     <string name="add_row_title">Add a row</string>
     <string name="add_row_text_body">For words over the video</string>
     <string name="add_row_pip_body">For small photos and videos in a corner</string>
-    <string name="add_row_frame_body">For frame videos with a green window</string>
+    <string name="add_row_frame_body">For frame videos with a coloured screen, like a green screen</string>
     <string name="add_row_music_body">For background music</string>
     <string name="add_row_voice_body">For someone speaking</string>
     <string name="remove_row_title">Remove %1$s?</string>
@@ -696,7 +696,7 @@
     <string name="action_picture_area">Picture area</string>
     <string name="frame_look_title">Set up this frame</string>
     <string name="frame_look_colour_body">Tap the colour to remove, so your photos and videos show through it.</string>
-    <string name="frame_look_area_body">Drag the box to where your photos and videos should show. Drag a corner to change its size.</string>
+    <string name="frame_look_area_body">Drag the box to where your photos and videos should show. Drag a corner or an edge to change its size.</string>
     <string name="frame_look_moment">Moment in the frame video</string>
     <string name="frame_look_amount">How much to remove</string>
     <string name="frame_look_less">Less</string>
@@ -712,4 +712,5 @@
     <string name="preset_copy_title">Keep a copy of the files</string>
     <string name="preset_copy_body">Off: the preset uses your files where they are, so they take no extra space. If you move or delete one, ClearMovie asks for it again. On: ClearMovie keeps its own copies.</string>
     <string name="preset_setup_body_linked">Choose each file from your phone once. ClearMovie uses it where it is, so leave it there.</string>
+    <string name="preset_guide_step_done_linked">ClearMovie uses each file where it is, so leave the files on the phone.</string>
 </resources>

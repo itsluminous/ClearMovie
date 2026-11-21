@@ -64,6 +64,16 @@ drawbox=x=1140:y=880:w=320:h=180:color=0x589444:t=fill,\
 drawbox=x=1500:y=880:w=320:h=180:color=0x1B5E20:t=fill[v]" \
   -map "[v]" "${x264[@]}" -crf 12 -t 4 "$out/frame_neargreen.mp4"
 
+# frame_magenta.mp4 (cm-frame-area): 2 s, 1280x720, a frame whose screen is
+# magenta (#FF00FF), not green: a white frame with the magenta window at
+# x 128-767, y 72-503 (0.1, 0.1, 0.5, 0.6 of the picture) and a #00D922
+# green swatch at x 900-1179, y 100-299 that a magenta key must keep.
+"${ff[@]}" \
+  -f lavfi -i "color=c=0xFFFFFF:s=1280x720:r=30:d=2" \
+  -filter_complex "[0:v]drawbox=x=128:y=72:w=640:h=432:color=0xFF00FF:t=fill,\
+drawbox=x=900:y=100:w=280:h=200:color=0x00D922:t=fill[v]" \
+  -map "[v]" "${x264[@]}" -crf 12 -t 2 "$out/frame_magenta.mp4"
+
 # intro.mp4: 2 s of solid orange with a moving dark block, and a 660 Hz tone.
 "${ff[@]}" \
   -f lavfi -i "color=c=0xFF8000:s=1920x1080:r=30:d=2" \

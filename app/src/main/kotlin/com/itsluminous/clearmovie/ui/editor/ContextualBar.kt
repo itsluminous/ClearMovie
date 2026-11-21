@@ -348,7 +348,7 @@ fun barIcon(action: EditAction): Int =
         EditAction.LOWER_MUSIC -> R.drawable.ic_volume_down
         EditAction.FRAME_ON -> R.drawable.ic_frame
         EditAction.KEY_COLOUR -> R.drawable.ic_colorize
-        EditAction.PICTURE_AREA -> R.drawable.ic_crop_free
+        EditAction.PICTURE_AREA -> R.drawable.ic_picture_area
         EditAction.MOVE_EARLIER -> R.drawable.ic_chevron_left
         EditAction.MOVE_LATER -> R.drawable.ic_chevron_right
         EditAction.MOVE_TO_ROW -> R.drawable.ic_swap_vert

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +42,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -56,9 +58,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -67,6 +72,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.preset.FrameSample
 import com.itsluminous.clearmovie.domain.model.ArgbColor
@@ -151,6 +158,15 @@ fun FrameLookDialog(
     }
 
     Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        // The dialog has a window of its own: its status bar icons follow the theme, as the screens' do.
+        val view = LocalView.current
+        val lightBars = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+        SideEffect {
+            (view.parent as? DialogWindowProvider)?.window?.let {
+                WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars =
+                    lightBars
+            }
+        }
         Scaffold(
             modifier = Modifier.testTag(FRAME_LOOK_TAG),
             topBar = {
@@ -172,6 +188,14 @@ fun FrameLookDialog(
             },
             contentWindowInsets = WindowInsets.safeDrawing,
         ) { padding ->
+            // The picture area's handles stay clear of the edges where a swipe means Back.
+            val density = LocalDensity.current
+            val layoutDirection = LocalLayoutDirection.current
+            val gestures = WindowInsets.systemGestures
+            val edge =
+                with(density) {
+                    maxOf(16.dp, maxOf(gestures.getLeft(this, layoutDirection), gestures.getRight(this, layoutDirection)).toDp() + 8.dp)
+                }
             BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
                 val roomWidth = maxWidth
                 val roomHeight = maxHeight
@@ -220,7 +244,10 @@ fun FrameLookDialog(
                     )
                 }
                 if (twoPane) {
-                    Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(
+                        Modifier.fillMaxSize().padding(horizontal = edge, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
                         BoxWithConstraints(Modifier.weight(1f).fillMaxSize(), contentAlignment = Alignment.Center) {
                             picture(Modifier.width(minOf(maxWidth, maxHeight * aspect)))
                         }
@@ -228,11 +255,11 @@ fun FrameLookDialog(
                     }
                 } else {
                     Column(
-                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = edge, vertical = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         // An upright frame never takes more than about half the height, so the controls stay in reach.
-                        picture(Modifier.width(minOf(roomWidth - 32.dp, roomHeight * PICTURE_SHARE * aspect)))
+                        picture(Modifier.width(minOf(roomWidth - edge * 2, roomHeight * PICTURE_SHARE * aspect)))
                         Spacer(Modifier.size(16.dp))
                         Column(Modifier.widthIn(max = 640.dp)) { controls() }
                     }
@@ -258,20 +285,23 @@ private fun FramePicture(
     BoxWithConstraints(
         modifier
             .aspectRatio(aspect)
-            .clip(RoundedCornerShape(8.dp))
             .testTag(FRAME_LOOK_PICTURE_TAG),
     ) {
-        Checkerboard(Modifier.fillMaxSize())
-        if (keyed != null) {
-            Image(
-                keyed.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else if (!unreadable) {
+        // Only the picture has round corners: the picture area's handles reach past its edges.
+        Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))) {
+            Checkerboard(Modifier.fillMaxSize())
+            if (keyed != null) {
+                Image(
+                    keyed.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        if (keyed == null && !unreadable) {
             LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.Center).padding(horizontal = 32.dp))
-        } else {
+        } else if (keyed == null) {
             Surface(Modifier.align(Alignment.Center).padding(16.dp), shape = RoundedCornerShape(8.dp)) {
                 Text(
                     stringResource(R.string.frame_look_unreadable),
@@ -350,7 +380,7 @@ private fun Controls(
                     modifier = Modifier.heightIn(min = 48.dp).testTag(frameLookTabTag(t)),
                     icon = {
                         Icon(
-                            painterResource(if (t == FrameLookTab.COLOUR) R.drawable.ic_colorize else R.drawable.ic_crop_free),
+                            painterResource(if (t == FrameLookTab.COLOUR) R.drawable.ic_colorize else R.drawable.ic_picture_area),
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                         )

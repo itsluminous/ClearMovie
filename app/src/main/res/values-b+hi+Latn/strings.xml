@@ -509,7 +509,7 @@
     <string name="record_discard">Hata dein</string>
     <string name="record_no_room">Pehle video me thoda peeche jaayein: yahan se aage bolne ke liye video nahi bacha hai.</string>
     <string name="insert_overlay">Frame video</string>
-    <string name="insert_overlay_body">Aapki files se. Iske green hisson me neeche ka video dikhega.</string>
+    <string name="insert_overlay_body">Aapki files se. Phir aap uski screen ka rang chunte hain, jismein se neeche ka video dikhta hai.</string>
     <string name="fade_title">Fade</string>
     <string name="fade_in">Shuru me fade: %1$s</string>
     <string name="fade_out">Aakhir me fade: %1$s</string>
@@ -525,7 +525,7 @@
     <string name="add_row_title">Row add karein</string>
     <string name="add_row_text_body">Video par shabdon ke liye</string>
     <string name="add_row_pip_body">Kone me chhote photos aur videos ke liye</string>
-    <string name="add_row_frame_body">Green window wale frame videos ke liye</string>
+    <string name="add_row_frame_body">Rangeen screen wale frame videos ke liye, jaise hari screen</string>
     <string name="add_row_music_body">Peeche chalne wale music ke liye</string>
     <string name="add_row_voice_body">Kisi ke bolne ke liye</string>
     <string name="remove_row_title">%1$s hatayein?</string>
@@ -652,7 +652,7 @@
     <string name="action_picture_area">Photo ki jagah</string>
     <string name="frame_look_title">Yeh frame set karein</string>
     <string name="frame_look_colour_body">Jo rang hatana hai, us par tap karein, taaki aapki photo aur video usmein se dikhein.</string>
-    <string name="frame_look_area_body">Box ko wahan kheenchein jahan aapki photo aur video dikhni chahiye. Size badalne ke liye koi kona kheenchein.</string>
+    <string name="frame_look_area_body">Box ko wahan kheenchein jahan aapki photo aur video dikhni chahiye. Size badalne ke liye koi kona ya kinara kheenchein.</string>
     <string name="frame_look_moment">Frame video ka pal</string>
     <string name="frame_look_amount">Kitna hatana hai</string>
     <string name="frame_look_less">Kam</string>
@@ -668,4 +668,5 @@
     <string name="preset_copy_title">Files ki copy rakhein</string>
     <string name="preset_copy_body">Off: preset aapki files wahin se use karta hai jahan woh hain, isliye woh extra jagah nahin leti. Agar aap koi file hatate ya delete karte hain, to ClearMovie use phir se maangega. On: ClearMovie apni copy rakhta hai.</string>
     <string name="preset_setup_body_linked">Har file apne phone se ek baar chunein. ClearMovie use wahin se use karta hai, isliye use wahin rehne dein.</string>
+    <string name="preset_guide_step_done_linked">ClearMovie har file ko wahin se use karta hai, isliye files phone par hi rehne dein.</string>
 </resources>

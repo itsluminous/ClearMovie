@@ -133,6 +133,22 @@ class FrameAreaPlanTest {
                 .setFrameLook(ClipId("o2"), magenta, other)
         assertThat(pictureWindow(p, null, 0, 3000)).isEqualTo(other)
         assertThat(pictureWindow(p, null, 0, 900)).isEqualTo(area)
+        // A frame over less than half of an item does not move it: 1 s of frame over a 3 s item, or o2 over 1-4 s.
+        assertThat(pictureWindow(p, null, 500, 3500, NormRect.FULL)).isEqualTo(other)
+        assertThat(pictureWindow(p, null, 2500, 6000, NormRect.FULL)).isEqualTo(NormRect.FULL)
+    }
+
+    @Test
+    fun `an item the frame covers only partly keeps the whole canvas, one it covers fully goes into the area`() {
+        // A 3 s frame over the first photo (0-3 s) and the first 1 s of a 3 s second photo shown 3-6 s.
+        val ids = SequentialIds("j")
+        val p =
+            ProjectFactory
+                .blank(Fixtures.PROJECT_ID, ids)
+                .addToMain(listOf(photo("a"), photo("b")), ids = ids)
+                .addTimedClip(Fixtures.overlay("o", 0, 4000), ids = ids)
+                .setFrameLook(ClipId("o"), magenta, area)
+        assertThat(RenderPlanBuilder().build(p).mainRects()).containsExactly(area, NormRect.FULL).inOrder()
     }
 
     @Test

@@ -168,7 +168,7 @@ fun PresetSetupScreen(
             val ready = status.isReady
             val side: @Composable (withGuide: Boolean) -> Unit = { withGuide ->
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (withGuide && ui.firstTime) Guide()
+                    if (withGuide && ui.firstTime) Guide(linked = !ui.copiesFiles)
                     ui.message?.let { MessageCard(it, onDismissMessage, ui.preset?.shape ?: CanvasShape.LANDSCAPE) }
                     // A preset.json adjusts a preset the app ships; one the user made is edited in the app instead.
                     if (ui.preset
@@ -211,7 +211,7 @@ fun PresetSetupScreen(
                 ) {
                     Column(Modifier.widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         // The guide comes first, before the files it explains.
-                        if (ui.firstTime) Guide()
+                        if (ui.firstTime) Guide(linked = !ui.copiesFiles)
                         PresetSlotList(status, onChoose = onChoose, onFrameLook = onFrameLook, linked = !ui.copiesFiles)
                         side(false)
                     }
@@ -240,13 +240,16 @@ fun PresetSetupScreen(
 
 /** The short first-time guide: where the files come from, in three steps with pictures (review F14). */
 @Composable
-private fun Guide() {
+private fun Guide(linked: Boolean) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.preset_guide_title), style = MaterialTheme.typography.titleLarge)
             GuideStep(R.drawable.ic_phone_download, stringResource(R.string.preset_guide_step_copy))
             GuideStep(R.drawable.ic_folder_open, stringResource(R.string.preset_guide_step_choose))
-            GuideStep(R.drawable.ic_check_circle, stringResource(R.string.preset_guide_step_done))
+            GuideStep(
+                R.drawable.ic_check_circle,
+                stringResource(if (linked) R.string.preset_guide_step_done_linked else R.string.preset_guide_step_done),
+            )
         }
     }
 }

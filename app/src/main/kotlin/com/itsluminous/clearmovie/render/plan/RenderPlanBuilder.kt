@@ -914,7 +914,9 @@ fun frameWindow(
 
 /**
  * Where photos and videos shown from [startMs] to [endMs] go (cm-frame-area):
- * the picture area of the frame that is shown longest over that time, among
+ * the picture area of the frame that is shown longest over that time, when
+ * that is more than half of it (an item keeps one place for its whole time;
+ * the preview and the export never move it mid-item), among
  * the frames on rows that are switched on and that have an area (the preset
  * frame always has one; a frame the user added has one once it was set).
  * Equal times go to the frame drawn on top. With no such frame over that
@@ -954,7 +956,8 @@ fun pictureWindow(
             }
         }
     }
-    return best ?: fallback
+    // A frame over less than half of the item leaves it where it would be without that frame.
+    return best?.takeIf { bestOverlap * 2 > endMs - startMs } ?: fallback
 }
 
 /** Where the preset's frame is drawn on the video: the whole canvas, or its own shape centred on a canvas of another. */
