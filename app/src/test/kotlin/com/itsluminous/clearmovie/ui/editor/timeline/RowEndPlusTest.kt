@@ -76,13 +76,17 @@ class RowEndPlusTest {
     }
 
     @Test
-    fun `a sound or a recording counts its own small length, so it stays where the cursor is near the end`() {
-        // An empty voice row, cursor at 13 s of 14 s: recording starts at 13 s, not 3 s earlier.
-        assertThat(RowEndPlus.timed(emptyList(), 13_000, 100, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(13_000))
-        // At the very end: the last moment inside the video.
-        assertThat(RowEndPlus.timed(emptyList(), 14_000, 100, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(13_900))
+    fun `a sound or a recording looks for a second of room, so it stays where the cursor is near the end`() {
+        val second = RowEndPlus.MIN_SEEN_MS
+        // An empty voice row, cursor at 12 s of 14 s: recording starts at 12 s, not 3 s earlier.
+        assertThat(RowEndPlus.timed(emptyList(), 12_000, second, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(12_000))
+        // At the very end: the last second of the video.
+        assertThat(RowEndPlus.timed(emptyList(), 14_000, second, videoMs = 14_000)).isEqualTo(EndPlusTarget.At(13_000))
         // On a music clip 9-12 s, cursor 10 s: right after it, on the same row.
-        assertThat(RowEndPlus.timed(listOf(clip("m", 9000, 12_000)), 10_000, 100, videoMs = 14_000)).isEqualTo(after("m"))
+        assertThat(RowEndPlus.timed(listOf(clip("m", 9000, 12_000)), 10_000, second, videoMs = 14_000)).isEqualTo(after("m"))
+        // A clip to 13.5 s: under a second left after it, so the row is full there.
+        assertThat(RowEndPlus.timed(listOf(clip("m", 9000, 13_500)), 10_000, second, videoMs = 14_000))
+            .isEqualTo(EndPlusTarget.At(13_000, full = true))
     }
 
     @Test
