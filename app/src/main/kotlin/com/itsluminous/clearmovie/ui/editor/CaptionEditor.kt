@@ -582,9 +582,11 @@ private fun WordsTab(
     callbacks: EditorCallbacks,
     key: String,
 ) {
-    // A TextFieldValue, saved with its cursor, so typing after a rotation goes on where it was.
+    // A TextFieldValue, saved with its cursor, so typing after a rotation goes on where it was. The app's own
+    // words ([CaptionWords.DEFAULT]) open selected, so the first key replaces them.
     var text by rememberSaveable(caption.id.value, stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(caption.text, TextRange(caption.text.length)))
+        val start = if (caption.text == CaptionWords.DEFAULT) 0 else caption.text.length
+        mutableStateOf(TextFieldValue(caption.text, TextRange(start, caption.text.length)))
     }
     // The words this field has sent to the project and not yet seen come back. The project can show an
     // older one while typing is fast (it catches up a moment later); only words the field never sent (an
