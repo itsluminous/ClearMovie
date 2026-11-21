@@ -135,10 +135,16 @@ class PlaybackStripTest {
             for ((shown, label) in listOf(playWord to play, exportWord to export)) {
                 if (!shown) continue
                 val layout = layoutOf(label)
-                assertWithMessage("$where $label lines").that(layout.lineCount).isAtMost(2)
+                // At most two lines, and a one-word label on one: never broken inside a word.
+                assertWithMessage("$where $label lines").that(layout.lineCount).isAtMost(minOf(2, label.split(' ').size))
                 assertWithMessage("$where $label cut").that(layout.isLineEllipsized(layout.lineCount - 1)).isFalse()
                 assertWithMessage("$where $label overflow").that(layout.hasVisualOverflow).isFalse()
                 assertWithMessage("$where $label size").that(sizes[label]!!.value).isAtLeast(MIN_LABEL_FONT_SIZE.value)
+            }
+            // With room to spare, both words at the label style's own size.
+            if (width == 600.dp && scale == 1f) {
+                assertWithMessage(where).that(sizes[play]?.value).isEqualTo(LABEL_SIZE)
+                assertWithMessage(where).that(sizes[export]?.value).isEqualTo(LABEL_SIZE)
             }
             // The time is never squeezed.
             val time = layoutOf(tag = TIME_TAG)
@@ -196,7 +202,11 @@ class PlaybackStripTest {
     }
 
     private companion object {
+        // From the narrowest phone (320 dp); a narrower split-screen window can squeeze the time at large text.
         val WIDTHS = listOf(320.dp, 360.dp, 411.dp, 600.dp)
+
+        /** Material's labelLarge, the strip's label style. */
+        const val LABEL_SIZE = 14f
         val SCALES = listOf(1f, 1.5f, 2f)
     }
 }

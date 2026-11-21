@@ -1281,7 +1281,15 @@ private fun stripLabelSizes(
                 .toList()
         val lineHeight = if (labels.lineHeight.isSpecified) labels.lineHeight else labels.fontSize
         val words = exportLabel.split(' ').filter { it.isNotEmpty() }
-        val twoLines = if (words.size > 1 && (lineHeight * MAX_LABEL_LINES).toDp() <= TOUCH) words.maxOf { width(it, min) } else null
+        // Two lines only for a two-word label: wider words would need a third line.
+        val twoLines =
+            if (words.size == MAX_LABEL_LINES &&
+                (lineHeight * MAX_LABEL_LINES).toDp() <= TOUCH
+            ) {
+                words.maxOf { width(it, min) }
+            } else {
+                null
+            }
         StripLabelSizes(steps, twoLines)
     }
 
