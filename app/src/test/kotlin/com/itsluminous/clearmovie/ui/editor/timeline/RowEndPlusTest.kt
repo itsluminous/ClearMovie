@@ -69,7 +69,7 @@ class RowEndPlusTest {
             SlotSpan("a", 2000, 5000, content = true),
             SlotSpan("b", 5000, 8000, content = true),
             SlotSpan("c", 7000, 10_000, content = true),
-            SlotSpan("end", 10_000, 12_000, content = false),
+            SlotSpan("end", 10_000, 12_000, content = false, ending = true),
         )
 
     private fun at(
@@ -122,11 +122,34 @@ class RowEndPlusTest {
     }
 
     @Test
-    fun `MAIN with nothing on it, or nothing that takes an item beside it, has no target`() {
+    fun `MAIN with only an intro adds after it, with only an ending before it, and with nothing has no target`() {
         assertThat(RowEndPlus.main(emptyList(), 0)).isNull()
-        // Only an ending: nothing goes before it here (the same rule as the "+" beside a selected item).
-        assertThat(RowEndPlus.main(listOf(SlotSpan("end", 0, 2000, content = false)), 500)).isNull()
-        // A lone intro or ending reads the same here (as on the old "+"): none; Add photos in the bar still adds.
-        assertThat(RowEndPlus.main(listOf(SlotSpan("intro", 0, 2000, content = false)), 500)).isNull()
+        // As the model allows: nothing before the intro, nothing after the ending.
+        for (cursor in listOf(0L, 500L, 2000L, 9000L)) {
+            assertThat(RowEndPlus.main(listOf(SlotSpan("intro", 0, 2000, content = false)), cursor)).isEqualTo(at(0))
+            assertThat(RowEndPlus.main(listOf(SlotSpan("end", 0, 2000, content = false, ending = true)), cursor))
+                .isEqualTo(at(0, InsertSide.BEFORE))
+        }
+    }
+
+    @Test
+    fun `a caption goes at the cursor only where it fits, else at the first place right of the cursor where it does`() {
+        // Captions 2-4 s and 6-8 s, a 2 s gap between them; a new caption is 3 s.
+        val captions = listOf(clip("a", 2000, 4000), clip("b", 6000, 8000))
+        // 1 s before "a" there is no room for 3 s, nor in the 2 s after "a": after "b".
+        assertThat(RowEndPlus.timed(captions, 1000, 3000)).isEqualTo(after("b"))
+        // Room at the very start for 2 s.
+        assertThat(RowEndPlus.timed(captions, 0, 2000)).isEqualTo(EndPlusTarget.AtCursor)
+        // On "a": the gap after it is too short, so after "b".
+        assertThat(RowEndPlus.timed(captions, 3000, 3000)).isEqualTo(after("b"))
+        // With a short enough item the gap after "a" is used.
+        assertThat(RowEndPlus.timed(captions, 3000, 2000)).isEqualTo(after("a"))
+        // In the gap, too short from the cursor: after the next item.
+        assertThat(RowEndPlus.timed(captions, 4500, 3000)).isEqualTo(after("b"))
+        // Past every item: always room.
+        assertThat(RowEndPlus.timed(captions, 8000, 3000)).isEqualTo(EndPlusTarget.AtCursor)
+        // A length not known yet (a file still to pick) counts one moment: any gap is room.
+        assertThat(RowEndPlus.timed(captions, 4500)).isEqualTo(EndPlusTarget.AtCursor)
+        assertThat(RowEndPlus.timed(captions, 3000)).isEqualTo(after("a"))
     }
 }

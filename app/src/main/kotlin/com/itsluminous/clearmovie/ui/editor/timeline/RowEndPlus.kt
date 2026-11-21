@@ -4,10 +4,10 @@ import com.itsluminous.clearmovie.domain.model.ClipId
 
 /** Where the "+" at a row's right end adds on a row other than MAIN, worked out from the cursor when it is tapped. */
 sealed interface EndPlusTarget {
-    /** At the cursor: nothing is on that row at the cursor ("Add here", which starts at the playhead). */
+    /** At the cursor: nothing is on that row there ("Add here", from that time). */
     data object AtCursor : EndPlusTarget
 
-    /** Right after item [anchor]: the cursor is on it, or on the items touching it from the left. */
+    /** Right after item [anchor]: the first place to the right of the cursor where the row is free. */
     data class After(
         val anchor: ClipId,
     ) : EndPlusTarget
@@ -22,38 +22,45 @@ data class MainEndTarget(
 /**
  * The "+" at the right end of every row (cm-plus-position, the owner's rule):
  * it sits in the same place on every row, and a new item goes to the right of
- * the cursor (the playhead), so it starts at the cursor. When the cursor is
- * on an item of that row, the new item goes right after that item. Pure, so
- * the rules are tested on the JVM.
+ * the cursor (the playhead), starting at the cursor. When the cursor is on an
+ * item of that row, the new item goes right after that item. Pure, so the
+ * rules are tested on the JVM.
  *
- * - A row other than MAIN: in a gap, at the cursor. On an item, right after
- *   it; when the next item starts exactly where that one ends (the space
- *   after it is taken too), after the last of the items that touch, the first
- *   moment the row is free. Where the new item is then too long for the gap,
- *   the model puts it on the highest free row of its kind or a new one, at
- *   the same time, as every insert on these rows already does.
+ * - A row other than MAIN: at the cursor when the row is free there for the
+ *   new item's length ([lengthMs]: a caption's 3 s on a text row; one moment
+ *   where the length is not known until a file is picked). Otherwise right
+ *   after the item under the cursor (or the next one, when the cursor is in a
+ *   gap too short), and past every item that still leaves no room: the first
+ *   place to the right of the cursor where it fits. A picked file longer than
+ *   that room goes, as every insert on these rows does, on the highest free
+ *   row of its kind or a new one, at the same time.
  * - MAIN (one item after another): at the cursor when it is exactly between
  *   two items; on an item, right after it, and every later item moves later.
  *   In a transition two items are under the cursor: after the later one, so
- *   the new item never lands left of the cursor. Never before the intro or
- *   after the ending: on the ending, or past the end, it goes after the last
- *   photo, video or card.
+ *   the new item never starts left of the cursor. Never before the intro or
+ *   after the ending: on the ending, or past the end, it goes just before the
+ *   ending.
  */
 object RowEndPlus {
     fun timed(
         clips: List<RowClip>,
         cursorMs: Long,
+        lengthMs: Long = 0,
     ): EndPlusTarget {
         val live = clips.filter { it.endMs > it.startMs }
-        var under =
+        val length = lengthMs.coerceAtLeast(1)
+
+        // The items in the way of a new item from [start].
+        fun blocking(start: Long) = live.filter { it.startMs < start + length && it.endMs > start }
+        var anchor =
             live.filter { cursorMs >= it.startMs && cursorMs < it.endMs }.maxByOrNull { it.endMs }
+                ?: blocking(cursorMs).minByOrNull { it.startMs }
                 ?: return EndPlusTarget.AtCursor
-        // Each step ends later, so this stops.
+        // Each step ends later, so this stops; past the last item the row is always free.
         while (true) {
-            val end = under.endMs
-            under = live.filter { end >= it.startMs && end < it.endMs }.maxByOrNull { it.endMs } ?: break
+            anchor = blocking(anchor.endMs).minByOrNull { it.startMs } ?: break
         }
-        return EndPlusTarget.After(under.id)
+        return EndPlusTarget.After(anchor.id)
     }
 
     fun main(
@@ -63,14 +70,7 @@ object RowEndPlus {
         if (spans.isEmpty()) return null
         val n = spans.size
 
-        fun allowed(b: Int): Boolean {
-            val before = spans.getOrNull(b - 1)
-            val after = spans.getOrNull(b)
-            // The same rule as TimelineGeometry: nothing before the intro, nothing after the ending.
-            if (before == null && after?.content == false) return false
-            if (after == null && before?.content == false) return false
-            return true
-        }
+        fun allowed(b: Int) = TimelineGeometry.insertAllowed(spans, b)
 
         fun at(b: Int) = if (b > 0) MainEndTarget(b - 1, InsertSide.AFTER) else MainEndTarget(0, InsertSide.BEFORE)
 
@@ -91,12 +91,7 @@ object RowEndPlus {
             // The ending: just before it.
             if (allowed(under)) return MainEndTarget(under, InsertSide.BEFORE)
         }
-        val lastContent = spans.indexOfLast { it.content }
-        return when {
-            lastContent >= 0 -> MainEndTarget(lastContent, InsertSide.AFTER)
-            allowed(1) -> MainEndTarget(0, InsertSide.AFTER)
-            allowed(0) -> MainEndTarget(0, InsertSide.BEFORE)
-            else -> null
-        }
+        // Past the end (or nothing under the cursor): the last place allowed, just before an ending.
+        return (n downTo 0).firstOrNull { allowed(it) }?.let { at(it) }
     }
 }

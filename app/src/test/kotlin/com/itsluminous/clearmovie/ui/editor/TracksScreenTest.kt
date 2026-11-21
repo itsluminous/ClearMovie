@@ -505,8 +505,10 @@ class TracksScreenTest {
         val mainKey = p.main.id.value
         val shown =
             h.project.tracks.filter { t -> compose.onAllNodesWithTag(rowTag(t.id.value)).fetchSemanticsNodes().isNotEmpty() }
-        val withItems = shown.filter { it.clips.isNotEmpty() }
+        // Rows the preset manages (its frame and music) never take what a "+" adds: they have none.
+        val withItems = shown.filter { it.clips.isNotEmpty() && it.presetRole == null && it.enabled }
         assertThat(withItems.size).isAtLeast(3)
+        for (t in shown.filter { it.presetRole != null }) assertThat(plusTags()).doesNotContain(rowEndPlusTag(t.id.value))
         // Nothing selected: one "+" per row, in its end column (cm-plus-position); none beside or between items.
         var tags = plusTags()
         assertThat(
@@ -665,7 +667,7 @@ class TracksScreenTest {
                     .rowAddTag(row.value),
             ).performClick()
         compose.waitForIdle()
-        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = row))
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = row, atMs = 4000))
         compose.onNodeWithTag(insertOptionTag("text")).performClick()
         compose.waitForIdle()
         // The preset sets no words of its own: the new caption starts with the app's.

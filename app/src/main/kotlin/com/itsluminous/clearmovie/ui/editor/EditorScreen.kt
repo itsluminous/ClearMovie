@@ -443,12 +443,15 @@ fun EditorScreen(
                     state.panel = null
                 }
 
-                override fun addHere(key: String) {
+                override fun addHere(
+                    key: String,
+                    atMs: Long?,
+                ) {
                     // MAIN's one "+" (nothing on it yet) opens the gallery, as Add photos does.
                     if (key == mainKey.value) return actions.pickToAdd()
                     state.selected = null
                     state.selectedRow = TrackId(key)
-                    state.panel = OpenPanel(Panel.INSERT, trackId = TrackId(key))
+                    state.panel = OpenPanel(Panel.INSERT, trackId = TrackId(key), atMs = atMs)
                 }
 
                 override fun rowMenu(key: String) {

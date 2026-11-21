@@ -2,13 +2,17 @@ package com.itsluminous.clearmovie.ui.editor.timeline
 
 import kotlin.math.abs
 
-/** One MAIN item as the timeline lays it out. [content] is false for the intro and the ending. */
+/** One MAIN item as the timeline lays it out. [content] is false for the intro and the ending; [ending] is true for the ending. */
 data class SlotSpan(
     val key: String,
     val startMs: Long,
     val endMs: Long,
     val content: Boolean,
-)
+    val ending: Boolean = false,
+) {
+    /** The intro: not content and not the ending. */
+    val intro: Boolean get() = !content && !ending
+}
 
 /** Which side of an item a "+" inserts on (mirrors the model's `Side`). */
 enum class InsertSide { BEFORE, AFTER }
@@ -91,8 +95,8 @@ sealed interface HitTarget {
  *   would come within a marker's hit area moves up the same way. A marker
  *   gives way to the selected item's trim handles (the bar's Transition
  *   opens it then), to an earlier marker closer than its hit area, and to
- *   the "+" column at the row's right end (it is left out while any of its
- *   hit area would reach in there).
+ *   the "+" column at the row's right end (it is left out while its bow tie
+ *   would be drawn in there; there the column takes the touch).
  */
 class TimelineGeometry(
     val spans: List<SlotSpan>,
@@ -123,15 +127,7 @@ class TimelineGeometry(
         return if (last < first) IntRange.EMPTY else first..last
     }
 
-    private fun insertAllowed(b: Int): Boolean {
-        if (spans.isEmpty()) return false
-        val before = spans.getOrNull(b - 1)
-        val after = spans.getOrNull(b)
-        // Nothing goes before the intro or after the ending.
-        if (before == null && after?.content == false) return false
-        if (after == null && before?.content == false) return false
-        return true
-    }
+    private fun insertAllowed(b: Int): Boolean = spans.isNotEmpty() && insertAllowed(spans, b)
 
     /** Whether items b - 1 and b overlap (a transition joins them). */
     private fun overlaps(b: Int): Boolean = b in 1 until spans.size && spans[b - 1].endMs > spans[b].startMs
@@ -153,7 +149,7 @@ class TimelineGeometry(
                         x - MARKER_HIT_DP / 2 - HANDLE_GAP_DP >= h.endInclusive
                 }
             if (!clear) continue
-            if (x + MARKER_HIT_DP / 2 > widthDp + EPS) continue
+            if (x + MARKER_DP / 2 > widthDp + EPS) continue
             if (kept.any { abs(it.xDp - x) < MARKER_HIT_DP }) continue
             kept += MarkerPoint(b, b - 1, x)
         }
@@ -280,7 +276,8 @@ class TimelineGeometry(
          * The column at every row's right end that holds the row's "+"
          * (cm-plus-position): a 48 dp touch target, right after the time
          * span. On the selected item's row it is empty, and that item's own
-         * "+" after it may sit in it.
+         * "+" after it may sit in it (so a long item near the right edge
+         * keeps it).
          */
         const val END_DP = 48.0
 
@@ -288,6 +285,23 @@ class TimelineGeometry(
         const val PLUS_CORE_DP = 12.0
 
         private const val EPS = 1e-6
+
+        /**
+         * Whether something may go in at boundary [b] of [spans] (0 before
+         * the first item): anywhere but before the intro or after the ending,
+         * as the model allows (a lone intro still takes items after it).
+         */
+        fun insertAllowed(
+            spans: List<SlotSpan>,
+            b: Int,
+        ): Boolean {
+            if (b !in 0..spans.size) return false
+            val before = spans.getOrNull(b - 1)
+            val after = spans.getOrNull(b)
+            if (before == null && after?.intro == true) return false
+            if (after == null && before?.ending == true) return false
+            return true
+        }
 
         /**
          * Where a dragged content item lands: its content index among the

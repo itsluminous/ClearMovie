@@ -68,7 +68,8 @@ object TimedRowGeometry {
         val sorted = clips.filter { it.endMs > it.startMs }.sortedBy { it.startMs }
         if (sorted.isEmpty()) return emptyList()
         val half = TimelineGeometry.PLUS_HIT_DP / 2
-        // Kept whole inside the span's padding at its start or the "+" column at its end, so its full 48 dp is on screen.
+        // Kept whole on screen: inside the span's padding at its start, or the "+" column at its end, which is empty on
+        // the selected item's row (cm-plus-position).
         val lo = -TimelineGeometry.EDGE_ROOM_DP + half
         val hi = widthDp + TimelineGeometry.END_DP - half
 

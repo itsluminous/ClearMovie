@@ -18,7 +18,7 @@ class TransitionMarkerGeometryTest {
             SlotSpan("a", 2000, 5000, content = true),
             SlotSpan("b", 4000, 7000, content = true),
             SlotSpan("c", 6500, 9500, content = true),
-            SlotSpan("end", 9500, 11_500, content = false),
+            SlotSpan("end", 9500, 11_500, content = false, ending = true),
         )
 
     private fun geometry(

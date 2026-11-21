@@ -169,7 +169,10 @@ class RowEndPlusDeviceTest {
         }
     }
 
-    /** Each row in view has its "+" (or, empty, its Add here "+") at the same x, flush with the timeline's right end. */
+    /**
+     * Each row in view that takes new items (not one the preset manages) has its "+" (or, empty, its Add here "+") at
+     * the same x, flush with the timeline's right end; a preset row has none.
+     */
     private fun oneColumn() {
         rowsShown()
         val timeline = read { bounds(TIMELINE_TAG) }
@@ -177,9 +180,16 @@ class RowEndPlusDeviceTest {
         val boxes =
             read {
                 project.tracks.mapNotNull { t ->
-                    val tag = listOf(rowEndPlusTag(t.id.value), rowAddTag(t.id.value)).firstOrNull { exists(it) } ?: return@mapNotNull null
-                    val r = bounds(rowTag(t.id.value))
-                    if (r.top < view.top || r.bottom > view.bottom) null else t.id.value to bounds(tag)
+                    val key = t.id.value
+                    val r = bounds(rowTag(key))
+                    if (r.top < view.top || r.bottom > view.bottom) return@mapNotNull null
+                    val tag = listOf(rowEndPlusTag(key), rowAddTag(key)).firstOrNull { exists(it) }
+                    if (t.presetRole != null) {
+                        assertWithMessage("a preset row's plus: $key").that(tag).isNull()
+                        return@mapNotNull null
+                    }
+                    assertWithMessage("the plus of row $key").that(tag).isNotNull()
+                    key to bounds(tag!!)
                 }
             }
         Log.i(

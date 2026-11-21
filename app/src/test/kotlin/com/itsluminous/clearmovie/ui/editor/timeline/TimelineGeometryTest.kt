@@ -13,7 +13,7 @@ class TimelineGeometryTest {
             SlotSpan("a", 2000, 5000, content = true),
             SlotSpan("b", 5000, 8000, content = true),
             SlotSpan("c", 8000, 11_000, content = true),
-            SlotSpan("end", 11_000, 13_000, content = false),
+            SlotSpan("end", 11_000, 13_000, content = false, ending = true),
         )
 
     private fun geometry(
@@ -45,7 +45,7 @@ class TimelineGeometryTest {
     fun `an empty MAIN, only the intro and ending, has its end plus after the intro`() {
         val g =
             TimelineGeometry(
-                listOf(SlotSpan("intro", 0, 2000, content = false), SlotSpan("end", 2000, 4000, content = false)),
+                listOf(SlotSpan("intro", 0, 2000, content = false), SlotSpan("end", 2000, 4000, content = false, ending = true)),
                 ZoomState(10.0, 0.0, false),
                 2000.0,
                 28.0,

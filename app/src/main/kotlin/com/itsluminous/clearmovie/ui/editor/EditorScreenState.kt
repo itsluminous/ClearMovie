@@ -82,13 +82,15 @@ enum class Panel {
 /**
  * An open panel: what it is about ([clipId], or row [trackId] for the row's
  * own panels) and, for an insert, where the new item goes. An insert with a
- * [trackId] and no [clipId] is "Add here" on that row, at the playhead.
+ * [trackId] and no [clipId] is "Add here" on that row: at [atMs], the cursor
+ * when its "+" was tapped (cm-plus-position), or the playhead when null.
  */
 data class OpenPanel(
     val panel: Panel,
     val clipId: ClipId? = null,
     val side: InsertSide? = null,
     val trackId: TrackId? = null,
+    val atMs: Long? = null,
 )
 
 /**
@@ -164,6 +166,7 @@ class EditorScreenState(
                         s.captionTab,
                         s.captionStartText,
                         s.captionStartStyle,
+                        s.panel?.atMs,
                     )
                 },
                 restore = { saved ->
@@ -180,6 +183,7 @@ class EditorScreenState(
                                     panelClip?.let(::ClipId),
                                     (v[3] as String?)?.let { InsertSide.valueOf(it) },
                                     panelTrack?.let(::TrackId),
+                                    (v.getOrNull(15) as Long?)?.takeIf { it >= 0 },
                                 )
                             }.getOrNull()
                         } else {

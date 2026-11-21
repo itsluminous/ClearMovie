@@ -113,6 +113,8 @@ internal fun TimedInsertPanel(
     onSelect: (ClipId) -> Unit,
 ) {
     val side = open.side ?: InsertSide.AFTER
+    // "Add here" from a row's "+": the cursor as it was when the "+" was tapped (it may have moved on since).
+    val hereMs = open.atMs ?: playheadMs
     val title =
         if (anchor != null) {
             val where = stringResource(timedItemName(null, anchor))
@@ -124,7 +126,7 @@ internal fun TimedInsertPanel(
 
     fun pick() {
         onPanel(null)
-        if (anchor != null) callbacks.pickForInsert(anchor.id, side) else callbacks.pickForRow(track.id, playheadMs)
+        if (anchor != null) callbacks.pickForInsert(anchor.id, side) else callbacks.pickForRow(track.id, hereMs)
     }
     when (track.type) {
         TrackType.TEXT -> {
@@ -145,7 +147,7 @@ internal fun TimedInsertPanel(
                             if (anchor != null) {
                                 insertAt(trackOf(anchor.id)!!.id, anchor.id, side.model(), made)
                             } else {
-                                addToTrack(track.id, made, playheadMs)
+                                addToTrack(track.id, made, hereMs)
                             }
                         placed.withEffectDefaultsFor(listOf(id))
                     }
@@ -181,7 +183,7 @@ internal fun TimedInsertPanel(
             // A voice row can also record one (cm-record-voice): from the playhead, or, at a "+" after an item, from
             // that item's end, as the other things put there go; the video plays from there while it records.
             if (track.audioRole == AudioRole.VOICE && track.presetRole == null) {
-                val from = if (anchor != null && side == InsertSide.AFTER) anchor.endMs else playheadMs
+                val from = if (anchor != null && side == InsertSide.AFTER) anchor.endMs else hereMs
                 Choice(
                     stringResource(R.string.record_voice),
                     stringResource(R.string.record_voice_body, durationText(from * 1000)),

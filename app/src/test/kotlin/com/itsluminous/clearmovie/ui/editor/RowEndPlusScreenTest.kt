@@ -23,9 +23,11 @@ import com.itsluminous.clearmovie.domain.model.addText
 import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.mainSlot
+import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
+import com.itsluminous.clearmovie.ui.editor.timeline.plusTag
 import com.itsluminous.clearmovie.ui.editor.timeline.rowEndPlusTag
 import org.junit.Rule
 import org.junit.Test
@@ -120,7 +122,7 @@ class RowEndPlusScreenTest {
             description(textRow),
         ).isEqualTo(context.getString(R.string.timeline_add_at, context.getString(R.string.timeline_row_text), "0:05"))
         tapEnd(textRow)
-        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = textRow))
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = textRow, atMs = 5000))
         val made = newCaption(h)
         assertThat(made.startMs).isEqualTo(5000)
         assertThat(h.project.rowOf(made.id)).isEqualTo(textRow)
@@ -160,7 +162,7 @@ class RowEndPlusScreenTest {
             compose.runOnIdle { h.state!!.panel = null }
             at(h, 2000)
             tapEnd(row)
-            assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = row))
+            assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = row, atMs = 2000))
             compose.runOnIdle { h.state!!.panel = null }
         }
     }
@@ -183,6 +185,92 @@ class RowEndPlusScreenTest {
         compose.runOnIdle { h.actions.undo() }
         compose.waitForIdle()
         assertThat(h.project).isEqualTo(project)
+    }
+
+    @Test
+    fun `the time is fixed when the plus is tapped, so the cursor moving on before a choice does not move the caption`() {
+        val h = show()
+        val textRow = h.project.rowOf(h.project.captionId("hello"))
+        at(h, 5000)
+        tapEnd(textRow)
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = textRow, atMs = 5000))
+        // The video plays on (or the cursor is moved) while the chooser is open.
+        at(h, 9500)
+        val made = newCaption(h)
+        assertThat(made.startMs).isEqualTo(5000)
+        assertThat(h.project.rowOf(made.id)).isEqualTo(textRow)
+    }
+
+    @Test
+    fun `where a new caption does not fit at the cursor it goes on the same row after the next caption`() {
+        val h = show()
+        val textRow = h.project.rowOf(h.project.captionId("hello"))
+        // 8.5 s: a 1.5 s gap before "hello" (10 s), too short for a 3 s caption.
+        at(h, 8500)
+        tapEnd(textRow)
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, h.project.captionId("next"), InsertSide.AFTER))
+        val made = newCaption(h)
+        assertThat(made.startMs).isEqualTo(14_000)
+        assertThat(h.project.rowOf(made.id)).isEqualTo(textRow)
+    }
+
+    @Test
+    fun `rows the preset manages and rows switched off have no plus`() {
+        val off = project.tracks.first { it.id == project.trackOf(ClipId("m1"))!!.id }.id
+        val h = EditorHarness(project.setTrackEnabled(off, false), Fixtures.preset)
+        compose.setContent { h.At(ScreenSize.EXPANDED, 1f) }
+        compose.waitForIdle()
+        for (t in h.project.tracks.filter { it.presetRole != null || !it.enabled }) {
+            compose.onNodeWithTag(rowEndPlusTag(t.id.value), useUnmergedTree = true).assertDoesNotExist()
+        }
+        compose.onNodeWithTag(rowEndPlusTag(h.project.rowOf(ClipId("pip1")).value), useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun `in the column only the plus itself adds, and the last photo's plus after it stays beside it`() {
+        // Font scale 2: a text row is 96 dp tall, the "+" 48 dp in its middle.
+        val h = EditorHarness(project, Fixtures.preset)
+        compose.setContent { h.At(ScreenSize.EXPANDED, 2f) }
+        compose.waitForIdle()
+        val textRow = h.project.rowOf(h.project.captionId("hello"))
+        at(h, 5000)
+        val cell = compose.onNodeWithTag(rowEndPlusTag(textRow.value), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val timeline = compose.onNodeWithTag(TIMELINE_TAG).fetchSemanticsNode().boundsInRoot
+        val density = context.resources.displayMetrics.density
+        assertThat((cell.bottom - cell.top) / density).isAtLeast(90f)
+        // Near the cell's top edge, off the "+": nothing opens.
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
+            click(
+                androidx.compose.ui.geometry
+                    .Offset(cell.center.x - timeline.left, cell.top + 6 * density - timeline.top),
+            )
+        }
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isNull()
+        // On the "+": its chooser.
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
+            click(
+                androidx.compose.ui.geometry.Offset(
+                    cell.center.x - timeline.left,
+                    cell.center.y - timeline.top,
+                ),
+            )
+        }
+        compose.waitForIdle()
+        assertThat(h.state!!.panel).isEqualTo(OpenPanel(Panel.INSERT, trackId = textRow, atMs = 5000))
+        compose.runOnIdle { h.state!!.panel = null }
+        // The last photo or video selected at fit all (the ending after it): its "+" after it is beside it, left of the column.
+        val last =
+            h.project.main.clips
+                .last { it !is com.itsluminous.clearmovie.domain.model.EndingClip }
+                .id
+        compose.runOnIdle { h.state!!.selected = last }
+        compose.waitForIdle()
+        val i =
+            h.project.main.clips
+                .indexOfFirst { it.id == last }
+        val after = compose.onNodeWithTag(plusTag(i + 1), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertThat(after.right).isAtMost(cell.left + 1)
     }
 
     @Test
