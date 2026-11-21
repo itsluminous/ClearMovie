@@ -123,7 +123,20 @@ Android types, so all of it is tested on the JVM.
   caption onto both parts, join merges them, duplicate copies them. Placed
   by hand inside its item, a caption keeps an offset; placed outside, it is
   free. Captions made on a text row ("+", "Add here") are free and keep
-  their times. A style stores only what differs from the preset's
+  their times. Dragging a whole caption's handle detaches only that side
+  (`CaptionAttachment.detachedStartMs` / `detachedEndMs`): it keeps its own
+  time while the other side follows the item; both detached, the caption is
+  free. Match item gives it both sides back.
+- **Handles** (`Resize.kt`). Every item off MAIN can be resized by side:
+  `resizeRange` gives each handle's limits (neighbours on its row, the
+  video's start and end, 0.5 s or 0.3 s for video and sound, and its file
+  for media that does not repeat) and `resizeClip` applies one. The preset's
+  frame, its music and the closing message keep following the video on the
+  side that was not dragged (`detachedStartMs` / `detachedEndMs` on the clip,
+  next to its `anchor`).
+- **Lower for talk.** A music row's `lowerToDb` is the level its music goes
+  down to under voices and videos' own sound; without one the project's
+  `DuckingSpec` levels apply (-20 dB under a voice, -12 dB under a video). A style stores only what differs from the preset's
   (`CaptionStyleOverride.between`), so Reset to preset clears it.
 - **Undo.** `ProjectEditor` applies one edit per undo step (50 kept), and
   accepts a result only if `validate()` finds no broken invariant.
@@ -141,7 +154,9 @@ Android types, so all of it is tested on the JVM.
   adding or dropping an item, and refuses files that are too large, too
   deeply nested, from a newer app or otherwise invalid. `ProjectMigrations` upgrades older
   versions one step at a time (schema 2 added `attachedTo`; the 1 to 2
-  step rewrites nothing, so a schema 1 caption reads as a free one). Golden files under `app/src/test/resources/fixtures/project/` must
+  step rewrites nothing, so a schema 1 caption reads as a free one; schema
+  4 added detached sides and `lowerToDb`, and its step rewrites nothing
+  either). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.
 
 ## Rendering
