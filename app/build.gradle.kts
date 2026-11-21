@@ -243,7 +243,7 @@ dependencies {
     // The project model is stored as JSON (ARCHITECTURE section 6, cm-storage keeps it in Room).
     implementation(libs.kotlinx.serialization.json)
 
-    // Media3: Transformer for the export and exact drafts, ExoPlayer for the layered preview.
+    // Media3: Transformer for the export, ExoPlayer for the layered preview.
     implementation(libs.media3.transformer)
     implementation(libs.media3.effect)
     implementation(libs.media3.common)

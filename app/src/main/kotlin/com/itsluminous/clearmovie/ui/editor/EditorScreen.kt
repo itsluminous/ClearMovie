@@ -91,6 +91,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.media.MediaStatus
@@ -123,6 +124,7 @@ import com.itsluminous.clearmovie.domain.model.setPhotoDuration
 import com.itsluminous.clearmovie.domain.model.trimVideo
 import com.itsluminous.clearmovie.render.plan.frameWindow
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
+import com.itsluminous.clearmovie.ui.components.MAX_LABEL_LINES
 import com.itsluminous.clearmovie.ui.components.MIN_LABEL_FONT_SIZE
 import com.itsluminous.clearmovie.ui.components.ShapeOutline
 import com.itsluminous.clearmovie.ui.components.durationText
@@ -1174,9 +1176,10 @@ private fun HistoryButton(
  * The playback strip under the preview: Play, the time, and Export (the
  * upload arrow, which opens the export sheet) at the far end, spread across
  * one row of 48 dp buttons that never grows. Export's word shrinks to fit,
- * then takes two lines at the smallest size; only when even that does not
- * fit does Export keep just its icon, then Play, each still named for
- * TalkBack. Zooming is in the bar below (with Fit all) and by pinching.
+ * then takes two lines at the smallest size when two fit the button. When
+ * the row is still too short, Play keeps only its icon first (its triangle
+ * needs no word), then Export; each is still named for TalkBack. Zooming is
+ * in the bar below (with Fit all) and by pinching.
  */
 @Composable
 private fun Controls(
@@ -1200,15 +1203,15 @@ private fun Controls(
     // Play keeps one width whether it says Play or Pause, so the time never shifts when it is pressed.
     val playWords = listOf(stringResource(R.string.action_play), stringResource(R.string.action_pause))
     val playTextDp = with(density) { playWords.maxOf { measurer.measure(it, labels).size.width }.toDp() }
-    // The narrowest Export's word can be: its widest word at the smallest label size (two lines at most).
+    // The narrowest Export's word can be: at the smallest label size, on two lines (its widest word) when
+    // two lines fit the 48 dp button at this text size, else on one line.
     val exportMinTextDp =
         with(density) {
             val smallest = labels.copy(fontSize = MIN_LABEL_FONT_SIZE, letterSpacing = 0.sp)
-            exportLabel
-                .split(' ')
-                .filter { it.isNotEmpty() }
-                .maxOfOrNull { measurer.measure(it, smallest).size.width }
-                ?.toDp() ?: 0.dp
+            val lineHeight = if (labels.lineHeight.isSpecified) labels.lineHeight else labels.fontSize
+            val twoLinesFit = (lineHeight * MAX_LABEL_LINES).toDp() <= TOUCH
+            val parts = if (twoLinesFit) exportLabel.split(' ').filter { it.isNotEmpty() } else listOf(exportLabel)
+            parts.maxOfOrNull { measurer.measure(it, smallest).size.width }?.toDp() ?: 0.dp
         }
     // The time is measured at its widest ("total of total"), so the choice does not flip as it plays.
     val timeDp =
@@ -1222,10 +1225,11 @@ private fun Controls(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         // The strip's own padding (8 + 8) and the time with its padding (8 + 8).
         val fixed = 16.dp + 16.dp + timeDp
-        // Export keeps a word while it fits at the smallest size beside Play's word; it gives way first.
-        val exportIconOnly = fixed + playMinWidth + EXPORT_CHROME + exportMinTextDp > maxWidth
-        // Play keeps its word whenever the row still fits with it, at any text size: it is the one he looks for.
-        val playIconOnly = fixed + playMinWidth + TOUCH > maxWidth
+        val exportWorded = EXPORT_CHROME + exportMinTextDp
+        // Both words when they fit. Else Play gives up its word first: its triangle is clear without one, an
+        // upload arrow is not. Only when Export's word does not fit even then does Export keep just its icon.
+        val playIconOnly = fixed + playMinWidth + exportWorded > maxWidth
+        val exportIconOnly = fixed + TOUCH + exportWorded > maxWidth
         // The room Export's word has: what Play and the time leave, less Export's icon and padding.
         val exportTextMax = (maxWidth - fixed - (if (playIconOnly) TOUCH else playMinWidth) - EXPORT_CHROME).coerceAtLeast(0.dp)
         TransportRow(

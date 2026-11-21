@@ -133,7 +133,7 @@
     <string name="pick_out_of_space">Copy karte waqt phone ki jagah khatam ho gayi, isliye kuch add nahi hua. Thodi jagah khaali karein aur phir se koshish karein.</string>
     <string name="editor_title_new">Naya video</string>
     <!-- The button with the upload arrow at the end of the editor's playback strip, beside Play: it opens the export sheet. -->
-    <string name="editor_export">Export karein</string>
+    <string name="editor_export">Export</string>
     <string name="export_title">Apna video save karein</string>
     <string name="export_choose_body">Ek size chunein. Bada wala TV par zyada saaf dikhta hai; chhota wala jaldi bheja jaata hai.</string>
     <string name="export_quality_best">Sabse achha</string>

@@ -43,7 +43,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The editor's top bar actions (kupraki's request): the download arrow opens
+ * The editor's actions (kupraki's request): Export in the playback strip opens
  * the export sheet, More options holds Rename video, Video shape and
  * Settings, and a tap on the title or Rename video opens one rename dialog
  * whose name is an undoable edit of the video.
@@ -319,7 +319,7 @@ class EditorMenuTest {
     @Config(qualifiers = "hi-w1300dp-h1300dp-xxhdpi")
     fun `in Hindi Export, the menu and the dialog speak Hindi`() {
         show()
-        compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertTextEquals("एक्सपोर्ट करें")
+        compose.onNodeWithTag(EDITOR_EXPORT_TAG).assertTextEquals("एक्सपोर्ट")
         openMenu()
         compose.onNodeWithText("वीडियो का नाम बदलें").assertIsDisplayed()
         compose.onNodeWithText("वीडियो की आकृति").assertIsDisplayed()

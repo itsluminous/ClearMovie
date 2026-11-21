@@ -125,7 +125,7 @@
     <string name="pick_out_of_space">कॉपी करते समय फ़ोन की जगह खत्म हो गई, इसलिए कुछ नहीं जोड़ा गया। थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
     <string name="editor_title_new">नया वीडियो</string>
     <!-- The button with the upload arrow at the end of the editor's playback strip, beside Play: it opens the export sheet. -->
-    <string name="editor_export">एक्सपोर्ट करें</string>
+    <string name="editor_export">एक्सपोर्ट</string>
     <string name="export_title">अपना वीडियो सेव करें</string>
     <string name="export_choose_body">एक साइज़ चुनें। बड़ा वाला टीवी पर ज़्यादा साफ़ दिखता है; छोटा वाला जल्दी भेजा जाता है।</string>
     <string name="export_quality_best">सबसे अच्छा</string>

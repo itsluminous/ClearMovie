@@ -37,7 +37,7 @@ import org.junit.runner.RunWith
  * after the intro, so the first seek sends its keyed player into its
  * silence; sent from there to the frame file while paused, the player stayed
  * buffering for good, and the frame never showed until the video was played:
- * only "As exported" showed it. The frame's blue strip (scripts/make-fixtures.sh)
+ * only the exact draft (then behind "As exported") showed it. The frame's blue strip (scripts/make-fixtures.sh)
  * must be on the frame row's surface.
  */
 @UnstableApi

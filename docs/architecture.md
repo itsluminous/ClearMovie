@@ -384,7 +384,7 @@ repair heading), then preset review (Play, Replace or Skip for this video for
 the intro, frame and ending; the choices rebuild the new draft from the
 track template), then the photo step (the one-time access explainer, Try
 again after a refusal, the system Photo Picker, the intake), then the editor
-(below; Export at the top right opens the export sheet).
+(below; Export in its playback strip opens the export sheet).
 `NewVideoFlow` decides the order: with `EntryMode.MEDIA_CHOSEN` (shares, from
 cm-share) the preset pick goes straight to the editor.
 

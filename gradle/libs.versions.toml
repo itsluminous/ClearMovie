@@ -31,7 +31,7 @@ espresso = "3.7.0"
 turbine = "1.2.1"
 ktlintPlugin = "14.2.0"
 kover = "0.9.11"
-# Media3: Transformer renders the export and exact drafts; ExoPlayer plays the layered preview (ARCHITECTURE section 7).
+# Media3: Transformer renders the export; ExoPlayer plays the layered preview (ARCHITECTURE section 7).
 media3 = "1.11.1"
 # WorkManager runs the export as a foreground worker that outlives the screen (ARCHITECTURE section 12).
 work = "2.11.2"
