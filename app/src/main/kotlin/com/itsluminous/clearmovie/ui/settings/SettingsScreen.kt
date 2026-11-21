@@ -1,5 +1,9 @@
 package com.itsluminous.clearmovie.ui.settings
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,10 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,22 +54,17 @@ import com.itsluminous.clearmovie.BuildConfig
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.files.StorageReport
 import com.itsluminous.clearmovie.domain.model.AppSettings
-import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.ThemeMode
 import com.itsluminous.clearmovie.ui.components.sizeText
-import com.itsluminous.clearmovie.ui.home.PresetCard
-import com.itsluminous.clearmovie.ui.preset.presetName
 import com.itsluminous.clearmovie.ui.theme.isDynamicColorSupported
 
 /** Settings wired to its view model and to the per-app language. */
 @Composable
 fun SettingsRoute(
     onBack: () -> Unit,
-    onOpenPreset: (PresetId) -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val loaded by viewModel.settings.collectAsStateWithLifecycle()
-    val presets by viewModel.presets.collectAsStateWithLifecycle()
     val storage by viewModel.storage.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
@@ -91,16 +90,41 @@ fun SettingsRoute(
             selectedLanguage = tag
             AppLanguage.select(tag)
         },
-        presets = presets,
         storage = storage,
-        onOpenPreset = onOpenPreset,
+        onOpenProjectPage = { openProjectPage(context) },
     )
+}
+
+/** ClearMovie's page on GitHub, which About's version opens (cm-home-presets). */
+const val PROJECT_PAGE_URL = "https://github.com/itsluminous/ClearMovie"
+
+/** Test tag of About's version row. */
+const val SETTINGS_VERSION_TAG = "settings_version"
+
+/**
+ * The intent that opens [PROJECT_PAGE_URL] in the phone's browser: a fixed
+ * address, to an app that opens web links, so ClearMovie itself never goes
+ * online (it has no internet permission).
+ */
+fun projectPageIntent(): Intent = Intent(Intent.ACTION_VIEW, PROJECT_PAGE_URL.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
+
+/** Opens [projectPageIntent], or says the phone has no app for web pages. */
+internal fun openProjectPage(context: Context) {
+    try {
+        context.startActivity(projectPageIntent())
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, context.getString(R.string.settings_no_browser), Toast.LENGTH_LONG).show()
+    }
 }
 
 /** Test tag of the scrolling settings column. */
 const val SETTINGS_LIST_TAG = "settings_list"
 
-/** Settings: Theme, Colours from wallpaper, Language and About. Stateless. */
+/**
+ * Settings: Theme, Colours from wallpaper, Language, Storage and About,
+ * whose version opens ClearMovie's page on GitHub. Presets are made and
+ * edited from Home (cm-home-presets). Stateless.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -113,9 +137,8 @@ fun SettingsScreen(
     onThemeModeSelected: (ThemeMode) -> Unit,
     onDynamicColorChanged: (Boolean) -> Unit,
     onLanguageSelected: (String?) -> Unit,
-    presets: List<PresetCard> = emptyList(),
     storage: StorageReport? = null,
-    onOpenPreset: (PresetId) -> Unit = {},
+    onOpenProjectPage: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -188,12 +211,6 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-                if (presets.isNotEmpty()) {
-                    SectionHeader(stringResource(R.string.settings_section_presets))
-                    presets.forEach { card -> PresetRow(card, onClick = { onOpenPreset(card.preset.id) }) }
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                }
-
                 if (storage != null) {
                     SectionHeader(stringResource(R.string.settings_section_storage))
                     StorageLine(stringResource(R.string.settings_storage_presets, sizeText(storage.presetBytes)))
@@ -203,11 +220,7 @@ fun SettingsScreen(
                 }
 
                 SectionHeader(stringResource(R.string.settings_section_about))
-                Text(
-                    text = stringResource(R.string.settings_version, versionName),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                )
+                VersionRow(versionName, onOpenProjectPage)
                 Spacer(Modifier.heightIn(min = 16.dp))
             }
         }
@@ -221,36 +234,35 @@ private fun ThemeMode.labelRes(): Int =
         ThemeMode.DARK -> R.string.theme_dark
     }
 
-/** A preset with its state; the whole row opens its editor. */
+/** The version, with a line saying it opens ClearMovie on GitHub; the whole row is the link. */
 @Composable
-private fun PresetRow(
-    card: PresetCard,
+private fun VersionRow(
+    versionName: String,
     onClick: () -> Unit,
 ) {
-    val state =
-        when (val s = card.state) {
-            PresetCard.State.Ready -> stringResource(R.string.home_preset_ready)
-            PresetCard.State.NeedsSetup -> stringResource(R.string.home_preset_needs_setup)
-            is PresetCard.State.Missing -> pluralStringResource(R.plurals.home_preset_missing, s.count, s.count)
-        }
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 72.dp)
                 .clickable(role = Role.Button, onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag(SETTINGS_VERSION_TAG),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(text = presetName(card.preset), style = MaterialTheme.typography.bodyLarge)
-            Text(text = state, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = stringResource(R.string.settings_version, versionName), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = stringResource(R.string.settings_version_link),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Text(
-            text = stringResource(R.string.preset_edit),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+        Icon(
+            painter = painterResource(R.drawable.ic_open_in_new),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

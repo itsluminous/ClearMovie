@@ -6,6 +6,7 @@ import android.provider.MediaStore
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.data.db.ClearMovieDatabase
+import com.itsluminous.clearmovie.data.db.ProjectEntity
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.media.MediaCopier
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
@@ -86,6 +87,10 @@ class PresetStoreTest {
                     MediaCopier.sha256(it)
                 },
             )
+        // As on an install made before cm-home-presets, which kept the shipped preset (PresetSeedTest covers new installs).
+        runBlocking { check(store.adoptShipped(id)) }
+        // File names below count from the first bind.
+        n = 0
     }
 
     @After
@@ -101,6 +106,9 @@ class PresetStoreTest {
         return uri
     }
 
+    /** The preset's media files, without its kept preset.json. */
+    private fun slotFiles() = files.presetDir(id).listFiles()!!.filterNot { it.name.startsWith("preset-") }
+
     private fun bindAll(frameFrames: String = "original") =
         runBlocking {
             now = System.currentTimeMillis() + 5_000
@@ -113,11 +121,11 @@ class PresetStoreTest {
         }
 
     @Test
-    fun `the bundled generic preset is offered and needs setup`() =
+    fun `the kept generic preset is offered and needs setup`() =
         runBlocking<Unit> {
             val definitions = store.definitions()
             assertThat(definitions.map { it.preset.id }).containsExactly(id)
-            assertThat(definitions.single().source).isEqualTo(PresetDefinition.Source.BUNDLED)
+            assertThat(definitions.single().source).isEqualTo(PresetDefinition.Source.USER)
             val status = store.status(id)
             assertThat(status.needsSetup).containsExactly(PresetSlot.INTRO, PresetSlot.FRAME, PresetSlot.ENDING)
             assertThat(status.isReady).isFalse()
@@ -241,7 +249,7 @@ class PresetStoreTest {
                 store.bindSlot(PresetId("nope"), PresetSlot.INTRO, file("x.mp4", ByteArray(10), "video/mp4")),
             ).isEqualTo(SlotBindResult.UnknownPreset)
             assertThat(store.status(id)).isEqualTo(before)
-            assertThat(files.presetDir(id).listFiles()!!).hasLength(3)
+            assertThat(slotFiles()).hasSize(3)
         }
 
     @Test
@@ -282,6 +290,12 @@ class PresetStoreTest {
     @Test
     fun `an invalid, oversized or non-UTF-8 preset json is refused and nothing is stored`() =
         runBlocking<Unit> {
+            val rows = db.presets().definitions()
+            val stored =
+                files.presetsRoot
+                    .walkTopDown()
+                    .filter { it.isFile }
+                    .toList()
             val bad =
                 store.bindDefinition(
                     file(
@@ -299,13 +313,13 @@ class PresetStoreTest {
             val latin1 = store.bindDefinition(file("l1.json", byteArrayOf(0x7B, 0xE9.toByte(), 0x7D), "application/json"))
             assertThat(latin1).isEqualTo(DefinitionBindResult.Invalid(listOf("the file is not UTF-8 text")))
             assertThat(store.bindDefinition(Uri.parse("content://$DOCS/missing.json"))).isEqualTo(DefinitionBindResult.Unreadable)
-            assertThat(db.presets().definitions()).isEmpty()
+            assertThat(db.presets().definitions()).isEqualTo(rows)
             assertThat(
                 files.presetsRoot
                     .walkTopDown()
                     .filter { it.isFile }
                     .toList(),
-            ).isEmpty()
+            ).isEqualTo(stored)
         }
 
     @Test
@@ -315,6 +329,10 @@ class PresetStoreTest {
             store.bindDefinition(file("preset.json", json, "application/json"))
             val row = db.presets().definition(id.value)!!
             files.presetFile(id, row.fileName).writeText("""{"schemaVersion":1,"id":"other-id","displayName":{"en":"x"}}""")
+            assertThat(store.definitions()).isEmpty()
+            assertThat(store.definition(id)).isNull()
+            // A video made from it still gets the app's own copy.
+            db.projects().upsert(ProjectEntity("v1", null, id.value, 2, "{}", null, now, now))
             assertThat(store.definition(id)!!.source).isEqualTo(PresetDefinition.Source.BUNDLED)
         }
 
@@ -343,7 +361,7 @@ class PresetStoreTest {
             withTimeout(10_000) { while (!probe.blocking) delay(5) }
             job.cancelAndJoin()
             assertThat(store.status(id)).isEqualTo(before)
-            assertThat(files.presetDir(id).listFiles()!!).hasLength(3)
+            assertThat(slotFiles()).hasSize(3)
         }
 
     @Test

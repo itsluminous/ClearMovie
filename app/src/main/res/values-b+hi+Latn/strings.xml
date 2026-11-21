@@ -29,6 +29,8 @@
 
     <string name="settings_section_about">Jaankari</string>
     <string name="settings_version">Version %1$s</string>
+    <string name="settings_version_link">GitHub par ClearMovie kholein</string>
+    <string name="settings_no_browser">Is phone me web page kholne wala koi app nahin hai</string>
 
     <string name="preset_event_frame_name">Event frame</string>
 
@@ -191,7 +193,6 @@
     <string name="editor_preset_repair_body">Preset ki ek file delete ho gayi ya kahin aur chali gayi, isliye woh hissa preview me nahi hai.</string>
     <string name="editor_fix_preset">Theek karein</string>
     <string name="editor_not_saved">Phone bhar jaane ki wajah se aapke naye badlaav save nahi ho sake. Thodi jagah khaali karein; ClearMovie khula rehne tak kuch nahi khoyega.</string>
-    <string name="settings_section_presets">Presets</string>
     <string name="settings_section_storage">Storage</string>
     <string name="settings_storage_presets">Preset ki files: %1$s</string>
     <string name="settings_storage_copied">Copy ki gayi photos aur videos: %1$s</string>
@@ -581,10 +582,6 @@
     <string name="preset_delete">Preset delete karein</string>
     <string name="preset_delete_title">Ye preset delete karein?</string>
     <string name="preset_delete_body">%1$s ab nahi dikhega. Isse pehle banaye gaye videos pehle ki tarah chalte rahenge.</string>
-    <string name="preset_reset">Preset pehle jaisa karein</string>
-    <string name="preset_reset_title">Ye preset pehle jaisa karein?</string>
-    <string name="preset_reset_body">Iska naam, shabd aur caption ka style waise ho jayenge jaise ClearMovie me aate hain. Iski files rahengi.</string>
-    <string name="preset_reset_done">Preset waisa ho gaya hai jaisa ClearMovie me aata hai.</string>
     <string name="preset_not_saved">Preset save nahi ho saka. Phone me thodi jagah khaali karein aur phir se koshish karein.</string>
     <string name="preset_discard_title">Badlav chhod dein?</string>
     <string name="preset_discard_body">Is preset me kiye gaye badlav abhi save nahi hue hain.</string>

@@ -66,11 +66,23 @@ data class PresetEditUi(
     /** The shape shown: the draft's, else the preset's. */
     val shape: CanvasShape get() = draftShape ?: preset?.shape ?: CanvasShape.LANDSCAPE
 
-    /** Only a preset the user made, and only while no video uses it, can change its shape. */
-    val canChangeShape: Boolean get() = definition?.builtIn == false && videosUsing == 0
+    /**
+     * A preset the user made can change its shape while no video uses it.
+     * One the app once shipped (the kept Event frame) keeps its own: its
+     * frame's window is the one its definition names, measured for that shape.
+     */
+    val canChangeShape: Boolean get() = madeHere && videosUsing == 0
+
+    /** Made in the app, not one the app once shipped (cm-home-presets). */
+    val madeHere: Boolean get() =
+        definition
+            ?.preset
+            ?.id
+            ?.value
+            ?.startsWith(PresetStore.OWN_PREFIX) == true
 }
 
-enum class PresetEditMessage { NOT_SAVED, RESET_DONE }
+enum class PresetEditMessage { NOT_SAVED }
 
 sealed interface PresetEditEvent {
     /** Saved, or nothing to save: back to where the editor was opened from. */
@@ -86,7 +98,7 @@ sealed interface PresetEditEvent {
  * Editing a preset (cm-preset-manager): its name, the words and style a new
  * caption starts with, and (on the setup screen) its files. Changes are a
  * draft, kept across rotation and the system closing the app, until Save.
- * A preset the user made can be deleted; one the app ships can be reset.
+ * Any preset can be deleted; the videos made from it keep working.
  */
 @HiltViewModel
 class PresetEditViewModel
@@ -207,7 +219,7 @@ class PresetEditViewModel
                 }
         }
 
-        /** Deletes a preset the user made (a built-in one is reset instead). */
+        /** Deletes the preset; the videos made from it keep working. */
         fun delete() {
             if (job?.isActive == true) return
             job =
@@ -224,24 +236,11 @@ class PresetEditViewModel
                             eventChannel.send(PresetEditEvent.Deleted(r.videos))
                         }
 
-                        PresetDeleteResult.BuiltIn, PresetDeleteResult.Unknown -> {
+                        PresetDeleteResult.Unknown -> {
                             Unit
                         }
                     }
                     uiState.update { it.copy(busy = false) }
-                }
-        }
-
-        /** A built-in preset back to the app's own name and caption style; its files stay. */
-        fun reset() {
-            if (job?.isActive == true) return
-            job =
-                viewModelScope.launch {
-                    uiState.update { it.copy(busy = true) }
-                    presetStore.reset(presetId)
-                    clearDraft()
-                    val definition = presetStore.definition(presetId)
-                    uiState.update { it.copy(definition = definition, busy = false, message = PresetEditMessage.RESET_DONE) }
                 }
         }
 

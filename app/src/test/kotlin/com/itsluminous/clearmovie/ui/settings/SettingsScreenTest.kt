@@ -1,7 +1,11 @@
 package com.itsluminous.clearmovie.ui.settings
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -28,6 +32,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
 class SettingsScreenTest {
@@ -47,6 +54,7 @@ class SettingsScreenTest {
         settings: AppSettings = AppSettings(),
         dynamicColorSupported: Boolean = true,
         selectedLanguageTag: String? = null,
+        onOpenProjectPage: () -> Unit = {},
     ) {
         SettingsScreen(
             settings = settings,
@@ -58,6 +66,7 @@ class SettingsScreenTest {
             onThemeModeSelected = { selectedThemes += it },
             onDynamicColorChanged = { dynamicChanges += it },
             onLanguageSelected = { selectedLanguages += it },
+            onOpenProjectPage = onOpenProjectPage,
         )
     }
 
@@ -88,10 +97,14 @@ class SettingsScreenTest {
                 "Hinglish",
                 string(R.string.settings_section_about),
                 context.getString(R.string.settings_version, "0.1.0"),
+                string(R.string.settings_version_link),
             )
         for (label in labels) {
             compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
         }
+        // Presets are made and edited from Home only (cm-home-presets).
+        compose.onNodeWithText(string(R.string.preset_edit)).assertDoesNotExist()
+        compose.onNodeWithText(string(R.string.home_preset_ready)).assertDoesNotExist()
     }
 
     @Test
@@ -122,6 +135,44 @@ class SettingsScreenTest {
         assertThat(selectedThemes).containsExactly(ThemeMode.DARK)
         assertThat(dynamicChanges).containsExactly(false)
         assertThat(selectedLanguages).containsExactly("hi", "hi-Latn").inOrder()
+    }
+
+    @Test
+    fun `the version opens ClearMovie's GitHub page in the browser`() {
+        compose.setContent {
+            val activity = LocalContext.current
+            AtSize(ScreenSize.COMPACT) {
+                ClearMovieTheme(dynamicColor = false) { Screen(onOpenProjectPage = { openProjectPage(activity) }) }
+            }
+        }
+        compose
+            .onNodeWithTag(SETTINGS_VERSION_TAG)
+            .performScrollTo()
+            .assertHasClickAction()
+            .performClick()
+        val started = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertThat(started.action).isEqualTo(Intent.ACTION_VIEW)
+        assertThat(started.data).isEqualTo(Uri.parse("https://github.com/itsluminous/ClearMovie"))
+        assertThat(started.categories).containsExactly(Intent.CATEGORY_BROWSABLE)
+        // Only the address: nothing of the app's own goes with it.
+        assertThat(started.extras).isNull()
+        assertThat(started.component).isNull()
+        assertThat(started.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)).isEqualTo(0)
+    }
+
+    @Test
+    fun `with no browser the version says so instead of failing`() {
+        val app = RuntimeEnvironment.getApplication()
+        val shadow = shadowOf(app)
+        shadow.checkActivities(true)
+        compose.setContent {
+            val activity = LocalContext.current
+            AtSize(ScreenSize.COMPACT) {
+                ClearMovieTheme(dynamicColor = false) { Screen(onOpenProjectPage = { openProjectPage(activity) }) }
+            }
+        }
+        compose.onNodeWithTag(SETTINGS_VERSION_TAG).performScrollTo().performClick()
+        assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(string(R.string.settings_no_browser))
     }
 
     @Test

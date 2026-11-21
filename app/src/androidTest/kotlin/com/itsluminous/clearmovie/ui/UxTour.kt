@@ -383,6 +383,8 @@ class UxTour {
         val presetName = s(R.string.preset_event_frame_name)
         val bound =
             runBlocking {
+                // A new install has no presets (cm-home-presets): keep the shipped one, as an older install does.
+                app.presetStore.adoptShipped(presetId)
                 app.presetStore
                     .status(presetId)
                     .slots.values

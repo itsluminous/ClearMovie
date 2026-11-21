@@ -54,6 +54,8 @@ object StorageModule {
     @Singleton
     fun provideDatabase(
         @ApplicationContext context: Context,
+        // Taken first, so it is read before the database is made (cm-home-presets).
+        @Suppress("UNUSED_PARAMETER") history: InstallHistory,
     ): ClearMovieDatabase =
         Room
             .databaseBuilder(context, ClearMovieDatabase::class.java, ClearMovieDatabase.FILE_NAME)
@@ -131,7 +133,45 @@ object StorageModule {
         copier: MediaCopier,
         probe: MediaProbe,
         freeSpace: FreeSpace,
-    ): PresetStore = PresetStore(context.assets, context.contentResolver, gateway, db, files, copier, probe, freeSpace::bytes)
+        history: InstallHistory,
+    ): PresetStore =
+        PresetStore(
+            context.assets,
+            context.contentResolver,
+            gateway,
+            db,
+            files,
+            copier,
+            probe,
+            freeSpace::bytes,
+            installedBefore = { history.openedBefore },
+        )
+
+    /**
+     * Whether the app ran on this phone before this launch: its database is
+     * made the first time it runs, so it is there only after an earlier
+     * launch, of this version or an older one. Read before the database is
+     * opened ([provideDatabase] takes it), never from the install dates, which
+     * call an install updated before it was ever opened an old one. On the
+     * first launch ever there is no preset to keep, and that is recorded at
+     * once, before the database exists, so a launch cut short never makes a
+     * new install look like an old one.
+     */
+    @Provides
+    @Singleton
+    fun provideInstallHistory(
+        @ApplicationContext context: Context,
+        files: AppFiles,
+    ): InstallHistory {
+        val openedBefore = context.getDatabasePath(ClearMovieDatabase.FILE_NAME).exists()
+        if (!openedBefore) {
+            runCatching {
+                files.presetSeedMarker.parentFile?.mkdirs()
+                files.presetSeedMarker.createNewFile()
+            }
+        }
+        return InstallHistory(openedBefore)
+    }
 
     @Provides
     fun provideMediaFactsProbe(
@@ -151,3 +191,9 @@ object StorageModule {
         files: AppFiles,
     ): StorageUsage = StorageUsage(db, files)
 }
+
+/** What the app knew about this phone when it started (cm-home-presets). */
+class InstallHistory(
+    /** The app had run here before this launch. */
+    val openedBefore: Boolean,
+)

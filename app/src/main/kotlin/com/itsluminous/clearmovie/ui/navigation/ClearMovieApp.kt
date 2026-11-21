@@ -189,11 +189,8 @@ fun ClearMovieApp(
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsRoute(
-                onBack = dropUnlessResumed { navController.popBackStack() },
-                // A preset opens its editor (name, captions, files, delete), the same as Edit on Home.
-                onOpenPreset = { navController.navigate(Routes.presetEdit(it)) { launchSingleTop = true } },
-            )
+            // Presets are edited from Home only (cm-home-presets).
+            SettingsRoute(onBack = dropUnlessResumed { navController.popBackStack() })
         }
         composable(
             Routes.SETUP,

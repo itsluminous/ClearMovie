@@ -21,6 +21,8 @@
 
     <string name="settings_section_about">जानकारी</string>
     <string name="settings_version">वर्शन %1$s</string>
+    <string name="settings_version_link">GitHub पर ClearMovie खोलें</string>
+    <string name="settings_no_browser">इस फ़ोन में वेब पेज खोलने वाला कोई ऐप नहीं है</string>
 
     <string name="preset_event_frame_name">इवेंट फ़्रेम</string>
 
@@ -183,7 +185,6 @@
     <string name="editor_preset_repair_body">प्रीसेट की एक फ़ाइल हटा दी गई या कहीं और चली गई, इसलिए वह हिस्सा प्रीव्यू में नहीं है।</string>
     <string name="editor_fix_preset">ठीक करें</string>
     <string name="editor_not_saved">फ़ोन भर जाने की वजह से आपके नए बदलाव सेव नहीं हो सके। थोड़ी जगह खाली करें; ClearMovie खुला रहने तक कुछ नहीं खोएगा।</string>
-    <string name="settings_section_presets">प्रीसेट</string>
     <string name="settings_section_storage">स्टोरेज</string>
     <string name="settings_storage_presets">प्रीसेट की फ़ाइलें: %1$s</string>
     <string name="settings_storage_copied">कॉपी की गई फ़ोटो और वीडियो: %1$s</string>
@@ -573,10 +574,6 @@
     <string name="preset_delete">प्रीसेट हटाएँ</string>
     <string name="preset_delete_title">यह प्रीसेट हटाएँ?</string>
     <string name="preset_delete_body">%1$s अब नहीं दिखेगा। इससे पहले बनाए गए वीडियो पहले की तरह चलते रहेंगे।</string>
-    <string name="preset_reset">प्रीसेट पहले जैसा करें</string>
-    <string name="preset_reset_title">यह प्रीसेट पहले जैसा करें?</string>
-    <string name="preset_reset_body">इसका नाम, शब्द और कैप्शन का स्टाइल वैसे हो जाएँगे जैसे ClearMovie में आते हैं। इसकी फ़ाइलें रहेंगी।</string>
-    <string name="preset_reset_done">प्रीसेट वैसा हो गया है जैसा ClearMovie में आता है।</string>
     <string name="preset_not_saved">प्रीसेट सेव नहीं हो सका। फ़ोन में थोड़ी जगह खाली करें और फिर से कोशिश करें।</string>
     <string name="preset_discard_title">बदलाव छोड़ दें?</string>
     <string name="preset_discard_body">इस प्रीसेट में किए गए बदलाव अभी सेव नहीं हुए हैं।</string>

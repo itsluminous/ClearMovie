@@ -35,6 +35,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -46,22 +48,20 @@ import java.nio.charset.CodingErrorAction
 import java.util.UUID
 
 /**
- * A preset the app can offer. [source] says whether this definition ships in
- * the app or is the user's (a `preset.json` they chose, or one the app wrote
- * when they made or edited a preset). [builtIn] is true for a preset the app
- * ships, edited or not: it can be reset, never deleted. [retired] is true for
- * a preset the user deleted that videos still use.
+ * A preset the app can offer. [source] is [Source.USER] for every preset on
+ * the list (one the user made, edited or chose a `preset.json` for, and the
+ * one an older version shipped, kept on an install made before
+ * cm-home-presets), and [Source.BUNDLED] only for the app's own copy of a
+ * preset it once shipped, read back for the videos made from it when the
+ * install has no copy of its own. [retired] is true for a preset the user
+ * deleted that videos still use.
  */
 data class PresetDefinition(
     val preset: Preset,
     val source: Source,
-    val builtIn: Boolean = source == Source.BUNDLED,
     val retired: Boolean = false,
 ) {
     enum class Source { BUNDLED, USER }
-
-    /** A built-in preset the user changed: Reset puts the app's own back. */
-    val edited: Boolean get() = builtIn && source == Source.USER
 }
 
 /** The parts a new preset has. Fixed once it is made: videos made from it play these parts. */
@@ -94,9 +94,6 @@ sealed interface PresetDeleteResult {
     data class Retired(
         val videos: Int,
     ) : PresetDeleteResult
-
-    /** A preset the app ships is reset, never deleted. */
-    data object BuiltIn : PresetDeleteResult
 
     data object Unknown : PresetDeleteResult
 }
@@ -210,15 +207,18 @@ sealed interface DefinitionBindResult {
 /**
  * Presets and their files (ARCHITECTURE section 8).
  *
- * Definitions: the generic preset that ships in `assets/presets/<id>/preset.json`,
- * plus, optionally, the user's own `preset.json` chosen at setup. The user's
- * file is untrusted: it is read with a size limit, must be UTF-8, goes
- * through the strict `PresetParser`, and is copied into app storage only when
- * valid. It overrides the bundled preset with the same id. Presets the user
- * makes or edits in the app ([create], [save]) are stored the same way, as a
- * `preset.json` that `PresetWriter` writes and the parser reads back; an
- * edited built-in preset is an override that [reset] removes, so a later app
- * version's built-in preset reaches everyone who did not edit theirs.
+ * Definitions: every preset on the list is a stored `preset.json`. A new
+ * install has none (cm-home-presets): the generic preset in
+ * `assets/presets/<id>/preset.json` is only the template a new preset starts
+ * from, and the definition the videos made from it fall back to. An install
+ * made before that keeps it as a preset of its own ([seedOnce]), which the
+ * user can edit or delete like any other. The user's own `preset.json`,
+ * chosen at setup, is untrusted: it is read with a size limit, must be
+ * UTF-8, goes through the strict `PresetParser`, and is copied into app
+ * storage only when valid; it takes the place of the stored preset with the
+ * same id. Presets the user makes or edits in the app ([create], [save]) are
+ * stored the same way, as a `preset.json` that `PresetWriter` writes and the
+ * parser reads back.
  *
  * Bindings: each slot's file (intro, frame, ending) is copied into
  * `filesDir/presets/<id>/` once, with progress, its SHA-256 and size, its
@@ -248,39 +248,101 @@ class PresetStore(
             .take(8)
     },
     private val hash: (File) -> String = MediaCopier::sha256,
+    /** True when the app had run on this phone before this launch: see [seedOnce]. */
+    private val installedBefore: () -> Boolean = { false },
 ) {
+    private val seedLock = Mutex()
+
+    @Volatile private var seeded = false
+
     /**
-     * Every preset that is offered: those the app ships first (by id, an
-     * edited one in its edited form), then the user's own in the order they
-     * were made. A deleted preset that videos still use is left out.
+     * Every preset that is offered, in the order they were made (a kept
+     * preset of an older version first). A deleted preset that videos still
+     * use is left out. A new install has none.
      */
-    suspend fun definitions(): List<PresetDefinition> = withContext(dispatcher) { all().filterNot { it.retired } }
-
-    /** Preset [id], including one the user deleted that videos still use, so those videos keep working. */
-    suspend fun definition(id: PresetId): PresetDefinition? = withContext(dispatcher) { all().firstOrNull { it.preset.id == id } }
-
-    private suspend fun all(): List<PresetDefinition> {
-        val shipped = bundled()
-        val shippedIds = shipped.map { it.id }.toSet()
-        val rows = db.presets().definitions()
-        val byId = linkedMapOf<PresetId, PresetDefinition>()
-        shipped.forEach { byId[it.id] = PresetDefinition(it, PresetDefinition.Source.BUNDLED) }
-        val own = mutableListOf<Pair<PresetDefinitionEntity, PresetDefinition>>()
-        for (row in rows) {
-            val preset = userDefinition(row) ?: continue
-            if (preset.id in shippedIds) {
-                byId[preset.id] = PresetDefinition(preset, PresetDefinition.Source.USER, builtIn = true)
-            } else {
-                own += row to PresetDefinition(preset, PresetDefinition.Source.USER, builtIn = false, retired = row.retiredAt != null)
-            }
+    suspend fun definitions(): List<PresetDefinition> =
+        withContext(dispatcher) {
+            seedOnce()
+            all().filterNot { it.retired }
         }
-        return byId.values.sortedBy { it.preset.id.value } +
-            own.sortedWith(compareBy({ it.first.createdAt }, { it.first.presetId })).map { it.second }
+
+    /**
+     * Preset [id], including one the user deleted that videos still use, so
+     * those videos keep working; and for a video made from a preset the app
+     * once shipped that this install has no copy of, the app's own.
+     */
+    suspend fun definition(id: PresetId): PresetDefinition? =
+        withContext(dispatcher) {
+            seedOnce()
+            all().firstOrNull { it.preset.id == id }
+                ?: bundled().firstOrNull { it.id == id }?.takeIf { db.presets().projectsUsing(id.value) > 0 }?.let {
+                    PresetDefinition(it, PresetDefinition.Source.BUNDLED, retired = true)
+                }
+        }
+
+    private suspend fun all(): List<PresetDefinition> =
+        db
+            .presets()
+            .definitions()
+            .mapNotNull { row ->
+                userDefinition(row)?.let { row to PresetDefinition(it, PresetDefinition.Source.USER, retired = row.retiredAt != null) }
+            }.sortedWith(compareBy({ it.first.createdAt }, { it.first.presetId }))
+            .map { it.second }
+
+    /**
+     * Once per install (cm-home-presets): an install made before presets
+     * stopped shipping keeps each preset the app shipped, as an ordinary
+     * preset of its own; a new install starts with none. It is an older
+     * install when the app ran before this launch and had not decided this
+     * yet (only a version from before this one leaves no answer), or when the
+     * preset has files chosen for it or videos made from it. The answer
+     * is kept in [AppFiles.presetSeedMarker], so a preset the user deletes
+     * never comes back; a preset that could not be stored is tried again at
+     * the next launch.
+     */
+    private suspend fun seedOnce() {
+        if (seeded) return
+        seedLock.withLock {
+            if (seeded) return
+            val marker = files.presetSeedMarker
+            if (!marker.exists()) {
+                val older = runCatching(installedBefore).getOrDefault(false)
+                var stored = true
+                for (preset in bundled()) {
+                    val id = preset.id.value
+                    if (db.presets().definition(id) != null) continue
+                    val used = db.presets().bindings(id).isNotEmpty() || db.presets().projectsUsing(id) > 0
+                    if ((older || used) && !adopt(preset)) stored = false
+                }
+                if (stored) {
+                    runCatching {
+                        marker.parentFile?.mkdirs()
+                        marker.createNewFile()
+                    }
+                }
+            }
+            seeded = true
+        }
     }
 
     /**
+     * Puts the preset the app ships as [id] on the list as the user's own,
+     * first in order; it then is an ordinary preset (edit, delete). For
+     * [seedOnce], and for tests that need it on the list. False when the app
+     * ships no such preset, or it could not be stored.
+     */
+    suspend fun adoptShipped(id: PresetId): Boolean =
+        withContext(dispatcher) {
+            if (db.presets().definition(id.value) != null) return@withContext true
+            val preset = bundled().firstOrNull { it.id == id } ?: return@withContext false
+            adopt(preset)
+        }
+
+    private suspend fun adopt(preset: Preset): Boolean = write(preset, createdAt = 0L) is PresetSaveResult.Saved
+
+    /**
      * Makes a new preset called [name] with [parts], and the frame layout and
-     * caption style of [from] (or the first preset the app ships). It has no
+     * caption style of [from] (or the template the app ships). It has no
      * files yet: setup chooses them. Null when it could not be stored.
      */
     suspend fun create(
@@ -289,7 +351,7 @@ class PresetStore(
         from: PresetId? = null,
     ): PresetId? =
         withContext(dispatcher) {
-            val template = (from?.let { definition(it) } ?: all().firstOrNull { it.builtIn })?.preset ?: return@withContext null
+            val template = from?.let { definition(it)?.preset } ?: bundled().firstOrNull() ?: return@withContext null
             val frame = template.frame ?: bundled().firstNotNullOfOrNull { it.frame }
             if (parts.frame && frame == null) return@withContext null
             var id: PresetId
@@ -313,14 +375,15 @@ class PresetStore(
 
     /**
      * Stores [preset] in place of the preset with its id: its name, caption
-     * style and words, and anything else a preset holds. For a preset the
-     * app ships this is an edited copy, which Reset removes. The parts (intro,
+     * style and words, and anything else a preset holds. The parts (intro,
      * frame, ending) must stay as they are: videos made from it play them.
      * Its shape may change only while no video uses it (cm-aspect-ratio).
      */
     suspend fun save(preset: Preset): PresetSaveResult =
         withContext(dispatcher) {
             val old = definition(preset.id) ?: return@withContext PresetSaveResult.NotSaved
+            // The app's own copy, kept only for the videos made from it, is never put back on the list.
+            if (old.source == PresetDefinition.Source.BUNDLED) return@withContext PresetSaveResult.NotSaved
             val same = old.preset
             if ((same.intro == null) != (preset.intro == null) ||
                 (same.frame == null) != (preset.frame == null) ||
@@ -335,27 +398,17 @@ class PresetStore(
             write(preset, createdAt = row?.createdAt ?: 0L, retiredAt = row?.retiredAt)
         }
 
-    /** Takes a built-in preset back to the app's own: the edit (or the user's preset.json) goes, its files stay. */
-    suspend fun reset(id: PresetId): Boolean =
-        withContext(dispatcher) {
-            if (bundled().none { it.id == id }) return@withContext false
-            val row = db.presets().definition(id.value) ?: return@withContext false
-            db.presets().deleteDefinition(id.value)
-            runCatching { files.presetFile(id, row.fileName).delete() }
-            true
-        }
-
     /** How many videos were made from [id]: while any is, its shape stays (cm-aspect-ratio). */
     suspend fun videosUsing(id: PresetId): Int = withContext(dispatcher) { db.presets().projectsUsing(id.value) }
 
     /**
-     * Deletes a preset the user made. A video made from it keeps working:
-     * while any video uses it, it is only taken off the list (its definition
-     * and files stay, and [sweepRetired] removes them once no video does).
+     * Deletes a preset, the one an older version shipped included. A video
+     * made from it keeps working: while any video uses it, it is only taken
+     * off the list (its definition and files stay, and [sweepRetired] removes
+     * them once no video does).
      */
     suspend fun delete(id: PresetId): PresetDeleteResult =
         withContext(dispatcher) {
-            if (bundled().any { it.id == id }) return@withContext PresetDeleteResult.BuiltIn
             db.presets().definition(id.value) ?: return@withContext PresetDeleteResult.Unknown
             val outcome =
                 db.withTransaction {
@@ -554,7 +607,8 @@ class PresetStore(
                 }
                 // A Cancel while the file was being checked must not record it.
                 currentCoroutineContext().ensureActive()
-                // A preset the user made has the built-in frame's window until its own frame is measured.
+                // A preset the user made has the shipped frame's window until its own frame is measured.
+                // The kept Event frame keeps the window its definition names.
                 val ownWindow =
                     frame
                         ?.takeIf { bundled().none { b -> b.id == id } }
@@ -616,7 +670,8 @@ class PresetStore(
 
     /**
      * Reads the user's own `preset.json` from [uri] and, if it is a valid
-     * preset, copies it in. It then overrides the bundled preset with its id.
+     * preset with the id of one the app ships, copies it in. It then is the
+     * stored preset with that id (on the list, like any other).
      */
     suspend fun bindDefinition(uri: Uri): DefinitionBindResult =
         withContext(dispatcher) {
@@ -733,6 +788,7 @@ class PresetStore(
         )
     }
 
+    /** The presets the app ships: templates for a new preset, never offered on their own. */
     private fun bundled(): List<Preset> =
         // A device lists the folder's children ("event-frame"); Robolectric lists
         // nested paths ("event-frame/preset.json"). The first segment is the id either way.

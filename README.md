@@ -80,8 +80,9 @@ In ClearMovie 0.0.1, plus one addition already on `main` for 0.0.2:
 - **Presets** - one tap sets up the intro, the frame overlay (with its green window
   keyed out so your photos and videos show through) and the ending, which can be a
   video or a closing voice clip. You can replace any part for a single video, or skip it.
-- **Your own presets** (new on `main`, coming in 0.0.2) - make a new preset from Home, edit
-  any preset from Home or Settings, delete the ones you made, or reset a built-in one. Each
+- **Your own presets** - make a new preset from Home, and edit or delete any preset there.
+  A new install starts with none: New preset comes first on Home. An install that had the
+  Event frame keeps it as a preset like any other. Each
   preset keeps a caption style (words, place, size, font, colour, outline and band) that new
   captions start from, with a live preview.
 - **Share from your gallery** - select photos and videos in the gallery, tap Share, and
@@ -118,7 +119,7 @@ What has shipped, and what is still to come:
 - [x] Preset picker, with "Start without a preset"
 - [x] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
 - [x] Preset review: replace or skip the intro, frame or ending for this video
-- [x] Make your own presets, edit any preset and delete the ones you made, each with its own caption style (done on `main`, ships in 0.0.2)
+- [x] Make your own presets, edit and delete any preset, each with its own caption style
 - [x] Add photos and videos with the system photo picker
 - [x] Share photos and videos from the gallery straight into a new video
 

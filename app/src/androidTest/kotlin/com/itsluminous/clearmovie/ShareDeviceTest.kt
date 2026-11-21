@@ -528,6 +528,8 @@ class ShareDeviceTest {
         val id = PresetId("event-frame")
         val store = app.presetStore
         runBlocking {
+            // A new install has no presets (cm-home-presets): keep the shipped one, as an older install does.
+            assertThat(store.adoptShipped(id)).isTrue()
             listOf(
                 PresetSlot.INTRO to insert("fixtures/intro.mp4", "video/mp4"),
                 PresetSlot.FRAME to insert("fixtures/frame.mp4", "video/mp4"),

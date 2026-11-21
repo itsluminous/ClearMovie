@@ -102,7 +102,6 @@ const val PRESET_EDIT_LIST_TAG = "preset_edit_list"
 const val PRESET_NAME_TAG = "preset_name"
 const val PRESET_SAVE_TAG = "preset_save"
 const val PRESET_DELETE_TAG = "preset_delete"
-const val PRESET_RESET_TAG = "preset_reset"
 const val PRESET_CAPTION_CHANGE_TAG = "preset_caption_change"
 const val PRESET_FILES_TAG = "preset_files"
 const val PRESET_WORDS_TAG = "preset_words"
@@ -144,7 +143,6 @@ fun PresetEditRoute(
         onFiles = { onFiles(viewModel.presetId) },
         onSave = viewModel::save,
         onDelete = viewModel::delete,
-        onReset = viewModel::reset,
         onBack = onBack,
         onDismissMessage = viewModel::dismissMessage,
     )
@@ -160,8 +158,8 @@ private fun shownWords(preset: Preset): String {
 /**
  * The preset editor (cm-preset-manager): the name, the captions (a picture
  * of the frame with a new caption on it, and Change caption style), the
- * files (opening setup), and Save. A preset the user made has Delete in the
- * top bar; a built-in one that was changed has Reset instead. Change caption
+ * files (opening setup), and Save. Every preset has Delete in the top bar
+ * (its videos keep working). Change caption
  * style turns the screen into the caption editor's tabs over the same
  * picture, with Cancel and Done. In two panes the picture sits on the left.
  * Leaving with unsaved changes asks first. Stateless apart from which dialog
@@ -178,7 +176,6 @@ fun PresetEditScreen(
     onFiles: () -> Unit,
     onSave: (shownName: String, shownWords: String) -> Unit,
     onDelete: () -> Unit,
-    onReset: () -> Unit,
     onBack: () -> Unit,
     onDismissMessage: () -> Unit,
     onShape: (CanvasShape) -> Unit = {},
@@ -194,7 +191,6 @@ fun PresetEditScreen(
             onFiles,
             onSave,
             onDelete,
-            onReset,
             onBack,
             onDismissMessage,
             onShape,
@@ -213,7 +209,6 @@ private fun PresetEditContent(
     onFiles: () -> Unit,
     onSave: (shownName: String, shownWords: String) -> Unit,
     onDelete: () -> Unit,
-    onReset: () -> Unit,
     onBack: () -> Unit,
     onDismissMessage: () -> Unit,
     onShape: (CanvasShape) -> Unit,
@@ -253,7 +248,6 @@ private fun PresetEditContent(
         val text =
             when (ui.message) {
                 PresetEditMessage.NOT_SAVED -> resources.getString(R.string.preset_not_saved)
-                PresetEditMessage.RESET_DONE -> resources.getString(R.string.preset_reset_done)
                 null -> return@LaunchedEffect
             }
         snackbar.showSnackbar(text)
@@ -278,22 +272,12 @@ private fun PresetEditContent(
                 },
                 actions = {
                     if (definition != null && !captionOpen) {
-                        if (!definition.builtIn) {
-                            IconButton(
-                                onClick = { dialog = DIALOG_DELETE },
-                                enabled = !ui.busy,
-                                modifier = Modifier.testTag(PRESET_DELETE_TAG),
-                            ) {
-                                Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.preset_delete))
-                            }
-                        } else if (definition.edited) {
-                            IconButton(
-                                onClick = { dialog = DIALOG_RESET },
-                                enabled = !ui.busy,
-                                modifier = Modifier.testTag(PRESET_RESET_TAG),
-                            ) {
-                                Icon(painterResource(R.drawable.ic_restore), contentDescription = stringResource(R.string.preset_reset))
-                            }
+                        IconButton(
+                            onClick = { dialog = DIALOG_DELETE },
+                            enabled = !ui.busy,
+                            modifier = Modifier.testTag(PRESET_DELETE_TAG),
+                        ) {
+                            Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.preset_delete))
                         }
                     }
                 },
@@ -386,9 +370,10 @@ private fun PresetEditContent(
                 CaptionsCard(preview = { preview(false, Modifier.fillMaxWidth(minOf(1f, aspect))) }, onChange = openCaption)
             }
             val shapeCard: @Composable () -> Unit = {
-                if (definition?.builtIn == false) {
+                // The kept Event frame is made for its frame's shape: no choice is shown.
+                if (ui.madeHere) {
                     // Its intro and frame, once chosen, were made for the shape it had.
-                    val filesChosen = listOf(PresetSlot.INTRO, PresetSlot.FRAME).any { ui.status?.slots?.get(it) is SlotStatus.Ready }
+                    val filesChosen = listOf(PresetSlot.INTRO, PresetSlot.FRAME).any { ui.status.slots[it] is SlotStatus.Ready }
                     PresetShapeCard(
                         ui.shape,
                         enabled = ui.canChangeShape,
@@ -457,20 +442,6 @@ private fun PresetEditContent(
             )
         }
 
-        DIALOG_RESET -> {
-            ConfirmDialog(
-                title = stringResource(R.string.preset_reset_title),
-                body = stringResource(R.string.preset_reset_body),
-                confirm = stringResource(R.string.preset_reset),
-                destructive = false,
-                onConfirm = {
-                    dialog = null
-                    onReset()
-                },
-                onDismiss = { dialog = null },
-            )
-        }
-
         DIALOG_DISCARD -> {
             ConfirmDialog(
                 title = stringResource(R.string.preset_discard_title),
@@ -489,7 +460,6 @@ private fun PresetEditContent(
 }
 
 private const val DIALOG_DELETE = "delete"
-private const val DIALOG_RESET = "reset"
 private const val DIALOG_DISCARD = "discard"
 
 @Composable

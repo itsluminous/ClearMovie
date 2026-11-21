@@ -929,6 +929,8 @@ class ShareViewModelTest {
                             ).use { ImageIO.read(it) }
                     FrameSample(image.width, image.height, image.getRGB(0, 0, image.width, image.height, null, 0, image.width))
                 }
+            // A new install has no presets (cm-home-presets): keep the shipped one, as an older install does.
+            check(presets.adoptShipped(PresetId("event-frame")))
             for ((slot, name) in listOf(PresetSlot.INTRO to "Intro.mp4", PresetSlot.FRAME to "Frame.mp4", PresetSlot.ENDING to "end.mp3")) {
                 val uri = "content://$CHAT/preset/$name".toUri()
                 chat.add(

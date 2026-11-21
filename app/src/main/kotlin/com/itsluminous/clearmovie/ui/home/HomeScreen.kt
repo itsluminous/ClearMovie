@@ -5,7 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -54,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
@@ -87,14 +87,18 @@ data class ShareHeader(
 const val SHARE_HEADER_TAG = "share_header"
 
 /**
- * Home and preset pick (ARCHITECTURE section 11.1): "Make a new video", a
- * large card per preset (with "N files missing, tap to fix" when a file is
- * gone), the Start without a preset card, then "My videos". One column on a
- * phone held upright, two or three on wider windows. Stateless.
+ * Home and preset pick (ARCHITECTURE section 11.1): "Make a new video", then
+ * a large card per preset (with "N files missing, tap to fix" when a file is
+ * gone), Start without a preset and New preset; with no presets yet, New
+ * preset comes first (cm-home-presets). Then "My videos". Every card under
+ * "Make a new video" is one height (that of the tallest), so none stands out.
+ * One column on a phone held upright, two or three on wider windows.
+ * Stateless.
  *
  * With [share] it is the share variant (section 11.12): the shared items'
- * header above the presets, a Cancel button instead of Settings, and no
- * "My videos"; the cards wait until the items are ready.
+ * header above the presets, a Cancel button instead of Settings, no New
+ * preset and no "My videos"; the cards wait until the items are ready. With
+ * no presets it offers Start without a preset alone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -142,8 +146,23 @@ fun HomeScreen(
             // Wide windows get more columns, but never so narrow that a preset's name breaks.
             val columns = (maxWidth / MIN_CARD_WIDTH).toInt().coerceIn(1, window.columns)
             val enabled = !busy && share?.ready != false
-            // Cards side by side are given one height (a grid row cannot match them), enough for a three-line text.
-            val cardHeight = if (columns > 1) SIDE_BY_SIDE_CARD else 96.dp
+            val newPreset = onNewPreset?.takeIf { share == null }
+            val edit = onEditPreset?.takeIf { share == null }
+            val noPresets = presets?.isEmpty() == true
+            // Every card shown under the heading, in the order shown: with no presets, New preset first.
+            val cards =
+                buildList {
+                    presets.orEmpty().forEach {
+                        add(CardWords(presetName(it.preset), presetLine(it.state), edit != null, it.state is PresetCard.State.Missing))
+                    }
+                    val blank = CardWords(stringResource(R.string.home_start_blank), stringResource(R.string.home_start_blank_body))
+                    val new = newPreset?.let { CardWords(stringResource(R.string.preset_new), stringResource(R.string.preset_new_body)) }
+                    if (noPresets && new != null) add(new)
+                    add(blank)
+                    if (!noPresets && new != null) add(new)
+                }
+            val cardWidth = (maxWidth - 32.dp - 16.dp * (columns - 1)) / columns
+            val layout = rememberCardLayout(cards, cardWidth)
             Column(Modifier.fillMaxSize()) {
                 // Busy, the shared items not ready, or the presets still being read.
                 if (busy || share?.ready == false || presets == null) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -159,36 +178,41 @@ fun HomeScreen(
                         item(span = { GridItemSpan(maxLineSpan) }, key = "share") { ShareHeaderView(share) }
                     }
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Heading(stringResource(if (share != null) R.string.share_choose_preset else R.string.home_new_video))
+                        // Choosing a preset for shared items, unless there is none to choose.
+                        Heading(stringResource(if (share != null && !noPresets) R.string.share_choose_preset else R.string.home_new_video))
                     }
-                    items(presets.orEmpty(), key = { "preset-" + it.preset.id.value }) { card ->
-                        // Editing is offered from the launcher's pick only, never while choosing a preset for shared items.
-                        val edit = onEditPreset?.takeIf { share == null }
-                        PresetCardView(
-                            card,
-                            enabled = enabled,
-                            minHeight = cardHeight,
-                            onClick = { onPreset(card.preset.id) },
-                            onEdit = edit?.let { { it(card.preset.id) } },
-                        )
-                    }
-                    // Never waits for the presets: Start without a preset is there at once (the moving bar says
-                    // the presets are still being read).
-                    item(key = "blank") { BlankCard(enabled = enabled, minHeight = cardHeight, onClick = onStartBlank) }
-                    if (share != null) return@LazyVerticalGrid
-                    if (onNewPreset != null) {
-                        item(key = "new-preset") {
-                            ActionCard(
-                                title = stringResource(R.string.preset_new),
-                                body = stringResource(R.string.preset_new_body),
-                                icon = R.drawable.ic_add,
-                                enabled = !busy,
-                                minHeight = cardHeight,
-                                tag = NEW_PRESET_TAG,
-                                onClick = onNewPreset,
+                    // The cards wait for the presets (the moving bar says they are being read), as their order depends on them.
+                    if (presets != null) {
+                        val newPresetCard: () -> Unit = {
+                            if (newPreset != null) {
+                                item(key = "new-preset") {
+                                    ActionCard(
+                                        title = stringResource(R.string.preset_new),
+                                        body = stringResource(R.string.preset_new_body),
+                                        icon = R.drawable.ic_add,
+                                        enabled = !busy,
+                                        layout = layout,
+                                        tag = NEW_PRESET_TAG,
+                                        onClick = newPreset,
+                                    )
+                                }
+                            }
+                        }
+                        if (noPresets) newPresetCard()
+                        items(presets, key = { "preset-" + it.preset.id.value }) { card ->
+                            // Editing is offered from the launcher's pick only, never while choosing a preset for shared items.
+                            PresetCardView(
+                                card,
+                                enabled = enabled,
+                                layout = layout,
+                                onClick = { onPreset(card.preset.id) },
+                                onEdit = edit?.let { { it(card.preset.id) } },
                             )
                         }
+                        item(key = "blank") { BlankCard(enabled = enabled, layout = layout, onClick = onStartBlank) }
+                        if (!noPresets) newPresetCard()
                     }
+                    if (share != null) return@LazyVerticalGrid
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Heading(stringResource(R.string.home_my_videos), Modifier.padding(top = 8.dp))
                     }
@@ -275,20 +299,20 @@ private fun Heading(
 private fun PresetCardView(
     card: PresetCard,
     enabled: Boolean,
-    minHeight: Dp,
+    layout: CardLayout,
     onClick: () -> Unit,
     onEdit: (() -> Unit)?,
 ) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         val name = presetName(card.preset)
-        CardBody(name, {
+        CardBody(layout, {
             Thumb(card.thumbnail?.let { { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } })
-        }, trailing = if (onEdit != null) EDIT_BUTTON else 0.dp) {
+        }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PresetWords(card, name, Modifier.weight(1f))
                 if (onEdit != null) {
@@ -313,22 +337,18 @@ private fun PresetWords(
 ) {
     Column(modifier) {
         Text(name, style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(4.dp))
-        val (line, warn) =
-            when (val s = card.state) {
-                PresetCard.State.Ready -> stringResource(R.string.home_preset_ready) to false
-                PresetCard.State.NeedsSetup -> stringResource(R.string.home_preset_needs_setup) to false
-                is PresetCard.State.Missing -> pluralStringResource(R.plurals.home_preset_missing, s.count, s.count) to true
-            }
+        Spacer(Modifier.height(WORDS_GAP))
+        val line = presetLine(card.state)
+        val warn = card.state is PresetCard.State.Missing
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (warn) {
                 Icon(
                     painterResource(R.drawable.ic_warning),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(WARNING_ICON),
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(WARNING_GAP))
             }
             Text(
                 line,
@@ -339,10 +359,19 @@ private fun PresetWords(
     }
 }
 
+/** The line under a preset's name: ready, needs setup, or how many files are missing. */
+@Composable
+private fun presetLine(state: PresetCard.State): String =
+    when (state) {
+        PresetCard.State.Ready -> stringResource(R.string.home_preset_ready)
+        PresetCard.State.NeedsSetup -> stringResource(R.string.home_preset_needs_setup)
+        is PresetCard.State.Missing -> pluralStringResource(R.plurals.home_preset_missing, state.count, state.count)
+    }
+
 @Composable
 private fun BlankCard(
     enabled: Boolean,
-    minHeight: Dp,
+    layout: CardLayout,
     onClick: () -> Unit,
 ) {
     ActionCard(
@@ -350,8 +379,8 @@ private fun BlankCard(
         body = stringResource(R.string.home_start_blank_body),
         icon = R.drawable.ic_photo_library,
         enabled = enabled,
-        minHeight = minHeight,
-        tag = null,
+        layout = layout,
+        tag = BLANK_TAG,
         onClick = onClick,
     )
 }
@@ -363,20 +392,20 @@ private fun ActionCard(
     body: String,
     icon: Int,
     enabled: Boolean,
-    minHeight: Dp,
-    tag: String?,
+    layout: CardLayout,
+    tag: String,
     onClick: () -> Unit,
 ) {
     Card(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).then(if (tag != null) Modifier.testTag(tag) else Modifier),
+        modifier = Modifier.fillMaxWidth().testTag(tag),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        CardBody(title, { Thumb(null, icon = icon) }) {
+        CardBody(layout, { Thumb(null, icon = icon) }) {
             Column {
                 Text(title, style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(WORDS_GAP))
                 Text(
                     body,
                     style = MaterialTheme.typography.bodyLarge,
@@ -416,44 +445,104 @@ private fun VideoCard(
     }
 }
 
+/** The words of one card under "Make a new video", for working out their one height. */
+private data class CardWords(
+    val title: String,
+    val body: String,
+    /** The card has an Edit button beside its words. */
+    val trailing: Boolean = false,
+    /** A warning sign leads the body line. */
+    val warn: Boolean = false,
+)
+
 /**
- * A card's picture and words: side by side when the card's [title] fits
- * beside the picture on one line, the picture above the words otherwise
- * (a narrow phone, large text), so a name never breaks into a column of
- * single words next to it.
+ * How the cards under "Make a new video" are laid out, all alike: the
+ * picture beside the words when every card's title fits beside it on one
+ * line, the picture above the words otherwise (a narrow phone, large text),
+ * so a name never breaks into a column of single words; and one [height],
+ * the tallest card's, for all of them.
  */
+private data class CardLayout(
+    val stacked: Boolean,
+    val height: Dp,
+)
+
+@Composable
+private fun rememberCardLayout(
+    cards: List<CardWords>,
+    cardWidth: Dp,
+): CardLayout {
+    val measurer = rememberTextMeasurer()
+    val title = MaterialTheme.typography.titleLarge
+    val body = MaterialTheme.typography.bodyLarge
+    val density = LocalDensity.current
+    return remember(cards, cardWidth, title, body, density) {
+        with(density) {
+            val inner = cardWidth - CARD_PADDING * 2
+            val thumbHeight = THUMB_WIDTH * 9f / 16f
+
+            fun Dp.px() = roundToPx().coerceAtLeast(1)
+            val stacked =
+                cards.any { c ->
+                    val titleWidth =
+                        measurer
+                            .measure(c.title, title)
+                            .size.width
+                            .toDp()
+                    THUMB_WIDTH + PICTURE_GAP + titleWidth + (if (c.trailing) EDIT_BUTTON else 0.dp) > inner
+                }
+            val height =
+                cards.maxOfOrNull { c ->
+                    val words = (if (stacked) inner else inner - THUMB_WIDTH - PICTURE_GAP) - (if (c.trailing) EDIT_BUTTON else 0.dp)
+                    val limit = Constraints(maxWidth = words.px())
+                    val titleHeight =
+                        measurer
+                            .measure(c.title, title, constraints = limit)
+                            .size.height
+                            .toDp()
+                    val bodyLimit = Constraints(maxWidth = (words - if (c.warn) WARNING_ICON + WARNING_GAP else 0.dp).px())
+                    val bodyHeight =
+                        measurer
+                            .measure(c.body, body, constraints = bodyLimit)
+                            .size.height
+                            .toDp()
+                    val wordsHeight = titleHeight + WORDS_GAP + maxOf(bodyHeight, WARNING_ICON)
+                    CARD_PADDING * 2 + if (stacked) thumbHeight + STACK_GAP + wordsHeight else maxOf(thumbHeight, wordsHeight)
+                } ?: 0.dp
+            CardLayout(stacked, height)
+        }
+    }
+}
+
+/** A card's picture and its words, as [layout] says; centred in the card's height. */
 @Composable
 private fun CardBody(
-    title: String,
+    layout: CardLayout,
     picture: @Composable () -> Unit,
-    trailing: Dp = 0.dp,
     words: @Composable () -> Unit,
 ) {
-    val measurer = rememberTextMeasurer()
-    val style = MaterialTheme.typography.titleLarge
-    val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(16.dp)) {
-        val titleDp =
-            with(density) {
-                measurer
-                    .measure(title, style)
-                    .size.width
-                    .toDp()
-            }
-        if (THUMB_WIDTH + 16.dp + titleDp + trailing <= maxWidth) {
+    Box(Modifier.fillMaxWidth().heightIn(min = layout.height).padding(CARD_PADDING), contentAlignment = Alignment.CenterStart) {
+        if (!layout.stacked) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 picture()
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(PICTURE_GAP))
                 words()
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(STACK_GAP)) {
                 picture()
                 words()
             }
         }
     }
 }
+
+private val CARD_PADDING = 16.dp
+private val PICTURE_GAP = 16.dp
+private val STACK_GAP = 16.dp
+private val WORDS_GAP = 4.dp
+private val WARNING_ICON = 24.dp
+private val WARNING_GAP = 8.dp
 
 private val THUMB_WIDTH = 112.dp
 
@@ -466,8 +555,8 @@ const val NEW_PRESET_TAG = "new_preset"
 /** Test tag of a preset card's Edit button. */
 fun presetEditTag(id: PresetId) = "preset_edit_${id.value}"
 
-/** The height of preset cards shown two or three to a row. */
-private val SIDE_BY_SIDE_CARD = 168.dp
+/** Test tag of the Start without a preset card. */
+const val BLANK_TAG = "start_blank"
 
 /** A 16:9 picture well: the preset's frame, or an icon. */
 @Composable

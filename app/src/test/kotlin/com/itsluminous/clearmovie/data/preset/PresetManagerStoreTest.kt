@@ -13,7 +13,6 @@ import com.itsluminous.clearmovie.data.media.MediaCopier
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CanvasShape
-import com.itsluminous.clearmovie.domain.model.CaptionStyle
 import com.itsluminous.clearmovie.domain.model.EndingKind
 import com.itsluminous.clearmovie.domain.model.LocalizedText
 import com.itsluminous.clearmovie.domain.model.NormRect
@@ -21,7 +20,6 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.ProjectId
-import com.itsluminous.clearmovie.domain.model.TextBackground
 import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.testing.FakeMediaProvider
 import com.itsluminous.clearmovie.testing.FakeOtherAppProvider
@@ -40,9 +38,10 @@ import java.io.File
 import javax.imageio.ImageIO
 
 /**
- * cm-preset-manager (Robolectric): making, editing, resetting and deleting
- * presets, what a deleted preset leaves for the videos made from it, and the
- * built-in preset's caption defaults reaching installs that did not edit it.
+ * cm-preset-manager (Robolectric): making, editing and deleting presets, and
+ * what a deleted preset leaves for the videos made from it. These run as an
+ * install made before cm-home-presets, which kept the Event frame
+ * ([builtIn]) as a preset of its own; PresetSeedTest covers new installs.
  */
 @RunWith(RobolectricTestRunner::class)
 class PresetManagerStoreTest {
@@ -81,6 +80,7 @@ class PresetManagerStoreTest {
                 randomToken = { "tok" + (++n).toString().padStart(5, '0') },
             )
         probe.frames = frames()
+        runBlocking { check(store.adoptShipped(builtIn)) }
     }
 
     @After
@@ -151,12 +151,11 @@ class PresetManagerStoreTest {
     ) = db.projects().upsert(ProjectEntity(video, null, id.value, 2, "{}", null, now, now))
 
     @Test
-    fun `a new preset has its name and parts, the built-in caption style, no files, and comes after the built-in one`() =
+    fun `a new preset has its name and parts, the shipped caption style, no files, and comes after the kept Event frame`() =
         runBlocking<Unit> {
             val id = store.create("  Spasht Dhaara  ", PresetParts(intro = false, frame = true, ending = EndingKind.VIDEO))!!
             assertThat(id.value).startsWith(PresetStore.OWN_PREFIX)
             val made = store.definition(id)!!
-            assertThat(made.builtIn).isFalse()
             assertThat(made.preset.displayName).isEqualTo(LocalizedText.same("Spasht Dhaara"))
             assertThat(made.preset.displayNameRes).isNull()
             assertThat(made.preset.intro).isNull()
@@ -247,23 +246,24 @@ class PresetManagerStoreTest {
         }
 
     @Test
-    fun `an edited built-in preset is an override that reset removes, its files staying`() =
+    fun `the kept Event frame is edited and deleted like any other preset, its videos keeping it`() =
         runBlocking<Unit> {
             bindAll(builtIn)
-            val shipped = store.definition(builtIn)!!
-            assertThat(shipped.edited).isFalse()
-            val edited = shipped.preset.copy(displayName = LocalizedText.same("Spasht Dhaara"))
+            val kept = store.definition(builtIn)!!
+            assertThat(kept.source).isEqualTo(PresetDefinition.Source.USER)
+            val edited = kept.preset.copy(displayName = LocalizedText.same("Spasht Dhaara"))
             assertThat(store.save(edited)).isInstanceOf(PresetSaveResult.Saved::class.java)
-            val current = store.definition(builtIn)!!
-            assertThat(current.edited).isTrue()
-            assertThat(current.builtIn).isTrue()
-            assertThat(current.preset).isEqualTo(edited)
-            assertThat(store.delete(builtIn)).isEqualTo(PresetDeleteResult.BuiltIn)
-            assertThat(store.reset(builtIn)).isTrue()
-            assertThat(store.definition(builtIn)!!.preset).isEqualTo(shipped.preset)
-            assertThat(store.definition(builtIn)!!.edited).isFalse()
+            assertThat(store.definition(builtIn)!!.preset).isEqualTo(edited)
+            videoFrom(builtIn)
+            assertThat(store.delete(builtIn)).isEqualTo(PresetDeleteResult.Retired(1))
+            assertThat(store.definitions()).isEmpty()
+            // The video still has the edited preset and its files.
+            assertThat(store.definition(builtIn)!!.preset).isEqualTo(edited)
             assertThat(store.status(builtIn).isReady).isTrue()
-            assertThat(store.reset(builtIn)).isFalse()
+            db.projects().delete("v1")
+            assertThat(store.sweepRetired()).isEqualTo(1)
+            assertThat(store.definition(builtIn)).isNull()
+            assertThat(files.presetDir(builtIn).exists()).isFalse()
         }
 
     @Test
@@ -316,7 +316,7 @@ class PresetManagerStoreTest {
         }
 
     @Test
-    fun `the built-in preset puts a plain caption on the frame's blue strip, with its words`() =
+    fun `the shipped preset puts a plain caption on the frame's blue strip, with its words`() =
         runBlocking<Unit> {
             val caption = store.definition(builtIn)!!.preset
             // Measured on old/Frame-White.mp4 (1920 x 1080): the blue strip is rows 862-993, columns 272-1901.
@@ -325,27 +325,6 @@ class PresetManagerStoreTest {
             assertThat(caption.caption.outline).isNull()
             assertThat(caption.caption.color).isEqualTo(ArgbColor.WHITE)
             assertThat(caption.defaultText).isEqualTo(LocalizedText(hi = "सुंदर प्रकृति"))
-        }
-
-    @Test
-    fun `an install with its own preset file for the built-in preset keeps it, one without gets the new defaults`() =
-        runBlocking<Unit> {
-            // Before: a user preset.json (the old caption, in a box) stored as an override.
-            val old =
-                store
-                    .definition(
-                        builtIn,
-                    )!!
-                    .preset
-                    .copy(caption = CaptionStyle.STANDARD.copy(background = TextBackground(ArgbColor(0x99000000L), 12)))
-            assertThat(store.save(old)).isInstanceOf(PresetSaveResult.Saved::class.java)
-            assertThat(store.definition(builtIn)!!.preset.caption).isEqualTo(old.caption)
-            store.reset(builtIn)
-            assertThat(
-                store
-                    .definition(builtIn)!!
-                    .preset.caption.background,
-            ).isNull()
         }
 
     @Test
@@ -436,7 +415,6 @@ class PresetManagerStoreTest {
                     .preset.frame!!
                     .contentRect,
             ).isEqualTo(copied)
-            assertThat(store.definition(builtIn)!!.edited).isFalse()
         }
 
     @Test

@@ -28,6 +28,8 @@
     <string name="settings_section_about">About</string>
     <!-- %1$s is the version number, for example 0.1.0. -->
     <string name="settings_version">Version %1$s</string>
+    <string name="settings_version_link">Open ClearMovie on GitHub</string>
+    <string name="settings_no_browser">No app on this phone can open web pages</string>
 
     <!-- The bundled generic preset's name. assets/presets/event-frame/preset.json
          refers to it by name (displayNameRes), which Lint can't see. -->
@@ -211,7 +213,6 @@
     <string name="editor_preset_repair_body">A preset file was moved or deleted, so that part is missing from the preview.</string>
     <string name="editor_fix_preset">Fix it</string>
     <string name="editor_not_saved">Your latest changes could not be saved because the phone is full. Free up some space; nothing is lost while ClearMovie is open.</string>
-    <string name="settings_section_presets">Presets</string>
     <string name="settings_section_storage">Storage</string>
     <!-- %1$s is a size such as 180 MB. -->
     <string name="settings_storage_presets">Preset files: %1$s</string>
@@ -624,10 +625,6 @@
     <string name="preset_delete">Delete preset</string>
     <string name="preset_delete_title">Delete this preset?</string>
     <string name="preset_delete_body">%1$s will no longer be offered. Videos you already made with it keep working.</string>
-    <string name="preset_reset">Reset preset</string>
-    <string name="preset_reset_title">Reset this preset?</string>
-    <string name="preset_reset_body">Its name, words and caption style go back to how ClearMovie ships them. Its files stay.</string>
-    <string name="preset_reset_done">The preset is back to how ClearMovie ships it.</string>
     <string name="preset_not_saved">The preset couldn\'t be saved. Free up some space on the phone and try again.</string>
     <string name="preset_discard_title">Discard your changes?</string>
     <string name="preset_discard_body">Your changes to this preset haven\'t been saved.</string>

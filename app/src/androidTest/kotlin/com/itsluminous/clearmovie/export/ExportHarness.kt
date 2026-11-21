@@ -125,6 +125,8 @@ class ExportHarness {
         frame: Uri = insert("fixtures/frame.mp4", "video/mp4"),
         ending: Uri = insert("fixtures/speech.m4a", "audio/mp4"),
     ) = runBlocking {
+        // A new install has no presets (cm-home-presets): keep the shipped one, as an older install does.
+        assertThat(app.presetStore.adoptShipped(presetId)).isTrue()
         listOf(PresetSlot.INTRO to intro, PresetSlot.FRAME to frame, PresetSlot.ENDING to ending).forEach { (slot, uri) ->
             assertThat(app.presetStore.bindSlot(presetId, slot, uri)).isInstanceOf(SlotBindResult.Bound::class.java)
         }

@@ -27,6 +27,9 @@ class AppFiles(
     val presetsRoot: File = File(filesDir, "presets")
     val thumbsRoot: File = File(cacheDir, "thumbs")
 
+    /** There once this install has decided which presets an older version shipped it keeps (cm-home-presets). */
+    val presetSeedMarker: File = File(filesDir, "presets-seeded")
+
     fun projectDir(id: ProjectId): File = inside(projectsRoot, File(projectsRoot, id.value))
 
     fun projectMediaDir(id: ProjectId): File = inside(projectsRoot, File(projectDir(id), MEDIA))

@@ -63,7 +63,6 @@ class PresetEditScreenTest {
     private class Calls {
         var saved: Pair<String, String>? = null
         var deleted = 0
-        var reset = 0
         var files = 0
         var back = 0
         var style: CaptionStyle? = null
@@ -97,7 +96,6 @@ class PresetEditScreenTest {
                         onFiles = { calls.files++ },
                         onSave = { n, w -> calls.saved = n to w },
                         onDelete = { calls.deleted++ },
-                        onReset = { calls.reset++ },
                         onBack = { calls.back++ },
                         onDismissMessage = {},
                     )
@@ -109,8 +107,7 @@ class PresetEditScreenTest {
 
     @Test
     fun `a preset the user made can be deleted after a confirm that says its videos keep working`() {
-        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false))
-        compose.onNodeWithTag(PRESET_RESET_TAG).assertDoesNotExist()
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
         compose.onNodeWithContentDescription(s(R.string.preset_delete)).performClick()
         compose.onNodeWithText(s(R.string.preset_delete_title)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.preset_delete_body, "Spasht Dhaara")).assertIsDisplayed()
@@ -123,32 +120,16 @@ class PresetEditScreenTest {
     }
 
     @Test
-    fun `the built-in preset is never deleted, and offers Reset only once it was changed`() {
-        show(PresetDefinition(Fixtures.preset, PresetDefinition.Source.BUNDLED))
-        compose.onNodeWithTag(PRESET_DELETE_TAG).assertDoesNotExist()
-        compose.onNodeWithTag(PRESET_RESET_TAG).assertDoesNotExist()
-    }
-
-    @Test
-    fun `an edited built-in preset resets after a confirm`() {
-        val calls =
-            show(
-                PresetDefinition(
-                    Fixtures.preset.copy(displayName = LocalizedText.same("Mine")),
-                    PresetDefinition.Source.USER,
-                    builtIn = true,
-                ),
-            )
-        compose.onNodeWithTag(PRESET_DELETE_TAG).assertDoesNotExist()
-        compose.onNodeWithTag(PRESET_RESET_TAG).performClick()
-        compose.onNodeWithText(s(R.string.preset_reset_body)).assertIsDisplayed()
+    fun `the preset an older version shipped is deleted like any other`() {
+        val calls = show(PresetDefinition(Fixtures.preset, PresetDefinition.Source.USER))
+        compose.onNodeWithTag(PRESET_DELETE_TAG).performClick()
         compose.onNodeWithTag(PRESET_CONFIRM_TAG).performClick()
-        assertThat(calls.reset).isEqualTo(1)
+        assertThat(calls.deleted).isEqualTo(1)
     }
 
     @Test
     fun `renaming and saving hands the shown name over, and an empty name cannot be saved`() {
-        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false))
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
         compose.onNodeWithTag(PRESET_NAME_TAG).performTextReplacement("   ")
         compose.onNodeWithTag(PRESET_SAVE_TAG).performScrollTo().assertIsNotEnabled()
         compose.onNodeWithTag(PRESET_NAME_TAG).performScrollTo().performTextReplacement("New name")
@@ -162,7 +143,7 @@ class PresetEditScreenTest {
 
     @Test
     fun `leaving with unsaved changes asks first`() {
-        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false))
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
         compose.onNodeWithContentDescription(s(R.string.action_back)).performClick()
         assertThat(calls.back).isEqualTo(1)
         compose.onNodeWithTag(PRESET_NAME_TAG).performTextReplacement("Changed")
@@ -177,7 +158,7 @@ class PresetEditScreenTest {
 
     @Test
     fun `the caption style editor changes the words and style live, and Cancel puts them back`() {
-        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false))
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
         compose.onNodeWithTag(PRESET_CAPTION_CHANGE_TAG).performScrollTo().performClick()
         compose.onNodeWithTag(PRESET_WORDS_TAG).performTextReplacement("सुंदर प्रकृति")
         assertThat(calls.words).isEqualTo("सुंदर प्रकृति")
@@ -201,7 +182,7 @@ class PresetEditScreenTest {
         size: ScreenSize,
         scale: Float,
     ) {
-        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false), size, scale)
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER), size, scale)
         compose.onNodeWithTag(PRESET_FILES_TAG).performScrollTo().performClick()
         assertThat(calls.files).isEqualTo(1)
         // In two panes the picture stays put on the left; on a phone it scrolls with the rest.
@@ -216,7 +197,7 @@ class PresetEditScreenTest {
         restore.setContent {
             ClearMovieTheme(dynamicColor = false) {
                 PresetEditScreen(
-                    ui = PresetEditUi(definition = PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false), status = ready),
+                    ui = PresetEditUi(definition = PresetDefinition(own, PresetDefinition.Source.USER), status = ready),
                     onName = {},
                     onStyle = {},
                     onWords = {},
@@ -224,7 +205,6 @@ class PresetEditScreenTest {
                     onFiles = {},
                     onSave = { _, _ -> },
                     onDelete = {},
-                    onReset = {},
                     onBack = {},
                     onDismissMessage = {},
                 )
@@ -270,7 +250,7 @@ class PresetEditScreenTest {
 
     @Test
     fun `only a draft that differs from what is shown is a change`() {
-        val ui = PresetEditUi(definition = PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false))
+        val ui = PresetEditUi(definition = PresetDefinition(own, PresetDefinition.Source.USER))
         assertThat(PresetEditViewModel.changedPreset(own, ui.copy(draftName = " Spasht Dhaara "), "Spasht Dhaara", "")).isNull()
         assertThat(PresetEditViewModel.changedPreset(own, ui.copy(draftStyle = own.caption), "Spasht Dhaara", "")).isNull()
         val renamed = PresetEditViewModel.changedPreset(own, ui.copy(draftName = "Other"), "Spasht Dhaara", "")!!
@@ -323,8 +303,8 @@ class PresetEditScreenTest {
     }
 
     @Test
-    fun `a preset the user made can change its shape until a video uses it, and the built-in one shows none`() {
-        val mine = PresetDefinition(own, PresetDefinition.Source.USER, builtIn = false)
+    fun `a preset the user made can change its shape until a video uses it, and the kept Event frame shows none`() {
+        val mine = PresetDefinition(own, PresetDefinition.Source.USER)
         var ui by mutableStateOf(PresetEditUi(definition = mine, status = ready))
         compose.setContent {
             ClearMovieTheme(dynamicColor = false) {
@@ -337,7 +317,6 @@ class PresetEditScreenTest {
                     onFiles = {},
                     onSave = { _, _ -> },
                     onDelete = {},
-                    onReset = {},
                     onBack = {},
                     onDismissMessage = {},
                     onShape = { ui = ui.copy(draftShape = it) },
@@ -359,8 +338,8 @@ class PresetEditScreenTest {
             .onNodeWithText(context.getString(R.string.preset_shape_fixed, s(R.string.shape_landscape)))
             .performScrollTo()
             .assertIsDisplayed()
-        // The built-in preset is made for its frame's shape: no choice is shown.
-        ui = PresetEditUi(definition = PresetDefinition(Fixtures.preset, PresetDefinition.Source.BUNDLED, builtIn = true), status = ready)
+        // The kept Event frame is made for its frame's shape (its window is the one its definition names): no choice is shown.
+        ui = PresetEditUi(definition = PresetDefinition(Fixtures.preset, PresetDefinition.Source.USER), status = ready)
         compose.waitForIdle()
         compose.onNodeWithTag(PRESET_SHAPE_TAG).assertDoesNotExist()
     }

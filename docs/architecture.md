@@ -132,7 +132,8 @@ Android types, so all of it is tested on the JVM.
   untrusted; `ProjectFactory.fromPreset` builds the default rows (Text, Frame,
   MAIN, Music, Closing message). The only preset in the repo is the generic
   `assets/presets/event-frame/preset.json`, named through the
-  `preset_event_frame_name` string.
+  `preset_event_frame_name` string. It is not offered on its own: it is the
+  template a new preset starts from (see Presets under Storage).
 - **Storage format.** `ProjectCodec` writes canonical JSON with a
   `schemaVersion` and every value (defaults included, so a later change to a
   default never changes a saved project). On reading it works out stale
@@ -327,7 +328,9 @@ the same.
 
 ## Screens and navigation
 
-Home (preset pick, Start without a preset, My videos) leads to preset setup or
+Home (the presets, Start without a preset, New preset, My videos; with no
+presets yet, New preset first, then Start without a preset; every card one
+height) leads to preset setup or
 repair when a file is not ready (a missing file never crashes: it opens the
 repair heading), then preset review (Play, Replace or Skip for this video for
 the intro, frame and ending; the choices rebuild the new draft from the
@@ -460,10 +463,17 @@ project with no question; "We brought back your last video" shows only when
 it has edits newer than that time. A session naming an unreadable project
 starts at Home.
 
-**Presets.** `PresetStore` offers the bundled definitions plus the user's own
-`preset.json`, which may only adjust a preset the app ships; it is
-size-limited, strict UTF-8, parsed by `PresetParser` and re-checked every time
-it is read. Each slot's file (intro, frame, ending) is copied into
+**Presets.** `PresetStore` offers only stored definitions: the presets the
+user made, and on an install made before cm-home-presets the Event frame,
+which `seedOnce` stores once (the app was updated rather than newly
+installed, or the preset has files or videos) as an ordinary preset the user
+can edit or delete; `filesDir/presets-seeded` records that this was decided,
+so a deleted preset never comes back. A new install starts with none. A video
+made from a preset the app ships, on an install with no copy of it, reads
+the app's own definition, which is never put back on the list. The user's
+own `preset.json` may only replace a preset with the id of one the app
+ships; it is size-limited, strict UTF-8, parsed by `PresetParser` and
+re-checked every time it is read. Each slot's file (intro, frame, ending) is copied into
 `filesDir/presets/<id>/` with its SHA-256, size, length and loudness
 (`LoudnessMeter`, BS.1770). Launch checks are cheap (the file exists with its
 size); before an export a file modified after it was bound is hashed again.
