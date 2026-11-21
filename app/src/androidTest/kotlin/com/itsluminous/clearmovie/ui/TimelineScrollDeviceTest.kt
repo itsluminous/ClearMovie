@@ -182,7 +182,7 @@ class TimelineScrollDeviceTest {
 
     private fun window(): DpRect = compose.onRoot().getUnclippedBoundsInRoot()
 
-    private fun bounds(tag: String): DpRect = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot()
+    private fun bounds(tag: String): DpRect = compose.onNodeWithTag(tag, useUnmergedTree = true).getUnclippedBoundsInRoot()
 
     private fun exists(tag: String): Boolean = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
 
@@ -195,7 +195,10 @@ class TimelineScrollDeviceTest {
         }
     }
 
-    /** [block], tried again while Compose is busy (the preview's players post frames on a software-GPU emulator). */
+    /**
+     * [block], tried again while Compose is busy (the preview's players post
+     * frames on a software-GPU emulator) or a node it needs is not there yet.
+     */
     private fun <T> read(block: () -> T): T {
         val end = System.currentTimeMillis() + TIMEOUT_MS
         while (true) {
@@ -204,6 +207,9 @@ class TimelineScrollDeviceTest {
             } catch (e: ComposeNotIdleException) {
                 if (System.currentTimeMillis() > end) throw e
             } catch (e: ComposeTimeoutException) {
+                if (System.currentTimeMillis() > end) throw e
+            } catch (e: AssertionError) {
+                // A node not there yet: the editor still opening, or laid out again after the turn.
                 if (System.currentTimeMillis() > end) throw e
             }
             Thread.sleep(200)
