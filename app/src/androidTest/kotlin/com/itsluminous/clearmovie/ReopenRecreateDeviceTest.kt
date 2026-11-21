@@ -43,6 +43,7 @@ import com.itsluminous.clearmovie.ui.editor.EDITOR_EXPORT_TAG
 import com.itsluminous.clearmovie.ui.editor.EDITOR_MENU_SETTINGS_TAG
 import com.itsluminous.clearmovie.ui.editor.EDITOR_MORE_TAG
 import com.itsluminous.clearmovie.ui.editor.EDITOR_TITLE_TAG
+import com.itsluminous.clearmovie.ui.editor.PLAY_TAG
 import com.itsluminous.clearmovie.ui.editor.PREVIEW_TAG
 import com.itsluminous.clearmovie.ui.editor.RENAME_CONFIRM_TAG
 import com.itsluminous.clearmovie.ui.editor.RENAME_FIELD_TAG
@@ -159,7 +160,8 @@ class ReopenRecreateDeviceTest {
         waitFor(hasTestTag(PREVIEW_TAG))
         val unloaded = h.context.getString(R.string.editor_time, "0:00", "0:00")
         compose.waitUntil(LAUNCH_TIMEOUT_MS) { notYetIfBusy { timeLabel() != unloaded } }
-        waitFor(hasText(s(R.string.action_play)).and(isEnabled()).or(hasText(s(R.string.action_pause)).and(isEnabled())), LAUNCH_TIMEOUT_MS)
+        // By its tag: Play may show only its icon on a narrow window or at large text.
+        waitFor(hasTestTag(PLAY_TAG).and(isEnabled()), LAUNCH_TIMEOUT_MS)
     }
 
     /** The editor is back on screen (not that its preview has loaded). */
@@ -194,7 +196,7 @@ class ReopenRecreateDeviceTest {
      */
     private fun previewPlays() {
         val atStart = progress()
-        compose.onNodeWithText(s(R.string.action_play)).performClick()
+        compose.onNodeWithTag(PLAY_TAG).performClick()
         // While it plays Compose redraws the playhead every frame and may not go idle, and a
         // Compose read then waits out Espresso's idle timeout (seen: about 35 s per read), so
         // two reads could outlast the wait. With a 2 s timeout a busy read fails fast and is

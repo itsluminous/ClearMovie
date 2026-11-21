@@ -46,6 +46,7 @@ import com.itsluminous.clearmovie.ui.editor.BAR_TAG
 import com.itsluminous.clearmovie.ui.editor.EDITOR_TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.PANEL_DONE_TAG
 import com.itsluminous.clearmovie.ui.editor.PANEL_TAG
+import com.itsluminous.clearmovie.ui.editor.PLAY_TAG
 import com.itsluminous.clearmovie.ui.editor.TEXT_FIELD_TAG
 import com.itsluminous.clearmovie.ui.editor.ZOOM_IN_TAG
 import com.itsluminous.clearmovie.ui.editor.barActionTag
@@ -199,7 +200,7 @@ class FlowDeviceTest {
             intended(not(isInternal()), Intents.times(1))
 
             // The preview plays: the time label moves on from 0:00.
-            compose.onNodeWithText(s(R.string.action_play)).performClick()
+            compose.onNodeWithTag(PLAY_TAG).performClick()
             val atStart = context.getString(R.string.editor_time, "0:00", "")
             val of = context.getString(R.string.editor_time, "", "")
             compose.waitUntil(TIMEOUT_MS) { texts(of).any { !it.startsWith(atStart) } }

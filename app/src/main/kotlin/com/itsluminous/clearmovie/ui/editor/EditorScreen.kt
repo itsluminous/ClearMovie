@@ -86,10 +86,14 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
@@ -1175,11 +1179,12 @@ private fun HistoryButton(
 /**
  * The playback strip under the preview: Play, the time, and Export (the
  * upload arrow, which opens the export sheet) at the far end, spread across
- * one row of 48 dp buttons that never grows. Export's word shrinks to fit,
- * then takes two lines at the smallest size when two fit the button. When
- * the row is still too short, Play keeps only its icon first (its triangle
- * needs no word), then Export; each is still named for TalkBack. Zooming is
- * in the bar below (with Fit all) and by pinching.
+ * one row of 48 dp buttons that never grows. When the words do not fit,
+ * Play's and Export's shrink together, half a point at a time, so they stay
+ * one size, down to the smallest label size; then Export's may take two
+ * lines there, when two fit the button. Only then does Play keep just its
+ * icon (its triangle needs no word), and last Export; each is still named
+ * for TalkBack. Zooming is in the bar below (with Fit all) and by pinching.
  */
 @Composable
 private fun Controls(
@@ -1202,68 +1207,122 @@ private fun Controls(
     val density = LocalDensity.current
     // Play keeps one width whether it says Play or Pause, so the time never shifts when it is pressed.
     val playWords = listOf(stringResource(R.string.action_play), stringResource(R.string.action_pause))
-    val playTextDp = with(density) { playWords.maxOf { measurer.measure(it, labels).size.width }.toDp() }
-    // The narrowest Export's word can be: at the smallest label size, on two lines (its widest word) when
-    // two lines fit the 48 dp button at this text size, else on one line.
-    val exportMinTextDp =
-        with(density) {
-            val smallest = labels.copy(fontSize = MIN_LABEL_FONT_SIZE, letterSpacing = 0.sp)
-            val lineHeight = if (labels.lineHeight.isSpecified) labels.lineHeight else labels.fontSize
-            val twoLinesFit = (lineHeight * MAX_LABEL_LINES).toDp() <= TOUCH
-            val parts = if (twoLinesFit) exportLabel.split(' ').filter { it.isNotEmpty() } else listOf(exportLabel)
-            parts.maxOfOrNull { measurer.measure(it, smallest).size.width }?.toDp() ?: 0.dp
-        }
+    val sizes = remember(playWords, exportLabel, labels, density) { stripLabelSizes(measurer, density, labels, playWords, exportLabel) }
     // The time is measured at its widest ("total of total"), so the choice does not flip as it plays.
+    val widestTime = stringResource(R.string.editor_time, total, total)
     val timeDp =
-        with(density) {
-            measurer
-                .measure(stringResource(R.string.editor_time, total, total), timeStyle)
-                .size.width
-                .toDp()
+        remember(widestTime, timeStyle, density) {
+            with(density) {
+                measurer
+                    .measure(widestTime, timeStyle)
+                    .size.width
+                    .toDp()
+            }
         }
-    val playMinWidth = 12.dp + ICON + 8.dp + playTextDp + 16.dp
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        // The strip's own padding (8 + 8) and the time with its padding (8 + 8).
-        val fixed = 16.dp + 16.dp + timeDp
-        val exportWorded = EXPORT_CHROME + exportMinTextDp
-        // Both words when they fit. Else Play gives up its word first: its triangle is clear without one, an
-        // upload arrow is not. Only when Export's word does not fit even then does Export keep just its icon.
-        val playIconOnly = fixed + playMinWidth + exportWorded > maxWidth
-        val exportIconOnly = fixed + TOUCH + exportWorded > maxWidth
-        // The room Export's word has: what Play and the time leave, less Export's icon and padding.
-        val exportTextMax = (maxWidth - fixed - (if (playIconOnly) TOUCH else playMinWidth) - EXPORT_CHROME).coerceAtLeast(0.dp)
+        // What Play and Export share: the strip less its own padding (8 + 8) and the time with its padding (8 + 8).
+        val room = maxWidth - 16.dp - 16.dp - timeDp
+        val fit = fitStrip(sizes, room)
         TransportRow(
-            playIconOnly,
-            exportIconOnly,
+            fit,
             enabled,
             actions,
             playLabel,
             playIcon,
-            playMinWidth,
             timeLabel,
             seekLabel,
             playhead,
             duration,
             exportLabel,
-            exportTextMax,
+            labels.copy(fontSize = fit.size),
+            (room - (if (fit.playWord) fit.playWidth else TOUCH) - EXPORT_CHROME).coerceAtLeast(0.dp),
         )
     }
 }
 
+/** How wide Play's word (the wider of Play and Pause) and Export's are at one label size. */
+private class StripLabelSize(
+    val size: TextUnit,
+    val playText: Dp,
+    val exportText: Dp,
+)
+
+/**
+ * The strip's label widths at every size from the style's own down to the
+ * smallest, half a point apart, and Export's narrowest on two lines at the
+ * smallest (its widest word), or null when two lines do not fit the 48 dp
+ * button at this text size. Each width has 1 dp in hand for rounding.
+ */
+private class StripLabelSizes(
+    val steps: List<StripLabelSize>,
+    val exportTwoLines: Dp?,
+)
+
+private fun stripLabelSizes(
+    measurer: TextMeasurer,
+    density: Density,
+    labels: TextStyle,
+    playWords: List<String>,
+    exportLabel: String,
+): StripLabelSizes =
+    with(density) {
+        fun width(
+            text: String,
+            size: Float,
+        ) = measurer
+            .measure(text, labels.copy(fontSize = size.sp, letterSpacing = 0.sp))
+            .size.width
+            .toDp() + 1.dp
+        val full = if (labels.fontSize.isSpecified) labels.fontSize.value else MIN_LABEL_FONT_SIZE.value
+        val min = minOf(MIN_LABEL_FONT_SIZE.value, full)
+        val steps =
+            generateSequence(full) { (it - LABEL_STEP).takeIf { s -> s >= min - 0.001f } }
+                .map { s -> StripLabelSize(s.sp, playWords.maxOf { width(it, s) }, width(exportLabel, s)) }
+                .toList()
+        val lineHeight = if (labels.lineHeight.isSpecified) labels.lineHeight else labels.fontSize
+        val words = exportLabel.split(' ').filter { it.isNotEmpty() }
+        val twoLines = if (words.size > 1 && (lineHeight * MAX_LABEL_LINES).toDp() <= TOUCH) words.maxOf { width(it, min) } else null
+        StripLabelSizes(steps, twoLines)
+    }
+
+/** What the strip shows: which words, at what size, and Play's width with its word. */
+private class StripFit(
+    val playWord: Boolean,
+    val exportWord: Boolean,
+    val size: TextUnit,
+    val playWidth: Dp,
+)
+
+/** The strip for [room] (the width Play and Export share): see [Controls]. */
+private fun fitStrip(
+    sizes: StripLabelSizes,
+    room: Dp,
+): StripFit {
+    fun play(s: StripLabelSize) = PLAY_CHROME + s.playText
+
+    fun export(text: Dp) = EXPORT_CHROME + text
+    val smallest = sizes.steps.last()
+    sizes.steps.firstOrNull { play(it) + export(it.exportText) <= room }?.let { return StripFit(true, true, it.size, play(it)) }
+    val twoLines = sizes.exportTwoLines
+    if (twoLines != null && play(smallest) + export(twoLines) <= room) return StripFit(true, true, smallest.size, play(smallest))
+    sizes.steps.firstOrNull { TOUCH + export(it.exportText) <= room }?.let { return StripFit(false, true, it.size, TOUCH) }
+    if (twoLines != null && TOUCH + export(twoLines) <= room) return StripFit(false, true, smallest.size, TOUCH)
+    return StripFit(false, false, smallest.size, TOUCH)
+}
+
 @Composable
 private fun TransportRow(
-    playIconOnly: Boolean,
-    exportIconOnly: Boolean,
+    fit: StripFit,
     enabled: Boolean,
     actions: EditorActions,
     playLabel: String,
     playIcon: Int,
-    playMinWidth: Dp,
     timeLabel: String,
     seekLabel: String,
     playhead: PlayheadUi,
     duration: Long,
     exportLabel: String,
+    labelStyle: TextStyle,
     exportTextMax: Dp,
 ) {
     Row(
@@ -1275,7 +1334,7 @@ private fun TransportRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (playIconOnly) {
+        if (!fit.playWord) {
             FilledTonalIconButton(onClick = actions::togglePlay, enabled = enabled, modifier = Modifier.size(TOUCH).testTag(PLAY_TAG)) {
                 Icon(painterResource(playIcon), contentDescription = playLabel, modifier = Modifier.size(ICON))
             }
@@ -1284,11 +1343,11 @@ private fun TransportRow(
                 onClick = actions::togglePlay,
                 enabled = enabled,
                 contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
-                modifier = Modifier.height(TOUCH).widthIn(min = playMinWidth).testTag(PLAY_TAG),
+                modifier = Modifier.height(TOUCH).widthIn(min = fit.playWidth).testTag(PLAY_TAG),
             ) {
                 Icon(painterResource(playIcon), contentDescription = null, modifier = Modifier.size(ICON))
                 Spacer(Modifier.width(8.dp))
-                AutoSizeLabel(playLabel, style = MaterialTheme.typography.labelLarge)
+                AutoSizeLabel(playLabel, style = labelStyle)
             }
         }
         // The time, which TalkBack can also move (the timeline's ruler is the gesture for it).
@@ -1309,7 +1368,7 @@ private fun TransportRow(
                 },
         )
         // Export is always on, as it was in the top bar: the export sheet says when there is nothing to save yet.
-        if (exportIconOnly) {
+        if (!fit.exportWord) {
             // In the primary colour, as when it has its word, so it looks the same at every text size.
             IconButton(
                 onClick = actions::export,
@@ -1326,7 +1385,7 @@ private fun TransportRow(
             ) {
                 Icon(painterResource(R.drawable.ic_export), contentDescription = null, modifier = Modifier.size(ICON))
                 Spacer(Modifier.width(8.dp))
-                AutoSizeLabel(exportLabel, Modifier.widthIn(max = exportTextMax), style = MaterialTheme.typography.labelLarge)
+                AutoSizeLabel(exportLabel, Modifier.widthIn(max = exportTextMax), style = labelStyle)
             }
         }
     }
@@ -1338,6 +1397,12 @@ private val TOUCH = 48.dp
 
 /** Export's padding, icon and the gap before its word (12 + 24 + 8 + 12). */
 private val EXPORT_CHROME = 56.dp
+
+/** Play's padding, icon and the gap before its word (12 + 24 + 8 + 16). */
+private val PLAY_CHROME = 60.dp
+
+/** The strip's labels shrink together in steps of half a point, as every label does. */
+private const val LABEL_STEP = 0.5f
 
 /** The most of an upright window an open panel takes. */
 private const val PANEL_SHARE = 0.3
