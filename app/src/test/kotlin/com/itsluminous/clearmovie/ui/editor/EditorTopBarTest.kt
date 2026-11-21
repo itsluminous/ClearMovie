@@ -256,8 +256,8 @@ class EditorTopBarTest {
 
     private companion object {
         const val SHORT = "Party"
-        const val LONG = "Asha's wedding 2026"
-        const val LONG_TOO = "Asha's wedding day"
+        const val LONG = "Asha's party"
+        const val LONG_TOO = "Ravi's party!"
         const val VERY_LONG = "Riya and Arjun's wedding sangeet night with the whole family at the Jaipur farmhouse, December 2026"
         const val HINDI = "रिया और अर्जुन की शादी का संगीत, पूरे परिवार के साथ जयपुर फार्महाउस में, दिसंबर 2026"
     }
