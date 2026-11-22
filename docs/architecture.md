@@ -107,7 +107,9 @@ Android types, so all of it is tested on the JVM.
   `moveClip`, `splitClip`, `setTransition` and `bringForward`. Each returns a
   normalised project (`normalized()`): transitions and animations refitted,
   and the preset frame, its music and the closing message re-spanned to follow
-  MAIN. Inserting on MAIN shifts later clips; on any other row the clip goes at
+  MAIN (once a new frame takes over part of the preset frame, `addFrameFrom`,
+  the preset frame keeps fixed times and the new frame follows the video's
+  end from the cut). Inserting on MAIN shifts later clips; on any other row the clip goes at
   the item's edge, or onto the highest free row of that type, or a new row,
   when it would overlap. The rows a preset manages (its frame, the frame's
   music, the closing message) hold only the clip the preset put there, which
