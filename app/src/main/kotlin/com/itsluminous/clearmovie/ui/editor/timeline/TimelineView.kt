@@ -698,7 +698,13 @@ fun TimelineView(
                                 // gives way to the "+" on each side of that item. Drawn here; its TalkBack stop and test tag
                                 // are in the row (EndPlusTarget).
                                 if (rowPlus(row, shownSlots, shownSpans, selectedIndex, selected, spokenMs, totalMs, photoMs) != null) {
-                                    val centre = if (row.type == RowType.MAIN) lift + metrics.mainDp / 2 else band.heightDp / 2
+                                    // On MAIN over a transition marker it sits on the row's top edge (y = lift in this box).
+                                    val centre =
+                                        when {
+                                            row.type != RowType.MAIN -> band.heightDp / 2
+                                            geometry.endPlusLifted() -> lift
+                                            else -> lift + metrics.mainDp / 2
+                                        }
                                     EndPlusCircle(spanWidth, centre)
                                 }
                                 if (row.type == RowType.MAIN && shownSlots.isNotEmpty()) {
@@ -1700,21 +1706,19 @@ private fun hit(
     val sx = xDp - metrics.headerDp - PAD_DP
     if (yDp >= metrics.rulerDp && abs(sx - TimelineGeometry.endPlusX(c.spanWidth)) <= TimelineGeometry.PLUS_HIT_DP / 2) {
         val inRows = yDp - metrics.rulerDp + rowScrollDp
+
+        // Where each row's "+" is centred: its middle, or MAIN's top edge over a transition marker.
+        fun centre(r: Int) = if (c.shown[r].type == RowType.MAIN && c.geometry.endPlusLifted()) c.bands[r].topDp else c.bands[r].centreDp
+
+        fun hasPlus(r: Int) =
+            rowPlus(c.shown[r], c.slots, c.spans, c.selectedIndex, c.selectedId, c.playheadMs, c.totalMs, c.photoMs) != null
         val near =
             c.bands.indices
-                .filter { abs(inRows - c.bands[it].centreDp) <= TimelineGeometry.PLUS_HIT_DP / 2 && c.bands[it].centreDp >= rowScrollDp }
                 .filter {
-                    rowPlus(
-                        c.shown[it],
-                        c.slots,
-                        c.spans,
-                        c.selectedIndex,
-                        c.selectedId,
-                        c.playheadMs,
-                        c.totalMs,
-                        c.photoMs,
-                    ) != null
-                }.minByOrNull { abs(inRows - c.bands[it].centreDp) }
+                    abs(
+                        inRows - centre(it),
+                    ) <= TimelineGeometry.PLUS_HIT_DP / 2 && c.bands[it].centreDp >= rowScrollDp && hasPlus(it)
+                }.minByOrNull { abs(inRows - centre(it)) }
         if (near != null) {
             val key = c.shown[near].key
             val under =
@@ -2227,8 +2231,15 @@ private fun EndPlusTarget(
     Box(
         modifier
             .size(TimelineGeometry.PLUS_HIT_DP.dp)
-            .testTag(if (plus is RowPlus.Empty || row.clips.isEmpty()) rowAddTag(row.key) else rowEndPlusTag(row.key))
-            .semantics {
+            .testTag(
+                if (plus is RowPlus.Empty ||
+                    (row.type != RowType.MAIN && row.clips.isEmpty())
+                ) {
+                    rowAddTag(row.key)
+                } else {
+                    rowEndPlusTag(row.key)
+                },
+            ).semantics {
                 contentDescription = description
                 role = Role.Button
                 onClick {

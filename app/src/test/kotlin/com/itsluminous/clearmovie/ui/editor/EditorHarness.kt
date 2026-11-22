@@ -20,6 +20,7 @@ import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Side
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.domain.model.addFrameFrom
 import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.domain.model.insertAt
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
@@ -233,6 +234,16 @@ class EditorHarness(
 
             override fun playPart(clipId: ClipId) {
                 calls += "playPart:${clipId.value}"
+            }
+
+            override fun pickFrameFrom(
+                trackId: TrackId,
+                atMs: Long,
+                takeOver: ClipId?,
+            ) {
+                calls += "pickFrame:${trackId.value}:$atMs:${takeOver?.value}"
+                val frame = timedAnswer.firstOrNull() as? com.itsluminous.clearmovie.domain.model.OverlayClip ?: return
+                edit { addFrameFrom(trackId, frame, atMs, takeOver) }
             }
 
             override fun pickForRow(

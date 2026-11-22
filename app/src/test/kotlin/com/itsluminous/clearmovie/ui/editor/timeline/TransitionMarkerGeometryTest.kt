@@ -57,14 +57,18 @@ class TransitionMarkerGeometryTest {
     }
 
     @Test
-    fun `a marker is drawn only while its bow tie is in the time span, never in the plus column`() {
-        // 10 ms per dp: the a->b marker is at 450 dp and the b->c one at 675 dp; its bow tie is 24 dp wide.
-        for (width in listOf(455.0, 461.0, 462.0, 470.0, 700.0, 2000.0)) {
+    fun `a marker under MAIN's floating plus is kept, and that plus moves up to the row's top edge`() {
+        // 10 ms per dp: the a->b marker is at 450 dp and the b->c one at 675 dp.
+        for (width in listOf(440.0, 470.0, 700.0, 2000.0)) {
             val g = TimelineGeometry(spans, ZoomState(10.0, 0.0, false), width, 28.0, 72.0, null, -1e4, selectedTrimmable = false)
-            for (m in g.markers()) assertThat(m.xDp + TimelineGeometry.MARKER_DP / 2).isAtMost(width)
-            // One left out is opened from the bar's Transition; the column takes the touch over the rest of a kept one.
-            assertThat(g.markers().size).isEqualTo(listOf(450.0, 675.0).count { it + TimelineGeometry.MARKER_DP / 2 <= width })
+            // Every marker is kept, as before the "+" moved: none is hidden by the row's own "+".
+            assertThat(g.markers().size).isEqualTo(2)
+            val under = g.markers().any { abs(it.xDp - TimelineGeometry.endPlusX(width)) < TimelineGeometry.PLUS_HIT_DP }
+            assertThat(g.endPlusLifted()).isEqualTo(under)
         }
+        // With an item selected MAIN's own "+" is hidden, so it never moves.
+        val sel = TimelineGeometry(spans, ZoomState(10.0, 0.0, false), 470.0, 28.0, 72.0, 1, -1e4, selectedTrimmable = true)
+        assertThat(sel.endPlusLifted()).isFalse()
     }
 
     @Test

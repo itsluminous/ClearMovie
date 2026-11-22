@@ -497,7 +497,7 @@ class TracksScreenTest {
     // ---------------------------------------------------------------- where the "+" buttons are
 
     @Test
-    fun `every row's own plus is in one column at its right end, and the selected item's row has its side plus instead`() {
+    fun `every row's own plus floats in one place at its right edge, and the selected item's row has its side plus instead`() {
         val withEmpty = project.addRow(TrackType.TEXT, id = TrackId("emptyText"))
         val h = show(withEmpty, ScreenSize.EXPANDED)
         val p = h.project
@@ -505,18 +505,19 @@ class TracksScreenTest {
         val mainKey = p.main.id.value
         val shown =
             h.project.tracks.filter { t -> compose.onAllNodesWithTag(rowTag(t.id.value)).fetchSemanticsNodes().isNotEmpty() }
-        // Rows the preset manages (its frame and music) never take what a "+" adds: they have none.
-        val withItems = shown.filter { it.clips.isNotEmpty() && it.presetRole == null && it.enabled }
-        assertThat(withItems.size).isAtLeast(3)
-        for (t in shown.filter { it.presetRole != null }) assertThat(plusTags()).doesNotContain(rowEndPlusTag(t.id.value))
-        // Nothing selected: one "+" per row, in its end column (cm-plus-position); none beside or between items.
+        val withItems = shown.filter { it.clips.isNotEmpty() || it.id.value == mainKey }
+        assertThat(withItems.size).isAtLeast(4)
+        // The preset's rows (its frame, its music) have one too.
+        assertThat(shown.count { it.presetRole != null }).isAtLeast(1)
+        // Nothing selected: one "+" per row, at its right edge (cm-plus-position); none beside or between items.
         var tags = plusTags()
         assertThat(
             tags.filter { it.startsWith("timeline_row_end_plus_") },
         ).containsExactlyElementsIn(withItems.map { rowEndPlusTag(it.id.value) })
         assertThat(tags.filter { it.startsWith("timeline_row_add_") }).containsExactly(rowAddTag("emptyText"))
         assertThat(tags.filter { it.startsWith("timeline_plus_") }).isEmpty()
-        // All in one column, flush with the timeline's right edge, 48 dp wide.
+        // All at one x, flush with the timeline's right edge, 48 dp: no space is set aside for them, the rows run to
+        // the edge under them.
         val t = timeline()
         val boxes = withItems.map { bounds(rowEndPlusTag(it.id.value)) } + bounds(rowAddTag("emptyText"))
         for (b in boxes) {
@@ -524,21 +525,21 @@ class TracksScreenTest {
             assertThat(b.right).isWithin(1f).of(t.right)
             assertThat((b.right - b.left) / density).isWithin(0.5f).of(48f)
         }
-        // Select "hello": its two sides, and its row's end "+" gives way; every other row keeps its own.
+        // Select "hello": its two sides, and its row's own "+" gives way; every other row keeps its own.
         compose.runOnIdle { h.state!!.selected = hello }
         compose.waitForIdle()
         tags = plusTags()
         assertThat(tags).containsAtLeast(timedPlusTag(hello, InsertSide.BEFORE), timedPlusTag(hello, InsertSide.AFTER))
         assertThat(tags).doesNotContain(rowEndPlusTag(p.rowOf("hello").value))
         assertThat(tags).contains(rowEndPlusTag(mainKey))
-        // The selection moves to MAIN: the side "+" go with it, and MAIN's end "+" gives way instead.
+        // The selection moves to MAIN: the side "+" go with it, and MAIN's own "+" gives way instead.
         compose.runOnIdle { h.state!!.selected = ClipId("v2") }
         compose.waitForIdle()
         tags = plusTags()
         assertThat(tags).containsNoneOf(timedPlusTag(hello, InsertSide.BEFORE), timedPlusTag(hello, InsertSide.AFTER))
         assertThat(tags).containsAtLeast(plusTag(2), plusTag(3), rowEndPlusTag(p.rowOf("hello").value))
         assertThat(tags).doesNotContain(rowEndPlusTag(mainKey))
-        // Cleared: back to the end column only.
+        // Cleared: back to the rows' own "+" only.
         compose.runOnIdle { h.state!!.selected = null }
         compose.waitForIdle()
         assertThat(plusTags()).containsNoneOf(plusTag(2), plusTag(3))

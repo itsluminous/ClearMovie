@@ -61,7 +61,7 @@ import org.junit.runner.RunWith
 /**
  * Every row's own "+" in the real app (cm-plus-position), on a video whose
  * rows end at different times: upright and sideways each row in view has its
- * "+" in one column at the timeline's right end, and a tap on a row's "+"
+ * "+" floating at one place at the timeline's right edge, and a tap on a row's "+"
  * with the cursor in a gap adds there, which one Undo takes away.
  */
 @UnstableApi
@@ -170,8 +170,8 @@ class RowEndPlusDeviceTest {
     }
 
     /**
-     * Each row in view that takes new items (not one the preset manages) has its "+" (or, empty, its Add here "+") at
-     * the same x, flush with the timeline's right end; a preset row has none.
+     * Each row in view has its "+" (or, empty, its Add here "+") at the same x, flush with the timeline's right end,
+     * the preset's rows included.
      */
     private fun oneColumn() {
         rowsShown()
@@ -195,10 +195,7 @@ class RowEndPlusDeviceTest {
                     val r = bounds(rowTag(key))
                     if (r.top < view.top || r.bottom > view.bottom) return@mapNotNull null
                     val tag = listOf(rowEndPlusTag(key), rowAddTag(key)).firstOrNull { exists(it) }
-                    if (t.presetRole != null) {
-                        assertWithMessage("a preset row's plus: $key").that(tag).isNull()
-                        return@mapNotNull null
-                    }
+                    // Every row has one, the preset's frame and music included.
                     assertWithMessage("the plus of row $key").that(tag).isNotNull()
                     key to bounds(tag!!)
                 }
@@ -209,7 +206,6 @@ class RowEndPlusDeviceTest {
                 "$k ${b.left}-${b.right}"
             }} timeline ${timeline.left}-${timeline.right}",
         )
-        // Sideways at least MAIN and one more row are whole in view (the preset's frame row has no "+").
         assertWithMessage("rows with a plus in view").that(boxes.size).isAtLeast(2)
         for ((key, b) in boxes) {
             assertWithMessage("left of $key").that(b.left.value).isWithin(1f).of(

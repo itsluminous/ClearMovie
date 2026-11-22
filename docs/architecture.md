@@ -474,18 +474,21 @@ the screen; the playhead is saved by `EditorViewModel`.
   its type icon and name. MAIN shows each item with a thumbnail strip
   (re-planned per zoom step by `ThumbPlan`, the old pictures drawn until the
   new ones load), its type and length, and trim handles on the selected item.
-  Every row has its own "+" in a 48 dp column at its right end, the same
-  place on every row; items stop at that column, so none is hidden under it.
-  It adds to the right of the cursor (`RowEndPlus`): at the cursor where the
-  new item fits, else right after the item under it (on rows other than MAIN,
+  Every row has its own "+" floating over its right edge, its 48 dp touch
+  area flush with the timeline's edge, the same place on every row; items
+  run on under it, and held or dragged there they are still the item. It
+  adds to the right of the cursor (`RowEndPlus`): at the cursor where the new
+  item fits, else right after the item under it (on rows other than MAIN,
   past any items that leave no room; on MAIN later items move later), never
   starting later than the item's length before the video's end. The time is
   fixed when the "+" is tapped (`OpenPanel.atMs`, shown in the chooser's
-  title), and opening a chooser pauses the preview. Rows the preset manages
-  and switched-off rows have no "+". On the row of the selected item it gives
-  way to that item's own "+" on each side, which `TimelineGeometry` and
-  `TimedRowGeometry` place clear of its trim handles, at most half into the
-  column.
+  title), and opening a chooser pauses the preview. A frame row's "+" adds a
+  new frame from the cursor: the frame under it ends there and the new one
+  takes over its time (`addFrameFrom`). A row that never takes what it would
+  add (the preset's music, a row switched off) adds at the cursor on another
+  row of its kind and says so. On the row of the selected item it gives way
+  to that item's own "+" on each side, which `TimelineGeometry` and
+  `TimedRowGeometry` place clear of its trim handles.
 - **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
   finger before a long-press is a pinch (zoom around the fingers, clamped
   between Fit all and 1 s per 240 dp, `TimelineZoom`), movement is a scroll
