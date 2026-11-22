@@ -1722,6 +1722,13 @@ private fun hit(
                     is Hit.OnRowSpace -> h.takeIf { it.key == key }
                     else -> null
                 }
+            // Over an item only the drawn circle is the "+" (as for a "+" on a narrow item), so a tap on the visible
+            // part of an item at the edge still selects it; over the row's empty space the "+" has its full 48 dp.
+            val onItem = under is Hit.OnClip || under is Hit.OnTimedClip
+            val offCircle =
+                abs(sx - TimelineGeometry.endPlusX(c.spanWidth)) > TimelineGeometry.PLUS_CORE_DP ||
+                    abs(inRows - centre(near)) > TimelineGeometry.PLUS_CORE_DP
+            if (onItem && offCircle) return under!!
             return Hit.OnRowEnd(key, under)
         }
     }
