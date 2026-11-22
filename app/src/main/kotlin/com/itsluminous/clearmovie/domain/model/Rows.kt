@@ -88,7 +88,11 @@ internal fun Project.candidateTracks(
  * only its managed clip, so the user's items always go on rows of their own
  * and switching the frame off never hides them.
  */
-internal fun Track.takes(clip: Clip): Boolean = presetRole == null || clip.isPresetManaged
+internal fun Track.takes(clip: Clip): Boolean =
+    presetRole == null || clip.isPresetManaged ||
+        // The preset's frame cut where a new frame takes over (cm-plus-position) keeps fixed times, and its row still
+        // holds it alone; nothing new is ever placed there.
+        (presetRole == PresetRole.FRAME && clip is OverlayClip && clips.size == 1 && clips.single().id == clip.id)
 
 /**
  * A clip the preset put in: one that plays a preset file or follows a span.

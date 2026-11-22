@@ -123,7 +123,7 @@ internal fun TimedInsertPanel(
             stringResource(if (side == InsertSide.BEFORE) R.string.insert_title_before else R.string.insert_title_after, where)
         } else if (open.frameFrom && open.atMs != null) {
             val at = durationText(open.atMs * 1000)
-            if (track.presetRole != null) {
+            if (track.presetRole != null || !track.enabled) {
                 stringResource(R.string.timeline_add_frame_other_row, at)
             } else {
                 stringResource(R.string.timeline_add_frame_from, at)

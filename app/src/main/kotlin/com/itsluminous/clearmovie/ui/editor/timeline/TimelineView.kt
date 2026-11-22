@@ -2264,7 +2264,7 @@ private fun rowPlusDescription(
         is RowPlus.Frame -> {
             // The preset's frame row keeps only its own frame: a new one goes on another frame row, and it says so.
             val at = durationText(plus.atMs * 1000)
-            if (row.fixed) {
+            if (row.fixed || !row.enabled) {
                 stringResource(
                     R.string.timeline_add_frame_other_row,
                     at,

@@ -46,6 +46,34 @@ class FrameEditsTest {
     }
 
     @Test
+    fun `a preset frame replaced for this video hands over too, and the edit is valid`() {
+        // The frame plays the user's own file (preset review's Replace): it is the preset's only by its anchor.
+        val replaced =
+            project.withTrackClips(frameRow.id, listOf(presetFrame.copy(media = MediaRef.Copied("mine.mp4"))))
+        val at = presetFrame.startMs + 3000
+        val p = replaced.addFrameFrom(frameRow.id, Fixtures.overlay("n", 0, 1500), at, presetFrame.id, ids)
+        assertThat(p.validate()).isEmpty()
+        assertThat(p.clip(presetFrame.id)!!.endMs).isEqualTo(at)
+        assertThat(p.clip(ClipId("n"))!!.startMs).isEqualTo(at)
+    }
+
+    @Test
+    fun `skipping the intro or a transition on every join after the cut moves neither side of the handover`() {
+        val at = presetFrame.startMs + 4000
+        val p = project.addFrameFrom(frameRow.id, Fixtures.overlay("n", 0, 1500), at, presetFrame.id, ids)
+        val intro =
+            p.main.clips
+                .first()
+                .id
+        for (later in listOf(p.applyTransitionToAll(Transition(TransitionKind.CROSSFADE, 500)), p.deleteClip(intro))) {
+            assertThat(later.clip(presetFrame.id)!!.endMs).isEqualTo(at)
+            assertThat(later.clip(ClipId("n"))!!.startMs).isEqualTo(at)
+            assertThat(later.clip(ClipId("n"))!!.endMs).isEqualTo(later.totalDurationMs())
+            assertThat(later.validate()).isEmpty()
+        }
+    }
+
+    @Test
     fun `near the frame's start it is cut a moment in, and near its end the new frame follows it`() {
         val nearStart = project.addFrameFrom(frameRow.id, Fixtures.overlay("n", 0), presetFrame.startMs + 100, presetFrame.id, ids)
         assertThat(nearStart.clip(presetFrame.id)!!.endMs).isEqualTo(presetFrame.startMs + ResizeRules.MIN_STILL_MS)

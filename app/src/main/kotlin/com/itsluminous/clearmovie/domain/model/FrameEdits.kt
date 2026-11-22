@@ -8,8 +8,9 @@ package com.itsluminous.clearmovie.domain.model
  * - With [takeOver], the frame under the cursor: that frame now ends at the
  *   cursor and the new frame takes over the rest of its time (it repeats to
  *   fill it). Taking over the preset's frame, the new frame also takes over
- *   its following the video's end, and the cut stays where it was put when
- *   photos are added or taken away later.
+ *   its following the video's end, and the cut stays at the time it was put
+ *   when photos are added or taken away later (the preset's frame then keeps
+ *   fixed times: skipping the intro afterwards no longer moves its start).
  *   Never less than [ResizeRules.MIN_STILL_MS] of either: a cursor that close
  *   to the old frame's start cuts it there; one that close to its end leaves
  *   it whole and starts the new frame right after it.
@@ -41,18 +42,18 @@ fun Project.addFrameFrom(
     if (old != null) {
         end = old.endMs
         val cutAt = maxOf(atMs, old.startMs + ResizeRules.MIN_STILL_MS)
-        val span = old.anchor?.let { anchorSpan(it) }
+        val oldAnchor = old.anchor as? SpanAnchor.Frame
         if (cutAt > old.endMs - ResizeRules.MIN_STILL_MS) {
             start = old.endMs
-        } else if (old.anchor != null && span != null) {
-            // The handover stays where it was put: the old frame keeps its times (no longer following the video's
-            // end), and the new frame starts there, at the same distance from the frame's span start, and ends as the
-            // old one did.
+        } else if (oldAnchor != null) {
+            // The handover stays at the time it was put, whatever is added or taken away later: the old frame keeps
+            // its times (it no longer follows the video), and the new frame starts there, held from the video's start,
+            // and ends as the old one did (with the video's end, or the ending's start).
             val kept = old.copy(durationMs = cutAt - old.startMs, anchor = null, detachedStartOffsetMs = null, detachedEndOffsetMs = null)
             p = p.withTrackClips(track.id, track.clips.map { if (it.id == old.id) kept else it })
             start = cutAt
-            anchor = old.anchor
-            detachedStart = (cutAt - span.first).takeUnless { it == 0L }
+            anchor = oldAnchor.copy(startAfterIntro = false)
+            detachedStart = cutAt.takeUnless { it == 0L }
             detachedEnd = old.detachedEndOffsetMs
         } else {
             p = p.resizeClip(old.id, ResizeEdge.END, cutAt)
