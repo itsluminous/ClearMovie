@@ -4,6 +4,7 @@ import android.app.UiAutomation
 import android.content.res.Configuration
 import android.util.Log
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.click
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.junit4.android.ComposeNotIdleException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
@@ -46,6 +48,7 @@ import com.itsluminous.clearmovie.ui.editor.PANEL_DONE_TAG
 import com.itsluminous.clearmovie.ui.editor.UNDO_TAG
 import com.itsluminous.clearmovie.ui.editor.insertOptionTag
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TAG
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TOGGLE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_RULER_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.rowAddTag
@@ -135,6 +138,10 @@ class RowEndPlusDeviceTest {
             compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
                 click(Offset((48 + 28 + 1).dp.toPx(), ((ruler.top + ruler.bottom) / 2 - timeline.top).toPx()))
             }
+            // A small screen (CI's) folds rows away behind Show all rows: open them so the text row is there.
+            if (!read { exists(rowTag(names.value)) }) read { node(TIMELINE_ROWS_TOGGLE_TAG).performClick() }
+            // ...and the rows scrolled to the top, where that row is (a row under the ruler has no "+").
+            read { node(TIMELINE_ROWS_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -100_000f) } }
             compose.waitUntil(TIMEOUT_MS) {
                 notYetIfBusy {
                     node(rowEndPlusTag(names.value))
@@ -144,7 +151,8 @@ class RowEndPlusDeviceTest {
                         .contains("0:00")
                 }
             }
-            read { node(rowEndPlusTag(names.value)).performClick() }
+            // Through its accessibility action: the row may be scrolled below the rows' view on a small screen.
+            read { node(rowEndPlusTag(names.value)).performSemanticsAction(SemanticsActions.OnClick) }
             read { node(insertOptionTag("text")).performClick() }
             read { node(PANEL_DONE_TAG).performClick() }
             val atCursor = hasAnyAncestor(hasTestTag(rowTag(names.value))) and hasContentDescription("from 0:00 to 0:03", substring = true)
