@@ -15,10 +15,9 @@ preset (an intro, a green-screen frame overlay that runs across the whole video,
 an ending), add your photos and videos, drop in a few captions, and export. Encoding
 uses your phone's hardware, and everything stays on your device.
 
-> **Status: first release, [0.0.1](https://github.com/itsluminous/ClearMovie/releases/tag/v0.0.1).**
-> What it does and what to know is in the
-> [release notes](docs/release-notes/v0.0.1.md). The checklist below shows what has
-> shipped and what is still to come.
+> **Status: early releases.** What the newest version does and what to know is in the
+> notes of the [latest release](https://github.com/itsluminous/ClearMovie/releases/latest).
+> The checklist below shows what is done on `main` and what is still to come.
 
 <a href="https://github.com/itsluminous/ClearMovie/releases/latest">
   <img alt="Get it on GitHub" height="80"
@@ -38,14 +37,14 @@ Website: [itsluminous.github.io/ClearMovie](https://itsluminous.github.io/ClearM
 
 ### Download
 
-Get the APK from the [latest release](https://github.com/itsluminous/ClearMovie/releases/latest)
-and open it on your phone to install. 0.0.1 has one file per processor type; most
-phones need the one ending in `arm64-v8a.apk`. Starting with 0.0.2, each release
-will be a single `ClearMovie-<version>.apk` that works on every phone.
+[Download the latest release](https://github.com/itsluminous/ClearMovie/releases/latest)
+and open the APK on your phone to install. Each release is a single
+`ClearMovie-<version>.apk` that works on every phone; the first release alone had
+one file per processor type.
 Obtainium (the button above) installs it and keeps it up to date. If your Obtainium
 entry for ClearMovie has the APK filter `arm64-v8a` (what the button used to set),
-edit it in Obtainium and clear the filter, because the single APK of 0.0.2 and
-later will not match it. ClearMovie needs Android 10 or newer.
+edit it in Obtainium and clear the filter, because the single APK will not match it.
+ClearMovie needs Android 10 or newer.
 
 ## Screenshots
 
@@ -126,8 +125,7 @@ What ClearMovie on `main` does:
   timeline on the right. The home and preset screens use the extra width too. A wide window
   on a tablet, foldable or in split-screen gets the same layout.
 - **Autosave** - work is saved as you go and recovered after a crash. Your videos are
-  listed under "My videos"; tap a video's title in the editor to give it a name (new on
-  `main`, coming in 0.0.2).
+  listed under "My videos"; tap a video's title in the editor to give it a name.
 - **Hardware-accelerated export** - tap the download button at the top, then choose Best
   (1080p), Good (720p) or Small (480p). The video is saved to your gallery, ready to play
   or share.
@@ -141,9 +139,9 @@ What has shipped, and what is still to come:
 - [x] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
 - [x] Preset review: replace or skip the intro, frame or ending for this video
 - [x] Make your own presets, edit and delete any preset, each with its own caption style
-- [x] Set up a frame: tap its screen colour to remove it and place the picture area (done on `main`)
-- [x] Video shapes: landscape, portrait or square, per preset or asked once without one (done on `main`)
-- [x] Presets can use your files where they are, or keep a copy (done on `main`)
+- [x] Set up a frame: tap its screen colour to remove it and place the picture area
+- [x] Video shapes: landscape, portrait or square, per preset or asked once without one
+- [x] Presets can use your files where they are, or keep a copy
 - [x] Add photos and videos with the system photo picker
 - [x] Share photos and videos from the gallery straight into a new video
 
@@ -157,16 +155,16 @@ What has shipped, and what is still to come:
 - [x] Photo duration
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
 - [x] Audio overlay with volume, fade and automatic ducking
-- [x] Lower for talk: choose how low the music goes while people talk (done on `main`)
-- [x] Trim handles at both ends of a selected item (done on `main`)
-- [x] Record voice: speak over the video as it plays, lined up with the picture (done on `main`, ships in 0.0.2)
+- [x] Lower for talk: choose how low the music goes while people talk
+- [x] Trim handles at both ends of a selected item
+- [x] Record voice: speak over the video as it plays, lined up with the picture
 - [x] Captions with preset defaults, drag-to-place, drag-to-resize, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
 - [x] Preview that shrinks, or floats as a small window, when all rows need room
 
 **Saving and export**
 - [x] Autosave and crash recovery
-- [x] Named projects in "My videos": tap the title in the editor, or More options > Rename video (done on `main`, ships in 0.0.2)
+- [x] Named projects in "My videos": tap the title in the editor, or More options > Rename video
 - [x] Export at Best, Good or Small size with hardware encoding; keeps running if you rotate or leave the app
 - [x] Saved to Movies/ClearMovie, then Play and Share buttons
 
