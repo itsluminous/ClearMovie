@@ -233,6 +233,13 @@ interface TimelineActions {
         otherRow: Boolean = false,
     ) {}
 
+    /** A frame row's "+": a new frame from [atMs], taking over from frame [takeOver] (which ends there) if any. */
+    fun addFrame(
+        key: String,
+        atMs: Long,
+        takeOver: ClipId?,
+    ) {}
+
     /** A row dragged by its icon: to [toIndex] of the screen order (counted with the row taken out). */
     fun moveRow(
         key: String,
@@ -344,8 +351,7 @@ fun TimelineView(
     val spokenMs = if (playing) playedFrom else playheadMs
     BoxWithConstraints(modifier.fillMaxWidth().testTag(TIMELINE_TAG)) {
         val fullWidth = maxWidth
-        // The time span runs from the padding after the row icons to the "+" column at the right end.
-        val spanWidth = (maxWidth.value - metrics.headerDp - PAD_DP - TimelineGeometry.END_DP).coerceAtLeast(1.0)
+        val spanWidth = (maxWidth.value - metrics.headerDp - 2 * PAD_DP).coerceAtLeast(1.0)
         val z = zoom ?: TimelineZoom.fitAll(totalMs, spanWidth)
         LaunchedEffect(spanWidth) { onSpanWidth(spanWidth) }
         // A new width (rotation) or length (an edit): the same zoom, clamped; fit all stays fit all.
@@ -388,10 +394,9 @@ fun TimelineView(
                     else -> TimelineGeometry.PLUS_HIT_DP / 2
                 }
             // How far in from each end of the time span the item's edge must be for its "+" there to show (negative: it
-            // may be past the edge). Null where nothing goes: before the intro, after the ending. The "+" after an item
-            // may reach half into the "+" column (empty on its row), so it still reads as the item's own.
+            // may be past the edge, into the span's padding). Null where nothing goes: before the intro, after the ending.
             val room = if (mainClip is IntroClip) null else outward + TimelineGeometry.PLUS_HIT_DP / 2 - PAD_DP
-            val endRoom = if (mainClip is EndingClip) null else outward + TimelineGeometry.PLUS_HIT_DP / 2 - TimelineGeometry.SIDE_END_DP
+            val endRoom = if (mainClip is EndingClip) null else outward + TimelineGeometry.PLUS_HIT_DP / 2 - PAD_DP
             val left = z.xOf(span.first.toDouble())
             val right = z.xOf(span.second.toDouble())
             // Only a small shift: a "+" well off screen (a long item) is left for the item's menu.
@@ -617,30 +622,25 @@ fun TimelineView(
                                     } else {
                                         TimedRowContent(row, z, selected, playheadMs, timedDrag, timedTrim, latestActions)
                                     }
+                                    // The row's own "+" floats over its right edge (cm-plus-position), items running on under it.
+                                    // Its TalkBack stop is here, read right after the row's items; the circle itself is drawn in
+                                    // the "+" layer above, over the playhead.
+                                    val band = bands[i]
+                                    val underRuler by remember(band, density) {
+                                        derivedStateOf { band.centreDp * density.density < rowScroll.value }
+                                    }
+                                    // While anything is dragged the "+" fade out (below), so the row's "+" is not offered then either.
+                                    val still = drag == null && rowDrag == null && timedDrag == null && trim == null && !timedTrimming
+                                    EndPlusTarget(
+                                        plus =
+                                            rowPlus(row, shownSlots, shownSpans, selectedIndex, selected, spokenMs, totalMs, photoMs)
+                                                .takeIf { still && !underRuler },
+                                        row = row,
+                                        slots = shownSlots,
+                                        actions = latestActions,
+                                        modifier = Modifier.align(Alignment.CenterEnd),
+                                    )
                                 }
-                                // The row's "+" column (cm-plus-position): items stop at it, so none is ever hidden under its
-                                // "+". Its TalkBack stop is here, read right after the row's items; the circle itself is drawn
-                                // in the "+" layer above, over the playhead.
-                                val band = bands[i]
-                                val underRuler by remember(band, density) {
-                                    derivedStateOf { band.centreDp * density.density < rowScroll.value }
-                                }
-                                // While anything is dragged the "+" fade out (below), so the row's "+" is not offered then either.
-                                val still = drag == null && rowDrag == null && timedDrag == null && trim == null && !timedTrimming
-                                EndColumn(
-                                    plus =
-                                        rowPlus(row, shownSlots, shownSpans, selectedIndex, selected, spokenMs, totalMs, photoMs).takeIf {
-                                            still &&
-                                                !underRuler
-                                        },
-                                    row = row,
-                                    slots = shownSlots,
-                                    // The selected item's row has no cell: its "+" are beside that item.
-                                    cell =
-                                        takesPlus(row) && row.clips.none { it.id == selected } &&
-                                            !(row.type == RowType.MAIN && selectedIndex != null),
-                                    actions = latestActions,
-                                )
                             }
                             Spacer(Modifier.height(metrics.gapDp.dp))
                         }
@@ -693,10 +693,10 @@ fun TimelineView(
                                         clipRect(top = top) { this@drawWithContent.drawContent() }
                                     },
                             ) {
-                                // Every row's own "+" is in the column at its right end, in the same place on every
-                                // row (cm-plus-position); it adds at the cursor (RowEndPlus). On the row of the selected
-                                // item it gives way to the "+" on each side of that item. Drawn here; its TalkBack stop and
-                                // test tag are the row's cell (EndColumn).
+                                // Every row's own "+" floats at its right edge, in the same place on every row
+                                // (cm-plus-position); it adds at the cursor (RowEndPlus). On the row of the selected item it
+                                // gives way to the "+" on each side of that item. Drawn here; its TalkBack stop and test tag
+                                // are in the row (EndPlusTarget).
                                 if (rowPlus(row, shownSlots, shownSpans, selectedIndex, selected, spokenMs, totalMs, photoMs) != null) {
                                     val centre = if (row.type == RowType.MAIN) lift + metrics.mainDp / 2 else band.heightDp / 2
                                     EndPlusCircle(spanWidth, centre)
@@ -820,6 +820,12 @@ private class LatestActions(
         atMs: Long?,
         otherRow: Boolean,
     ) = latest().addHere(key, atMs, otherRow)
+
+    override fun addFrame(
+        key: String,
+        atMs: Long,
+        takeOver: ClipId?,
+    ) = latest().addFrame(key, atMs, takeOver)
 
     override fun moveRow(
         key: String,
@@ -992,6 +998,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         is Hit.OnClip -> c0.slots.getOrNull(start.index) != null
                         is Hit.OnHeader, is Hit.OnTimedClip, is Hit.OnRowSpace -> true
                         is Hit.OnTimedPlus -> start.under != null
+                        is Hit.OnRowEnd -> start.under != null
                         else -> false
                     }
                 var lastSpread: Double? = null
@@ -1461,8 +1468,10 @@ private sealed interface Hit {
     /** A row's own "+", in the column at its right end: adds right of the cursor ([RowEndPlus]). */
     data class OnRowEnd(
         val key: String,
+        /** What lies under the floating "+": a tap is the "+", but held or dragged it is that item (or the row's space). */
+        val under: Hit? = null,
     ) : Hit {
-        override val kind get() = GestureStart.PLUS
+        override val kind get() = under?.kind ?: GestureStart.PLUS
     }
 
     data class OnClip(
@@ -1512,14 +1521,25 @@ private sealed interface Hit {
 }
 
 /** What a hold or a drag acts on: a "+" over an item's edge is that item. */
-private fun Hit.held(): Hit = if (this is Hit.OnTimedPlus && under != null) Hit.OnTimedClip(key, under) else this
+private fun Hit.held(): Hit =
+    when {
+        this is Hit.OnTimedPlus && under != null -> Hit.OnTimedClip(key, under)
+        this is Hit.OnRowEnd && under != null -> under
+        else -> this
+    }
 
 /**
- * A row's own "+" in the column at its right end (cm-plus-position), as it
+ * A row's own "+" floating at its right edge (cm-plus-position), as it
  * stands with the cursor at a time: what a tap on it does, so its TalkBack
  * text, its tap and its drawing always agree.
  */
 private sealed interface RowPlus {
+    /** A frame row: a new frame from [atMs], taking over from [takeOver] (the frame under the cursor) if any. */
+    data class Frame(
+        val atMs: Long,
+        val takeOver: RowClip?,
+    ) : RowPlus
+
     /** An empty row: Add here from [atMs] (on MAIN, null: the first photos and videos). */
     data class Empty(
         val atMs: Long?,
@@ -1544,10 +1564,14 @@ private sealed interface RowPlus {
 
 /**
  * [row]'s own "+" with the cursor at [cursorMs] in a video of [videoMs] (never
- * adding past its end), or null where it has none:
- * on the row of the selected item (that item's own "+" are on each side of
- * it), and on rows that never take what it would add (one the preset manages,
- * one switched off), where it would always land on another row.
+ * adding past its end), or null on the row of the selected item, whose own
+ * "+" are on each side of it. Every other row has one:
+ * - a frame row (the preset's included): a new frame from the cursor, the
+ *   frame under the cursor handing over to it there ([RowPlus.Frame]);
+ * - a row that never takes what it would add (the preset's music or closing
+ *   message, a row switched off): at the cursor on another row of its kind,
+ *   and it says so;
+ * - any other row: [RowEndPlus.timed].
  */
 private fun rowPlus(
     row: TimelineRow,
@@ -1564,10 +1588,17 @@ private fun rowPlus(
         if (selectedIndex != null) return null
         return RowEndPlus.main(spans, cursorMs)?.let { RowPlus.OnMain(it) }
     }
-    if (!takesPlus(row)) return null
     if (row.clips.any { it.id == selectedId }) return null
-    // A caption's (3 s) and a photo's (the project's setting) length are known before they are made; a sound's or a
-    // frame's only once picked.
+    // Never later than a second before the end, so what is added is seen.
+    val inVideo = cursorMs.coerceIn(0, maxOf(0, videoMs - RowEndPlus.MIN_SEEN_MS))
+    if (row.type == RowType.FRAME) {
+        // The frame shown at the cursor (a switched-off row shows none, so nothing hands over).
+        val under = row.clips.firstOrNull { inVideo >= it.startMs && inVideo < it.endMs }?.takeIf { row.enabled }
+        return RowPlus.Frame(inVideo, under)
+    }
+    if (row.fixed || !row.enabled) return RowPlus.At(inVideo, full = true)
+    // A caption's (3 s) and a photo's (the project's setting) length are known before they are made; a sound's
+    // only once picked.
     val length =
         when (row.type) {
             RowType.TEXT -> Limits.DEFAULT_TEXT_MS
@@ -1597,6 +1628,10 @@ private fun goesAt(
             plus.atMs
         }
 
+        is RowPlus.Frame -> {
+            plus.atMs
+        }
+
         is RowPlus.After -> {
             plus.clip.endMs
         }
@@ -1613,9 +1648,6 @@ private fun goesAt(
             }
         }
     }
-
-/** Whether [row] ever takes what its own "+" adds: not a row the preset manages, nor one switched off. */
-private fun takesPlus(row: TimelineRow) = row.type == RowType.MAIN || (!row.fixed && row.enabled)
 
 /**
  * A tap on [row]'s own "+" ([plus], worked out at [cursorMs]): the row is
@@ -1638,6 +1670,10 @@ private fun act(
             actions.addHere(row.key, plus.atMs, otherRow = plus.full)
         }
 
+        is RowPlus.Frame -> {
+            actions.addFrame(row.key, plus.atMs, plus.takeOver?.id)
+        }
+
         is RowPlus.After -> {
             actions.selectRow(row.key)
             actions.insert(plus.clip.id, InsertSide.AFTER)
@@ -1658,41 +1694,50 @@ private fun hit(
     yDp: Double,
     rowScrollDp: Float,
 ): Hit {
-    // The "+" column at a row's right end belongs to that row: its "+" (on the circle's 48 dp, while the row's middle
-    // is in view, as it is drawn), else the row's space. Items stop at the column, so none is under it.
-    if (xDp - metrics.headerDp - PAD_DP >= c.spanWidth && yDp >= metrics.rulerDp) {
+    // A row's own "+" floats over the row's right edge (cm-plus-position) and wins over what is under it on its 48 dp
+    // (also past a slim row into the gap), while the row's middle is in view, as it is drawn. A tap is the "+"; held
+    // or dragged it is what lies under it, so an item running under the "+" can still be moved or opened.
+    val sx = xDp - metrics.headerDp - PAD_DP
+    if (yDp >= metrics.rulerDp && abs(sx - TimelineGeometry.endPlusX(c.spanWidth)) <= TimelineGeometry.PLUS_HIT_DP / 2) {
         val inRows = yDp - metrics.rulerDp + rowScrollDp
-
-        fun plusOf(r: Int) = rowPlus(c.shown[r], c.slots, c.spans, c.selectedIndex, c.selectedId, c.playheadMs, c.totalMs, c.photoMs)
-        // The "+" whose 48 dp circle area is under the finger, even where it reaches past a slim row into the gap.
         val near =
             c.bands.indices
                 .filter { abs(inRows - c.bands[it].centreDp) <= TimelineGeometry.PLUS_HIT_DP / 2 && c.bands[it].centreDp >= rowScrollDp }
-                .filter { plusOf(it) != null }
-                .minByOrNull { abs(inRows - c.bands[it].centreDp) }
-        if (near != null) return Hit.OnRowEnd(c.shown[near].key)
-        val i = c.bands.indexOfFirst { inRows >= it.topDp && inRows < it.bottomDp }
-        if (i < 0) return Hit.Elsewhere
-        val band = c.bands[i]
-        val row = c.shown[i]
-        if (plusOf(i) != null) return Hit.OnRowSpace(row.key)
-        // The selected item's row: its own "+" after it, or its trim handle, may reach in here; never an item
-        // (clipped out of sight here).
-        val sx = xDp - metrics.headerDp - PAD_DP
-        if (row.type == RowType.MAIN) {
-            return when (val t = c.geometry.hitTest(sx, metrics.rulerDp + (inRows - band.topDp))) {
-                is HitTarget.Plus -> Hit.OnPlus(t.point)
-                is HitTarget.TrimStart -> Hit.OnTrim(GestureStart.TRIM_START)
-                is HitTarget.TrimEnd -> Hit.OnTrim(GestureStart.TRIM_END)
-                else -> Hit.OnRowSpace(row.key)
-            }
-        }
-        return when (val t = TimedRowGeometry.hitTest(row.clips, c.timedPlus[row.key].orEmpty(), c.zoom, sx, c.selectedId)) {
-            is TimedHit.Plus -> Hit.OnTimedPlus(t.plus, row.key, under = null)
-            is TimedHit.Handle -> Hit.OnTimedTrim(row.key, t.id, if (t.start) GestureStart.TRIM_START else GestureStart.TRIM_END)
-            else -> Hit.OnRowSpace(row.key)
+                .filter {
+                    rowPlus(
+                        c.shown[it],
+                        c.slots,
+                        c.spans,
+                        c.selectedIndex,
+                        c.selectedId,
+                        c.playheadMs,
+                        c.totalMs,
+                        c.photoMs,
+                    ) != null
+                }.minByOrNull { abs(inRows - c.bands[it].centreDp) }
+        if (near != null) {
+            val key = c.shown[near].key
+            val under =
+                when (val h = hitBelow(c, metrics, xDp, yDp, rowScrollDp)) {
+                    is Hit.OnClip -> h.takeIf { c.shown[near].type == RowType.MAIN }
+                    is Hit.OnTimedClip -> h.takeIf { it.key == key }
+                    is Hit.OnRowSpace -> h.takeIf { it.key == key }
+                    else -> null
+                }
+            return Hit.OnRowEnd(key, under)
         }
     }
+    return hitBelow(c, metrics, xDp, yDp, rowScrollDp)
+}
+
+/** What a touch hits, the rows' own floating "+" left aside. */
+private fun hitBelow(
+    c: Current,
+    metrics: RowMetrics,
+    xDp: Double,
+    yDp: Double,
+    rowScrollDp: Float,
+): Hit {
     if (xDp >= metrics.headerDp && yDp >= metrics.rulerDp) {
         // A "+" lifted over a transition marker reaches above the MAIN row, and wins there over the
         // rows (as every "+" and marker does over what is under it), but never over the ruler: a
@@ -1805,7 +1850,7 @@ private fun Ruler(
                 drawLine(line, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 1.dp.toPx())
                 val firstTick = (zoom.scrollMs.coerceAtLeast(0.0) / tick).toLong() * tick
                 var t = firstTick
-                val end = zoom.timeAt(spanWidth + TimelineGeometry.END_DP)
+                val end = zoom.timeAt(spanWidth + PAD_DP)
                 while (t <= minOf(end, totalMs.toDouble() + tick)) {
                     val x = pad + (zoom.xOf(t.toDouble()) * density).toFloat()
                     drawLine(color, Offset(x, size.height * 0.55f), Offset(x, size.height), 1.dp.toPx())
@@ -1815,7 +1860,7 @@ private fun Ruler(
             // Labels at each tick, as text so they scale with the font.
             val firstTick = (zoom.scrollMs.coerceAtLeast(0.0) / tick).toLong() * tick
             var t = firstTick
-            val end = zoom.timeAt(spanWidth + TimelineGeometry.END_DP)
+            val end = zoom.timeAt(spanWidth + PAD_DP)
             while (t <= minOf(end, totalMs.toDouble())) {
                 val x = PAD_DP + zoom.xOf(t.toDouble())
                 Text(
@@ -2148,7 +2193,7 @@ private fun TimedRowContent(
     }
 }
 
-/** How every "+" looks: a small tonal circle with a thin outline, calm next to the items. */
+/** How every "+" looks: a small tonal circle with a thin outline and a slight shadow, calm next to the items. */
 @Composable
 private fun PlusCircle() {
     Surface(
@@ -2156,6 +2201,8 @@ private fun PlusCircle() {
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        // A little lift: the row's own "+" floats over items, and every "+" looks the same.
+        shadowElevation = 2.dp,
         modifier = Modifier.size(TimelineGeometry.PLUS_DP.dp),
     ) {
         Icon(painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.padding(3.dp))
@@ -2163,44 +2210,33 @@ private fun PlusCircle() {
 }
 
 /**
- * The column at a row's right end that holds its "+" (cm-plus-position),
- * tinted like the row's icon. It is the "+" for TalkBack (read right after
- * the row's items) and for tests; the circle is drawn by [EndPlusCircle] in
- * the "+" layer, over the playhead, and taps come through the timeline's own
- * handler.
+ * A row's own "+" for TalkBack and tests (cm-plus-position): 48 dp at the
+ * row's right edge, read right after the row's items. It draws nothing: the
+ * circle is drawn by [EndPlusCircle] in the "+" layer, over the playhead, and
+ * taps come through the timeline's own handler.
  */
 @Composable
-private fun EndColumn(
+private fun EndPlusTarget(
     plus: RowPlus?,
     row: TimelineRow,
     slots: List<MainSlot>,
-    cell: Boolean,
     actions: TimelineActions,
+    modifier: Modifier,
 ) {
-    val description = plus?.let { rowPlusDescription(it, row, slots) }?.takeIf { it.isNotEmpty() }
+    val description = plus?.let { rowPlusDescription(it, row, slots) }?.takeIf { it.isNotEmpty() } ?: return
     Box(
-        Modifier
-            .width(TimelineGeometry.END_DP.dp)
-            .fillMaxHeight()
-            // A row with no "+" here (the preset's, one switched off, the selected item's) has no cell: its surface runs on.
-            .background(if (cell) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow)
-            .then(
-                if (plus == null || description == null) {
-                    Modifier
-                } else {
-                    Modifier
-                        .testTag(if (plus is RowPlus.Empty) rowAddTag(row.key) else rowEndPlusTag(row.key))
-                        .semantics {
-                            contentDescription = description
-                            role = Role.Button
-                            onClick {
-                                // Where the text said (while playing: the time play started from).
-                                act(plus, row, slots, actions)
-                                true
-                            }
-                        }
-                },
-            ),
+        modifier
+            .size(TimelineGeometry.PLUS_HIT_DP.dp)
+            .testTag(if (plus is RowPlus.Empty || row.clips.isEmpty()) rowAddTag(row.key) else rowEndPlusTag(row.key))
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+                onClick {
+                    // Where the text said (while playing: the time play started from).
+                    act(plus, row, slots, actions)
+                    true
+                }
+            },
     )
 }
 
@@ -2218,6 +2254,10 @@ private fun rowPlusDescription(
             } else {
                 stringResource(R.string.timeline_add_at, rowName(row), durationText(plus.atMs * 1000))
             }
+        }
+
+        is RowPlus.Frame -> {
+            stringResource(R.string.timeline_add_frame_from, durationText(plus.atMs * 1000))
         }
 
         is RowPlus.At -> {
@@ -2240,7 +2280,7 @@ private fun rowPlusDescription(
         }
     }
 
-/** A row's own "+" as drawn (24 dp) in the column at its right end, centred on [centreY] in the "+" layer's box. */
+/** A row's own "+" as drawn (24 dp, as every "+"), floating at the row's right edge, centred on [centreY] in the layer's box. */
 @Composable
 private fun EndPlusCircle(
     spanWidth: Double,
@@ -2249,8 +2289,10 @@ private fun EndPlusCircle(
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
-                .offset(x = (PAD_DP + spanWidth).dp, y = (centreY - TimelineGeometry.PLUS_HIT_DP / 2).dp)
-                .size(width = TimelineGeometry.END_DP.dp, height = TimelineGeometry.PLUS_HIT_DP.dp)
+                .offset(
+                    x = (PAD_DP + TimelineGeometry.endPlusX(spanWidth) - TimelineGeometry.PLUS_HIT_DP / 2).dp,
+                    y = (centreY - TimelineGeometry.PLUS_HIT_DP / 2).dp,
+                ).size(TimelineGeometry.PLUS_HIT_DP.dp)
                 .clearAndSetSemantics { },
             contentAlignment = Alignment.Center,
         ) {

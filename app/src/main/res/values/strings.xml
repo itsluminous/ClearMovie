@@ -390,6 +390,7 @@
     <string name="timeline_add_after">Add after this %1$s</string>
     <string name="timeline_add_at">Add to %1$s at %2$s</string>
     <string name="timeline_add_other_row">Add to another %1$s row at %2$s</string>
+    <string name="timeline_add_frame_from">Add a new frame from %1$s</string>
     <string name="timeline_colour_card">Colour card</string>
     <string name="timeline_text_card">Text card</string>
     <string name="timeline_item_description">%1$s, %2$d of %3$d, %4$s long</string>

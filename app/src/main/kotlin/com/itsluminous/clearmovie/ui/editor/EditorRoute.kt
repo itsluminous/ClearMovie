@@ -314,6 +314,12 @@ fun EditorRoute(
                     IntakePurpose.AddToRow(trackId, atMs),
                 )
 
+                override fun pickFrameFrom(
+                    trackId: TrackId,
+                    atMs: Long,
+                    takeOver: ClipId?,
+                ) = pickFor(TrackType.OVERLAY, IntakePurpose.FrameFrom(trackId, atMs, takeOver))
+
                 override fun pickForReplace(clipId: ClipId) {
                     val clip =
                         viewModel.ui.value.project

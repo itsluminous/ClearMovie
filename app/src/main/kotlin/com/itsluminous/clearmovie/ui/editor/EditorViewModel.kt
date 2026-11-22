@@ -52,6 +52,7 @@ import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.addFrameFrom
 import com.itsluminous.clearmovie.domain.model.addRecording
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.addToTrack
@@ -182,6 +183,13 @@ sealed interface IntakePurpose {
         val atMs: Long,
     ) : IntakePurpose
 
+    /** A frame row's "+" (cm-plus-position): a new frame from [atMs], taking over from frame [takeOver] if any. */
+    data class FrameFrom(
+        val trackId: TrackId,
+        val atMs: Long,
+        val takeOver: ClipId?,
+    ) : IntakePurpose
+
     fun encode(): String =
         when (this) {
             Add -> "add"
@@ -189,12 +197,21 @@ sealed interface IntakePurpose {
             is Replace -> "replace:${clipId.value}"
             is ReplacePart -> "part:${clipId.value}"
             is AddToRow -> "row:$atMs:${trackId.value}"
+            is FrameFrom -> "frame:$atMs:${takeOver?.value.orEmpty()}:${trackId.value}"
         }
 
     companion object {
         fun decode(text: String): IntakePurpose? =
             runCatching {
                 val parts = text.split(':', limit = 3)
+                if (parts[0] == "frame") {
+                    val f = text.split(':', limit = 4)
+                    return@runCatching FrameFrom(
+                        TrackId(f[3]),
+                        f[1].toLong().coerceAtLeast(0),
+                        f[2].takeIf { it.isNotEmpty() }?.let(::ClipId),
+                    )
+                }
                 when (parts[0]) {
                     "add" -> Add
                     "insert" -> Insert(ClipId(parts[2]), Side.valueOf(parts[1]))
@@ -531,6 +548,7 @@ class EditorViewModel
                 when (purpose) {
                     is IntakePurpose.Insert -> project.trackOf(purpose.anchor)?.takeIf { it.type.isTimed }
                     is IntakePurpose.AddToRow -> project.track(purpose.trackId)
+                    is IntakePurpose.FrameFrom -> project.track(purpose.trackId)
                     else -> null
                 }
             when {
@@ -542,7 +560,7 @@ class EditorViewModel
                     placeOnRow(purpose, timedRow, items, project)
                 }
 
-                purpose is IntakePurpose.AddToRow -> {
+                purpose is IntakePurpose.AddToRow || purpose is IntakePurpose.FrameFrom -> {
                     // The row went away while the files were being taken in.
                     Unit
                 }
@@ -574,10 +592,6 @@ class EditorViewModel
 
                             is IntakePurpose.Replace -> {
                                 edit { replaceMainItem(purpose.clipId, clips.first()) }
-                            }
-
-                            else -> {
-                                false
                             }
                         }
                     if (applied) {
@@ -621,6 +635,12 @@ class EditorViewModel
                                 p = p.insertAt(requireNotNull(p.trackOf(anchor)).id, anchor, purpose.side, c)
                                 anchor = c.id
                             }
+                        }
+
+                        is IntakePurpose.FrameFrom -> {
+                            // One frame: the first picked; the frame under the cursor, if any, hands over to it.
+                            val frame = clips.first() as OverlayClip
+                            p = p.addFrameFrom(row.id, frame, purpose.atMs, purpose.takeOver)
                         }
 
                         is IntakePurpose.AddToRow -> {

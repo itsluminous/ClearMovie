@@ -222,6 +222,13 @@ interface EditorCallbacks {
         atMs: Long,
     )
 
+    /** A frame row's "+": a frame from Files from [atMs], taking over from frame [takeOver] if any (cm-plus-position). */
+    fun pickFrameFrom(
+        trackId: TrackId,
+        atMs: Long,
+        takeOver: ClipId?,
+    ) = pickForRow(trackId, atMs)
+
     /**
      * "Record voice" on a voice row (cm-record-voice): asks for the
      * microphone if need be, then records while the video plays from [atMs];

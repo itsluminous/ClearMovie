@@ -93,6 +93,10 @@ data class OpenPanel(
     val atMs: Long? = null,
     /** "Add here" on a row full there: the new item goes on another row of its kind, and the chooser says so. */
     val otherRow: Boolean = false,
+    /** A frame row's "+": a new frame from [atMs] (cm-plus-position). */
+    val frameFrom: Boolean = false,
+    /** ...taking over from this frame, which then ends at [atMs]. */
+    val takeOver: ClipId? = null,
 )
 
 /**
@@ -170,6 +174,8 @@ class EditorScreenState(
                         s.captionStartStyle,
                         s.panel?.atMs,
                         s.panel?.otherRow,
+                        s.panel?.frameFrom,
+                        s.panel?.takeOver?.value,
                     )
                 },
                 restore = { saved ->
@@ -188,6 +194,8 @@ class EditorScreenState(
                                     panelTrack?.let(::TrackId),
                                     (v.getOrNull(15) as Long?)?.takeIf { it >= 0 },
                                     v.getOrNull(16) as Boolean? ?: false,
+                                    v.getOrNull(17) as Boolean? ?: false,
+                                    (v.getOrNull(18) as String?)?.let { runCatching { ClipId(it) }.getOrNull() },
                                 )
                             }.getOrNull()
                         } else {

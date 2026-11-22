@@ -457,6 +457,17 @@ fun EditorScreen(
                     state.panel = OpenPanel(Panel.INSERT, trackId = TrackId(key), atMs = atMs, otherRow = otherRow)
                 }
 
+                override fun addFrame(
+                    key: String,
+                    atMs: Long,
+                    takeOver: ClipId?,
+                ) {
+                    actions.pause()
+                    state.selected = null
+                    state.selectedRow = TrackId(key)
+                    state.panel = OpenPanel(Panel.INSERT, trackId = TrackId(key), atMs = atMs, frameFrom = true, takeOver = takeOver)
+                }
+
                 override fun rowMenu(key: String) {
                     state.selected = null
                     state.selectedRow = TrackId(key)

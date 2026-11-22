@@ -53,9 +53,8 @@ sealed interface TimedHit {
  * picture in picture, frame, music, voice), in dp on the time span (the
  * owner's rule, the same as MAIN's): on the selected item only, one on each
  * side, just outside it (beyond its trim handles, as on MAIN, when it has
- * them); none between unselected items. The row's own "+" is in the column
- * at its right end, drawn by the timeline itself ([RowEndPlus],
- * cm-plus-position). The selected item's trim handles take its inner edges,
+ * them); none between unselected items. The row's own "+" floats at its
+ * right edge, drawn by the timeline itself ([RowEndPlus], cm-plus-position). The selected item's trim handles take its inner edges,
  * 24 dp drawn and 48 dp to touch. Pure, so the rules are tested on the JVM.
  */
 object TimedRowGeometry {
@@ -68,10 +67,10 @@ object TimedRowGeometry {
         val sorted = clips.filter { it.endMs > it.startMs }.sortedBy { it.startMs }
         if (sorted.isEmpty()) return emptyList()
         val half = TimelineGeometry.PLUS_HIT_DP / 2
-        // Kept whole on screen: inside the span's padding at its start, and at its end no further than half into the
-        // "+" column (empty on the selected item's row), so it never sits where the rows' "+" are (cm-plus-position).
+        // Kept whole inside the span's padding at either end, so its full 48 dp is always on screen (the row's own "+"
+        // at the right edge is hidden on the selected item's row).
         val lo = -TimelineGeometry.EDGE_ROOM_DP + half
-        val hi = widthDp + TimelineGeometry.SIDE_END_DP - half
+        val hi = widthDp + TimelineGeometry.EDGE_ROOM_DP - half
 
         fun TimedPlus.kept() = copy(xDp = xDp.coerceIn(lo, maxOf(lo, hi)))
         val out = mutableListOf<TimedPlus>()

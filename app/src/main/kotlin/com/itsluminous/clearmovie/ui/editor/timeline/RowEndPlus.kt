@@ -7,8 +7,9 @@ import com.itsluminous.clearmovie.domain.model.Limits
 sealed interface EndPlusTarget {
     /**
      * At [atMs] ("Add here" from that time): the cursor, or the last moment
-     * that leaves the new item seen. [full]: the row has no room left there,
-     * so the item goes on another row of its kind (the model's rule).
+     * that leaves the new item seen. [full]: the row has no room left to the
+     * right of the cursor, so it goes there on another row of its kind (the
+     * model's rule).
      */
     data class At(
         val atMs: Long,
@@ -48,8 +49,8 @@ data class MainEndTarget(
  *   nearer the end the rule starts at that moment. When the first free place
  *   is later still: right after the item in the way while at least
  *   [MIN_SEEN_MS] of video is left after it (a caption is then cut to end with
- *   the video), else at that last moment on another row of its kind, the row
- *   being full to the end ([EndPlusTarget.At.full]).
+ *   the video), else at the cursor on another row of its kind, the row being
+ *   full to the end ([EndPlusTarget.At.full]).
  * - MAIN (one item after another): at the cursor when it is exactly between
  *   two items; on an item, right after it, and every later item moves later.
  *   In a transition two items are under the cursor: after the later one, so
@@ -90,7 +91,7 @@ object RowEndPlus {
         return when {
             anchor.endMs <= latest -> EndPlusTarget.After(anchor.id)
             anchor.endMs <= videoMs - minOf(MIN_SEEN_MS, seen).coerceAtLeast(Limits.MIN_CLIP_MS) -> EndPlusTarget.After(anchor.id)
-            else -> EndPlusTarget.At(latest, full = true)
+            else -> EndPlusTarget.At(from, full = true)
         }
     }
 

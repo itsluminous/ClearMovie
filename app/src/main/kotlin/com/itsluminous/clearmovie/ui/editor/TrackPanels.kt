@@ -121,6 +121,8 @@ internal fun TimedInsertPanel(
         if (anchor != null) {
             val where = stringResource(timedItemName(null, anchor))
             stringResource(if (side == InsertSide.BEFORE) R.string.insert_title_before else R.string.insert_title_after, where)
+        } else if (open.frameFrom && open.atMs != null) {
+            stringResource(R.string.timeline_add_frame_from, durationText(open.atMs * 1000))
         } else if (open.atMs != null) {
             // From a row's "+": the time it adds at, fixed when the "+" was tapped; "another row" when the "+" said the
             // row is full there, as the model then puts it on another row of its kind.
@@ -137,7 +139,11 @@ internal fun TimedInsertPanel(
 
     fun pick() {
         onPanel(null)
-        if (anchor != null) callbacks.pickForInsert(anchor.id, side) else callbacks.pickForRow(track.id, hereMs)
+        when {
+            anchor != null -> callbacks.pickForInsert(anchor.id, side)
+            open.frameFrom -> callbacks.pickFrameFrom(track.id, hereMs, open.takeOver)
+            else -> callbacks.pickForRow(track.id, hereMs)
+        }
     }
     when (track.type) {
         TrackType.TEXT -> {
