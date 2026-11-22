@@ -698,13 +698,7 @@ fun TimelineView(
                                 // gives way to the "+" on each side of that item. Drawn here; its TalkBack stop and test tag
                                 // are in the row (EndPlusTarget).
                                 if (rowPlus(row, shownSlots, shownSpans, selectedIndex, selected, spokenMs, totalMs, photoMs) != null) {
-                                    // On MAIN over a transition marker it sits on the row's top edge (y = lift in this box).
-                                    val centre =
-                                        when {
-                                            row.type != RowType.MAIN -> band.heightDp / 2
-                                            geometry.endPlusLifted() -> lift
-                                            else -> lift + metrics.mainDp / 2
-                                        }
+                                    val centre = if (row.type == RowType.MAIN) lift + metrics.mainDp / 2 else band.heightDp / 2
                                     EndPlusCircle(spanWidth, centre)
                                 }
                                 if (row.type == RowType.MAIN && shownSlots.isNotEmpty()) {
@@ -1707,8 +1701,8 @@ private fun hit(
     if (yDp >= metrics.rulerDp && abs(sx - TimelineGeometry.endPlusX(c.spanWidth)) <= TimelineGeometry.PLUS_HIT_DP / 2) {
         val inRows = yDp - metrics.rulerDp + rowScrollDp
 
-        // Where each row's "+" is centred: its middle, or MAIN's top edge over a transition marker.
-        fun centre(r: Int) = if (c.shown[r].type == RowType.MAIN && c.geometry.endPlusLifted()) c.bands[r].topDp else c.bands[r].centreDp
+        // Where each row's "+" is centred: its middle.
+        fun centre(r: Int) = c.bands[r].centreDp
 
         fun hasPlus(r: Int) =
             rowPlus(c.shown[r], c.slots, c.spans, c.selectedIndex, c.selectedId, c.playheadMs, c.totalMs, c.photoMs) != null
@@ -2268,7 +2262,16 @@ private fun rowPlusDescription(
         }
 
         is RowPlus.Frame -> {
-            stringResource(R.string.timeline_add_frame_from, durationText(plus.atMs * 1000))
+            // The preset's frame row keeps only its own frame: a new one goes on another frame row, and it says so.
+            val at = durationText(plus.atMs * 1000)
+            if (row.fixed) {
+                stringResource(
+                    R.string.timeline_add_frame_other_row,
+                    at,
+                )
+            } else {
+                stringResource(R.string.timeline_add_frame_from, at)
+            }
         }
 
         is RowPlus.At -> {

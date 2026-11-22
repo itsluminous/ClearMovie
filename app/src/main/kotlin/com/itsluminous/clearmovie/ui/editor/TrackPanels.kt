@@ -122,7 +122,12 @@ internal fun TimedInsertPanel(
             val where = stringResource(timedItemName(null, anchor))
             stringResource(if (side == InsertSide.BEFORE) R.string.insert_title_before else R.string.insert_title_after, where)
         } else if (open.frameFrom && open.atMs != null) {
-            stringResource(R.string.timeline_add_frame_from, durationText(open.atMs * 1000))
+            val at = durationText(open.atMs * 1000)
+            if (track.presetRole != null) {
+                stringResource(R.string.timeline_add_frame_other_row, at)
+            } else {
+                stringResource(R.string.timeline_add_frame_from, at)
+            }
         } else if (open.atMs != null) {
             // From a row's "+": the time it adds at, fixed when the "+" was tapped; "another row" when the "+" said the
             // row is full there, as the model then puts it on another row of its kind.
@@ -216,7 +221,8 @@ internal fun TimedInsertPanel(
             }
             // A voice row can also record one (cm-record-voice): from the playhead, or, at a "+" after an item, from
             // that item's end, as the other things put there go; the video plays from there while it records.
-            if (track.audioRole == AudioRole.VOICE && track.presetRole == null) {
+            // On the preset's closing-message row too: the recording then goes on another voice row (addRecording).
+            if (track.audioRole == AudioRole.VOICE) {
                 val from = if (anchor != null && side == InsertSide.AFTER) anchor.endMs else hereMs
                 Choice(
                     stringResource(R.string.record_voice),

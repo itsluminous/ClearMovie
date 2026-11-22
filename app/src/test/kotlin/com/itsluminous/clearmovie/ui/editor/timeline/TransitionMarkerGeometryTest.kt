@@ -57,18 +57,17 @@ class TransitionMarkerGeometryTest {
     }
 
     @Test
-    fun `a marker under MAIN's floating plus is kept, and that plus moves up to the row's top edge`() {
+    fun `a marker whose touch area would meet MAIN's floating plus is left out while nothing is selected`() {
         // 10 ms per dp: the a->b marker is at 450 dp and the b->c one at 675 dp.
-        for (width in listOf(440.0, 470.0, 700.0, 2000.0)) {
+        for (width in listOf(440.0, 470.0, 520.0, 700.0, 2000.0)) {
             val g = TimelineGeometry(spans, ZoomState(10.0, 0.0, false), width, 28.0, 72.0, null, -1e4, selectedTrimmable = false)
-            // Every marker is kept, as before the "+" moved: none is hidden by the row's own "+".
-            assertThat(g.markers().size).isEqualTo(2)
-            val under = g.markers().any { abs(it.xDp - TimelineGeometry.endPlusX(width)) < TimelineGeometry.PLUS_HIT_DP }
-            assertThat(g.endPlusLifted()).isEqualTo(under)
+            val plusLeft = TimelineGeometry.endPlusX(width) - TimelineGeometry.PLUS_HIT_DP / 2
+            for (m in g.markers()) assertThat(m.xDp + TimelineGeometry.MARKER_HIT_DP / 2).isAtMost(plusLeft)
+            assertThat(g.markers().size).isEqualTo(listOf(450.0, 675.0).count { it + TimelineGeometry.MARKER_HIT_DP / 2 <= plusLeft })
         }
-        // With an item selected MAIN's own "+" is hidden, so it never moves.
+        // With an item selected MAIN's own "+" is hidden, and every marker is kept.
         val sel = TimelineGeometry(spans, ZoomState(10.0, 0.0, false), 470.0, 28.0, 72.0, 1, -1e4, selectedTrimmable = true)
-        assertThat(sel.endPlusLifted()).isFalse()
+        assertThat(sel.markers().map { it.boundary }).contains(3)
     }
 
     @Test

@@ -622,7 +622,9 @@ class EditorViewModel
                 )
                 return
             }
-            if (skipped > 0) eventChannel.send(EditorEvent.Skipped(skipped))
+            // A frame from a frame row's "+" takes one file: any more picked are left out, and said.
+            val extra = if (purpose is IntakePurpose.FrameFrom) clips.size - 1 else 0
+            if (skipped + extra > 0) eventChannel.send(EditorEvent.Skipped(skipped + extra))
             val applied =
                 edit {
                     var p = this
@@ -638,9 +640,14 @@ class EditorViewModel
                         }
 
                         is IntakePurpose.FrameFrom -> {
-                            // One frame: the first picked; the frame under the cursor, if any, hands over to it.
-                            val frame = clips.first() as OverlayClip
-                            p = p.addFrameFrom(row.id, frame, purpose.atMs, purpose.takeOver)
+                            // One frame: the first picked (the others are said to be left out); the frame under the
+                            // cursor, if any, hands over to it.
+                            val frame = clips.first() as? OverlayClip
+                            if (frame != null &&
+                                row.type == TrackType.OVERLAY
+                            ) {
+                                p = p.addFrameFrom(row.id, frame, purpose.atMs, purpose.takeOver)
+                            }
                         }
 
                         is IntakePurpose.AddToRow -> {

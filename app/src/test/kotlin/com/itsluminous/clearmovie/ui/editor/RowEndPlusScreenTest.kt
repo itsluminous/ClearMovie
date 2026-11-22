@@ -234,7 +234,8 @@ class RowEndPlusScreenTest {
         compose.waitForIdle()
         at(h, 5000)
         val frame = h.project.tracks.single { it.presetRole == com.itsluminous.clearmovie.domain.model.PresetRole.FRAME }
-        assertThat(description(frame.id)).isEqualTo(context.getString(R.string.timeline_add_frame_from, "0:05"))
+        // The preset's frame row keeps only its own frame: the new one goes on its own row, and it says so.
+        assertThat(description(frame.id)).isEqualTo(context.getString(R.string.timeline_add_frame_other_row, "0:05"))
         // The switched-off music row: at the cursor, on another music row.
         val music = context.getString(R.string.timeline_row_music)
         assertThat(description(off)).isEqualTo(context.getString(R.string.timeline_add_other_row, music, "0:05"))
@@ -594,7 +595,7 @@ class RowEndPlusScreenTest {
         assertThat(
             h.state!!.panel,
         ).isEqualTo(OpenPanel(Panel.INSERT, trackId = frameRow.id, atMs = cut, frameFrom = true, takeOver = old.id))
-        val title = context.getString(R.string.timeline_add_frame_from, "0:%02d".format((cut + 500) / 1000))
+        val title = context.getString(R.string.timeline_add_frame_other_row, "0:%02d".format((cut + 500) / 1000))
         compose.onNodeWithText(title).assertExists()
         h.timedAnswer = listOf(Fixtures.overlay("newframe", 0, 2000))
         compose.onNodeWithTag(insertOptionTag("overlay")).performClick()

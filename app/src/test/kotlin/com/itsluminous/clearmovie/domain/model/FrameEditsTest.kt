@@ -32,6 +32,20 @@ class FrameEditsTest {
     }
 
     @Test
+    fun `the handover stays put when photos are added or taken away later, and the new frame still runs to the end`() {
+        val at = presetFrame.startMs + 4000
+        val p = project.addFrameFrom(frameRow.id, Fixtures.overlay("n", 0, 1500), at, presetFrame.id, ids)
+        for (later in listOf(p.addToMain(listOf(Fixtures.photo("d"))), p.deleteClip(ClipId("c")))) {
+            val old = later.clip(presetFrame.id)!!
+            val made = later.clip(ClipId("n"))!!
+            assertThat(old.endMs).isEqualTo(at)
+            assertThat(made.startMs).isEqualTo(at)
+            assertThat(made.endMs).isEqualTo(later.totalDurationMs())
+            assertThat(later.validate()).isEmpty()
+        }
+    }
+
+    @Test
     fun `near the frame's start it is cut a moment in, and near its end the new frame follows it`() {
         val nearStart = project.addFrameFrom(frameRow.id, Fixtures.overlay("n", 0), presetFrame.startMs + 100, presetFrame.id, ids)
         assertThat(nearStart.clip(presetFrame.id)!!.endMs).isEqualTo(presetFrame.startMs + ResizeRules.MIN_STILL_MS)

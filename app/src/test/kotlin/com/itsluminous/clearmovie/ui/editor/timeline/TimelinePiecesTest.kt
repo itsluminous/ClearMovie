@@ -181,9 +181,28 @@ class TimelinePiecesTest {
                 IntakePurpose.Insert(ClipId("abc"), com.itsluminous.clearmovie.domain.model.Side.BEFORE),
                 IntakePurpose.Replace(ClipId("x1")),
                 IntakePurpose.ReplacePart(ClipId("intro")),
+                IntakePurpose.AddToRow(
+                    com.itsluminous.clearmovie.domain.model
+                        .TrackId("row1"),
+                    5000,
+                ),
+                IntakePurpose.FrameFrom(
+                    com.itsluminous.clearmovie.domain.model
+                        .TrackId("frames"),
+                    5000,
+                    ClipId("f1"),
+                ),
+                IntakePurpose.FrameFrom(
+                    com.itsluminous.clearmovie.domain.model
+                        .TrackId("frames"),
+                    0,
+                    null,
+                ),
             )
         for (p in purposes) assertThat(IntakePurpose.decode(p.encode())).isEqualTo(p)
         assertThat(IntakePurpose.decode("insert:SIDEWAYS:abc")).isNull()
         assertThat(IntakePurpose.decode("nonsense")).isNull()
+        assertThat(IntakePurpose.decode("frame:x:f1:frames")).isNull()
+        assertThat(IntakePurpose.decode("frame:5000")).isNull()
     }
 }

@@ -94,9 +94,9 @@ sealed interface HitTarget {
  *   the two never share a spot and both keep a 48 dp hit area. A "+" that
  *   would come within a marker's hit area moves up the same way. A marker
  *   gives way to the selected item's trim handles (the bar's Transition
- *   opens it then) and to an earlier marker closer than its hit area. The
- *   row's own "+" floating at the right edge ([endPlusX]) moves up to the
- *   top edge, as any "+" does, while a marker is under it ([endPlusLifted]).
+ *   opens it then), to an earlier marker closer than its hit area and, with
+ *   nothing selected, to the row's own "+" floating at the right edge
+ *   ([endPlusX]) when their touch areas would meet.
  */
 class TimelineGeometry(
     val spans: List<SlotSpan>,
@@ -149,18 +149,14 @@ class TimelineGeometry(
                         x - MARKER_HIT_DP / 2 - HANDLE_GAP_DP >= h.endInclusive
                 }
             if (!clear) continue
+            // Nothing selected, MAIN's own "+" floats at the right edge on the row's middle: a marker whose touch area
+            // would reach it is left out (the bar's Transition opens it), so the two never share a spot.
+            if (selected == null && x + MARKER_HIT_DP / 2 > endPlusX(widthDp) - PLUS_HIT_DP / 2 - EPS) continue
             if (kept.any { abs(it.xDp - x) < MARKER_HIT_DP }) continue
             kept += MarkerPoint(b, b - 1, x)
         }
         return kept
     }
-
-    /**
-     * Whether MAIN's own "+" at the right edge (shown while nothing is
-     * selected) sits on the row's top edge, a transition marker being under
-     * it, rather than on its centre line: the same rule as every "+".
-     */
-    fun endPlusLifted(): Boolean = selected == null && markers().any { abs(it.xDp - endPlusX(widthDp)) < (PLUS_HIT_DP + MARKER_HIT_DP) / 2 }
 
     /** The centre of [p]'s hit area, in the geometry's y. */
     fun plusCentreY(p: PlusPoint): Double = if (p.top) mainTop else mainCentre

@@ -7,14 +7,17 @@ package com.itsluminous.clearmovie.domain.model
  * [trackId], in one edit:
  * - With [takeOver], the frame under the cursor: that frame now ends at the
  *   cursor and the new frame takes over the rest of its time (it repeats to
- *   fill it). The preset's own frame keeps following the video at its start.
+ *   fill it). Taking over the preset's frame, the new frame also takes over
+ *   its following the video's end, and the cut stays where it was put when
+ *   photos are added or taken away later.
  *   Never less than [ResizeRules.MIN_STILL_MS] of either: a cursor that close
  *   to the old frame's start cuts it there; one that close to its end leaves
  *   it whole and starts the new frame right after it.
- * - Without, from the cursor up to the next frame on that row or the end of
- *   the video.
+ * - Without, from the cursor up to the next frame shown on that row or the
+ *   end of the video.
  * The new frame goes on [trackId] when it takes it, else on another frame
- * row, as every frame does (the preset's frame row holds only its frame).
+ * row; from the preset's frame row always on another frame row (that row
+ * holds only the preset's frame).
  */
 fun Project.addFrameFrom(
     trackId: TrackId,
@@ -30,23 +33,54 @@ fun Project.addFrameFrom(
     var p = this
     val start: Long
     val end: Long
+    // The new frame follows the video as the old one did: an anchored frame (the preset's) hands its anchor on, so the
+    // new frame still runs to the video's end when photos are added or taken away later.
+    var anchor: SpanAnchor? = null
+    var detachedStart: Long? = null
+    var detachedEnd: Long? = null
     if (old != null) {
         end = old.endMs
         val cutAt = maxOf(atMs, old.startMs + ResizeRules.MIN_STILL_MS)
-        if (cutAt <= old.endMs - ResizeRules.MIN_STILL_MS) {
+        val span = old.anchor?.let { anchorSpan(it) }
+        if (cutAt > old.endMs - ResizeRules.MIN_STILL_MS) {
+            start = old.endMs
+        } else if (old.anchor != null && span != null) {
+            // The handover stays where it was put: the old frame keeps its times (no longer following the video's
+            // end), and the new frame starts there, at the same distance from the frame's span start, and ends as the
+            // old one did.
+            val kept = old.copy(durationMs = cutAt - old.startMs, anchor = null, detachedStartOffsetMs = null, detachedEndOffsetMs = null)
+            p = p.withTrackClips(track.id, track.clips.map { if (it.id == old.id) kept else it })
+            start = cutAt
+            anchor = old.anchor
+            detachedStart = (cutAt - span.first).takeUnless { it == 0L }
+            detachedEnd = old.detachedEndOffsetMs
+        } else {
             p = p.resizeClip(old.id, ResizeEdge.END, cutAt)
             start = p.clip(old.id)?.endMs ?: cutAt
-        } else {
-            start = old.endMs
         }
     } else {
         start = atMs.coerceIn(0, maxOf(0, total - ResizeRules.MIN_STILL_MS))
-        end = track.clips
-            .filter { it.startMs > start && it.durationMs > 0 }
-            .minOfOrNull { it.startMs }
-            ?.coerceAtMost(total) ?: total
+        // A switched-off row shows none of its frames, so none of them bounds the new one.
+        val shown = if (track.enabled) track.clips else emptyList()
+        end = shown.filter { it.startMs > start && it.durationMs > 0 }.minOfOrNull { it.startMs }?.coerceAtMost(total) ?: total
+    }
+    // Both sides held at a distance is a frame that no longer follows anything.
+    if (detachedStart != null && detachedEnd != null) {
+        anchor = null
+        detachedStart = null
+        detachedEnd = null
     }
     val length = if (end - start >= ResizeRules.MIN_STILL_MS) end - start else frame.durationMs
-    val made = frame.copy(startMs = start, durationMs = length, repeat = true, anchor = null)
-    return p.addToTrack(trackId, made, start, ids)
+    val made =
+        frame.copy(
+            startMs = start,
+            durationMs = length,
+            repeat = true,
+            anchor = anchor,
+            detachedStartOffsetMs = detachedStart,
+            detachedEndOffsetMs = detachedEnd,
+        )
+    // The preset's frame row holds only its own frame (it can be switched off, and deleting there switches it off): a
+    // frame taken over from it goes on the highest free frame row of the user's, or a new one.
+    return if (track.presetRole != null) p.addTimedClip(made, ids = ids) else p.addToTrack(trackId, made, start, ids)
 }

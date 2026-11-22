@@ -44,6 +44,7 @@ import com.itsluminous.clearmovie.ui.editor.timeline.EditAction
 import com.itsluminous.clearmovie.ui.editor.timeline.TimelineGeometry
 import com.itsluminous.clearmovie.ui.editor.timeline.markerTag
 import com.itsluminous.clearmovie.ui.editor.timeline.plusTag
+import com.itsluminous.clearmovie.ui.editor.timeline.rowEndPlusTag
 import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
 import org.junit.Rule
 import org.junit.Test
@@ -234,10 +235,14 @@ class EffectsScreenTest {
                     val p = compose.onNodeWithTag(plusTag(b)).getUnclippedBoundsInRoot()
                     assertThat(overlaps(m, p)).isFalse()
                 }
+                // Nor with MAIN's own "+" floating at the right edge (a marker that would meet it is left out).
+                val own = compose.onNodeWithTag(rowEndPlusTag(h.project.main.id.value), useUnmergedTree = true).getUnclippedBoundsInRoot()
+                assertThat(m.right).isAtMost(own.left + 0.5f.dpv())
                 assertThat(marker).isNotNull()
             }
         }
-        assertThat(markersSeen).isAtLeast(3)
+        // A marker that would meet MAIN's own "+" gives way, so not every junction shows one at every zoom.
+        assertThat(markersSeen).isAtLeast(2)
     }
 
     private fun width(r: DpRect) = r.right - r.left
