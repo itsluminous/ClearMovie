@@ -314,7 +314,9 @@ private const val NUDGE_SLACK_DP = 1.0
  * - On a row's icon: a tap selects the row, a long-press then a drag up or
  *   down moves the row on screen (never in the video), and a long-press let
  *   go without moving opens the row menu.
- * - On an item: a long-press let go without moving opens its menu; a
+ * - On an item: a tap selects it and moves the cursor to the time tapped
+ *   ([TapSeek]: while playing on any row, while paused on the rows the preview
+ *   shows); a long-press let go without moving opens its menu; a
  *   long-press then a drag reorders MAIN, or moves any other item in time
  *   and, dragged onto another row of its kind, to that row.
  *
@@ -362,11 +364,12 @@ fun TimelineView(
         // While playing, the view follows the playhead.
         // A finger on the timeline wins: the view follows the playhead only when nobody is touching it.
         var touching by remember { mutableStateOf(false) }
-        // Moving the view by hand while playing stops the following until Play is pressed again,
-        // so the user can look ahead without being pulled back.
+        // Moving the view along the time by hand (a sideways swipe, a pinch) while playing stops the following
+        // until Play is pressed again, so the user can look ahead without being pulled back. A tap does not: a tap
+        // on an item while playing moves the cursor there (cm-tap-seek), and the view goes on following it.
         var followPaused by remember { mutableStateOf(false) }
+        val latestPlaying by rememberUpdatedState(playing)
         LaunchedEffect(playing) { if (playing) followPaused = false }
-        LaunchedEffect(touching) { if (touching && playing) followPaused = true }
         LaunchedEffect(playheadMs, playing, touching, followPaused) {
             if (playing && !touching && !followPaused) {
                 val revealed = TimelineZoom.reveal(z, playheadMs.toDouble(), totalMs, spanWidth)
@@ -524,6 +527,7 @@ fun TimelineView(
                 playheadMs,
                 selected,
                 photoMs,
+                playing,
             ),
         )
 
@@ -552,6 +556,7 @@ fun TimelineView(
                                     timedTrim = { timedTrim.value = it },
                                 ),
                             touched = { touching = it },
+                            viewMoved = { if (latestPlaying) followPaused = true },
                         )
                     },
             ) {
@@ -944,6 +949,7 @@ private data class Current(
     val playheadMs: Long,
     val selectedId: ClipId?,
     val photoMs: Long,
+    val playing: Boolean,
 ) {
     fun row(key: String): TimelineRow? = shown.firstOrNull { it.key == key }
 
@@ -970,6 +976,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
     longPressed: () -> Unit,
     previews: Previews,
     touched: (Boolean) -> Unit,
+    viewMoved: () -> Unit,
 ) {
     awaitPointerEventScope {
         while (true) {
@@ -1084,6 +1091,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                     if (abs(pan) > 0 && !next.fitAll) next = TimelineZoom.scrollBy(next, pan, c.totalMs, c.spanWidth)
                                     live = next
                                     onZoom(next)
+                                    viewMoved()
                                 }
                                 lastSpread = spread
                                 lastCentroid = centroid
@@ -1107,6 +1115,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 } else {
                                     live = TimelineZoom.scrollBy(live, dp(from.x - ch.position.x), c.totalMs, c.spanWidth)
                                     onZoom(live)
+                                    viewMoved()
                                 }
                                 lastScroll = ch.position
                             }
@@ -1238,11 +1247,26 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 }
 
                                 is Hit.OnClip -> {
-                                    c.slots.getOrNull(start.index)?.let { actions.select(it.clip.id) }
+                                    c.slots.getOrNull(start.index)?.let { s ->
+                                        actions.select(s.clip.id)
+                                        // cm-tap-seek: the cursor to the time tapped (MAIN is always seen).
+                                        if (TapSeek.seeks(RowType.MAIN, c.playing)) {
+                                            val x = dp(first.position.x) - metrics.headerDp - PAD_DP
+                                            actions.seek(TapSeek.timeAt(c.zoom, x, s.startMs, s.endMs, c.totalMs))
+                                        }
+                                    }
                                 }
 
                                 is Hit.OnTimedClip -> {
                                     actions.select(start.id)
+                                    // cm-tap-seek: while playing any item, while paused a caption, frame or picture in
+                                    // picture (a sound only shows nothing), moves the cursor to the time tapped.
+                                    val row = c.row(start.key)
+                                    val clip = row?.clips?.firstOrNull { it.id == start.id }
+                                    if (row != null && clip != null && TapSeek.seeks(row.type, c.playing)) {
+                                        val x = dp(first.position.x) - metrics.headerDp - PAD_DP
+                                        actions.seek(TapSeek.timeAt(c.zoom, x, clip.startMs, clip.endMs, c.totalMs))
+                                    }
                                 }
 
                                 is Hit.OnHeader -> {

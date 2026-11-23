@@ -30,7 +30,7 @@ their imports.
 | `ui.navigation` | `ClearMovieApp` (the navigation graph), `NewVideoFlow` (which screen follows which), `Routes` | |
 | `ui.layout` | `WindowClass`: Material window size classes from the space the screen has | |
 | `ui.home`, `ui.preset`, `ui.pick`, `ui.share`, `ui.editor`, `ui.export`, `ui.settings` | The screens and their view models; `AppLanguage` (the in-app language picker) | |
-| `ui.editor.timeline` | The editor timeline (`TimelineView`) and the pure pieces it runs on: `TimelineZoom`, `TimelineGeometry`, `TimelineGestureArbiter`, `PreviewLayoutReducer`, `ClipActions`, `TrimMath`, `ThumbPlan` | |
+| `ui.editor.timeline` | The editor timeline (`TimelineView`) and the pure pieces it runs on: `TimelineZoom`, `TimelineGeometry`, `TimelineGestureArbiter`, `PreviewLayoutReducer`, `ClipActions`, `TrimMath`, `ThumbPlan`, `TapSeek` | |
 | `ui.media`, `ui.components` | The photo-access explainer, the copy dialogs and `MediaIntake`, the missing-clip tile; progress and play-a-file dialogs | |
 
 `ClearMovieApplication` (`@HiltAndroidApp`), `MainActivity` and the share entry `ShareActivity` sit at the root.
@@ -517,6 +517,15 @@ the screen; the playhead is saved by `EditorViewModel`.
   item, a hold and release opens its menu, and a quick release is a tap. Each
   gesture has a button: the zoom buttons, the bar's Move left and Move right,
   the Trim panel, TalkBack actions on the items and the time.
+- **A tap on an item** selects it and (`TapSeek`) moves the cursor to the time
+  tapped, kept inside the item: while playing on any row, and play goes on
+  from there; while paused only on the rows the preview shows (MAIN, text,
+  frames, picture in picture), so the preview shows that item there. A tap on
+  a sound while paused only selects it. A tap on a "+", a transition marker or
+  a trim handle keeps its own meaning, and TalkBack's click only selects (it
+  has no point to move to). While playing the view follows the playhead until
+  it is moved along the time by hand (a sideways swipe, a pinch); a tap does
+  not stop the following.
 - **Edits.** The bar's actions and the panels change the model through
   `EditSession` (one undo step each, 50 kept; a change from elsewhere is a
   step too). "+" opens a chooser: photos and videos from the gallery, a text
