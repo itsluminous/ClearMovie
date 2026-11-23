@@ -364,9 +364,10 @@ fun TimelineView(
         // While playing, the view follows the playhead.
         // A finger on the timeline wins: the view follows the playhead only when nobody is touching it.
         var touching by remember { mutableStateOf(false) }
-        // Moving the view along the time by hand (a sideways swipe, a pinch) while playing stops the following
-        // until Play is pressed again, so the user can look ahead without being pulled back. A tap does not: a tap
-        // on an item while playing moves the cursor there (cm-tap-seek), and the view goes on following it.
+        // Any touch but a tap while playing (a swipe, a pinch, a drag, a trim, a long-press) stops the following
+        // until Play is pressed again, so the user can look ahead, or at what was just moved, without being pulled
+        // back. A tap does not: a tap on an item while playing moves the cursor there (cm-tap-seek), and the view
+        // goes on following it.
         var followPaused by remember { mutableStateOf(false) }
         val latestPlaying by rememberUpdatedState(playing)
         LaunchedEffect(playing) { if (playing) followPaused = false }
@@ -382,6 +383,9 @@ fun TimelineView(
         // must) to show it. Only a small shift: a long item already well in view never jumps.
         LaunchedEffect(selected) {
             val sel = selected ?: return@LaunchedEffect
+            // While playing, the view is the following's: an item tapped near the edge is not nudged one way
+            // while the following turns the page the other.
+            if (latestPlaying && !followPaused) return@LaunchedEffect
             val timed = rows.firstNotNullOfOrNull { r -> r.clips.firstOrNull { it.id == sel } }
             val span =
                 slots.firstOrNull { it.clip.id == sel }?.let { it.startMs to it.endMs }
@@ -556,7 +560,7 @@ fun TimelineView(
                                     timedTrim = { timedTrim.value = it },
                                 ),
                             touched = { touching = it },
-                            viewMoved = { if (latestPlaying) followPaused = true },
+                            heldOrMoved = { if (latestPlaying) followPaused = true },
                         )
                     },
             ) {
@@ -976,7 +980,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
     longPressed: () -> Unit,
     previews: Previews,
     touched: (Boolean) -> Unit,
-    viewMoved: () -> Unit,
+    heldOrMoved: () -> Unit,
 ) {
     awaitPointerEventScope {
         while (true) {
@@ -993,6 +997,8 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
             arbiter.down(first.id.value, dp(first.position.x), dp(first.position.y), first.uptimeMillis, start.kind)
             first.consume()
             touched(true)
+            // Whether the gesture ended as a tap, which leaves the view following the playhead.
+            var tapped = false
             try {
                 // Any other finger already down in the same event (two fingers landing together).
                 firstEvent.changes
@@ -1091,7 +1097,6 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                     if (abs(pan) > 0 && !next.fitAll) next = TimelineZoom.scrollBy(next, pan, c.totalMs, c.spanWidth)
                                     live = next
                                     onZoom(next)
-                                    viewMoved()
                                 }
                                 lastSpread = spread
                                 lastCentroid = centroid
@@ -1115,7 +1120,6 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 } else {
                                     live = TimelineZoom.scrollBy(live, dp(from.x - ch.position.x), c.totalMs, c.spanWidth)
                                     onZoom(live)
-                                    viewMoved()
                                 }
                                 lastScroll = ch.position
                             }
@@ -1211,6 +1215,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         }
 
                         GestureMode.TAP -> {
+                            tapped = true
                             when (start) {
                                 is Hit.OnPlus -> {
                                     val s = c.slots.getOrNull(start.point.anchorIndex)
@@ -1260,10 +1265,10 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 is Hit.OnTimedClip -> {
                                     actions.select(start.id)
                                     // cm-tap-seek: while playing any item, while paused a caption, frame or picture in
-                                    // picture (a sound only shows nothing), moves the cursor to the time tapped.
+                                    // picture on a row switched on (a sound shows nothing), moves the cursor to the time tapped.
                                     val row = c.row(start.key)
                                     val clip = row?.clips?.firstOrNull { it.id == start.id }
-                                    if (row != null && clip != null && TapSeek.seeks(row.type, c.playing)) {
+                                    if (row != null && clip != null && TapSeek.seeks(row.type, c.playing, row.enabled)) {
                                         val x = dp(first.position.x) - metrics.headerDp - PAD_DP
                                         actions.seek(TapSeek.timeAt(c.zoom, x, clip.startMs, clip.endMs, c.totalMs))
                                     }
@@ -1369,6 +1374,8 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                     }
                 }
             } finally {
+                // A gesture that was not a tap stops the view following the playhead (see TimelineView).
+                if (!tapped) heldOrMoved()
                 // Also when the handler is cancelled or a gesture throws: never left "touching" or mid-drag.
                 touched(false)
                 previews.clear()

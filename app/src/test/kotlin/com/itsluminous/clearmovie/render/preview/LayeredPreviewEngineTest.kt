@@ -215,6 +215,29 @@ class LayeredPreviewEngineTest {
     }
 
     @Test
+    fun `a seek after playing to the end stays paused there, and Play still plays`() {
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        engine.play()
+        // Played to the end: ExoPlayer stops there but keeps playWhenReady set.
+        main().playbackState = Player.STATE_ENDED
+        main().listeners.forEach { it.onPlaybackStateChanged(Player.STATE_ENDED) }
+        assertThat(engine.isPlaying).isFalse()
+        assertThat(main().playWhenReady).isTrue()
+        // A tap on the timeline (cm-tap-seek) or the ruler moves the preview: it must not start playing.
+        val p1 = project.mainSlot(ClipId("p1"))!!
+        engine.seekTo((p1.startMs + 500) * 1000)
+        main().playbackState = Player.STATE_READY
+        // MAIN and the sound stay stopped (the frame player plays on only to put its picture up, as on any paused seek).
+        assertThat(main().playWhenReady).isFalse()
+        assertThat(sounds().none { it.playWhenReady }).isTrue()
+        assertThat(engine.isPlaying).isFalse()
+        assertThat(engine.positionUs).isEqualTo((p1.startMs + 500) * 1000)
+        engine.play()
+        assertThat(engine.isPlaying).isTrue()
+        assertThat(engine.positionUs).isEqualTo((p1.startMs + 500) * 1000)
+    }
+
+    @Test
     fun `a follower near its next part waits at its start and starts when MAIN gets there`() {
         engine.load(schedule, resolver, startUs = 0, play = false)
         engine.play()

@@ -1,9 +1,11 @@
 package com.itsluminous.clearmovie.ui.editor
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -26,8 +28,10 @@ import com.itsluminous.clearmovie.domain.model.addText
 import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.mainSlot
+import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTransition
 import com.itsluminous.clearmovie.testing.ScreenSize
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TRIM_END_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.ZoomState
 import com.itsluminous.clearmovie.ui.editor.timeline.clipTag
@@ -130,7 +134,6 @@ class TapSeekScreenTest {
         assertThat(tapMiddle(h, p1.clip.id, p1.startMs, p1.endMs)).isNotNull()
         // Never played: the tap only moves the cursor.
         assertThat(h.calls).doesNotContain("play")
-        assertThat(h.playing).isFalse()
     }
 
     @Test
@@ -160,8 +163,8 @@ class TapSeekScreenTest {
         assertThat(tapMiddle(h, m1.id, m1.startMs, m1.endMs)).isNotNull()
         val v4 = h.project.mainSlot(ClipId("v4"))!!
         assertThat(tapMiddle(h, v4.clip.id, v4.startMs, v4.endMs)).isNotNull()
-        // Nothing paused it.
-        assertThat(h.playing).isTrue()
+        // Nothing paused it, nor pressed Play.
+        assertThat(h.pauses).isEqualTo(0)
         assertThat(h.calls).doesNotContain("play")
         assertThat(h.state!!.panel).isNull()
     }
@@ -183,6 +186,47 @@ class TapSeekScreenTest {
         compose.runOnIdle { h.playheadUs = 500_000 }
         compose.waitForIdle()
         assertThat(h.state!!.zoom!!.scrollMs).isEqualTo(put)
+    }
+
+    @Test
+    fun `while playing, the view stops following once an item is dragged, as before`() {
+        val h = show(playing = true)
+        val pip = h.project.clip(ClipId("pip1"))!!
+        val timeline = compose.onNodeWithTag(TIMELINE_TAG).fetchSemanticsNode().boundsInRoot
+        val at =
+            compose
+                .onNodeWithTag(clipTag(pip.id), useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .boundsInRoot.center - timeline.topLeft
+        val density =
+            compose
+                .onRoot()
+                .fetchSemanticsNode()
+                .layoutInfo.density.density
+        // Held, then moved sideways past twice the touch slop (as TracksScreenTest drags it).
+        compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
+            down(at)
+            advanceEventTime(700)
+            moveTo(at + Offset(25f * density, 0f))
+            moveTo(at + Offset(50f * density, 0f))
+            up()
+        }
+        compose.waitForIdle()
+        assertThat(h.project.clip(pip.id)!!.startMs).isGreaterThan(pip.startMs)
+        val put = h.state!!.zoom!!.scrollMs
+        // The cursor runs out of view: the view stays on the item just moved.
+        compose.runOnIdle { h.playheadUs = 1_000_000 }
+        compose.waitForIdle()
+        assertThat(h.state!!.zoom!!.scrollMs).isEqualTo(put)
+    }
+
+    @Test
+    fun `paused, a tap on a caption on a row switched off only selects it, as the preview shows nothing of it`() {
+        val hello = project.captionId("hello")
+        val off = project.setTrackEnabled(project.trackOf(hello)!!.id, false)
+        val h = show(off)
+        tapMiddle(h, hello, 10_000, 12_000).let { assertThat(it).isNull() }
+        assertThat(h.playheadUs).isEqualTo(12_000_000)
     }
 
     @Test
@@ -243,8 +287,6 @@ class TapSeekScreenTest {
         val p1 = h.project.mainSlot(ClipId("p1"))!!
         tapMiddle(h, p1.clip.id, p1.startMs, p1.endMs)
         assertThat(h.project).isEqualTo(project)
-        compose.runOnIdle { h.actions.undo() }
-        compose.waitForIdle()
-        assertThat(h.project).isEqualTo(project)
+        assertThat(h.canUndo).isFalse()
     }
 }

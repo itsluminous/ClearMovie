@@ -41,6 +41,12 @@ class EditorHarness(
     private val preset: Preset?,
 ) {
     val calls = mutableListOf<String>()
+
+    /** How many times the screen asked the preview to pause (kept apart from [calls], which tests compare whole). */
+    var pauses = 0
+
+    /** Whether the session has a step to undo. */
+    val canUndo: Boolean get() = session.canUndo
     private var session = EditSession().apply { adopt(initial) }
 
     /**
@@ -107,6 +113,10 @@ class EditorHarness(
 
             override fun togglePlay() {
                 calls += "play"
+            }
+
+            override fun pause() {
+                pauses++
             }
 
             override fun fixPreset() {

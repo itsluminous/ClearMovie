@@ -520,12 +520,13 @@ the screen; the playhead is saved by `EditorViewModel`.
 - **A tap on an item** selects it and (`TapSeek`) moves the cursor to the time
   tapped, kept inside the item: while playing on any row, and play goes on
   from there; while paused only on the rows the preview shows (MAIN, text,
-  frames, picture in picture), so the preview shows that item there. A tap on
-  a sound while paused only selects it. A tap on a "+", a transition marker or
-  a trim handle keeps its own meaning, and TalkBack's click only selects (it
-  has no point to move to). While playing the view follows the playhead until
-  it is moved along the time by hand (a sideways swipe, a pinch); a tap does
-  not stop the following.
+  frames, picture in picture, switched on), so the preview shows that item
+  there. A tap on a sound while paused only selects it. A tap on a "+", a
+  transition marker or a trim handle keeps its own meaning, and TalkBack's
+  click only selects (it has no point to move to). While playing the view
+  follows the playhead until any touch but a tap (a swipe, a pinch, a drag, a
+  trim, a long-press); after a tap it goes on following. A seek with the
+  video stopped at its end leaves it paused there (`LayeredPreviewEngine`).
 - **Edits.** The bar's actions and the panels change the model through
   `EditSession` (one undo step each, 50 kept; a change from elsewhere is a
   step too). "+" opens a chooser: photos and videos from the gallery, a text

@@ -246,11 +246,20 @@ class LayeredPreviewEngine(
 
     fun togglePlay() = if (isPlaying) pause() else play()
 
-    /** Moves every player to [us] of the video's time. */
+    /**
+     * Moves every player to [us] of the video's time. Stopped at the end, the
+     * preview stays paused there: ExoPlayer keeps playWhenReady set at its end,
+     * and a seek from there would otherwise play on its own.
+     */
     fun seekTo(us: Long) {
         checkMainThread()
         val s = schedule ?: return
         val p = main ?: return
+        if (p.playbackState == Player.STATE_ENDED && p.playWhenReady) {
+            wake?.cancel()
+            wake = null
+            allPlayers().forEach { it.playWhenReady = false }
+        }
         val t = us.coerceIn(0, s.durationUs)
         val i = s.mainIndexAt(t)
         val e = s.main[i]

@@ -13,13 +13,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.android.ComposeNotIdleException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.unit.DpRect
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -45,6 +43,7 @@ import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.addRow
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.addToTrack
+import com.itsluminous.clearmovie.domain.model.mainSlot
 import com.itsluminous.clearmovie.export.ExportHarness
 import com.itsluminous.clearmovie.ui.editor.PLAY_TAG
 import com.itsluminous.clearmovie.ui.editor.TIME_TAG
@@ -137,10 +136,7 @@ class TapSeekDeviceTest {
             val before = positionUs()
             // Music (2-5 s) is not seen: the cursor stays where it was.
             tap(music, song)
-            repeat(30) {
-                Thread.sleep(FRAME_MS)
-                compose.mainClock.advanceTimeBy(FRAME_MS)
-            }
+            runFor(1500)
             assertThat(positionUs()).isWithin(TIME_STEP_US).of(before)
             assertThat(playing()).isFalse()
         }
@@ -153,8 +149,7 @@ class TapSeekDeviceTest {
             upright(scenario)
             rowsShown()
             inView(music)
-            press(PLAY_TAG)
-            poll { playing() }
+            play()
             // Past the music (2-5 s), so only the tap can bring the preview back into it.
             poll { positionUs() >= 6_000_000 }
             tap(music, song)
@@ -167,6 +162,35 @@ class TapSeekDeviceTest {
             assertThat(playing()).isTrue()
             press(PLAY_TAG)
         }
+    }
+
+    @Test
+    fun afterPlayingToTheEndATapOnAPhotoMovesThePreviewThereAndItStaysPaused() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            this.scenario = scenario
+            upright(scenario)
+            rowsShown()
+            play()
+            // Played to the end: it stops there by itself.
+            poll(totalUs / 1000 + TIMEOUT_MS) { !playing() && positionUs() >= totalUs - END_SLACK_US }
+            val photo = project.mainClips.first { it is PhotoClip }
+            val slot = requireNotNull(project.mainSlot(photo.id))
+            press(clipTag(photo.id))
+            waitForTime(Range.closed(slot.startMs * 1000, slot.endMs * 1000 - 1))
+            val landed = positionUs()
+            // It stays there, paused: the tap does not start the video again.
+            runFor(1500)
+            assertThat(playing()).isFalse()
+            assertThat(positionUs()).isWithin(TIME_STEP_US).of(landed)
+        }
+    }
+
+    /** Presses Play once the editor has its video (Play is enabled then), and waits until it plays. */
+    private fun play() {
+        poll { live(PLAY_TAG)?.config?.contains(SemanticsProperties.Disabled) == false && live(TIME_TAG) != null }
+        runFor(500)
+        press(PLAY_TAG)
+        poll { playing() }
     }
 
     /** A real tap on the middle of item [id] of row [row] (brought into the rows' view first). */
@@ -191,27 +215,30 @@ class TapSeekDeviceTest {
         }
     }
 
+    /**
+     * Brings [row] into the rows' view: Show all rows when a small screen folds it away, and a scroll when it is
+     * out of the rows' view. Read from the app's live semantics, which needs no idle Compose (while playing it is
+     * never idle); only a scroll, done before playing where it is needed, goes through Compose.
+     */
     private fun inView(row: TrackId) {
-        // The row is there once the rows are laid out, unless a small screen folds it away behind Show all rows.
-        val shown =
-            runCatching { compose.waitUntil(5_000) { notYetIfBusy { exists(rowTag(row.value)) } } }.isSuccess
-        if (!shown) press(TIMELINE_ROWS_TOGGLE_TAG)
-        read {
-            val view = bounds(TIMELINE_ROWS_TAG)
-            val r = bounds(rowTag(row.value))
-            if (r.top < view.top || r.bottom > view.bottom) {
-                val density = context.resources.displayMetrics.density
-                val dy = (r.top - view.top).value * density
-                node(TIMELINE_ROWS_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
-            }
-            val now = bounds(rowTag(row.value))
-            check(now.top >= view.top - 1.toDp() && now.bottom <= bounds(TIMELINE_ROWS_TAG).bottom + 1.toDp()) { "row $row not in view" }
+        val shown = runCatching { poll(5_000) { live(rowTag(row.value)) != null } }.isSuccess
+        if (!shown) {
+            press(TIMELINE_ROWS_TOGGLE_TAG)
+            poll { live(rowTag(row.value)) != null }
+        }
+
+        fun within(): Boolean {
+            val view = live(TIMELINE_ROWS_TAG)?.boundsInWindow ?: return false
+            val r = live(rowTag(row.value))?.boundsInWindow ?: return false
+            return r.top >= view.top - 1 && r.bottom <= view.bottom + 1
+        }
+        if (!within()) {
+            val view = live(TIMELINE_ROWS_TAG)!!.boundsInWindow
+            val r = live(rowTag(row.value))!!.boundsInWindow
+            read { node(TIMELINE_ROWS_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, r.top - view.top) } }
+            poll { within() }
         }
     }
-
-    private fun Int.toDp() =
-        androidx.compose.ui.unit
-            .Dp(this.toFloat())
 
     /**
      * Where the preview is, from the play bar's time (its progress is exact; its words are to the second). Read
@@ -266,7 +293,7 @@ class TapSeekDeviceTest {
     }
 
     private fun waitForTime(range: Range<Long>) {
-        if (!runCatching { poll { positionUs() in range } }.isSuccess) {
+        if (runCatching { poll { positionUs() in range } }.isFailure) {
             assertWithMessage("the preview's time").that(positionUs()).isIn(range)
         }
     }
@@ -276,10 +303,21 @@ class TapSeekDeviceTest {
      * between asks, which it is not while the preview plays. The test's clock drives the app's frames, so each ask
      * moves it on by those 50 ms too.
      */
-    private fun poll(check: () -> Boolean) {
-        val end = System.currentTimeMillis() + TIMEOUT_MS
+    private fun poll(
+        timeoutMs: Long = TIMEOUT_MS,
+        check: () -> Boolean,
+    ) {
+        val end = System.currentTimeMillis() + timeoutMs
         while (!runCatching(check).getOrDefault(false)) {
-            check(System.currentTimeMillis() < end) { "still not so after $TIMEOUT_MS ms" }
+            check(System.currentTimeMillis() < end) { "still not so after $timeoutMs ms" }
+            Thread.sleep(FRAME_MS)
+            compose.mainClock.advanceTimeBy(FRAME_MS)
+        }
+    }
+
+    /** Lets the app run for [ms] (its frames too). */
+    private fun runFor(ms: Long) {
+        repeat((ms / FRAME_MS).toInt()) {
             Thread.sleep(FRAME_MS)
             compose.mainClock.advanceTimeBy(FRAME_MS)
         }
@@ -304,11 +342,6 @@ class TapSeekDeviceTest {
         }
 
     private fun node(tag: String): SemanticsNodeInteraction = compose.onNodeWithTag(tag, useUnmergedTree = true)
-
-    private fun bounds(tag: String): DpRect = node(tag).getUnclippedBoundsInRoot()
-
-    private fun exists(tag: String): Boolean =
-        compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     /** [block], tried again while Compose is busy (the preview's players post frames on a software-GPU emulator). */
     private fun <T> read(block: () -> T): T {
@@ -348,5 +381,8 @@ class TapSeekDeviceTest {
         /** The play bar's progress is reported ten times a second. */
         const val TIME_STEP_US = 150_000L
         const val FRAME_MS = 50L
+
+        /** How near the end counts as there (the last progress report). */
+        const val END_SLACK_US = 300_000L
     }
 }

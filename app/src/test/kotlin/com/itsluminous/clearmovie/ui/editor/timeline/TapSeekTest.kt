@@ -30,10 +30,11 @@ class TapSeekTest {
     }
 
     @Test
-    fun `fractions of a millisecond are rounded`() {
-        val z = ZoomState(msPerDp = 7.3, scrollMs = 0.0)
-        assertThat(TapSeek.timeAt(z, 10.0, 0, 3000, 14_000)).isEqualTo(73)
-        assertThat(TapSeek.timeAt(z, 10.07, 0, 3000, 14_000)).isEqualTo(74)
+    fun `fractions of a millisecond go to the millisecond below, as the ruler takes them`() {
+        val z = ZoomState(msPerDp = 7.5, scrollMs = 0.0)
+        assertThat(TapSeek.timeAt(z, 10.0, 0, 3000, 14_000)).isEqualTo(75)
+        assertThat(TapSeek.timeAt(z, 10.1, 0, 3000, 14_000)).isEqualTo(75)
+        assertThat(TapSeek.timeAt(z, 10.2, 0, 3000, 14_000)).isEqualTo(76)
     }
 
     @Test
@@ -79,5 +80,13 @@ class TapSeekTest {
         val seen = RowType.entries.filter { TapSeek.seeks(it, playing = false) }
         assertThat(seen).containsExactly(RowType.MAIN, RowType.TEXT, RowType.FRAME, RowType.PIP)
         assertThat(RowType.entries.filterNot { it.isPicture() }).containsExactly(RowType.MUSIC, RowType.VOICE, RowType.SOUND)
+    }
+
+    @Test
+    fun `while paused a row switched off moves nothing, as the preview shows nothing of it, but while playing it does`() {
+        for (type in RowType.entries) {
+            assertThat(TapSeek.seeks(type, playing = false, enabled = false)).isFalse()
+            assertThat(TapSeek.seeks(type, playing = true, enabled = false)).isTrue()
+        }
     }
 }
