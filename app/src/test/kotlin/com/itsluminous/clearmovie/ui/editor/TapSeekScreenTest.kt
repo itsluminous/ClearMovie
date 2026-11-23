@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -125,7 +126,7 @@ class TapSeekScreenTest {
     fun `paused, a tap on a caption, a picture in picture or a photo moves the cursor into it`() {
         val h = show()
         val hello = h.project.clip(h.project.captionId("hello"))!!
-        tapMiddle(h, hello.id, hello.startMs, hello.endMs)
+        assertThat(tapMiddle(h, hello.id, hello.startMs, hello.endMs)).isNotNull()
         assertThat(h.playheadUs / 1000).isIn(Range.closedOpen(hello.startMs, hello.endMs))
         val pip = h.project.clip(ClipId("pip1"))!!
         assertThat(tapMiddle(h, pip.id, pip.startMs, pip.endMs)).isNotNull()
@@ -221,6 +222,57 @@ class TapSeekScreenTest {
     }
 
     @Test
+    fun `a tap on a selected item narrow enough to be all handles still moves the cursor, and keeps it selected`() {
+        val h = show()
+        // p1 is 3 s, 60 dp at 50 ms a dp: its two 36 dp handle areas cover all of it.
+        val p1 = h.project.mainSlot(ClipId("p1"))!!
+        compose.runOnIdle { h.state!!.selected = p1.clip.id }
+        compose.waitForIdle()
+        assertThat(tapMiddle(h, p1.clip.id, p1.startMs, p1.endMs)).isNotNull()
+        // The same on another row: the 3 s picture in picture.
+        val pip = h.project.clip(ClipId("pip1"))!!
+        compose.runOnIdle { h.state!!.selected = pip.id }
+        compose.waitForIdle()
+        assertThat(tapMiddle(h, pip.id, pip.startMs, pip.endMs)).isNotNull()
+        assertThat(h.project).isEqualTo(project)
+    }
+
+    @Test
+    fun `while playing, a tap on an item after a swipe starts the following again from there`() {
+        val h = show(playing = true)
+        compose.onNodeWithTag(clipTag(ClipId("v4")), useUnmergedTree = true).performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        val m1 = h.project.clip(ClipId("m1"))!!
+        if (compose.onAllNodesWithTag(clipTag(m1.id), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            compose.runOnIdle { h.state!!.zoom = ZoomState(msPerDp = 50.0, scrollMs = 6000.0, fitAll = false) }
+            compose.waitForIdle()
+        }
+        tapMiddle(h, m1.id, m1.startMs, m1.endMs)
+        compose.runOnIdle { h.playheadUs = 1_000_000 }
+        compose.waitForIdle()
+        assertThat(h.state!!.zoom!!.scrollMs).isLessThan(1000.0)
+    }
+
+    @Test
+    fun `the selected item's plus cut off while playing is brought into view once paused`() {
+        val h = show(playing = true)
+        val p5 = h.project.mainSlot(ClipId("p5"))!!
+        val width = h.state!!.spanWidth!!
+        // p5's end 5 dp in from the right edge, the cursor at its start (well in view, so nothing turns the page).
+        val scroll = p5.endMs - (width - 5) * 50.0
+        compose.runOnIdle {
+            h.playheadUs = p5.startMs * 1000
+            h.state!!.zoom = ZoomState(msPerDp = 50.0, scrollMs = scroll, fitAll = false)
+            h.state!!.selected = p5.clip.id
+        }
+        compose.waitForIdle()
+        assertThat(h.state!!.zoom!!.scrollMs).isEqualTo(scroll)
+        compose.runOnIdle { h.playing = false }
+        compose.waitForIdle()
+        assertThat(h.state!!.zoom!!.scrollMs).isGreaterThan(scroll)
+    }
+
+    @Test
     fun `paused, a tap on a caption on a row switched off only selects it, as the preview shows nothing of it`() {
         val hello = project.captionId("hello")
         val off = project.setTrackEnabled(project.trackOf(hello)!!.id, false)
@@ -230,7 +282,7 @@ class TapSeekScreenTest {
     }
 
     @Test
-    fun `a tap on a transition marker, a plus or a trim handle moves no cursor`() {
+    fun `a tap on a transition marker or a plus moves no cursor, and one on a trim handle keeps the item, inside it`() {
         val h = show()
         val v2 = h.project.mainSlot(ClipId("v2"))!!
         val boundary = v2.index + 1
@@ -248,9 +300,12 @@ class TapSeekScreenTest {
         h.calls.clear()
         compose.onNodeWithTag(TRIM_END_TAG, useUnmergedTree = true).performClick()
         compose.waitForIdle()
-        assertThat(seeks(h)).isEmpty()
-        assertThat(h.state!!.selected).isEqualTo(ClipId("v4"))
+        // Nothing trimmed; still selected; a tap on the item's handle is a tap on the item, kept inside it.
         val v4 = h.project.mainSlot(ClipId("v4"))!!
+        assertThat(h.project).isEqualTo(project)
+        assertThat(h.state!!.selected).isEqualTo(ClipId("v4"))
+        assertThat(seeks(h).single()).isIn(Range.closed(v4.startMs, v4.endMs - 1))
+        h.calls.clear()
         compose.onNodeWithTag(plusTag(v4.index + 1), useUnmergedTree = true).performClick()
         compose.waitForIdle()
         assertThat(h.state!!.panel?.panel).isEqualTo(Panel.INSERT)

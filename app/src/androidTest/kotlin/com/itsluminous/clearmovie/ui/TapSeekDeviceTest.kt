@@ -173,6 +173,8 @@ class TapSeekDeviceTest {
             play()
             // Played to the end: it stops there by itself.
             poll(totalUs / 1000 + TIMEOUT_MS) { !playing() && positionUs() >= totalUs - END_SLACK_US }
+            // This project has no transitions, so the middle of a photo is the photo, never a transition marker.
+            assertThat(project.mainClips.mapNotNull { it.transitionToNext }).isEmpty()
             val photo = project.mainClips.first { it is PhotoClip }
             val slot = requireNotNull(project.mainSlot(photo.id))
             press(clipTag(photo.id))
@@ -233,6 +235,8 @@ class TapSeekDeviceTest {
             return r.top >= view.top - 1 && r.bottom <= view.bottom + 1
         }
         if (!within()) {
+            // A scroll waits for Compose to be idle, which it never is while the preview plays: say so at once.
+            check(!playing()) { "row $row is out of the rows' view while playing; bring it in before Play" }
             val view = live(TIMELINE_ROWS_TAG)!!.boundsInWindow
             val r = live(rowTag(row.value))!!.boundsInWindow
             read { node(TIMELINE_ROWS_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, r.top - view.top) } }

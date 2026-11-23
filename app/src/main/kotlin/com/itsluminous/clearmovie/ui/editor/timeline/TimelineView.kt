@@ -366,8 +366,8 @@ fun TimelineView(
         var touching by remember { mutableStateOf(false) }
         // Any touch but a tap while playing (a swipe, a pinch, a drag, a trim, a long-press) stops the following
         // until Play is pressed again, so the user can look ahead, or at what was just moved, without being pulled
-        // back. A tap does not: a tap on an item while playing moves the cursor there (cm-tap-seek), and the view
-        // goes on following it.
+        // back. A tap does not, and a tap that moves the cursor (on an item, cm-tap-seek, or on the ruler) starts
+        // the following again from there.
         var followPaused by remember { mutableStateOf(false) }
         val latestPlaying by rememberUpdatedState(playing)
         LaunchedEffect(playing) { if (playing) followPaused = false }
@@ -381,11 +381,11 @@ fun TimelineView(
         // A newly selected item shows a "+" on each side (on MAIN beyond its trim handles). When one would be
         // cut off by the end of the view, the view moves just enough (past the video's own start or end if it
         // must) to show it. Only a small shift: a long item already well in view never jumps.
-        LaunchedEffect(selected) {
+        LaunchedEffect(selected, playing) {
             val sel = selected ?: return@LaunchedEffect
             // While playing, the view is the following's: an item tapped near the edge is not nudged one way
-            // while the following turns the page the other.
-            if (latestPlaying && !followPaused) return@LaunchedEffect
+            // while the following turns the page the other. Paused again, the nudge runs then.
+            if (playing && !followPaused) return@LaunchedEffect
             val timed = rows.firstNotNullOfOrNull { r -> r.clips.firstOrNull { it.id == sel } }
             val span =
                 slots.firstOrNull { it.clip.id == sel }?.let { it.startMs to it.endMs }
@@ -561,6 +561,7 @@ fun TimelineView(
                                 ),
                             touched = { touching = it },
                             heldOrMoved = { if (latestPlaying) followPaused = true },
+                            followAgain = { followPaused = false },
                         )
                     },
             ) {
@@ -981,6 +982,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
     previews: Previews,
     touched: (Boolean) -> Unit,
     heldOrMoved: () -> Unit,
+    followAgain: () -> Unit,
 ) {
     awaitPointerEventScope {
         while (true) {
@@ -997,8 +999,9 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
             arbiter.down(first.id.value, dp(first.position.x), dp(first.position.y), first.uptimeMillis, start.kind)
             first.consume()
             touched(true)
-            // Whether the gesture ended as a tap, which leaves the view following the playhead.
-            var tapped = false
+            // Whether the gesture became one that moves or holds something (not a tap, not cancelled), which stops
+            // the view following the playhead.
+            var acted = false
             try {
                 // Any other finger already down in the same event (two fingers landing together).
                 firstEvent.changes
@@ -1073,6 +1076,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         }
                     }
                     if (arbiter.mode == GestureMode.DRAG) dragged = true
+                    if (arbiter.mode in ACTED) acted = true
                     if (before == GestureMode.PENDING && arbiter.mode in LIFTED && waiting) longPressed()
                     val c = current()
                     val pressed = event.changes.filter { it.pressed }
@@ -1215,7 +1219,19 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                         }
 
                         GestureMode.TAP -> {
-                            tapped = true
+                            // cm-tap-seek: a tap on an item of a row of [type] from [startMs] to [endMs] moves the
+                            // cursor to the time tapped (TapSeek says when), and the view follows it if playing.
+                            fun seekInItem(
+                                type: RowType,
+                                enabled: Boolean,
+                                startMs: Long,
+                                endMs: Long,
+                            ) {
+                                if (!TapSeek.seeks(type, c.playing, enabled)) return
+                                val x = dp(first.position.x) - metrics.headerDp - PAD_DP
+                                actions.seek(TapSeek.timeAt(c.zoom, x, startMs, endMs, c.totalMs))
+                                followAgain()
+                            }
                             when (start) {
                                 is Hit.OnPlus -> {
                                     val s = c.slots.getOrNull(start.point.anchorIndex)
@@ -1254,23 +1270,20 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 is Hit.OnClip -> {
                                     c.slots.getOrNull(start.index)?.let { s ->
                                         actions.select(s.clip.id)
-                                        // cm-tap-seek: the cursor to the time tapped (MAIN is always seen).
-                                        if (TapSeek.seeks(RowType.MAIN, c.playing)) {
-                                            val x = dp(first.position.x) - metrics.headerDp - PAD_DP
-                                            actions.seek(TapSeek.timeAt(c.zoom, x, s.startMs, s.endMs, c.totalMs))
-                                        }
+                                        seekInItem(RowType.MAIN, true, s.startMs, s.endMs)
                                     }
                                 }
 
                                 is Hit.OnTimedClip -> {
                                     actions.select(start.id)
-                                    // cm-tap-seek: while playing any item, while paused a caption, frame or picture in
-                                    // picture on a row switched on (a sound shows nothing), moves the cursor to the time tapped.
                                     val row = c.row(start.key)
-                                    val clip = row?.clips?.firstOrNull { it.id == start.id }
-                                    if (row != null && clip != null && TapSeek.seeks(row.type, c.playing, row.enabled)) {
-                                        val x = dp(first.position.x) - metrics.headerDp - PAD_DP
-                                        actions.seek(TapSeek.timeAt(c.zoom, x, clip.startMs, clip.endMs, c.totalMs))
+                                    row?.clips?.firstOrNull { it.id == start.id }?.let {
+                                        seekInItem(
+                                            row.type,
+                                            row.enabled,
+                                            it.startMs,
+                                            it.endMs,
+                                        )
                                     }
                                 }
 
@@ -1281,11 +1294,27 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 Hit.OnRuler -> {
                                     val t = c.zoom.timeAt(dp(first.position.x) - metrics.headerDp - PAD_DP)
                                     actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
+                                    followAgain()
                                 }
 
-                                // A tap on a trim handle keeps the item selected (it is about to be dragged).
-                                is Hit.OnTrim, is Hit.OnTimedTrim -> {
-                                    Unit
+                                // A tap on a trim handle keeps the item selected (it is about to be dragged), and is a
+                                // tap on the item: on a narrow item the handles cover all of it.
+                                is Hit.OnTrim -> {
+                                    c.selectedIndex?.let { c.slots.getOrNull(it) }?.let { s ->
+                                        seekInItem(RowType.MAIN, true, s.startMs, s.endMs)
+                                    }
+                                }
+
+                                is Hit.OnTimedTrim -> {
+                                    val row = c.row(start.key)
+                                    row?.clips?.firstOrNull { it.id == start.id }?.let {
+                                        seekInItem(
+                                            row.type,
+                                            row.enabled,
+                                            it.startMs,
+                                            it.endMs,
+                                        )
+                                    }
                                 }
 
                                 else -> {
@@ -1374,8 +1403,9 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                     }
                 }
             } finally {
-                // A gesture that was not a tap stops the view following the playhead (see TimelineView).
-                if (!tapped) heldOrMoved()
+                // A swipe, a pinch, a trim, a scrub, a drag or a long-press stops the view following the playhead
+                // (see TimelineView); a tap, or a touch cancelled before it was any of these, does not.
+                if (acted) heldOrMoved()
                 // Also when the handler is cancelled or a gesture throws: never left "touching" or mid-drag.
                 touched(false)
                 previews.clear()
@@ -1385,6 +1415,18 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
 }
 
 private val LIFTED = setOf(GestureMode.LONG_PRESSED, GestureMode.DRAG, GestureMode.MENU)
+
+/** The gestures that move or hold something: any of them stops the view following the playhead. */
+private val ACTED =
+    setOf(
+        GestureMode.PINCH,
+        GestureMode.SCROLL,
+        GestureMode.TRIM,
+        GestureMode.SCRUB,
+        GestureMode.DRAG,
+        GestureMode.LONG_PRESSED,
+        GestureMode.MENU,
+    )
 
 /** A drag let go: the MAIN item, the row or the timed item goes where it was dropped. */
 private fun endDrag(

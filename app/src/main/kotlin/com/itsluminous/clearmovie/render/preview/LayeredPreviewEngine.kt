@@ -226,8 +226,9 @@ class LayeredPreviewEngine(
     fun play() {
         checkMainThread()
         val p = main ?: return
-        stillPending.clear()
         if (p.playbackState == Player.STATE_ENDED) seekTo(0)
+        // After the seek, which (stopped at the end) shows the frames' stills as a paused seek does.
+        stillPending.clear()
         p.playWhenReady = true
         // Each follower plays now, or waits for its next part (see keepInStep).
         sync(force = false)
@@ -255,11 +256,7 @@ class LayeredPreviewEngine(
         checkMainThread()
         val s = schedule ?: return
         val p = main ?: return
-        if (p.playbackState == Player.STATE_ENDED && p.playWhenReady) {
-            wake?.cancel()
-            wake = null
-            allPlayers().forEach { it.playWhenReady = false }
-        }
+        if (p.playbackState == Player.STATE_ENDED && p.playWhenReady) allPlayers().forEach { it.playWhenReady = false }
         val t = us.coerceIn(0, s.durationUs)
         val i = s.mainIndexAt(t)
         val e = s.main[i]
