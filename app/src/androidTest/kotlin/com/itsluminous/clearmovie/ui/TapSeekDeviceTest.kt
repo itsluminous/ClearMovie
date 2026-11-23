@@ -6,6 +6,8 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -45,6 +47,7 @@ import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.domain.model.mainSlot
 import com.itsluminous.clearmovie.export.ExportHarness
+import com.itsluminous.clearmovie.ui.editor.EDITOR_POPUP_TAG
 import com.itsluminous.clearmovie.ui.editor.PLAY_TAG
 import com.itsluminous.clearmovie.ui.editor.TIME_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TAG
@@ -210,8 +213,15 @@ class TapSeekDeviceTest {
      */
     private fun press(tag: String) {
         val node = live(tag) ?: error("no $tag")
-        val x = node.positionOnScreen.x + node.size.width / 2
-        val y = node.positionOnScreen.y + node.size.height / 2
+        val box = node.boundsInWindow
+        val origin = node.positionOnScreen - node.positionInWindow
+        // On a small screen, Show all rows floats the preview in a small window over the rows' corner: a tap is
+        // made on the part of the item it leaves uncovered.
+        val popup = live(EDITOR_POPUP_TAG)?.boundsInWindow
+        val right = if (popup != null && popup.top < box.bottom && popup.bottom > box.top) minOf(box.right, popup.left) else box.right
+        check(right > box.left) { "$tag is under the small preview" }
+        val x = origin.x + (box.left + right) / 2
+        val y = origin.y + box.center.y
         automation.executeShellCommand("input tap ${x.toInt()} ${y.toInt()}").use { pfd ->
             ParcelFileDescriptor.AutoCloseInputStream(pfd).readBytes()
         }
@@ -231,18 +241,28 @@ class TapSeekDeviceTest {
 
         fun within(): Boolean {
             val view = live(TIMELINE_ROWS_TAG)?.boundsInWindow ?: return false
-            val r = live(rowTag(row.value))?.boundsInWindow ?: return false
+            val r = live(rowTag(row.value))?.unclipped() ?: return false
             return r.top >= view.top - 1 && r.bottom <= view.bottom + 1
         }
         if (!within()) {
             // A scroll waits for Compose to be idle, which it never is while the preview plays: say so at once.
             check(!playing()) { "row $row is out of the rows' view while playing; bring it in before Play" }
-            val view = live(TIMELINE_ROWS_TAG)!!.boundsInWindow
-            val r = live(rowTag(row.value))!!.boundsInWindow
-            read { node(TIMELINE_ROWS_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, r.top - view.top) } }
-            poll { within() }
+            // Asked again until it holds: the rows bring MAIN back into view by themselves when their room changes
+            // (Show all rows on a small screen), which can undo a scroll made just before.
+            poll {
+                if (!within()) {
+                    val view = live(TIMELINE_ROWS_TAG)!!.boundsInWindow
+                    val r = live(rowTag(row.value))!!.unclipped()
+                    read { node(TIMELINE_ROWS_TAG).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, r.top - view.top) } }
+                    runFor(600)
+                }
+                within()
+            }
         }
     }
+
+    /** Where the node is in the window, as laid out: a row scrolled out of the rows' view has no clipped bounds. */
+    private fun SemanticsNode.unclipped(): Rect = Rect(positionInWindow, Size(size.width.toFloat(), size.height.toFloat()))
 
     /**
      * Where the preview is, from the play bar's time (its progress is exact; its words are to the second). Read
