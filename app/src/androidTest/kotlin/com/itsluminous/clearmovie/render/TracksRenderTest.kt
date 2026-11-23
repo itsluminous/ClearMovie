@@ -126,6 +126,10 @@ class TracksRenderTest {
                 )
         val schedule = PreviewSchedule.of(RenderPlanBuilder().build(project, shortSide = 720))
         assertThat(schedule.overlays).hasSize(1)
+        // The reference pictures are read before the preview's players open: on CI's Android 10 emulator a
+        // retriever asked while they hold the video decoders gave no frame at all (No frame at 1500000).
+        val dark = rgb(frameAt(java.io.File(RenderHarness.fixtureDir, "clip_dark.mp4"), 1_500_000), 0.5, 0.5)
+        val light = rgb(frameAt(java.io.File(RenderHarness.fixtureDir, "clip_light.mp4"), 1_500_000), 0.5, 0.5)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val activity = compose.activity
         val engine = LayeredPreviewEngine(activity, scope)
@@ -144,8 +148,6 @@ class TracksRenderTest {
                 com.itsluminous.clearmovie.domain.model.NormRect.FULL,
                 16.0 / 9,
             )
-        val dark = rgb(frameAt(java.io.File(RenderHarness.fixtureDir, "clip_dark.mp4"), 1_500_000), 0.5, 0.5)
-        val light = rgb(frameAt(java.io.File(RenderHarness.fixtureDir, "clip_light.mp4"), 1_500_000), 0.5, 0.5)
         var inside = IntArray(3)
         var outside = IntArray(3)
         val until = System.currentTimeMillis() + 10_000
