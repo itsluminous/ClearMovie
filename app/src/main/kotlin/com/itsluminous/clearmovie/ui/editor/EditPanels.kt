@@ -383,9 +383,7 @@ fun EditPanel(
                     }
 
                     Panel.TALK_LOWER -> {
-                        if (track.audioRole ==
-                            AudioRole.MUSIC
-                        ) {
+                        if (track.audioRole == AudioRole.MUSIC || track.hasFrameSound(LocalFramesWithSound.current)) {
                             TalkLowerPanel(track, project, callbacks, close)
                         } else {
                             LaunchedEffect(open) { close() }
@@ -441,6 +439,7 @@ private fun volumeOf(clip: Clip?): Double? =
     when (clip) {
         is VideoClip -> clip.volumeDb
         is AudioClip -> clip.volumeDb
+        is OverlayClip -> clip.volumeDb
         else -> null
     }
 

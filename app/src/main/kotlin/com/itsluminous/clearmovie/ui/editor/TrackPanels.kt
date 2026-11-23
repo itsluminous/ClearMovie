@@ -511,15 +511,18 @@ internal fun RowSection(
             onPanel(OpenPanel(Panel.INSERT, trackId = track.id))
         }
     }
-    if (track.type == TrackType.AUDIO) {
+    val frameSound = track.hasFrameSound(LocalFramesWithSound.current)
+    val mutedFrameRow = track.type == TrackType.OVERLAY && track.presetRole != PresetRole.FRAME && track.muted
+    if (track.type == TrackType.AUDIO || frameSound || mutedFrameRow) {
         Choice(stringResource(R.string.action_mute_row), null, track.muted, R.drawable.ic_volume_off, rowMenuTag("mute")) {
             callbacks.edit { setTrackMuted(track.id, !track.muted) }
             close()
         }
     }
-    if (track.audioRole == AudioRole.MUSIC) {
-        // The same popup as the bar's Lower for talk: on or off, and how low.
-        Choice(stringResource(R.string.action_lower_music), null, track.lowerWhenTalking, R.drawable.ic_volume_down, rowMenuTag("lower")) {
+    if (track.audioRole == AudioRole.MUSIC || frameSound) {
+        // The same popup as the bar's Lower for talk: on or off, and how low; on a frame row, for its frames' sound.
+        val label = if (track.type == TrackType.OVERLAY) R.string.action_lower_frame_sound else R.string.action_lower_music
+        Choice(stringResource(label), null, track.lowerWhenTalking, R.drawable.ic_volume_down, rowMenuTag("lower")) {
             onPanel(OpenPanel(Panel.TALK_LOWER, trackId = track.id))
         }
     }

@@ -751,7 +751,7 @@ fun EditorScreen(
             }
             val bottom: @Composable (Modifier) -> Unit = { m ->
                 Box(m.onSizeChanged { bottomDp = with(density) { it.height.toDp().value } }) {
-                    CompositionLocalProvider(LocalShownRows provides visible) {
+                    CompositionLocalProvider(LocalShownRows provides visible, LocalFramesWithSound provides ui.framesWithSound) {
                         val open = state.panel
                         if (recording != null) {
                             recording(Modifier)
@@ -803,9 +803,22 @@ fun EditorScreen(
                             ContextualBar(
                                 actions =
                                     when {
-                                        project != null && selectedTrack != null -> rowBar(project, selectedTrack, shownRows)
-                                        project != null && timedClip != null -> timedBar(project, timedClip)
-                                        else -> barActions(project, slots, selectedSlot, missing, state.zoom)
+                                        project != null && selectedTrack != null -> {
+                                            rowBar(
+                                                project,
+                                                selectedTrack,
+                                                shownRows,
+                                                ui.framesWithSound,
+                                            )
+                                        }
+
+                                        project != null && timedClip != null -> {
+                                            timedBar(project, timedClip, ui.framesWithSound)
+                                        }
+
+                                        else -> {
+                                            barActions(project, slots, selectedSlot, missing, state.zoom)
+                                        }
                                     },
                                 onAction = ::onBar,
                                 description =

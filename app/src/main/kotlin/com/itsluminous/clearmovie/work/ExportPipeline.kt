@@ -37,8 +37,11 @@ import com.itsluminous.clearmovie.domain.export.ExportQuality
 import com.itsluminous.clearmovie.domain.export.ExportSpace
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.MediaRef
+import com.itsluminous.clearmovie.domain.model.OverlayClip
+import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
+import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.render.media3.ColourCalibration
 import com.itsluminous.clearmovie.render.media3.CompositionFactory
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
@@ -314,8 +317,10 @@ class ExportPipeline(
 
     /**
      * [known] plus a measurement of every sound in [project] that has none
-     * (cm-flow: a replaced ending was played at its own level). A sound that
-     * cannot be measured keeps its own level.
+     * (cm-flow: a replaced ending was played at its own level), and of every
+     * frame on the user's frame rows that has none kept on it yet, whose own
+     * sound plays like music (cm-frame-audio). A sound that cannot be
+     * measured keeps its own level; a frame that cannot plays no sound.
      */
     internal suspend fun measuredLoudness(
         project: Project,
@@ -324,10 +329,12 @@ class ExportPipeline(
     ): LoudnessTable {
         val unknown =
             project.tracks
-                .flatMap { it.clips }
-                .filterIsInstance<AudioClip>()
-                .map { it.media }
-                .distinct()
+                .flatMap { t ->
+                    val frames = t.type == TrackType.OVERLAY && t.presetRole != PresetRole.FRAME && t.enabled && !t.muted
+                    t.clips.mapNotNull {
+                        (it as? AudioClip)?.media ?: (it as? OverlayClip)?.takeIf { f -> frames && f.soundLufs == null }?.media
+                    }
+                }.distinct()
                 .filter { known.lufs(it) == null }
         if (unknown.isEmpty()) return known
         val measured =

@@ -17,10 +17,12 @@ import com.itsluminous.clearmovie.data.media.UriGrants
 import com.itsluminous.clearmovie.data.preset.AndroidFrameKeyCheck
 import com.itsluminous.clearmovie.data.preset.AndroidFrameStills
 import com.itsluminous.clearmovie.data.preset.AndroidMediaProbe
+import com.itsluminous.clearmovie.data.preset.AndroidSoundLoudness
 import com.itsluminous.clearmovie.data.preset.FrameKeyCheck
 import com.itsluminous.clearmovie.data.preset.FrameStills
 import com.itsluminous.clearmovie.data.preset.MediaProbe
 import com.itsluminous.clearmovie.data.preset.PresetStore
+import com.itsluminous.clearmovie.data.preset.SoundLoudness
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import dagger.Module
 import dagger.Provides
@@ -183,6 +185,11 @@ object StorageModule {
     fun provideFrameStills(
         @ApplicationContext context: Context,
     ): FrameStills = AndroidFrameStills(context)
+
+    @Provides
+    fun provideSoundLoudness(
+        @ApplicationContext context: Context,
+    ): SoundLoudness = AndroidSoundLoudness(context)
 
     @Provides
     fun provideMediaFactsProbe(

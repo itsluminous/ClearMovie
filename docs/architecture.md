@@ -145,7 +145,9 @@ Android types, so all of it is tested on the JVM.
 - **Lower for talk.** A music row's `lowerToDb` is the level its music goes
   down to under voices, videos' own sound and the closing message; without
   one the project's `DuckingSpec` levels apply (-20 dB under a voice or the
-  closing message, -12 dB under a video). A style stores only what differs from the preset's
+  closing message, -12 dB under a video). A frame row has the same setting
+  for its frames' own sound, and a frame its own `volumeDb` (schema 6). A
+  style stores only what differs from the preset's
   (`CaptionStyleOverride.between`), so Reset to preset clears it.
 - **Undo.** `ProjectEditor` applies one edit per undo step (50 kept), and
   accepts a result only if `validate()` finds no broken invariant.
@@ -167,7 +169,8 @@ Android types, so all of it is tested on the JVM.
   4 added detached sides and `lowerToDb`, and its step rewrites nothing
   either; schema 5 keeps a detached side as a distance from its item's edge,
   and its step renames the schema 4 keys and turns their times into
-  distances). Golden files under `app/src/test/resources/fixtures/project/` must
+  distances; schema 6 added a frame's `volumeDb`, and its step rewrites
+  nothing, so an older frame reads at the frame music's -8 dB). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.
 
 ## Rendering
@@ -195,7 +198,20 @@ Rendering has two layers, both under `render`:
   dip to silence for a fade through black or white), and
   ducking computed from the timeline (music lowered under clip sound and under
   voice, everything under the closing message, clip sound and voice never
-  lowered by music). `RenderPlan.slice` cuts a plan to a part of the video
+  lowered by music). A frame on a frame row of the user's plays its video's
+  own sound as a music layer of its row (cm-frame-audio): at the frame's
+  `volumeDb` (the frame music's -8 dB to start) after the music's loudness
+  normalisation, each copy of a repeating frame from its file's start with
+  its picture and a dip at each join, and lowered by its row's Lower for
+  talk. Only a frame with a measured loudness plays, so one without sound
+  gets no sound layer. The editor offers a frame's Volume and Lower for talk
+  as soon as a quick look finds a sound track in its file, measures its
+  loudness in the background with the export's own meter (`SoundLoudness`)
+  and keeps it on the frame (`OverlayClip.soundLufs`, no undo step), so a
+  frame is measured once and the preview and the export play it at one
+  level; an export of a frame not measured yet measures it itself. The
+  preset's frame is left out there: its sound is the frame music row
+  already. `RenderPlan.slice` cuts a plan to a part of the video
   (render tests use it).
 - **`render.media3`** maps a plan to one Media3 `Composition` for Transformer
   (`CompositionFactory`, `RenderExporter`). Media3's compositor draws the
@@ -279,8 +295,9 @@ lays it out for players:
 - **Frame rows** each play in a muted ExoPlayer with the export's
   `ChromaKeyEffect` (plus `PremultiplyEffect`, since a TextureView blends
   premultiplied colour) on a non-opaque TextureView over MAIN, in stacking order.
-- **Sound rows** (the frame's music, the closing message) each play in an
-  audio-only player. Every player's volume follows the plan's gain envelopes,
+- **Sound rows** (the frame's music, the closing message, and a user frame
+  row's own sound) each play in an audio-only player; the frame's keyed
+  picture player stays muted. Every player's volume follows the plan's gain envelopes,
   so the music ducks under clip sound as it will in the export.
 - **Captions** are the export's own images: `CaptionBitmapRenderer` draws
   each at its box's size on the 1080-line canvas and the preview scales it

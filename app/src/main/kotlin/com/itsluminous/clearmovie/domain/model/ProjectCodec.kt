@@ -42,9 +42,10 @@ class ProjectMigrations(
          * preset item's side detached by its handle (`detachedStartMs`,
          * `detachedEndMs`), and a music row's `lowerToDb`. 5
          * (cm-timeline-handles): a dragged side is a distance from its
-         * item's edge rather than a time in the video.
+         * item's edge rather than a time in the video. 6 (cm-frame-audio): a
+         * frame's `volumeDb`, the level of the frame video's own sound.
          */
-        const val CURRENT_VERSION = 5
+        const val CURRENT_VERSION = 6
 
         /**
          * 1 to 2: nothing to rewrite. A version 1 caption has no `attachedTo`,
@@ -65,6 +66,12 @@ class ProjectMigrations(
          * made distances from the item's edges after reading
          * (`withDetachedSidesAsDistances`), since that needs the item's span.
          * Only unreleased builds wrote schema 4.
+         *
+         * 5 to 6: nothing to rewrite. An older frame has no `volumeDb`, so it
+         * reads at the default, the preset frame music's level: a frame the
+         * user added now plays its own sound, which older versions dropped.
+         * An older app refuses a version 6 file rather than drop a frame's
+         * volume without a word.
          */
         val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> =
             mapOf(
@@ -72,6 +79,7 @@ class ProjectMigrations(
                 2 to { old -> JsonObject(old + mapOf("shape" to JsonPrimitive("landscape"), "askShape" to JsonPrimitive(false))) },
                 3 to { old -> old },
                 4 to { old -> renameDetachedSides(old) },
+                5 to { old -> old },
             )
     }
 }

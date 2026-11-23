@@ -118,6 +118,10 @@ data class RowFacts(
     val muted: Boolean,
     val enabled: Boolean,
     val lowerWhenTalking: Boolean,
+    /** A frame row with a frame whose video has sound (cm-frame-audio): Lower for talk applies to it. */
+    val hasFrameSound: Boolean = false,
+    /** A frame row of the user's. */
+    val isFrameRow: Boolean = false,
 )
 
 /** What a selected item on a row other than MAIN allows, for [ClipActions.forTimed]. */
@@ -131,6 +135,8 @@ data class TimedFacts(
     val frameOn: Boolean = true,
     /** A caption with a side detached from its photo or video (Match item). */
     val canFollow: Boolean = false,
+    /** A frame whose video has its own sound (cm-frame-audio): it has a Volume and Lower for talk. */
+    val hasSound: Boolean = false,
 )
 
 /**
@@ -275,8 +281,11 @@ object ClipActions {
                 listOf(BarAction(EditAction.FRAME_ON, checked = facts.frameOn)) + frameLook
             }
 
+            // A frame with sound has the sound's controls of a music item, after its look (cm-frame-audio).
             SelectionKind.OVERLAY -> {
-                frameLook + moves + delete
+                val sound =
+                    if (facts.hasSound) listOf(BarAction(EditAction.VOLUME), lowerMusic(facts.lowerWhenTalking)) else emptyList()
+                frameLook + sound + moves + delete
             }
 
             else -> {
@@ -292,8 +301,9 @@ object ClipActions {
     fun forRow(row: RowFacts): List<BarAction> =
         buildList {
             add(BarAction(if (row.isMain) EditAction.ADD_MEDIA else EditAction.ADD_HERE))
-            if (row.isSound) add(BarAction(EditAction.MUTE_ROW, checked = row.muted))
-            if (row.isMusic) add(lowerMusic(row.lowerWhenTalking))
+            // A frame row muted earlier keeps its switch, so it can be turned back on, sound or not.
+            if (row.isSound || row.hasFrameSound || (row.isFrameRow && row.muted)) add(BarAction(EditAction.MUTE_ROW, checked = row.muted))
+            if (row.isMusic || row.hasFrameSound) add(lowerMusic(row.lowerWhenTalking))
             if (row.isPresetFrame) add(BarAction(EditAction.FRAME_ON, checked = row.enabled))
             if (row.isVisual) {
                 add(BarAction(EditAction.SHOW_ON_TOP, row.canGoForward))

@@ -458,6 +458,16 @@ class RenderPlanBuilder(
                 .flatMap { t -> t.clips.map { DuckInterval(it.startMs * US, it.endMs * US, ducking.speechDuckDb) } }
 
         val speechDuck = duckEnvelope(speech, attackUs, releaseUs)
+
+        // How a music row, or a frame row's own sound (cm-frame-audio), is lowered: with Lower for talk on, under
+        // voices, videos' own sound and the closing message, to the row's own level from its popup when it has one;
+        // with it off, only under the closing message, as everything is.
+        fun musicDuck(track: Track): GainEnvelope {
+            if (!track.lowerWhenTalking) return speechDuck
+            val level = track.lowerToDb
+            val talk = clipSound + voice + speech
+            return duckEnvelope(if (level == null) talk else talk.map { it.copy(db = level) }, attackUs, releaseUs)
+        }
         val layers = mutableListOf<AudioLayer>()
 
         // Clip sound on MAIN, in the same two lanes as the pictures.
@@ -517,14 +527,7 @@ class RenderPlanBuilder(
             val duck =
                 when (role) {
                     AudioLayerRole.MUSIC -> {
-                        if (track.lowerWhenTalking) {
-                            // The row's own level from the Lower for talk popup, under voices, videos and the closing message alike.
-                            val level = track.lowerToDb
-                            val talk = clipSound + voice + speech
-                            duckEnvelope(if (level == null) talk else talk.map { it.copy(db = level) }, attackUs, releaseUs)
-                        } else {
-                            speechDuck
-                        }
+                        musicDuck(track)
                     }
 
                     AudioLayerRole.CLOSING_MESSAGE -> {
@@ -573,6 +576,49 @@ class RenderPlanBuilder(
                 }
             }
             layers += AudioLayer(track.id, role, lane.finish())
+        }
+
+        // A frame video's own sound (cm-frame-audio), played like music: at the frame's volume after the same loudness
+        // normalisation as a music row, repeated with its picture (each copy from the file's start, so it stays with
+        // the picture, dipping at each join as the preset's frame music does), and lowered for talk as its row says.
+        // Only a frame whose sound has been measured plays (its soundLufs, or [loudness]): a file without sound, or
+        // one that can't be read, has no loudness. The preset's frame is left out: its sound already plays as the frame music row.
+        for (track in audibleTracks.filter { it.type == TrackType.OVERLAY && it.presetRole != PresetRole.FRAME }) {
+            // Each frame with its loudness: its own once measured, else the table's (the export measures one that has none).
+            val frames =
+                track.clips
+                    .filterIsInstance<OverlayClip>()
+                    .filter { it.durationMs > 0 }
+                    .mapNotNull { clip -> (clip.soundLufs ?: loudness.lufs(clip.media))?.let { clip to it } }
+                    .sortedBy { it.first.startMs }
+            if (frames.isEmpty()) continue
+            val duck = musicDuck(track)
+            val lane = SoundLane(ctx.totalUs)
+            for ((clip, lufs) in frames) {
+                val startUs = clip.startMs * US
+                val copies = overlayCopies(clip)
+                val norm = (MUSIC_LUFS - lufs).coerceIn(MIN_NORM_DB, MAX_NORM_DB)
+                var env = GainEnvelope.constant(clip.volumeDb + norm)
+                for ((offset, _, _) in copies.drop(1)) {
+                    env += dip(offset, minOf(REPEAT_FADE_US, copies.first().second / 4))
+                }
+                env += duck.shifted(-startUs)
+                copies.forEach { (offset, length, srcEnd) ->
+                    lane.add(
+                        AudioSegment.Sound(
+                            startUs = startUs + offset,
+                            durationUs = length,
+                            media = clip.media,
+                            sourceDurationUs = clip.sourceDurationMs * US,
+                            clipStartUs = 0,
+                            clipEndUs = srcEnd,
+                            speed = Speed.X1,
+                            gain = env.slice(offset, offset + length),
+                        ),
+                    )
+                }
+            }
+            layers += AudioLayer(track.id, AudioLayerRole.MUSIC, lane.finish())
         }
         return layers
     }

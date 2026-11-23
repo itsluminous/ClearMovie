@@ -82,6 +82,9 @@ class EditorHarness(
      */
     var timedAnswer: List<Clip> = emptyList()
 
+    /** The frame videos that have their own sound, as the view model finds them (cm-frame-audio). */
+    var framesWithSound by mutableStateOf(emptySet<com.itsluminous.clearmovie.domain.model.MediaRef>())
+
     private fun ui(): EditorUi =
         EditorUi(
             project = project,
@@ -89,6 +92,7 @@ class EditorHarness(
             schedule = runCatching { PreviewSchedule.of(RenderPlanBuilder(preset).build(project)) }.getOrNull(),
             canUndo = session.canUndo,
             canRedo = session.canRedo,
+            framesWithSound = framesWithSound,
         )
 
     val actions =

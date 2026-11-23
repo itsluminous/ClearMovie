@@ -404,18 +404,19 @@ fun Project.setTrackMuted(
     muted: Boolean,
 ): Project = updateTrack(trackId) { it.copy(muted = muted) }
 
-/** "Lower music when people talk" on a MUSIC row. */
+/** "Lower music when people talk" on a MUSIC row, or on a frame row for its frames' own sound (cm-frame-audio). */
 fun Project.setLowerWhenTalking(
     trackId: TrackId,
     lower: Boolean,
 ): Project =
     updateTrack(trackId) {
-        require(it.audioRole == AudioRole.MUSIC) { "Only music rows are lowered" }
+        require(it.isLoweredForTalk) { "Only music and frame rows are lowered" }
         it.copy(lowerWhenTalking = lower)
     }
 
 /**
- * The "Lower for talk" popup on a MUSIC row: whether the music is lowered
+ * The "Lower for talk" popup on a MUSIC row, or on a frame row for its
+ * frames' own sound (cm-frame-audio): whether the sound is lowered
  * while people talk, and to what level ([levelDb], from
  * [Limits.MIN_VOLUME_DB], silent, to 0 dB, not lowered). A null level keeps
  * the project's own levels.
@@ -427,7 +428,7 @@ fun Project.setTalkLowering(
 ): Project {
     require(levelDb == null || (levelDb.isFinite() && levelDb in Limits.MIN_VOLUME_DB..0.0)) { "Level out of range" }
     return updateTrack(trackId) {
-        require(it.audioRole == AudioRole.MUSIC) { "Only music rows are lowered" }
+        require(it.isLoweredForTalk) { "Only music and frame rows are lowered" }
         it.copy(lowerWhenTalking = lower, lowerToDb = levelDb)
     }
 }
@@ -591,7 +592,7 @@ fun Project.setPip(
     }
 }
 
-/** Volume of a video's own sound or of a sound clip. */
+/** Volume of a video's own sound, of a sound clip, or of a frame video's own sound (cm-frame-audio). */
 fun Project.setVolume(
     clipId: ClipId,
     volumeDb: Double,
@@ -601,9 +602,43 @@ fun Project.setVolume(
         when (it) {
             is VideoClip -> it.copy(volumeDb = volumeDb)
             is AudioClip -> it.copy(volumeDb = volumeDb)
-            else -> throw IllegalArgumentException("Only videos and sounds have a volume")
+            is OverlayClip -> it.copy(volumeDb = volumeDb)
+            else -> throw IllegalArgumentException("Only videos, sounds and frames have a volume")
         }
     }
+}
+
+/**
+ * The measured loudness [lufs] of [media]'s sound, kept on every frame that
+ * plays it and has none yet (cm-frame-audio). Not an edit the user makes:
+ * the editor keeps it without an undo step.
+ */
+fun Project.withFrameLoudness(
+    media: MediaRef,
+    lufs: Double,
+): Project {
+    require(lufs.isFinite() && lufs in Limits.MIN_LUFS..Limits.MAX_LUFS) { "Loudness out of range" }
+    return copy(
+        tracks =
+            tracks.map { t ->
+                if (t.type != TrackType.OVERLAY || t.clips.none { it is OverlayClip && it.media == media && it.soundLufs == null }) {
+                    t
+                } else {
+                    t.copy(
+                        clips =
+                            t.clips.map {
+                                if (it is OverlayClip && it.media == media &&
+                                    it.soundLufs == null
+                                ) {
+                                    it.copy(soundLufs = lufs)
+                                } else {
+                                    it
+                                }
+                            },
+                    )
+                }
+            },
+    )
 }
 
 /**

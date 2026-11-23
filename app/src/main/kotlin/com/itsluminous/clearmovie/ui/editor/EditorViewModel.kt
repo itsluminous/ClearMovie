@@ -18,6 +18,7 @@ import com.itsluminous.clearmovie.data.media.newMainItems
 import com.itsluminous.clearmovie.data.preset.FrameSample
 import com.itsluminous.clearmovie.data.preset.FrameStills
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.data.preset.SoundLoudness
 import com.itsluminous.clearmovie.data.project.OpenResult
 import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.data.project.ProjectMediaSet
@@ -39,10 +40,12 @@ import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.MainClip
 import com.itsluminous.clearmovie.domain.model.MainSlot
 import com.itsluminous.clearmovie.domain.model.MediaClip
+import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.PipPlacement
 import com.itsluminous.clearmovie.domain.model.Preset
+import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
@@ -63,7 +66,9 @@ import com.itsluminous.clearmovie.domain.model.replaceMainItem
 import com.itsluminous.clearmovie.domain.model.replacePresetPart
 import com.itsluminous.clearmovie.domain.model.setShape
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
+import com.itsluminous.clearmovie.domain.model.withFrameLoudness
 import com.itsluminous.clearmovie.render.media3.MediaResolver
+import com.itsluminous.clearmovie.render.plan.LoudnessTable
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import com.itsluminous.clearmovie.render.plan.Source
@@ -109,6 +114,11 @@ data class EditorUi(
     val schedule: PreviewSchedule? = null,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
+    /**
+     * The frame videos (on frame rows) whose files have a sound track
+     * (cm-frame-audio): only they offer Volume and Lower for talk.
+     */
+    val framesWithSound: Set<MediaRef> = emptySet(),
 ) {
     /** MAIN in play order: intro, the user's items, ending. */
     val slots: List<MainSlot> get() = project?.mainLayout().orEmpty()
@@ -245,6 +255,7 @@ class EditorViewModel
         private val probe: MediaFactsProbe,
         private val recordings: VoiceRecordings,
         private val frameStills: FrameStills = FrameStills { _, _, _ -> null },
+        private val soundLoudness: SoundLoudness = SoundLoudness { null },
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -321,6 +332,18 @@ class EditorViewModel
         private var access: MediaAccessState? = null
 
         /**
+         * A frame's own sound (cm-frame-audio), by file: whether it has a sound track (a quick look, which
+         * decides whether the frame offers Volume and Lower for talk), and its loudness once measured (which
+         * decides whether its sound plays, and how loud). A measured loudness is also kept on the frame itself
+         * ([OverlayClip.soundLufs]), so a frame is measured once, and the export reads the same value; this map
+         * only covers an undo back to before it was kept. A file that could not be read is left out, so it is
+         * looked at again. Declared before `init`, which may load the project at once.
+         */
+        private val frameHasSound = mutableMapOf<MediaRef, Boolean>()
+        private val frameLoudness = mutableMapOf<MediaRef, Double>()
+        private var measuring: Job? = null
+
+        /**
          * One load at a time: refresh() and the project's own updates never overlap. Declared
          * before `init`: the loader starts there and, when the project is already open, calls
          * load() before the constructor returns.
@@ -377,6 +400,8 @@ class EditorViewModel
         /** Re-reads the preset files and the media: after the repair screen, or when access changed. */
         fun refresh(access: MediaAccessState) {
             this.access = access
+            // A frame that looked silent may be readable now (access granted, a file put back): look again.
+            frameHasSound.entries.removeAll { !it.value }
             // Links picked before a process death are taken in again, once.
             if (!resumed) {
                 resumed = true
@@ -783,6 +808,56 @@ class EditorViewModel
 
         private suspend fun load(project: Project) = loading.withLock { loadNow(project) }
 
+        /** The preset's loudness table, with the frames measured here. */
+        private fun loudnessFor(set: ProjectMediaSet) = LoudnessTable { set.loudness.lufs(it) ?: frameLoudness[it] }
+
+        /** The frames on the user's frame rows (the preset's frame plays its sound as the music row). */
+        private fun userFrames(project: Project): List<OverlayClip> =
+            project.tracks
+                .filter { it.type == TrackType.OVERLAY && it.presetRole != PresetRole.FRAME }
+                .flatMap { it.clips.filterIsInstance<OverlayClip>() }
+
+        /** Looks, quickly, whether each frame's file has a sound track; and returns the frames that have one. */
+        private suspend fun framesWithSound(project: Project): Set<MediaRef> {
+            val frames = userFrames(project)
+            for (ref in frames.filter { it.soundLufs == null }.map { it.media }.distinct()) {
+                if (ref in frameHasSound || ref in frameLoudness) continue
+                probe.probe(projectId, ref, null)?.let { frameHasSound[ref] = it.hasAudio }
+            }
+            return frames
+                .filter { it.soundLufs != null || it.media in frameLoudness || frameHasSound[it.media] == true }
+                .mapTo(mutableSetOf()) { it.media }
+        }
+
+        /**
+         * Measures, off the main thread, the loudness of each frame with sound that has none yet, and keeps it
+         * on the frame (no undo step): the save that follows shows the preview again with its sound. Frames
+         * added while it runs are measured before it ends; one that takes too long, or can't be read, is left
+         * for the next visit.
+         */
+        private fun measureFrames(set: ProjectMediaSet) {
+            if (measuring?.isActive == true) return
+            measuring =
+                viewModelScope.launch {
+                    val tried = mutableSetOf<MediaRef>()
+                    while (true) {
+                        val project = session.current ?: uiState.value.project ?: return@launch
+                        val ref =
+                            userFrames(project)
+                                .firstOrNull {
+                                    it.soundLufs == null && it.media !in frameLoudness && it.media !in tried &&
+                                        frameHasSound[it.media] == true
+                                }?.media ?: return@launch
+                        tried += ref
+                        val uri = runCatching { set.resolver.resolve(ref) }.getOrNull() ?: continue
+                        val lufs = withTimeoutOrNull(MEASURE_TIMEOUT_MS) { soundLoudness.lufs(uri) } ?: continue
+                        frameLoudness[ref] = lufs
+                        // Kept on the frame, unless a voice is being recorded: a save then would restart the picture under it.
+                        if (!voice.active) session.settle { withFrameLoudness(ref, lufs) }?.let(::write)
+                    }
+                }
+        }
+
         private suspend fun loadNow(project: Project) {
             suggestShape(project)
             // Only captions changed (a word typed, a colour picked, the box dragged): the files and the
@@ -795,7 +870,7 @@ class EditorViewModel
                 val quick =
                     runCatching {
                         PreviewSchedule.of(
-                            RenderPlanBuilder(cached.preset, cached.loudness).build(project, shortSide = PREVIEW_HEIGHT),
+                            RenderPlanBuilder(cached.preset, loudnessFor(cached)).build(project, shortSide = PREVIEW_HEIGHT),
                         )
                     }.getOrNull()
                 if (quick != null && engine.updateCaptions(quick)) {
@@ -815,12 +890,16 @@ class EditorViewModel
             val set = projectMedia.forProject(project)
             media = set
             resolver = set.resolver
+            val withSound = framesWithSound(project)
+            val table = loudnessFor(set)
             val schedule =
-                runCatching { PreviewSchedule.of(RenderPlanBuilder(set.preset, set.loudness).build(project, shortSide = PREVIEW_HEIGHT)) }
+                runCatching { PreviewSchedule.of(RenderPlanBuilder(set.preset, table).build(project, shortSide = PREVIEW_HEIGHT)) }
                     .getOrNull()
             val missing = access?.let { mediaAccess.missing(project, it) }.orEmpty()
+            measureFrames(set)
             uiState.update {
                 it.copy(
+                    framesWithSound = withSound,
                     // An edit made while the files were being looked up is newer than [project]: keep it.
                     project = session.current ?: project,
                     preset = set.preset,
@@ -923,6 +1002,9 @@ class EditorViewModel
 
             /** How long the first-time shape question waits for the first item's size. */
             const val SUGGEST_TIMEOUT_MS = 3_000L
+
+            /** Longer than measuring the longest frame takes (the meter reads at most 10 minutes of sound). */
+            const val MEASURE_TIMEOUT_MS = 60_000L
 
             /** How long [previewFrom] waits for the edited video before it plays what it has. */
             const val PREVIEW_FALLBACK_MS = 1_500L

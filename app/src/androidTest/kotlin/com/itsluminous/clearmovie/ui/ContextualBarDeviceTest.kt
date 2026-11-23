@@ -153,7 +153,7 @@ class ContextualBarDeviceTest {
     /** Every action any bar can show. */
     private val bars: List<List<BarAction>> =
         SelectionKind.entries.map { ClipActions.forSelection(it) } +
-            SelectionKind.entries.map { ClipActions.forTimed(it, TimedFacts(true, true, fixed = false, isMusic = true)) } +
+            SelectionKind.entries.map { ClipActions.forTimed(it, TimedFacts(true, true, fixed = false, isMusic = true, hasSound = true)) } +
             listOf(ClipActions.forRow(RowFacts(false, true, true, true, true, true, true, true, true, true, false, true, true)))
 
     /**

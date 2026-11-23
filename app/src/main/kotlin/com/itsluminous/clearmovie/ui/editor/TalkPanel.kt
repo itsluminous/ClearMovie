@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Track
+import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.setTalkLowering
 import kotlin.math.roundToInt
 
@@ -46,7 +47,9 @@ const val MAX_TALK_PERCENT = 100f
  * while people talk, the level it goes down to (0% silent to 100%, in 5%
  * steps) and a slider. Until the slider is moved the row keeps the project's
  * own levels (the slider shows the one used under a voice); a moved slider
- * sets one level for voices and videos alike. Done is one undo step.
+ * sets one level for voices and videos alike. Done is one undo step. On a
+ * frame row (cm-frame-audio) it does the same for its frames' own sound,
+ * and says so.
  */
 @Composable
 internal fun TalkLowerPanel(
@@ -79,7 +82,8 @@ internal fun TalkLowerPanel(
         },
         onCancel = close,
     )
-    val switchLabel = stringResource(R.string.action_lower_music)
+    val frame = track.type == TrackType.OVERLAY
+    val switchLabel = stringResource(if (frame) R.string.action_lower_frame_sound else R.string.action_lower_music)
     Row(
         Modifier
             .fillMaxWidth()
@@ -92,7 +96,7 @@ internal fun TalkLowerPanel(
         Spacer(Modifier.width(16.dp))
         Switch(checked = on, onCheckedChange = null)
     }
-    val label = stringResource(R.string.talk_level)
+    val label = stringResource(if (frame) R.string.talk_level_frame else R.string.talk_level)
     val shown = stringResource(R.string.volume_value, percent.roundToInt())
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(

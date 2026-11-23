@@ -118,6 +118,7 @@ What ClearMovie on `main` does:
 - **Background music and ducking** - the frame's music plays under the whole video and
   is lowered automatically while your videos play with their own sound, and everything
   is lowered for the closing voice. Lower for talk sets how low the music goes.
+  A frame you add with its own sound plays it too, with Volume and Lower for talk.
 - **Record voice** - add a voice row, tap its "+" and choose Record voice to speak while the
   video plays, lined up with the picture.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its

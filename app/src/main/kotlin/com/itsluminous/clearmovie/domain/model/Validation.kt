@@ -191,7 +191,7 @@ private fun Project.checkTrack(
     }
 
     track.lowerToDb?.let {
-        if (track.audioRole != AudioRole.MUSIC || !it.isFinite() || it !in Limits.MIN_VOLUME_DB..0.0) {
+        if (!track.isLoweredForTalk || !it.isFinite() || it !in Limits.MIN_VOLUME_DB..0.0) {
             fail(Violation.Rule.SETTINGS, "$where: talk level")
         }
     }
@@ -312,6 +312,8 @@ private fun Project.checkClipRanges(
             if (!clip.repeat && clip.durationMs > clip.sourceDurationMs) bad("longer than its media")
             clip.key?.let { if (!(it.tolerance in 0.0..1.0 && it.softness in 0.0..1.0)) bad("key") }
             clip.area?.let { if (!KeyMath.isUsableArea(it)) bad("picture area") }
+            if (!clip.volumeDb.isFinite() || clip.volumeDb !in Limits.MIN_VOLUME_DB..Limits.MAX_VOLUME_DB) bad("volume")
+            clip.soundLufs?.let { if (!it.isFinite() || it !in Limits.MIN_LUFS..Limits.MAX_LUFS) bad("loudness") }
         }
 
         is MediaClip -> {

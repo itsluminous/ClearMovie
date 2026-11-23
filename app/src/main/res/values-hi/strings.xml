@@ -444,6 +444,9 @@
     <string name="bar_lower_music">बात पर धीमा</string>
     <!-- cm-timeline-handles: the Lower for talk popup, Match item, and on/off for TalkBack. -->
     <string name="talk_level">बात के समय संगीत की आवाज़</string>
+    <!-- cm-frame-audio: Lower for talk on a frame row, for the frame video's own sound. -->
+    <string name="action_lower_frame_sound">बात होने पर फ़्रेम की आवाज़ धीमी</string>
+    <string name="talk_level_frame">बात के समय फ़्रेम की आवाज़</string>
     <string name="bar_follow_item">आइटम जितना</string>
     <string name="state_on">चालू</string>
     <string name="state_off">बंद</string>

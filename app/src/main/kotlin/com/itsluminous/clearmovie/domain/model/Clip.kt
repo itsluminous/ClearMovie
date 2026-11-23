@@ -16,6 +16,10 @@ object Limits {
     const val MAX_TEXT_LENGTH = 500
     const val MAX_NAME_LENGTH = 100
 
+    /** A measured loudness (LUFS) outside this is not a real measurement. */
+    const val MIN_LUFS = -120.0
+    const val MAX_LUFS = 10.0
+
     /** A new caption without a clip to follow lasts this long (section 6.1). */
     const val DEFAULT_TEXT_MS = 3000L
 
@@ -417,6 +421,15 @@ data class TextClip(
  * frame leaves free. Null for a frame the user added and never set one for
  * (photos then fill the canvas); on the preset frame, null means the
  * preset's own window.
+ *
+ * [volumeDb] (cm-frame-audio) is the level of the frame video's own sound,
+ * which plays under the video like music, lowered while people talk as its
+ * row's Lower for talk says. A frame the user added starts at the preset
+ * frame music's level ([FrameMusic.DEFAULT_GAIN_DB]). The preset's frame
+ * plays its sound as the frame music row instead, so its own [volumeDb] is
+ * not used. [soundLufs] is its sound's measured loudness, kept once measured
+ * so the preview and the export play it at one level; null until then, and
+ * for a file without sound.
  */
 @Serializable
 @SerialName("overlay")
@@ -433,6 +446,8 @@ data class OverlayClip(
     val detachedStartOffsetMs: Long? = null,
     val detachedEndOffsetMs: Long? = null,
     val area: NormRect? = null,
+    val volumeDb: Double = FrameMusic.DEFAULT_GAIN_DB,
+    val soundLufs: Double? = null,
 ) : Clip {
     override fun withStartMs(ms: Long) = copy(startMs = ms)
 

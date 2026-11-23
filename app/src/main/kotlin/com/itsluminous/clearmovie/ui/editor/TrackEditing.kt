@@ -1,11 +1,13 @@
 package com.itsluminous.clearmovie.ui.editor
 
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.PresetRole
@@ -136,10 +138,11 @@ fun timedKind(
         else -> SelectionKind.NOTHING
     }
 
-/** The bar for an item on a row other than MAIN. */
+/** The bar for an item on a row other than MAIN. [framesWithSound] are the frame videos that have their own sound. */
 fun timedBar(
     project: Project,
     clip: Clip,
+    framesWithSound: Set<MediaRef> = emptySet(),
 ): List<BarAction> {
     val track = requireNotNull(project.trackOf(clip.id))
     val facts =
@@ -151,15 +154,17 @@ fun timedBar(
             lowerWhenTalking = track.lowerWhenTalking,
             frameOn = track.enabled,
             canFollow = project.canFollowItem(clip.id),
+            hasSound = clip is OverlayClip && project.playsFrameSound(clip, framesWithSound),
         )
     return ClipActions.forTimed(timedKind(project, clip), facts)
 }
 
-/** The bar for a selected row. */
+/** The bar for a selected row. [framesWithSound] are the frame videos that have their own sound. */
 fun rowBar(
     project: Project,
     track: Track,
     shown: List<String> = emptyList(),
+    framesWithSound: Set<MediaRef> = emptySet(),
 ): List<BarAction> {
     val visible = shown.filter { k -> project.tracks.any { it.id.value == k } }
     val screen = visible.indexOf(track.id.value).takeIf { it >= 0 } ?: project.tracks.indexOfFirst { it.id == track.id }
@@ -180,9 +185,28 @@ fun rowBar(
             muted = track.muted,
             enabled = track.enabled,
             lowerWhenTalking = track.lowerWhenTalking,
+            hasFrameSound = track.hasFrameSound(framesWithSound),
+            isFrameRow = track.type == TrackType.OVERLAY && track.presetRole != PresetRole.FRAME,
         ),
     )
 }
+
+/**
+ * Whether [clip], a frame, plays its own sound (cm-frame-audio): its video
+ * has a sound track ([framesWithSound]) and it is not the preset's frame,
+ * whose sound is the frame music row.
+ */
+fun Project.playsFrameSound(
+    clip: OverlayClip,
+    framesWithSound: Set<MediaRef>,
+): Boolean = clip.media in framesWithSound && trackOf(clip.id)?.presetRole != PresetRole.FRAME
+
+/** A frame row (not the preset's) with a frame whose video has sound: its Lower for talk applies. */
+fun Track.hasFrameSound(framesWithSound: Set<MediaRef>): Boolean =
+    type == TrackType.OVERLAY && presetRole != PresetRole.FRAME && clips.any { it is OverlayClip && it.media in framesWithSound }
+
+/** The frame videos with their own sound, for the row menu and the popups (cm-frame-audio). */
+val LocalFramesWithSound = compositionLocalOf { emptySet<MediaRef>() }
 
 /** The four stacking moves (ARCHITECTURE section 6.2): they change the video, never the screen order. */
 enum class StackMove { TO_TOP, FORWARD, BACKWARD, TO_BOTTOM }
