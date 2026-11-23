@@ -14,6 +14,14 @@ on:
 permissions:
   contents: read
 
+# The instrumented tests of each API level run in this many parallel shards,
+# with the same number in the instrumented-shard matrix. Keep it a power of
+# two of at least 2: the runner puts a test in shard abs(hash) % count, and
+# only then does a test whose hash is Integer.MIN_VALUE land in a shard (the
+# instrumented job fails on any test no shard ran).
+env:
+  INSTRUMENTED_SHARDS: 4
+
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -59,18 +67,25 @@ jobs:
           path: app/build/reports/
           retention-days: 7
 
-  instrumented:
-    name: Instrumented tests (API ${{ matrix.api-level }})
+  # Each API level's tests run in INSTRUMENTED_SHARDS parallel jobs (about
+  # 56 minutes of tests on one emulator before; the longest shard of 4 was
+  # predicted at 17 from the measured test times). The runner splits them
+  # itself, so every test runs in exactly one shard and a new test needs no
+  # list (scripts/ci-instrumented-shard.sh).
+  instrumented-shard:
+    name: Instrumented tests (API ${{ matrix.api-level }}, shard ${{ matrix.shard }})
     needs: check
     runs-on: ubuntu-latest
-    # About 50 minutes on API 29's software-rendered emulator; a slow runner went past an hour.
-    timeout-minutes: 75
+    # About 20 minutes for the longest shard; a hung emulator stops sooner.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         # 29 is minSdk (Android 10, AppCompat stores the language choice);
         # 36 is targetSdk (LocaleManager stores it).
         api-level: [29, 36]
+        # 1..INSTRUMENTED_SHARDS; the instrumented job fails if they differ.
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -82,10 +97,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # One shard per API level saves the Gradle cache on main, as one job
+      # per level did before, so the shards do not crowd the cache.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 1 }}
 
       - name: Enable KVM
         run: |
@@ -96,27 +113,78 @@ jobs:
       # The emulator is created on the runner and thrown away with it.
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          SHARD: ${{ matrix.shard }}
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
-          script: ./gradlew connectedDebugAndroidTest
+          script: bash scripts/ci-instrumented-shard.sh "$SHARD" "$INSTRUMENTED_SHARDS"
 
       # Kept on success too: the reports and per-test logcat are the proof of
-      # what each API level measured (the colour calibration logs its result).
+      # what each API level measured (the colour calibration logs its result),
+      # and the instrumented job below checks them, so a failed upload turns
+      # this shard red and "Re-run failed jobs" runs it again. A re-run
+      # replaces the earlier attempt's report (overwrite) instead of failing
+      # on its name, so the check never reads a stale one.
       - name: Upload instrumented test reports
         if: always()
-        # A failed upload must not turn a passing run (or a release) red.
-        continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: instrumented-reports-api-${{ matrix.api-level }}
+          name: instrumented-reports-api-${{ matrix.api-level }}-shard-${{ matrix.shard }}
+          # Keep every path under app/build: the check expects each report's
+          # outputs/ and reports/ at the top (scripts/check-instrumented-shards.py).
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            app/build/outputs/androidTest-list/
+          overwrite: true
           retention-days: 7
+
+  # One per API level: green only when every shard of every level passed and
+  # this level's shards together ran exactly the full list of its tests.
+  instrumented:
+    name: Instrumented tests (API ${{ matrix.api-level }})
+    needs: [check, instrumented-shard]
+    # Runs when a shard failed or timed out too, so this job turns red instead
+    # of skipped; skipped, as before, when lint and unit tests failed or the
+    # run was cancelled.
+    if: ${{ !cancelled() && needs.check.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [29, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download every shard's reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: instrumented-reports-api-${{ matrix.api-level }}-shard-*
+          path: shards
+
+      - name: Check the shards ran every test once, and passed
+        env:
+          API_LEVEL: ${{ matrix.api-level }}
+        run: python3 scripts/check-instrumented-shards.py shards "$INSTRUMENTED_SHARDS" "$API_LEVEL"
+
+      # needs.instrumented-shard.result covers the shards of both API
+      # levels, so a failed API 29 shard turns API 36's job red as well.
+      - name: Require every shard to pass
+        if: always()
+        env:
+          SHARDS_RESULT: ${{ needs.instrumented-shard.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::The instrumented test shards ended '$SHARDS_RESULT': a shard of API 29 or 36 failed, was cancelled or timed out (see the shard jobs)."
+            exit 1
+          fi
 
   release:
     name: Build release APK
@@ -216,11 +284,12 @@ jobs:
           if-no-files-found: error
 
   # Publishes only on a v* tag, and only after the release APK verified AND
-  # the instrumented tests passed on both API levels.
+  # the instrumented tests passed on both API levels: every shard, and the
+  # check that the shards together ran every test.
   publish:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [release, instrumented]
+    needs: [release, instrumented-shard, instrumented]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
