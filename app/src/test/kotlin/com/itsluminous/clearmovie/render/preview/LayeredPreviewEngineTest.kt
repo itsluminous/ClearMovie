@@ -238,6 +238,24 @@ class LayeredPreviewEngineTest {
     }
 
     @Test
+    fun `Play after the end starts again from the start, every player playing and none paused later by a still`() {
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        engine.play()
+        main().playbackState = Player.STATE_ENDED
+        main().listeners.forEach { it.onPlaybackStateChanged(Player.STATE_ENDED) }
+        engine.play()
+        main().playbackState = Player.STATE_READY
+        assertThat(engine.positionUs).isEqualTo(0)
+        assertThat(engine.isPlaying).isTrue()
+        // Well past any still's timeout, the players are still playing.
+        scope.advanceTimeBy(5_000)
+        idle()
+        assertThat(main().playWhenReady).isTrue()
+        assertThat(overlays().all { it.playWhenReady }).isTrue()
+        assertThat(engine.isPlaying).isTrue()
+    }
+
+    @Test
     fun `a follower near its next part waits at its start and starts when MAIN gets there`() {
         engine.load(schedule, resolver, startUs = 0, play = false)
         engine.play()

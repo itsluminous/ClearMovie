@@ -212,7 +212,7 @@ class TapSeekDeviceTest {
         val node = live(tag) ?: error("no $tag")
         val x = node.positionOnScreen.x + node.size.width / 2
         val y = node.positionOnScreen.y + node.size.height / 2
-        automation.executeShellCommand("input tap ${x.toInt()} $y").use { pfd ->
+        automation.executeShellCommand("input tap ${x.toInt()} ${y.toInt()}").use { pfd ->
             ParcelFileDescriptor.AutoCloseInputStream(pfd).readBytes()
         }
     }

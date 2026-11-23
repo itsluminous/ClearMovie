@@ -364,10 +364,10 @@ fun TimelineView(
         // While playing, the view follows the playhead.
         // A finger on the timeline wins: the view follows the playhead only when nobody is touching it.
         var touching by remember { mutableStateOf(false) }
-        // Any touch but a tap while playing (a swipe, a pinch, a drag, a trim, a long-press) stops the following
-        // until Play is pressed again, so the user can look ahead, or at what was just moved, without being pulled
-        // back. A tap does not, and a tap that moves the cursor (on an item, cm-tap-seek, or on the ruler) starts
-        // the following again from there.
+        // While playing, moving the view along the time by hand (a swipe, a pinch) or moving or holding an item (a
+        // drag, a trim, a long-press) stops the following until Play is pressed again, so the user can look ahead,
+        // or at what was just moved, without being pulled back. A tap does not, and moving the cursor (a tap on an
+        // item, cm-tap-seek, a tap or a scrub on the ruler) starts the following again from there.
         var followPaused by remember { mutableStateOf(false) }
         val latestPlaying by rememberUpdatedState(playing)
         LaunchedEffect(playing) { if (playing) followPaused = false }
@@ -378,19 +378,17 @@ fun TimelineView(
             }
         }
         val selectedIndex = slots.indexOfFirst { it.clip.id == selected }.takeIf { it >= 0 }
+
         // A newly selected item shows a "+" on each side (on MAIN beyond its trim handles). When one would be
         // cut off by the end of the view, the view moves just enough (past the video's own start or end if it
         // must) to show it. Only a small shift: a long item already well in view never jumps.
-        LaunchedEffect(selected, playing) {
-            val sel = selected ?: return@LaunchedEffect
-            // While playing, the view is the following's: an item tapped near the edge is not nudged one way
-            // while the following turns the page the other. Paused again, the nudge runs then.
-            if (playing && !followPaused) return@LaunchedEffect
+        fun nudge(sel: ClipId?) {
+            if (sel == null) return
             val timed = rows.firstNotNullOfOrNull { r -> r.clips.firstOrNull { it.id == sel } }
             val span =
                 slots.firstOrNull { it.clip.id == sel }?.let { it.startMs to it.endMs }
                     ?: timed?.let { it.startMs to it.endMs }
-                    ?: return@LaunchedEffect
+                    ?: return
             val mainClip = slots.firstOrNull { it.clip.id == sel }?.clip
             // Beyond the trim handles on MAIN's photos, videos and cards, and on any other row's item that has them;
             // on the edge of the intro and the ending, which have none.
@@ -426,6 +424,24 @@ fun TimelineView(
                     }
                 }
             if (dx != 0.0) onZoom(TimelineZoom.nudgePastEnds(z, dx, room ?: 0.0, totalMs, spanWidth, endRoom ?: 0.0))
+        }
+        // While playing and following, the view is the following's: an item selected near the edge is not nudged
+        // one way while the following turns the page the other. The nudge is kept for when playing stops, and runs
+        // then only for that selection: a Pause with nothing newly selected moves nothing.
+        var nudgeWaiting by remember { mutableStateOf<ClipId?>(null) }
+        LaunchedEffect(selected) {
+            if (playing && !followPaused) {
+                nudgeWaiting = selected
+                return@LaunchedEffect
+            }
+            nudgeWaiting = null
+            nudge(selected)
+        }
+        LaunchedEffect(playing) {
+            val waiting = nudgeWaiting ?: return@LaunchedEffect
+            if (playing) return@LaunchedEffect
+            nudgeWaiting = null
+            if (waiting == selected) nudge(selected)
         }
         val spans = remember(slots) { slots.map { it.span() } }
         val selectedClip = selectedIndex?.let { slots[it].clip }
@@ -999,7 +1015,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
             arbiter.down(first.id.value, dp(first.position.x), dp(first.position.y), first.uptimeMillis, start.kind)
             first.consume()
             touched(true)
-            // Whether the gesture became one that moves or holds something (not a tap, not cancelled), which stops
+            // Whether the gesture moved the view along the time or moved or held an item (see ACTED), which stops
             // the view following the playhead.
             var acted = false
             try {
@@ -1099,6 +1115,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                     var next = TimelineZoom.zoomAround(live, spread / prevSpread, focus, c.totalMs, c.spanWidth)
                                     val pan = dp(prevCentroid.x - centroid.x)
                                     if (abs(pan) > 0 && !next.fitAll) next = TimelineZoom.scrollBy(next, pan, c.totalMs, c.spanWidth)
+                                    if (next != live) acted = true
                                     live = next
                                     onZoom(next)
                                 }
@@ -1124,6 +1141,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 } else {
                                     live = TimelineZoom.scrollBy(live, dp(from.x - ch.position.x), c.totalMs, c.spanWidth)
                                     onZoom(live)
+                                    acted = true
                                 }
                                 lastScroll = ch.position
                             }
@@ -1380,6 +1398,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                         val t = c.zoom.timeAt(dp(ch.position.x) - metrics.headerDp - PAD_DP)
                                         actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
                                     }
+                                    followAgain()
                                 }
 
                                 else -> {
@@ -1403,8 +1422,9 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                     }
                 }
             } finally {
-                // A swipe, a pinch, a trim, a scrub, a drag or a long-press stops the view following the playhead
-                // (see TimelineView); a tap, or a touch cancelled before it was any of these, does not.
+                // A swipe along the time, a pinch, a trim, a drag or a long-press stops the view following the
+                // playhead (see TimelineView); a tap, a scrub, a swipe up and down the rows, or a touch cancelled
+                // before it was any of these, does not.
                 if (acted) heldOrMoved()
                 // Also when the handler is cancelled or a gesture throws: never left "touching" or mid-drag.
                 touched(false)
@@ -1416,13 +1436,14 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
 
 private val LIFTED = setOf(GestureMode.LONG_PRESSED, GestureMode.DRAG, GestureMode.MENU)
 
-/** The gestures that move or hold something: any of them stops the view following the playhead. */
+/**
+ * The gestures that move or hold an item: any of them stops the view following the playhead. A swipe along the
+ * time and a pinch stop it too, once they move the view (see the handler); a swipe up and down the rows, and a
+ * scrub on the ruler, which moves the cursor the view follows, do not.
+ */
 private val ACTED =
     setOf(
-        GestureMode.PINCH,
-        GestureMode.SCROLL,
         GestureMode.TRIM,
-        GestureMode.SCRUB,
         GestureMode.DRAG,
         GestureMode.LONG_PRESSED,
         GestureMode.MENU,

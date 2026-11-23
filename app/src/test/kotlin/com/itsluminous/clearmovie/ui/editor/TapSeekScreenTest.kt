@@ -4,13 +4,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.unit.dp
 import com.google.common.collect.Range
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -32,6 +34,7 @@ import com.itsluminous.clearmovie.domain.model.mainSlot
 import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTransition
 import com.itsluminous.clearmovie.testing.ScreenSize
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TRIM_END_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.ZoomState
@@ -90,11 +93,12 @@ class TapSeekScreenTest {
     private fun show(
         p: Project = project,
         playing: Boolean = false,
+        size: ScreenSize = ScreenSize.EXPANDED,
     ): EditorHarness {
         val h = EditorHarness(p, Fixtures.preset)
         h.playing = playing
         h.playheadUs = 12_000_000
-        compose.setContent { h.At(ScreenSize.EXPANDED, 1f) }
+        compose.setContent { h.At(size, 1f) }
         compose.waitForIdle()
         compose.runOnIdle { h.state!!.zoom = ZoomState(msPerDp = 50.0, scrollMs = 6000.0, fitAll = false) }
         compose.waitForIdle()
@@ -240,13 +244,18 @@ class TapSeekScreenTest {
     @Test
     fun `while playing, a tap on an item after a swipe starts the following again from there`() {
         val h = show(playing = true)
-        compose.onNodeWithTag(clipTag(ClipId("v4")), useUnmergedTree = true).performTouchInput { swipeLeft() }
-        compose.waitForIdle()
-        val m1 = h.project.clip(ClipId("m1"))!!
-        if (compose.onAllNodesWithTag(clipTag(m1.id), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
-            compose.runOnIdle { h.state!!.zoom = ZoomState(msPerDp = 50.0, scrollMs = 6000.0, fitAll = false) }
-            compose.waitForIdle()
+        // A short swipe along the time (60 dp, 3 s at 50 ms a dp): m1 (10-13 s) stays in view.
+        compose.onNodeWithTag(clipTag(ClipId("v4")), useUnmergedTree = true).performTouchInput {
+            swipe(center, center - Offset(60.dp.toPx(), 0f))
         }
+        compose.waitForIdle()
+        val put = h.state!!.zoom!!.scrollMs
+        assertThat(put).isGreaterThan(6000.0)
+        // The swipe stopped the following: the cursor out of view moves nothing.
+        compose.runOnIdle { h.playheadUs = 1_000_000 }
+        compose.waitForIdle()
+        assertThat(h.state!!.zoom!!.scrollMs).isEqualTo(put)
+        val m1 = h.project.clip(ClipId("m1"))!!
         tapMiddle(h, m1.id, m1.startMs, m1.endMs)
         compose.runOnIdle { h.playheadUs = 1_000_000 }
         compose.waitForIdle()
@@ -270,6 +279,37 @@ class TapSeekScreenTest {
         compose.runOnIdle { h.playing = false }
         compose.waitForIdle()
         assertThat(h.state!!.zoom!!.scrollMs).isGreaterThan(scroll)
+    }
+
+    @Test
+    fun `Play and Pause with an item long selected move nothing, even with its plus cut off`() {
+        val h = show()
+        val p5 = h.project.mainSlot(ClipId("p5"))!!
+        compose.runOnIdle { h.state!!.selected = p5.clip.id }
+        compose.waitForIdle()
+        val width = h.state!!.spanWidth!!
+        val scroll = p5.endMs - (width - 5) * 50.0
+        compose.runOnIdle {
+            h.playheadUs = p5.startMs * 1000
+            h.state!!.zoom = ZoomState(msPerDp = 50.0, scrollMs = scroll, fitAll = false)
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { h.playing = true }
+        compose.waitForIdle()
+        compose.runOnIdle { h.playing = false }
+        compose.waitForIdle()
+        assertThat(h.state!!.zoom!!.scrollMs).isEqualTo(scroll)
+    }
+
+    @Test
+    fun `while playing, a swipe up and down the rows leaves the view following`() {
+        // Sideways on a phone, where the rows scroll (else an upright swipe moves along the time, and stops it).
+        val h = show(playing = true, size = ScreenSize.MEDIUM)
+        compose.onNodeWithTag(TIMELINE_ROWS_TAG).performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        compose.runOnIdle { h.playheadUs = 1_000_000 }
+        compose.waitForIdle()
+        assertThat(h.state!!.zoom!!.scrollMs).isLessThan(1000.0)
     }
 
     @Test

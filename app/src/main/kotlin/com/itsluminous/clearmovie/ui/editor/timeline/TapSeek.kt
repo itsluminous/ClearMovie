@@ -25,7 +25,8 @@ object TapSeek {
      * measures) on an item from [startMs] to [endMs] moves the cursor to: the
      * time under the finger, to the millisecond below as the ruler takes it,
      * kept inside the item (its last millisecond at most, never the next
-     * item's first) and inside the video of [totalMs].
+     * item's first) and inside the video of [totalMs], short of its very end
+     * (there the preview stops, and while playing it must play on).
      */
     fun timeAt(
         zoom: ZoomState,
@@ -36,7 +37,7 @@ object TapSeek {
     ): Long {
         val last = maxOf(startMs, endMs - 1)
         val t = zoom.timeAt(xDp).toLong().coerceIn(startMs, last)
-        return t.coerceIn(0L, maxOf(0L, totalMs))
+        return t.coerceIn(0L, maxOf(0L, totalMs - 1))
     }
 
     /** The rows whose items are seen in the preview. */

@@ -47,10 +47,11 @@ class TapSeekTest {
     }
 
     @Test
-    fun `never past the video's end, nor before its start`() {
+    fun `never at or past the video's end, nor before its start`() {
         val z = ZoomState(msPerDp = 20.0)
-        // An item running on past the end of a 5 s video.
-        assertThat(TapSeek.timeAt(z, 290.0, 4000, 8000, 5000)).isEqualTo(5000)
+        // An item running on past the end of a 5 s video: its last millisecond, where the preview does not stop.
+        assertThat(TapSeek.timeAt(z, 290.0, 4000, 8000, 5000)).isEqualTo(4999)
+        assertThat(TapSeek.timeAt(z, 250.0, 5000, 8000, 5000)).isEqualTo(4999)
         assertThat(TapSeek.timeAt(z, -50.0, -100, 2000, 5000)).isEqualTo(0)
         // An empty video: 0.
         assertThat(TapSeek.timeAt(z, 50.0, 0, 0, 0)).isEqualTo(0)

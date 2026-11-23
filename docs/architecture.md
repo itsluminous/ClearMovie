@@ -525,11 +525,12 @@ the screen; the playhead is saved by `EditorViewModel`.
   transition marker keeps its own meaning; a tap on a trim handle keeps the
   item selected and is a tap on the item (on a narrow item the handles cover
   it). TalkBack's click only selects (it has no point to move to). While
-  playing the view follows the playhead until a gesture moves or holds
-  something (a swipe, a pinch, a drag, a trim, a scrub, a long-press); a tap
-  that moves the cursor (on an item or the ruler) starts the following again.
-  A seek with the video stopped at its end leaves it paused there
-  (`LayeredPreviewEngine`).
+  playing the view follows the playhead until the view is moved along the
+  time by hand (a swipe, a pinch) or an item is moved or held (a drag, a
+  trim, a long-press); moving the cursor (a tap on an item, a tap or a scrub
+  on the ruler) starts the following again. A selection made while the view
+  follows gets its "+" brought into view when playing stops. A seek with the
+  video stopped at its end leaves it paused there (`LayeredPreviewEngine`).
 - **Edits.** The bar's actions and the panels change the model through
   `EditSession` (one undo step each, 50 kept; a change from elsewhere is a
   step too). "+" opens a chooser: photos and videos from the gallery, a text
