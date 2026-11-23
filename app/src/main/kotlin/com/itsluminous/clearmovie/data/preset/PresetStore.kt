@@ -174,6 +174,18 @@ data class PresetStatus(
     val needsSetup: List<PresetSlot> get() = slots.filterValues { it is SlotStatus.NotSet }.keys.toList()
 }
 
+/**
+ * Why a file chosen for a preset that uses its files where they are was
+ * copied instead (cm-preset-link-copy), so setup can say so.
+ */
+enum class CopyReason {
+    /** The place it was chosen from gave no read grant that lasts (another app, a share). */
+    SOURCE,
+
+    /** Android's limit of lasting grants is nearly reached. */
+    LIMIT,
+}
+
 sealed interface SlotBindResult {
     /**
      * [fileShape] is set when a video was chosen (the intro, the frame or a
@@ -610,15 +622,20 @@ class PresetStore(
         }
 
     /**
-     * Copies [uri] in as [slot] of preset [id], checks it, and records it.
-     * [onProgress] gets the bytes copied and the total, when known. A failed
-     * or cancelled bind leaves the earlier binding (if any) untouched and no
-     * partial file.
+     * Takes [uri] in as [slot] of preset [id]: used where it is when the
+     * preset says so and its read grant can be kept, otherwise copied; then
+     * checks it and records it. [onCopyStart] is called once, just before a
+     * copy starts, and never for a file used where it is: with null when the
+     * preset keeps copies, or with why the file could not be used where it
+     * is. [onProgress] then gets the bytes copied and the total, when known.
+     * A failed or cancelled bind leaves the earlier binding (if any)
+     * untouched and no partial file.
      */
     suspend fun bindSlot(
         id: PresetId,
         slot: PresetSlot,
         uri: Uri,
+        onCopyStart: (reason: CopyReason?) -> Unit = {},
         onProgress: (copied: Long, total: Long?) -> Unit = { _, _ -> },
     ): SlotBindResult =
         withContext(dispatcher) {
@@ -628,9 +645,18 @@ class PresetStore(
             val info = gateway.describe(uri) ?: return@withContext SlotBindResult.Unreadable
             // Used where it is (cm-frame-area) when the preset says so and the link's read grant can be kept;
             // otherwise copied, as before.
-            if (!copiesFiles(id) && MediaRef.isSafeContentUri(uri.toString()) && grants?.persist(uri) == true) {
+            val inPlace = !copiesFiles(id)
+            if (inPlace && MediaRef.isSafeContentUri(uri.toString()) && grants?.persist(uri) == true) {
                 return@withContext bindLinked(id, slot, preset, uri, info)
             }
+            val reason =
+                if (!inPlace) {
+                    null
+                } else if (grants?.hasRoom() == false) {
+                    CopyReason.LIMIT
+                } else {
+                    CopyReason.SOURCE
+                }
             val free = freeBytes()
             val size = info.sizeBytes ?: 0L
             if (size + CopyBudget.RESERVE_BYTES >
@@ -641,6 +667,7 @@ class PresetStore(
 
             val name = SafeFileName.build("${slot.fileStem}-${randomToken()}", info.displayName, info.mime)
             val target = files.presetFile(id, name)
+            onCopyStart(reason)
             val copied =
                 try {
                     copier.copy(

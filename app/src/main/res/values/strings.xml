@@ -126,6 +126,8 @@
     <string name="preset_definition_invalid">This preset file can\'t be used. Check the file, or carry on without it.</string>
     <string name="preset_bind_copying">Copying the file</string>
     <string name="preset_bind_checking">Checking the file</string>
+    <string name="preset_bind_copy_why_source">ClearMovie keeps its own copy of this file, because the place you chose it from doesn\'t let ClearMovie open it again later.</string>
+    <string name="preset_bind_copy_why_limit">ClearMovie keeps its own copy of this file, because it already uses as many files where they are as Android allows.</string>
     <string name="preset_bind_not_video">This file isn\'t a video ClearMovie can use. Choose another file.</string>
     <string name="preset_bind_not_sound">This file isn\'t a sound file ClearMovie can use. Choose another file.</string>
     <string name="preset_bind_unreadable">ClearMovie couldn\'t open this file. Choose it again.</string>

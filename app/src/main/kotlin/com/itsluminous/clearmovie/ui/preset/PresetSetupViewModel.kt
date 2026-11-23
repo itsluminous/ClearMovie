@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.itsluminous.clearmovie.data.preset.CopyReason
 import com.itsluminous.clearmovie.data.preset.DefinitionBindResult
 import com.itsluminous.clearmovie.data.preset.FrameSample
 import com.itsluminous.clearmovie.data.preset.FrameStills
@@ -45,14 +46,32 @@ import javax.inject.Inject
 
 /** What the setup screen shows while a file is being taken in. */
 sealed interface SetupWork {
-    /** [copied] of [total] bytes (null while the size is unknown). */
+    /**
+     * [copied] of [total] bytes (null while the size is unknown). [reason]
+     * is set when the preset uses its files where they are but this one
+     * could not be, so the screen says why it is copied.
+     */
     data class Copying(
         val copied: Long,
         val total: Long?,
+        val reason: CopyReason? = null,
     ) : SetupWork
 
-    /** Copied; its length, loudness and (for the frame) green are being measured. */
+    /**
+     * Its length, loudness and (for the frame) green are being measured:
+     * a file used where it is from the start (nothing is copied), a copy
+     * once it is in.
+     */
     data object Checking : SetupWork
+
+    companion object {
+        /** The work shown for a copy's progress: [Checking] once every byte is in. */
+        fun copying(
+            copied: Long,
+            total: Long?,
+            reason: CopyReason?,
+        ): SetupWork = if (total != null && copied >= total) Checking else Copying(copied, total, reason)
+    }
 }
 
 /** A message after choosing a file. */
@@ -80,6 +99,27 @@ sealed interface SetupMessage {
 
     /** The video chosen is not the preset's shape (cm-aspect-ratio): it is kept, and will look stretched. */
     data object ShapeDiffers : SetupMessage
+
+    /** The preset uses its files where they are, but this one was copied, for [reason] (cm-preset-link-copy). */
+    data class KeptCopy(
+        val reason: CopyReason,
+    ) : SetupMessage
+
+    companion object {
+        /**
+         * The message after a file is bound: a shape that differs matters
+         * more than a copy (the copy was explained while it ran).
+         */
+        fun afterBound(
+            result: SlotBindResult.Bound,
+            copyReason: CopyReason?,
+        ): SetupMessage? =
+            when {
+                result.fileShape != null -> ShapeDiffers
+                copyReason != null && !result.binding.isLinked -> KeptCopy(copyReason)
+                else -> null
+            }
+    }
 }
 
 data class SetupUi(
@@ -119,7 +159,8 @@ sealed interface SetupEvent {
 
 /**
  * Preset setup and repair (ARCHITECTURE section 11.1, R9): choose each file
- * once; it is copied into app storage with progress and checked. Opened for
+ * once; it is used where it is or copied into app storage (with progress),
+ * as the preset says, and checked. Opened for
  * a new video (Done then starts it) or from Settings (Done goes back).
  */
 @HiltViewModel
@@ -215,18 +256,26 @@ class PresetSetupViewModel
             slot: PresetSlot,
             uri: Uri,
         ) = run {
-            uiState.update { it.copy(work = SetupWork.Copying(0, null), message = null) }
+            // "Checking" until the store says a copy starts: a file used where it is is never copied (cm-preset-link-copy).
+            uiState.update { it.copy(work = SetupWork.Checking, message = null) }
+            var copyReason: CopyReason? = null
             val result =
-                presetStore.bindSlot(presetId, slot, uri) { copied, total ->
-                    uiState.update { s ->
-                        s.copy(work = if (total != null && copied >= total) SetupWork.Checking else SetupWork.Copying(copied, total))
-                    }
+                presetStore.bindSlot(
+                    presetId,
+                    slot,
+                    uri,
+                    onCopyStart = { reason ->
+                        copyReason = reason
+                        uiState.update { it.copy(work = SetupWork.Copying(0, null, reason)) }
+                    },
+                ) { copied, total ->
+                    uiState.update { it.copy(work = SetupWork.copying(copied, total, copyReason)) }
                 }
             when (result) {
                 is SlotBindResult.Bound -> {
                     // A frame just chosen asks once which colour to remove and where photos go (cm-frame-area).
                     if (slot == PresetSlot.FRAME) setFrameLook(true, justChosen = true)
-                    if (result.fileShape != null) SetupMessage.ShapeDiffers else null
+                    SetupMessage.afterBound(result, copyReason)
                 }
 
                 SlotBindResult.WrongKind -> {

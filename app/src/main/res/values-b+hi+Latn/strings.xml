@@ -112,6 +112,8 @@
     <string name="preset_definition_invalid">Yeh preset file use nahi ho sakti. File check karein, ya iske bina aage badhein.</string>
     <string name="preset_bind_copying">File copy ho rahi hai</string>
     <string name="preset_bind_checking">File check ho rahi hai</string>
+    <string name="preset_bind_copy_why_source">ClearMovie is file ki apni copy rakhta hai, kyunki jahan se aapne ise chuna, woh ClearMovie ko ise baad me phir se kholne nahin deta.</string>
+    <string name="preset_bind_copy_why_limit">ClearMovie is file ki apni copy rakhta hai, kyunki Android jitni files wahin se, jahan woh hain, use karne deta hai, ClearMovie utni pehle se use kar raha hai.</string>
     <string name="preset_bind_not_video">Yeh file aisa video nahi hai jo ClearMovie use kar sake. Doosri file chunein.</string>
     <string name="preset_bind_not_sound">Yeh file aisi sound file nahi hai jo ClearMovie use kar sake. Doosri file chunein.</string>
     <string name="preset_bind_unreadable">ClearMovie yeh file nahi khol saka. Ise phir se chunein.</string>

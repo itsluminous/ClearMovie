@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,7 +45,8 @@ fun preciseDurationText(ms: Long): String {
 
 /**
  * Heavy work in progress, with Cancel (ARCHITECTURE section 11). [fraction]
- * null shows a moving bar. It cannot be dismissed by a stray tap.
+ * null shows a moving bar. [body], when set, says more under the title.
+ * It cannot be dismissed by a stray tap.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,14 +54,20 @@ fun WorkDialog(
     title: String,
     fraction: Float?,
     onCancel: (() -> Unit)?,
+    body: String? = null,
 ) {
     BasicAlertDialog(
         onDismissRequest = {},
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
     ) {
         Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 560.dp)) {
-            Column(Modifier.padding(24.dp)) {
+            // Scrolls when a body at a large font size is taller than a phone held sideways, so Cancel stays reachable.
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp)) {
                 Text(title, style = MaterialTheme.typography.headlineSmall)
+                if (body != null) {
+                    Spacer(Modifier.height(16.dp))
+                    Text(body, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(24.dp))
                 if (fraction == null) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())

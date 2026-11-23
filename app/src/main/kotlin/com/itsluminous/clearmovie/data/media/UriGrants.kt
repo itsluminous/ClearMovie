@@ -20,6 +20,14 @@ interface UriGrants : GrantReleaser {
     /** Whether the app still holds a persisted read grant for [uri]. */
     fun isPersisted(uri: String): Boolean
 
+    /**
+     * False when fewer than [HEADROOM] grants are left below Android's limit,
+     * the same test [persist] refuses on. A caller uses it to tell [persist]
+     * failing at the limit from failing because the link has no persistable
+     * grant. True when the held grants cannot be read, and by default.
+     */
+    fun hasRoom(): Boolean = true
+
     companion object {
         const val HEADROOM = 16
     }
@@ -42,6 +50,11 @@ class AndroidUriGrants(
         } catch (e: IllegalArgumentException) {
             false
         }
+    }
+
+    override fun hasRoom(): Boolean {
+        val held = runCatching { resolver.persistedUriPermissions }.getOrNull() ?: return true
+        return held.size < limit() - UriGrants.HEADROOM
     }
 
     override fun isPersisted(uri: String): Boolean =

@@ -25,8 +25,14 @@ class FakeUriGrants(
     val held = linkedSetOf<String>()
     val released = mutableListOf<String>()
 
+    /** False stands for Android's grant limit being nearly reached: nothing more is persisted. */
+    var room = true
+
+    override fun hasRoom(): Boolean = room
+
     override fun persist(uri: Uri): Boolean {
-        if (uri.toString() !in persistable) return false
+        if (uri.toString() in held) return true
+        if (!room || uri.toString() !in persistable) return false
         held += uri.toString()
         return true
     }

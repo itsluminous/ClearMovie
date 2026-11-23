@@ -48,6 +48,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.data.preset.CopyReason
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.PresetSlot
@@ -226,6 +227,7 @@ fun PresetSetupScreen(
                 stringResource(R.string.preset_bind_copying),
                 w.total?.takeIf { it > 0 }?.let { w.copied.toFloat() / it },
                 onCancelWork,
+                body = w.reason?.let { stringResource(copyReasonText(it)) },
             )
         }
 
@@ -302,7 +304,7 @@ private fun MessageCard(
     onDismiss: () -> Unit,
     presetShape: CanvasShape = CanvasShape.LANDSCAPE,
 ) {
-    val good = message == SetupMessage.DefinitionAdded
+    val good = message == SetupMessage.DefinitionAdded || message is SetupMessage.KeptCopy
     val text =
         when (message) {
             SetupMessage.NotAVideo -> {
@@ -344,6 +346,10 @@ private fun MessageCard(
             SetupMessage.ShapeDiffers -> {
                 stringResource(R.string.setup_file_shape_mismatch, stringResource(shapeName(presetShape)))
             }
+
+            is SetupMessage.KeptCopy -> {
+                stringResource(copyReasonText(message.reason))
+            }
         }
     Card(
         colors =
@@ -355,7 +361,13 @@ private fun MessageCard(
         Column(Modifier.padding(16.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.Top) {
                 Icon(
-                    painterResource(if (good) R.drawable.ic_check_circle else R.drawable.ic_warning),
+                    painterResource(
+                        when {
+                            message is SetupMessage.KeptCopy -> R.drawable.ic_info
+                            good -> R.drawable.ic_check_circle
+                            else -> R.drawable.ic_warning
+                        },
+                    ),
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
                 )
@@ -368,3 +380,10 @@ private fun MessageCard(
         }
     }
 }
+
+/** Why a file of a preset that uses its files where they are was copied, in plain words (cm-preset-link-copy). */
+private fun copyReasonText(reason: CopyReason): Int =
+    when (reason) {
+        CopyReason.SOURCE -> R.string.preset_bind_copy_why_source
+        CopyReason.LIMIT -> R.string.preset_bind_copy_why_limit
+    }

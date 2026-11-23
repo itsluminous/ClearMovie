@@ -104,6 +104,8 @@
     <string name="preset_definition_invalid">यह प्रीसेट फ़ाइल इस्तेमाल नहीं हो सकती। फ़ाइल जाँचें, या इसके बिना आगे बढ़ें।</string>
     <string name="preset_bind_copying">फ़ाइल की कॉपी बन रही है</string>
     <string name="preset_bind_checking">फ़ाइल जाँची जा रही है</string>
+    <string name="preset_bind_copy_why_source">ClearMovie इस फ़ाइल की अपनी कॉपी रखता है, क्योंकि जहाँ से आपने इसे चुना, वह ClearMovie को इसे बाद में फिर से खोलने नहीं देता।</string>
+    <string name="preset_bind_copy_why_limit">ClearMovie इस फ़ाइल की अपनी कॉपी रखता है, क्योंकि Android जितनी फ़ाइलें वहीं से, जहाँ वे हैं, इस्तेमाल करने देता है, ClearMovie उतनी पहले से इस्तेमाल कर रहा है।</string>
     <string name="preset_bind_not_video">यह फ़ाइल ऐसा वीडियो नहीं है जो ClearMovie इस्तेमाल कर सके। दूसरी फ़ाइल चुनें।</string>
     <string name="preset_bind_not_sound">यह फ़ाइल ऐसी आवाज़ की फ़ाइल नहीं है जो ClearMovie इस्तेमाल कर सके। दूसरी फ़ाइल चुनें।</string>
     <string name="preset_bind_unreadable">ClearMovie यह फ़ाइल नहीं खोल सका। इसे फिर से चुनें।</string>

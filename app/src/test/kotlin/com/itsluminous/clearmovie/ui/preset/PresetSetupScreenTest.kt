@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.data.preset.CopyReason
 import com.itsluminous.clearmovie.data.preset.PresetBinding
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.SlotStatus
@@ -60,6 +61,7 @@ class PresetSetupScreenTest {
         size: ScreenSize = ScreenSize.COMPACT,
         fontScale: Float = 1f,
         message: SetupMessage? = null,
+        work: SetupWork? = null,
         onChoose: (PresetSlot) -> Unit = {},
         onDone: () -> Unit = {},
     ) {
@@ -67,7 +69,7 @@ class PresetSetupScreenTest {
             AtSize(size, fontScale) {
                 ClearMovieTheme(dynamicColor = false) {
                     PresetSetupScreen(
-                        SetupUi(Fixtures.preset, status, message = message),
+                        SetupUi(Fixtures.preset, status, work = work, message = message),
                         newVideo = true,
                         {},
                         onChoose,
@@ -133,6 +135,53 @@ class PresetSetupScreenTest {
             .assertIsEnabled()
             .performClick()
         assertThat(done).isEqualTo(1)
+    }
+
+    @Test
+    fun `a file used where it is shows Checking the file, never Copying`() {
+        show(firstTime, work = SetupWork.Checking)
+        compose.onNodeWithText(s(R.string.preset_bind_checking)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.preset_bind_copying)).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a copy the preset asked for shows Copying with no reason`() {
+        show(firstTime, work = SetupWork.Copying(10, 100))
+        compose.onNodeWithText(s(R.string.preset_bind_copying)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.preset_bind_copy_why_source)).assertDoesNotExist()
+        compose.onNodeWithText(s(R.string.preset_bind_copy_why_limit)).assertDoesNotExist()
+    }
+
+    private fun copyInsteadAt(
+        reason: CopyReason,
+        text: Int,
+        fontScale: Float,
+        size: ScreenSize = ScreenSize.COMPACT,
+    ) {
+        show(firstTime, size, fontScale = fontScale, work = SetupWork.Copying(10, 100, reason))
+        compose.onNodeWithText(s(R.string.preset_bind_copying)).assertIsDisplayed()
+        compose.onNodeWithText(s(text)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.action_cancel)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a copy instead of a link says the place is why`() = copyInsteadAt(CopyReason.SOURCE, R.string.preset_bind_copy_why_source, 1f)
+
+    @Test
+    fun `a copy instead of a link says the limit is why`() = copyInsteadAt(CopyReason.LIMIT, R.string.preset_bind_copy_why_limit, 1f)
+
+    @Test
+    fun `a copy instead of a link keeps its reason and Cancel on screen at font scale 2`() =
+        copyInsteadAt(CopyReason.SOURCE, R.string.preset_bind_copy_why_source, 2f)
+
+    @Test
+    fun `a copy instead of a link keeps Cancel reachable sideways at font scale 2`() =
+        copyInsteadAt(CopyReason.LIMIT, R.string.preset_bind_copy_why_limit, 2f, ScreenSize.MEDIUM)
+
+    @Test
+    fun `after a copy instead of a link, a note says why`() {
+        show(ready, message = SetupMessage.KeptCopy(CopyReason.SOURCE))
+        compose.onNodeWithText(s(R.string.preset_bind_copy_why_source)).performScrollTo().assertIsDisplayed()
     }
 
     @Test

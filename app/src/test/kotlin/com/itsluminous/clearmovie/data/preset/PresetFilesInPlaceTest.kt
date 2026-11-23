@@ -147,6 +147,70 @@ class PresetFilesInPlaceTest {
             assertThat(frame(id).file!!.isFile).isTrue()
         }
 
+    /** What a bind reported to setup: each copy start with its reason, then each progress call. */
+    private class Reports {
+        val events = mutableListOf<String>()
+
+        fun copyStart(reason: CopyReason?) {
+            events += "copy:$reason"
+        }
+
+        fun progress(
+            copied: Long,
+            total: Long?,
+        ) {
+            events += "progress:$copied/$total"
+        }
+    }
+
+    @Test
+    fun `a file used where it is never reports a copy, so setup says Checking, not Copying`() =
+        runBlocking<Unit> {
+            val id = make(copy = false)
+            val r = Reports()
+            val result = store.bindSlot(id, PresetSlot.FRAME, file("Frame-White.mp4"), r::copyStart, r::progress)
+            assertThat(result).isInstanceOf(SlotBindResult.Bound::class.java)
+            assertThat(frame(id).isLinked).isTrue()
+            assertThat(r.events).isEmpty()
+        }
+
+    @Test
+    fun `a copy for a preset that keeps copies starts with no reason, before any progress`() =
+        runBlocking<Unit> {
+            val id = make(copy = true)
+            val r = Reports()
+            store.bindSlot(id, PresetSlot.FRAME, file("Frame-White.mp4"), r::copyStart, r::progress)
+            assertThat(frame(id).isLinked).isFalse()
+            assertThat(r.events.first()).isEqualTo("copy:null")
+            assertThat(r.events.count { it.startsWith("copy:") }).isEqualTo(1)
+            assertThat(r.events.last()).isEqualTo("progress:4000/4000")
+        }
+
+    @Test
+    fun `a file whose place gives no lasting grant is copied, and the copy says the place is why`() =
+        runBlocking<Unit> {
+            val id = make(copy = false)
+            val r = Reports()
+            store.bindSlot(id, PresetSlot.FRAME, file("Shared.mp4", persistable = false), r::copyStart, r::progress)
+            val b = frame(id)
+            assertThat(b.isLinked).isFalse()
+            assertThat(b.file!!.readBytes()).isEqualTo(ByteArray(4000) { 7 })
+            assertThat(r.events.first()).isEqualTo("copy:SOURCE")
+            assertThat(grants.held).isEmpty()
+        }
+
+    @Test
+    fun `near Android's grant limit a file is copied, and the copy says the limit is why`() =
+        runBlocking<Unit> {
+            val id = make(copy = false)
+            grants.room = false
+            val r = Reports()
+            store.bindSlot(id, PresetSlot.FRAME, file("Frame-White.mp4"), r::copyStart, r::progress)
+            assertThat(frame(id).isLinked).isFalse()
+            assertThat(r.events.first()).isEqualTo("copy:LIMIT")
+            assertThat(grants.held).isEmpty()
+        }
+
     @Test
     fun `the Event frame an older install keeps goes on copying its files`() =
         runBlocking<Unit> {
