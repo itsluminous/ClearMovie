@@ -52,6 +52,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -71,6 +72,7 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.imageio.ImageIO
 
 /**
@@ -226,6 +228,34 @@ class ShareViewModelTest {
      */
     private fun pendingFileGone(): Boolean =
         runBlocking { withTimeoutOrNull(TIMEOUT_MS) { while (pendingFile.exists()) kotlinx.coroutines.delay(10) } } != null
+
+    /**
+     * Holds the main thread for [STALL_MS] the first time [flow] shows a value matching [predicate]
+     * there. A collector on [Dispatchers.Unconfined] runs inside the setter, so the hold falls in the
+     * middle of the view model's work on the main thread, as a slow runner's main thread can stall
+     * (a GC pause, a JIT compile). A process-death copy of the saved state must still see all of it.
+     */
+    private fun <T> stallMainOnce(
+        flow: Flow<T>,
+        predicate: (T) -> Boolean,
+    ) {
+        val mainThread = runBlocking(main) { Thread.currentThread() }
+        val held = AtomicBoolean(false)
+        scope().launch(Dispatchers.Unconfined) {
+            flow.collect {
+                if (Thread.currentThread() == mainThread && predicate(it) && held.compareAndSet(false, true)) Thread.sleep(STALL_MS)
+            }
+        }
+    }
+
+    /**
+     * The saved state as Android hands it to the new process. Android saves it on the main thread,
+     * between two pieces of the view model's work there, so the copy is made on [main] too: copied
+     * from the test thread, it could catch [ShareViewModel] after it published a state and before it
+     * saved it (on a slow runner), and the new view model would then come back to nothing.
+     */
+    private fun afterProcessDeath(saved: SavedStateHandle): SavedStateHandle =
+        SavedStateHandle(runBlocking(main) { saved.keys().associateWith { saved.get<Any>(it) } })
 
     /** Receives [intent] and, for a new video, settles the access question as the preset pick does. */
     private fun Made.share(
@@ -432,11 +462,13 @@ class ShareViewModelTest {
         runBlocking<Unit> {
             val saved = SavedStateHandle()
             val m = make(repository(), saved)
+            // The main thread stalls after the pick is published, before its saved state is written.
+            stallMainOnce(m.vm.pick) { it != null }
             m.share(send(photo("a.jpg"), photo("b.jpg")))
             val ready = m.await<ShareState.Ready>()
 
             // The new process: a new repository with nothing open, the saved state as Android hands it back, no new intent.
-            val again = make(repository(), SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) }))
+            val again = make(repository(), afterProcessDeath(saved))
             val restored = again.await<ShareState.Ready>()
 
             assertThat(restored.draft).isEqualTo(ready.draft)
@@ -760,10 +792,12 @@ class ShareViewModelTest {
             assertThat(repo.createDraft(ProjectFactory.blank(open), inEditor = true)).isTrue()
             val saved = SavedStateHandle()
             val m = make(repo, saved)
+            // The main thread stalls once the question's phase is saved, before the video it is about.
+            stallMainOnce(saved.getStateFlow<String?>(ShareViewModel.KEY_PHASE, null)) { it == ShareViewModel.PHASE_ASKING }
             m.share(send(photo("a.jpg"), photo("b.jpg")))
             assertThat(m.vm.state.value).isEqualTo(ShareState.Asking(2, open))
 
-            val again = make(repository(), SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) }))
+            val again = make(repository(), afterProcessDeath(saved))
             assertThat(again.await<ShareState.Asking>()).isEqualTo(ShareState.Asking(2, open))
             again.on { addToOpen() }
             again.on { begin(MediaAccessState.Full) }
@@ -864,7 +898,7 @@ class ShareViewModelTest {
             m.share(Intent(Intent.ACTION_SEND))
             m.await<ShareState.Nothing>()
 
-            val again = make(repository(), SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) }))
+            val again = make(repository(), afterProcessDeath(saved))
             val restored = again.await<ShareState.Ready>()
             assertThat(restored.draft).isEqualTo(first.draft)
             assertThat(restored.items).isEqualTo(2)
@@ -957,6 +991,7 @@ class ShareViewModelTest {
 
     private companion object {
         const val TIMEOUT_MS = 20_000L
+        const val STALL_MS = 500L
         const val CHAT = "com.example.chat.files"
     }
 }
