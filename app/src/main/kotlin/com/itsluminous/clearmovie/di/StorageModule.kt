@@ -24,6 +24,8 @@ import com.itsluminous.clearmovie.data.preset.MediaProbe
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SoundLoudness
 import com.itsluminous.clearmovie.data.project.ProjectRepository
+import com.itsluminous.clearmovie.render.media3.AndroidSoundTracks
+import com.itsluminous.clearmovie.render.media3.SoundTracks
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -185,6 +187,11 @@ object StorageModule {
     fun provideFrameStills(
         @ApplicationContext context: Context,
     ): FrameStills = AndroidFrameStills(context)
+
+    @Provides
+    fun provideSoundTracks(
+        @ApplicationContext context: Context,
+    ): SoundTracks = AndroidSoundTracks(context)
 
     @Provides
     fun provideSoundLoudness(

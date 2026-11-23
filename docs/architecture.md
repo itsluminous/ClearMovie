@@ -198,7 +198,13 @@ Rendering has two layers, both under `render`:
   dip to silence for a fade through black or white), and
   ducking computed from the timeline (music lowered under clip sound and under
   voice, everything under the closing message, clip sound and voice never
-  lowered by music). A frame on a frame row of the user's plays its video's
+  lowered by music). A video whose file has no sound track (the intro and a video
+  ending too) lowers nothing. A video keeps the answer
+  (`VideoClip.hasSound`), read when it is added; for older videos and the
+  preset's parts the editor and the export read it with one function
+  (`readSoundTracks`, `METADATA_KEY_HAS_AUDIO` through `UriGuard`), only
+  when a music or frame row would be lowered, and the editor keeps it on
+  the videos. A file that can't be read lowers music as before. A frame on a frame row of the user's plays its video's
   own sound as a music layer of its row (cm-frame-audio): at the frame's
   `volumeDb` (the frame music's -8 dB to start) after the music's loudness
   normalisation, each copy of a repeating frame from its file's start with

@@ -193,7 +193,7 @@ suspend fun newMainItems(
             }
 
             facts.hasVideo && facts.durationMs != null && facts.durationMs in Limits.MIN_CLIP_MS..Limits.MAX_MEDIA_MS -> {
-                clips += VideoClip(RandomIds.clipId(), ref, sourceDurationMs = facts.durationMs, fit = fit)
+                clips += VideoClip(RandomIds.clipId(), ref, sourceDurationMs = facts.durationMs, fit = fit, hasSound = facts.hasAudio)
             }
 
             else -> {

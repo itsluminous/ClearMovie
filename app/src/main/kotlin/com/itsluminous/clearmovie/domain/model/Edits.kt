@@ -609,6 +609,34 @@ fun Project.setVolume(
 }
 
 /**
+ * Whether each video's file has a sound track ([answers], by file), kept on
+ * every video of that file that has no answer yet (cm-frame-audio). Not an
+ * edit the user makes: the editor keeps it without an undo step.
+ */
+fun Project.withVideoSound(answers: Map<MediaRef, Boolean>): Project =
+    copy(
+        tracks =
+            tracks.map { t ->
+                if (t.clips.none { it is VideoClip && it.hasSound == null && it.media in answers }) {
+                    t
+                } else {
+                    t.copy(
+                        clips =
+                            t.clips.map {
+                                if (it is VideoClip &&
+                                    it.hasSound == null
+                                ) {
+                                    answers[it.media]?.let { a -> it.copy(hasSound = a) } ?: it
+                                } else {
+                                    it
+                                }
+                            },
+                    )
+                }
+            },
+    )
+
+/**
  * The measured loudness [lufs] of [media]'s sound, kept on every frame that
  * plays it and has none yet (cm-frame-audio). Not an edit the user makes:
  * the editor keeps it without an undo step.

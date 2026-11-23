@@ -67,11 +67,15 @@ import com.itsluminous.clearmovie.domain.model.replacePresetPart
 import com.itsluminous.clearmovie.domain.model.setShape
 import com.itsluminous.clearmovie.domain.model.withEffectDefaultsFor
 import com.itsluminous.clearmovie.domain.model.withFrameLoudness
+import com.itsluminous.clearmovie.domain.model.withVideoSound
 import com.itsluminous.clearmovie.render.media3.MediaResolver
+import com.itsluminous.clearmovie.render.media3.SoundTracks
 import com.itsluminous.clearmovie.render.plan.LoudnessTable
 import com.itsluminous.clearmovie.render.plan.PreviewSchedule
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
+import com.itsluminous.clearmovie.render.plan.SoundPresence
 import com.itsluminous.clearmovie.render.plan.Source
+import com.itsluminous.clearmovie.render.plan.duckingMedia
 import com.itsluminous.clearmovie.render.preview.LayeredPreviewEngine
 import com.itsluminous.clearmovie.render.preview.StillLoader
 import com.itsluminous.clearmovie.ui.frame.FRAME_LOOK_STILL_WIDTH
@@ -80,6 +84,7 @@ import com.itsluminous.clearmovie.ui.media.MediaIntake
 import com.itsluminous.clearmovie.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -256,6 +261,7 @@ class EditorViewModel
         private val recordings: VoiceRecordings,
         private val frameStills: FrameStills = FrameStills { _, _, _ -> null },
         private val soundLoudness: SoundLoudness = SoundLoudness { null },
+        private val soundTracks: SoundTracks = SoundTracks { _, _, known -> known },
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -340,6 +346,14 @@ class EditorViewModel
          * looked at again. Declared before `init`, which may load the project at once.
          */
         private val frameHasSound = mutableMapOf<MediaRef, Boolean>()
+
+        /**
+         * Whether each video that would lower music has a sound track, by file ([SoundTracks], the export's
+         * own reading): one without lowers no music or frame sound. Unknown (not read yet, or unreadable) lowers
+         * them as before; an unreadable file is not kept, so it is read again. Declared before `init`.
+         */
+        private var videoHasSound: Map<MediaRef, Boolean> = emptyMap()
+        private val soundPresence = SoundPresence { videoHasSound[it] }
         private val frameLoudness = mutableMapOf<MediaRef, Double>()
         private var measuring: Job? = null
 
@@ -402,6 +416,8 @@ class EditorViewModel
             this.access = access
             // A frame that looked silent may be readable now (access granted, a file put back): look again.
             frameHasSound.entries.removeAll { !it.value }
+            // A preset part may have been bound to another file (the repair screen): read it again.
+            videoHasSound = videoHasSound.filterKeys { it !is MediaRef.Preset }
             // Links picked before a process death are taken in again, once.
             if (!resumed) {
                 resumed = true
@@ -817,6 +833,29 @@ class EditorViewModel
                 .filter { it.type == TrackType.OVERLAY && it.presetRole != PresetRole.FRAME }
                 .flatMap { it.clips.filterIsInstance<OverlayClip>() }
 
+        /**
+         * Looks, once per file, whether each video that would lower music has a sound track, and keeps the answer
+         * on the user's videos (no undo step), so a video is looked at once. Videos added from the gallery have it
+         * already; this covers older ones and the preset's intro and ending.
+         */
+        private suspend fun lookAtVideos(
+            project: Project,
+            set: ProjectMediaSet,
+        ) {
+            val refs = duckingMedia(project)
+            if (refs.all { it in videoHasSound }) return
+            videoHasSound =
+                try {
+                    soundTracks.read(refs, set.resolver, videoHasSound)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Unknown, so music is lowered as before; the load goes on.
+                    videoHasSound
+                }
+            if (!voice.active) session.settle { withVideoSound(videoHasSound) }?.let(::write)
+        }
+
         /** Looks, quickly, whether each frame's file has a sound track; and returns the frames that have one. */
         private suspend fun framesWithSound(project: Project): Set<MediaRef> {
             val frames = userFrames(project)
@@ -870,7 +909,7 @@ class EditorViewModel
                 val quick =
                     runCatching {
                         PreviewSchedule.of(
-                            RenderPlanBuilder(cached.preset, loudnessFor(cached)).build(project, shortSide = PREVIEW_HEIGHT),
+                            RenderPlanBuilder(cached.preset, loudnessFor(cached), soundPresence).build(project, shortSide = PREVIEW_HEIGHT),
                         )
                     }.getOrNull()
                 if (quick != null && engine.updateCaptions(quick)) {
@@ -891,10 +930,14 @@ class EditorViewModel
             media = set
             resolver = set.resolver
             val withSound = framesWithSound(project)
+            lookAtVideos(project, set)
             val table = loudnessFor(set)
             val schedule =
-                runCatching { PreviewSchedule.of(RenderPlanBuilder(set.preset, table).build(project, shortSide = PREVIEW_HEIGHT)) }
-                    .getOrNull()
+                runCatching {
+                    PreviewSchedule.of(
+                        RenderPlanBuilder(set.preset, table, soundPresence).build(project, shortSide = PREVIEW_HEIGHT),
+                    )
+                }.getOrNull()
             val missing = access?.let { mediaAccess.missing(project, it) }.orEmpty()
             measureFrames(set)
             uiState.update {

@@ -240,7 +240,10 @@ data class PhotoClip(
 /**
  * A video. It plays [trimStartMs]..[trimEndMs] of the source at [speed],
  * [loops] times. Clips made by a split share a [splitGroup] and have
- * adjacent trims, which is what makes them joinable.
+ * adjacent trims, which is what makes them joinable. [hasSound] is whether
+ * its file has a sound track, as read when it was added (null: not known,
+ * as for every video added before cm-frame-audio); one without lowers no
+ * music under it.
  */
 @Serializable
 @SerialName("video")
@@ -260,6 +263,7 @@ data class VideoClip(
     override val pip: PipPlacement? = null,
     override val transitionToNext: Transition? = null,
     override val animations: Animations = Animations.NONE,
+    val hasSound: Boolean? = null,
 ) : MediaClip {
     override val durationMs: Long get() = speed.timelineMs((trimEndMs - trimStartMs) * loops)
 

@@ -6,6 +6,7 @@ import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.FrameMusic
+import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
@@ -18,6 +19,7 @@ import com.itsluminous.clearmovie.domain.model.setTalkLowering
 import com.itsluminous.clearmovie.domain.model.setTrackEnabled
 import com.itsluminous.clearmovie.domain.model.setTrackMuted
 import com.itsluminous.clearmovie.domain.model.setVolume
+import com.itsluminous.clearmovie.domain.model.withVideoSound
 import org.junit.Test
 
 /**
@@ -197,6 +199,92 @@ class FrameSoundPlanTest {
     }
 
     @Test
+    fun `a video whose file has no sound lowers neither the frame nor music, one with sound or unknown does`() {
+        // kupraki's call: lower only under videos with sound. A file not known either way lowers them, as before.
+        val p = project()
+        val music =
+            p.addTimedClip(
+                AudioClip(ClipId("song"), Fixtures.media("song"), startMs = 0, durationMs = 9000, sourceDurationMs = 9000),
+                role = AudioRole.MUSIC,
+                ids = ids,
+            )
+        val silent = SoundPresence { if (it == Fixtures.media("v")) false else null }
+        val loud = SoundPresence { if (it == Fixtures.media("v")) true else null }
+        val base = FrameMusic.DEFAULT_GAIN_DB
+        assertThat(RenderPlanBuilder(null, measured, silent).build(p).frameSound(p.frameRow).dbAt(4_500_000)).isWithin(1e-6).of(base)
+        assertThat(RenderPlanBuilder(null, measured, loud).build(p).frameSound(p.frameRow).dbAt(4_500_000)).isWithin(1e-6).of(base - 12)
+        assertThat(RenderPlanBuilder(null, measured).build(p).frameSound(p.frameRow).dbAt(4_500_000)).isWithin(1e-6).of(base - 12)
+        val songRow = music.tracks.single { it.audioRole == AudioRole.MUSIC }.id
+
+        fun songAt(plan: RenderPlan) = plan.frameSound(songRow).dbAt(4_500_000)
+        assertThat(songAt(RenderPlanBuilder(null, measured, silent).build(music))).isWithin(1e-6).of(0.0)
+        assertThat(songAt(RenderPlanBuilder(null, measured, loud).build(music))).isWithin(1e-6).of(-12.0)
+    }
+
+    @Test
+    fun `a silent intro lowers nothing either, and only what would lower something is looked at`() {
+        val preset = Fixtures.presetProject()
+        val intro = MediaRef.Preset(com.itsluminous.clearmovie.domain.model.PresetSlot.INTRO)
+        val p = preset.addTimedClip(frame(start = 0, ms = 5000), ids = SequentialIds("u"))
+        val row = p.tracks.single { it.type == TrackType.OVERLAY && it.presetRole == null }.id
+        val silentIntro = SoundPresence { if (it == intro) false else null }
+        val base = FrameMusic.DEFAULT_GAIN_DB
+        assertThat(
+            RenderPlanBuilder(Fixtures.preset, measured, silentIntro).build(p).frameSound(row).dbAt(2_000_000),
+        ).isWithin(1e-6).of(base)
+        assertThat(RenderPlanBuilder(Fixtures.preset, measured).build(p).frameSound(row).dbAt(2_000_000)).isWithin(1e-6).of(base - 12)
+        assertThat(duckingMedia(p)).contains(intro)
+        // Nothing to lower (no music, no frame of the user's): nothing to look at.
+        val bare = Fixtures.blankWith(Fixtures.video("v1"), ids = SequentialIds("b"))
+        assertThat(duckingMedia(bare)).isEmpty()
+        assertThat(
+            duckingMedia(bare.addTimedClip(frame(start = 0, ms = 2000), ids = SequentialIds("c"))),
+        ).containsExactly(Fixtures.media("v1"))
+        // A video that keeps its answer is not looked at, and its answer wins over the reader's.
+        val kept = withFrame0(bare).withVideoSound(mapOf(Fixtures.media("v1") to false))
+        assertThat(duckingMedia(kept)).isEmpty()
+        val keptRow = kept.tracks.single { it.type == TrackType.OVERLAY }.id
+        val says = SoundPresence { true }
+        assertThat(RenderPlanBuilder(null, measured, says).build(kept).frameSound(keptRow).dbAt(1_000_000)).isWithin(1e-6).of(base)
+        // Lower for talk off on the only row that could be lowered: nothing to look at.
+        assertThat(
+            duckingMedia(
+                withFrame0(bare).let {
+                    it.setTalkLowering(
+                        it.tracks
+                            .single { t ->
+                                t.type == TrackType.OVERLAY
+                            }.id,
+                        false,
+                        null,
+                    )
+                },
+            ),
+        ).isEmpty()
+        // A muted frame row lowers nothing, so nothing is looked at for it.
+        val withFrame = bare.addTimedClip(frame(start = 0, ms = 2000), ids = SequentialIds("d"))
+        val muted = withFrame.setTrackMuted(withFrame.frameRow, true)
+        assertThat(duckingMedia(muted)).isEmpty()
+    }
+
+    @Test
+    fun `a picture-in-picture video without sound lowers nothing either`() {
+        val pip =
+            VideoClip(
+                ClipId("pv"),
+                Fixtures.media("pv"),
+                sourceDurationMs = 3000,
+                startMs = 3000,
+                pip = com.itsluminous.clearmovie.domain.model.PipPlacement.DEFAULT,
+            )
+        val p = Fixtures.blankWith(Fixtures.photo("p1", 10_000), ids = ids).addTimedClip(frame(), ids = ids).addTimedClip(pip, ids = ids)
+        val silent = SoundPresence { if (it == Fixtures.media("pv")) false else null }
+        val base = FrameMusic.DEFAULT_GAIN_DB
+        assertThat(RenderPlanBuilder(null, measured, silent).build(p).frameSound(p.frameRow).dbAt(4_500_000)).isWithin(1e-6).of(base)
+        assertThat(RenderPlanBuilder(null, measured).build(p).frameSound(p.frameRow).dbAt(4_500_000)).isWithin(1e-6).of(base - 12)
+    }
+
+    @Test
     fun `a video on MAIN with its sound turned down does not lower the frame`() {
         val p =
             Fixtures
@@ -210,6 +298,8 @@ class FrameSoundPlanTest {
             RenderPlanBuilder(null, measured).build(p).frameSound(p.frameRow).dbAt(4_500_000),
         ).isWithin(1e-6).of(FrameMusic.DEFAULT_GAIN_DB)
     }
+
+    private fun withFrame0(p: Project) = p.addTimedClip(frame(start = 0, ms = 2000), ids = SequentialIds("e"))
 
     private fun RenderPlan.assertCoversAll() {
         for (layer in audio) {

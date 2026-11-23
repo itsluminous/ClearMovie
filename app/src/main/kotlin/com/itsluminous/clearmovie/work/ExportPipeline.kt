@@ -49,9 +49,12 @@ import com.itsluminous.clearmovie.render.media3.EncoderPreference
 import com.itsluminous.clearmovie.render.media3.ExportOutput
 import com.itsluminous.clearmovie.render.media3.MediaUnavailableException
 import com.itsluminous.clearmovie.render.media3.VideoExport
+import com.itsluminous.clearmovie.render.media3.readSoundTracks
+import com.itsluminous.clearmovie.render.media3.soundPresenceOf
 import com.itsluminous.clearmovie.render.plan.LoudnessTable
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
 import com.itsluminous.clearmovie.render.plan.decoderPeak
+import com.itsluminous.clearmovie.render.plan.duckingMedia
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -157,8 +160,9 @@ class ExportPipeline(
         checkInputs(project)?.let { return ExportOutcome.Failed(it) }
 
         val loudness = withContext(Dispatchers.IO) { measuredLoudness(project, set.loudness, set.resolver) }
+        val sound = soundPresenceOf(readSoundTracks(context, duckingMedia(project), set.resolver))
         val plan =
-            runCatching { RenderPlanBuilder(set.preset, loudness).build(project, shortSide = quality.shortSide) }
+            runCatching { RenderPlanBuilder(set.preset, loudness, sound).build(project, shortSide = quality.shortSide) }
                 .onFailure { Log.w(TAG, "The plan could not be built", it) }
                 .getOrNull() ?: return ExportOutcome.Failed(ExportFailure.FAILED)
         if (plan.durationUs <= 0 || plan.visual.isEmpty()) return ExportOutcome.Failed(ExportFailure.NOTHING)

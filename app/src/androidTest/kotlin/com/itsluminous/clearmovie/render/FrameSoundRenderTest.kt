@@ -20,8 +20,11 @@ import com.itsluminous.clearmovie.domain.model.setTalkLowering
 import com.itsluminous.clearmovie.render.RenderHarness.fixture
 import com.itsluminous.clearmovie.render.RenderHarness.report
 import com.itsluminous.clearmovie.render.RenderHarness.toneDb
+import com.itsluminous.clearmovie.render.media3.readSoundTracks
+import com.itsluminous.clearmovie.render.media3.soundPresenceOf
 import com.itsluminous.clearmovie.render.plan.LoudnessTable
 import com.itsluminous.clearmovie.render.plan.RenderPlanBuilder
+import com.itsluminous.clearmovie.render.plan.duckingMedia
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -127,6 +130,33 @@ class FrameSoundRenderTest {
         // A -20 dBFS 1 kHz tone on both channels is about -17 LUFS.
         assertWithMessage("frame.mp4 has sound, at a real loudness").that(withSound!!).isWithin(4.0).of(-17.0)
         assertWithMessage("frame_magenta.mp4 has none").that(without).isNull()
+    }
+
+    @Test
+    fun aMainVideoWithoutSoundLowersNoFrameSound() {
+        // kupraki's call: lower only under videos with sound. The MAIN video is frame_magenta.mp4, which has none.
+        val ids = SequentialIds("fq")
+        val project =
+            ProjectFactory
+                .blank(ProjectId("frame-sound-silent-video"), ids)
+                .addToMain(
+                    listOf(
+                        PhotoClip(ids.clipId(), fixture("photo_quadrants.png"), 3000),
+                        VideoClip(ids.clipId(), fixture("frame_magenta.mp4"), sourceDurationMs = 2000),
+                        PhotoClip(ids.clipId(), fixture("photo_blue.png"), 3000),
+                    ),
+                    ids = ids,
+                ).addTimedClip(OverlayClip(ClipId("fr"), fixture("frame.mp4"), 0, 8000, 12_000, key = key, repeat = false), ids = ids)
+        val sound = soundPresenceOf(runBlocking { readSoundTracks(RenderHarness.context, duckingMedia(project), RenderHarness.resolver()) })
+        assertWithMessage("frame_magenta.mp4 read as without sound").that(sound.hasSound(fixture("frame_magenta.mp4"))).isFalse()
+        val pcm =
+            RenderHarness.decodeAudio(
+                RenderHarness.export(RenderPlanBuilder(null, measured, sound).build(project), "frame-sound-silent-video").file,
+            )
+        val before = toneDb(pcm, 1000.0, 1.0, 2.6)
+        val under = toneDb(pcm, 1000.0, 3.4, 4.6)
+        report("frame-sound check over a video without sound: %.2f dB against before it, want 0 +-2".format(Locale.ROOT, under - before))
+        assertWithMessage("frame sound over a silent video").that(abs(under - before)).isLessThan(2.0)
     }
 
     @Test

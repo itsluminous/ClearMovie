@@ -48,6 +48,45 @@ fun interface LoudnessTable {
 }
 
 /**
+ * The files whose sound would lower something and is not known yet
+ * (cm-frame-audio): the intro and a video ending, and every video on MAIN
+ * and picture-in-picture rows that sound, at a volume that lowers music,
+ * without a kept [VideoClip.hasSound]. Empty when no row would be lowered
+ * under them (no music or user frame row that sounds with Lower for talk
+ * on), so nothing needs to be looked at.
+ */
+fun duckingMedia(project: Project): List<MediaRef> {
+    val audible = project.tracks.filter { it.enabled && !it.muted }
+    val lowered = audible.any { it.isLoweredForTalk && it.lowerWhenTalking && it.clips.isNotEmpty() }
+    if (!lowered) return emptyList()
+    return audible
+        .filter { it.type == TrackType.MAIN || it.type == TrackType.VISUAL }
+        .flatMap { t ->
+            t.clips.mapNotNull {
+                when (it) {
+                    is VideoClip -> it.media.takeIf { _ -> it.hasSound == null && it.volumeDb > RenderPlanBuilder.AUDIBLE_DB }
+                    is IntroClip -> it.media
+                    is EndingClip -> it.media.takeIf { _ -> it.kind == EndingKind.VIDEO }
+                    else -> null
+                }
+            }
+        }.distinct()
+}
+
+/**
+ * Whether a file has a sound track: true, false, or null when not known
+ * (cm-frame-audio). A video known to have none lowers no music or frame
+ * sound under it; an unknown one lowers them as every video did before.
+ */
+fun interface SoundPresence {
+    fun hasSound(media: MediaRef): Boolean?
+
+    companion object {
+        val UNKNOWN = SoundPresence { null }
+    }
+}
+
+/**
  * Builds the [RenderPlan] for a project (ARCHITECTURE section 7). Pure: no
  * Android, no files. The rules:
  * - one layer per visual row, in `Project.stacking` order; MAIN becomes two
@@ -69,6 +108,7 @@ fun interface LoudnessTable {
 class RenderPlanBuilder(
     private val preset: Preset? = null,
     private val loudness: LoudnessTable = LoudnessTable.NONE,
+    private val sound: SoundPresence = SoundPresence.UNKNOWN,
 ) {
     /**
      * The plan at [shortSide] pixels across the canvas's short side (the
@@ -440,12 +480,16 @@ class RenderPlanBuilder(
         if (main.enabled && !main.muted) {
             for (slot in ctx.slots) {
                 val vol = slotVolumeDb(slot) ?: continue
-                if (vol > AUDIBLE_DB) clipSound += DuckInterval(slot.startMs * US, slot.endMs * US, ducking.musicUnderClipDb)
+                // A video whose file has no sound track lowers nothing (kupraki's call, cm-frame-audio).
+                val silent = soundOf(slot) == false
+                if (vol > AUDIBLE_DB && !silent) clipSound += DuckInterval(slot.startMs * US, slot.endMs * US, ducking.musicUnderClipDb)
             }
         }
         for (track in audibleTracks.filter { it.type == TrackType.VISUAL }) {
             for (clip in track.clips.filterIsInstance<VideoClip>()) {
-                if (clip.volumeDb > AUDIBLE_DB) clipSound += DuckInterval(clip.startMs * US, clip.endMs * US, ducking.musicUnderClipDb)
+                if (clip.volumeDb > AUDIBLE_DB && (clip.hasSound ?: sound.hasSound(clip.media)) != false) {
+                    clipSound += DuckInterval(clip.startMs * US, clip.endMs * US, ducking.musicUnderClipDb)
+                }
             }
         }
         val voice =
@@ -642,6 +686,15 @@ class RenderPlanBuilder(
         totalUs: Long,
         copyUs: Long,
     ) = require(totalUs / copyUs < MAX_SEGMENTS_PER_LAYER) { "The video has too many pieces to render" }
+
+    /** Whether a MAIN slot's file has a sound track: kept on a video, else [sound]'s answer; null when not known. */
+    private fun soundOf(slot: MainSlot): Boolean? =
+        when (val c = slot.clip) {
+            is VideoClip -> c.hasSound ?: sound.hasSound(c.media)
+            is IntroClip -> sound.hasSound(c.media)
+            is EndingClip -> if (c.kind == EndingKind.VIDEO) sound.hasSound(c.media) else null
+            else -> null
+        }
 
     /** The volume of a MAIN slot's own sound, or null when it has none (photos, cards, a held frame). */
     private fun slotVolumeDb(slot: MainSlot): Double? =
