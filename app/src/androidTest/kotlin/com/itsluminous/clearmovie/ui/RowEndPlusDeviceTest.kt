@@ -14,6 +14,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.android.ComposeNotIdleException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -47,12 +48,15 @@ import com.itsluminous.clearmovie.export.ExportHarness
 import com.itsluminous.clearmovie.ui.editor.PANEL_DONE_TAG
 import com.itsluminous.clearmovie.ui.editor.UNDO_TAG
 import com.itsluminous.clearmovie.ui.editor.insertOptionTag
+import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_PLAYHEAD_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TOGGLE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_RULER_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
+import com.itsluminous.clearmovie.ui.editor.timeline.TimelineGeometry
 import com.itsluminous.clearmovie.ui.editor.timeline.rowAddTag
 import com.itsluminous.clearmovie.ui.editor.timeline.rowEndPlusTag
+import com.itsluminous.clearmovie.ui.editor.timeline.rowHeaderTag
 import com.itsluminous.clearmovie.ui.editor.timeline.rowTag
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -136,7 +140,7 @@ class RowEndPlusDeviceTest {
             val ruler = read { bounds(TIMELINE_RULER_TAG) }
             val timeline = read { bounds(TIMELINE_TAG) }
             compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
-                click(Offset((48 + 28 + 1).dp.toPx(), ((ruler.top + ruler.bottom) / 2 - timeline.top).toPx()))
+                click(Offset((48 + TimelineGeometry.START_ROOM_DP + 1).dp.toPx(), ((ruler.top + ruler.bottom) / 2 - timeline.top).toPx()))
             }
             // A small screen (CI's) folds rows away behind Show all rows: open them so the text row is there.
             if (!read { exists(rowTag(names.value)) }) read { node(TIMELINE_ROWS_TOGGLE_TAG).performClick() }
@@ -174,6 +178,58 @@ class RowEndPlusDeviceTest {
                         useUnmergedTree = true,
                     ).fetchSemanticsNodes(),
             ).isNotEmpty()
+        }
+    }
+
+    @Test
+    fun uprightTheVideoStartsRightAfterTheRowIcons() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            turn(scenario, UiAutomation.ROTATION_FREEZE_0, landscape = false)
+            startInset()
+        }
+    }
+
+    @Test
+    fun sidewaysTheVideoStartsRightAfterTheRowIcons() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            turn(scenario, UiAutomation.ROTATION_FREEZE_90, landscape = true)
+            startInset()
+        }
+    }
+
+    /**
+     * cm-timeline-start-gap: between the row icons and 0:00 there is only the playhead's dot (6 dp), not the
+     * 28 dp of empty track there was; the first item starts there and the playhead's dot is whole beside the icons.
+     */
+    private fun startInset() {
+        rowsShown()
+        val main =
+            project.tracks
+                .first { it.type == TrackType.MAIN }
+                .id.value
+        val intro = hasAnyAncestor(hasTestTag(rowTag(main))) and hasContentDescription("Intro,", substring = true)
+        compose.waitUntil(
+            TIMEOUT_MS,
+        ) { notYetIfBusy { compose.onAllNodes(intro, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } }
+        // The cursor at 0:00, through the ruler's accessibility action.
+        read { node(TIMELINE_RULER_TAG).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) } }
+        // Retried while Compose settles (the seek, the rows' layout).
+        read {
+            val header = bounds(rowHeaderTag(main))
+            val first = compose.onAllNodes(intro, useUnmergedTree = true).onFirst().getUnclippedBoundsInRoot()
+            val playhead = bounds(TIMELINE_PLAYHEAD_TAG)
+            Log.i(
+                ExportHarness.TAG,
+                "start inset: header right ${header.right} first item left ${first.left} playhead ${playhead.left}-${playhead.right}",
+            )
+            assertWithMessage("gap from the row icons to the first item")
+                .that((first.left - header.right).value)
+                .isWithin(1f)
+                .of(TimelineGeometry.START_ROOM_DP.toFloat())
+            // The playhead at 0:00: its line on the first item's edge, its 12 dp dot whole to the right of the icons.
+            val line = (playhead.left + playhead.right) / 2
+            assertWithMessage("playhead at 0:00").that(line.value).isWithin(1f).of(first.left.value)
+            assertWithMessage("playhead dot clear of the icons").that((line - 6.dp - header.right).value).isAtLeast(-0.5f)
         }
     }
 

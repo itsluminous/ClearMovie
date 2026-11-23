@@ -121,4 +121,17 @@ class TimelineZoomTest {
         assertThat(revealed.xOf(off)).isWithin(1.0).of(width * 0.25)
         assertThat(TimelineZoom.reveal(revealed, off, total, width)).isEqualTo(revealed)
     }
+
+    @Test
+    fun `a view moved past the start for a plus walks back from there when scrolled, never jumping`() {
+        // 30 s on 300 dp at 50 ms a dp, moved 66 dp past the start.
+        val nudged = TimelineZoom.nudgePastEnds(ZoomState(50.0, 0.0, fitAll = false), -66.0, 66.0, 30_000, 300.0)
+        assertThat(nudged.scrollMs).isWithin(1e-9).of(-3300.0)
+        // A small scroll later moves it by that much, not straight to the start.
+        assertThat(TimelineZoom.scrollBy(nudged, 10.0, 30_000, 300.0).scrollMs).isWithin(1e-9).of(-2800.0)
+        // Earlier than where it is: it stays (never further past the start by hand).
+        assertThat(TimelineZoom.scrollBy(nudged, -10.0, 30_000, 300.0).scrollMs).isWithin(1e-9).of(-3300.0)
+        // Within the video, as before.
+        assertThat(TimelineZoom.scrollBy(ZoomState(50.0, 1000.0, false), -100.0, 30_000, 300.0).scrollMs).isEqualTo(0.0)
+    }
 }

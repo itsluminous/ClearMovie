@@ -142,7 +142,7 @@ class TimelineGeometry(
         val kept = mutableListOf<MarkerPoint>()
         for (b in 1 until spans.size) {
             if (!overlaps(b)) continue
-            val x = (left(b) + right(b - 1)) / 2
+            val x = markerX((left(b) + right(b - 1)) / 2)
             val clear =
                 handles.all { h ->
                     x + MARKER_HIT_DP / 2 + HANDLE_GAP_DP <= h.start ||
@@ -152,11 +152,20 @@ class TimelineGeometry(
             // Nothing selected, MAIN's own "+" floats at the right edge on the row's middle: a marker whose touch area
             // would reach it is left out (the bar's Transition opens it), so the two never share a spot.
             if (selected == null && x + MARKER_HIT_DP / 2 > endPlusX(widthDp) - PLUS_HIT_DP / 2 - EPS) continue
-            if (kept.any { abs(it.xDp - x) < MARKER_HIT_DP }) continue
+            // Too close to the one before: the one with more of its touch area clear of the row icons stays (only the
+            // last kept can be that close: markers only move right, and those kept are a hit area apart).
+            val clash = kept.lastOrNull()?.takeIf { abs(it.xDp - x) < MARKER_HIT_DP }
+            if (clash != null) {
+                if (onSpan(x) <= onSpan(clash.xDp) + EPS) continue
+                kept.removeAt(kept.lastIndex)
+            }
             kept += MarkerPoint(b, b - 1, x)
         }
         return kept
     }
+
+    /** How much of a marker's touch area at [x] is clear of the row icons (left of -[START_ROOM_DP]). */
+    private fun onSpan(x: Double): Double = x + MARKER_HIT_DP / 2 - maxOf(x - MARKER_HIT_DP / 2, -START_ROOM_DP)
 
     /** The centre of [p]'s hit area, in the geometry's y. */
     fun plusCentreY(p: PlusPoint): Double = if (p.top) mainTop else mainCentre
@@ -183,7 +192,7 @@ class TimelineGeometry(
         val out = mutableListOf<PlusPoint>()
         val half = PLUS_HIT_DP / 2
 
-        fun onScreen(x: Double) = x - half >= -EDGE_ROOM_DP - EPS && x + half <= widthDp + EDGE_ROOM_DP + EPS
+        fun onScreen(x: Double) = x - half >= -START_ROOM_DP - EPS && x + half <= widthDp + END_ROOM_DP + EPS
         if (sel != null) {
             val outward = if (selectedTrimmable) DISPLACE_DP else 0.0
             val before = left(sel) - outward
@@ -204,10 +213,9 @@ class TimelineGeometry(
     /** The trim handles' hit areas (x ranges) on the selected item, or null. */
     fun handleHitAreas(): Pair<ClosedFloatingPointRange<Double>, ClosedFloatingPointRange<Double>>? {
         val sel = selected?.takeIf { it in spans.indices && selectedTrimmable } ?: return null
-        val l = left(sel)
         val r = right(sel)
         val outside = (HANDLE_HIT_DP - HANDLE_DP) / 2
-        return (l - outside)..(l + HANDLE_DP + outside) to (r - HANDLE_DP - outside)..(r + outside)
+        return startHandleArea(left(sel)) to (r - HANDLE_DP - outside)..(r + outside)
     }
 
     /** What a touch at ([x], [y]) hits. */
@@ -271,8 +279,38 @@ class TimelineGeometry(
 
         private const val OFFSCREEN_DP = 64.0
 
-        /** How far past the time span a "+" may sit: the span's padding at each end (TimelineView's PAD_DP). */
-        const val EDGE_ROOM_DP = 28.0
+        /**
+         * The room between the row icons and the video's start (TimelineView's
+         * START_PAD_DP): the playhead's dot, 6 dp each side of its line, so it
+         * sits whole beside the icons. A "+" may reach this far before the
+         * span; nothing else is kept clear here (cm-timeline-start-gap).
+         */
+        const val START_ROOM_DP = 6.0
+
+        /**
+         * Where a marker whose overlap's middle is at [midDp] is drawn: there,
+         * or moved right (by at most half its touch area, so one scrolled off
+         * is never pulled back) until its 48 dp touch area is clear of the row
+         * icons, as [startHandleArea] does for a trim handle.
+         */
+        fun markerX(midDp: Double): Double = midDp + (MARKER_HIT_DP / 2 - START_ROOM_DP - midDp).coerceIn(0.0, MARKER_HIT_DP / 2)
+
+        /** How far past the end of the time span a "+" may sit: the room under the rows' own "+" (TimelineView's END_PAD_DP). */
+        const val END_ROOM_DP = 28.0
+
+        /**
+         * A start trim handle's 48 dp touch area for an item starting at
+         * [leftDp]: 12 dp outside the item to 12 dp past the drawn handle,
+         * moved in (by at most those 12 dp, so it always covers the drawn
+         * handle) where it would reach past [START_ROOM_DP] onto the row
+         * icons, which take every touch left of the span. So the first item's
+         * handle keeps its full 48 dp at the very start of the video.
+         */
+        fun startHandleArea(leftDp: Double): ClosedFloatingPointRange<Double> {
+            val outside = (HANDLE_HIT_DP - HANDLE_DP) / 2
+            val shift = (-START_ROOM_DP - (leftDp - outside)).coerceIn(0.0, outside)
+            return (leftDp - outside + shift)..(leftDp + HANDLE_DP + outside + shift)
+        }
 
         /**
          * The centre of every row's own "+" (cm-plus-position), on the time
@@ -280,7 +318,7 @@ class TimelineGeometry(
          * flush with the timeline's right edge, so it is in the same place on
          * every row whatever the scroll and zoom, and items run on under it.
          */
-        fun endPlusX(widthDp: Double): Double = widthDp + EDGE_ROOM_DP - PLUS_HIT_DP / 2
+        fun endPlusX(widthDp: Double): Double = widthDp + END_ROOM_DP - PLUS_HIT_DP / 2
 
         /** Over a narrow item, how close to a "+" on its edge a tap must be: its drawn circle. */
         const val PLUS_CORE_DP = 12.0

@@ -69,8 +69,8 @@ object TimedRowGeometry {
         val half = TimelineGeometry.PLUS_HIT_DP / 2
         // Kept whole inside the span's padding at either end, so its full 48 dp is always on screen (the row's own "+"
         // at the right edge is hidden on the selected item's row).
-        val lo = -TimelineGeometry.EDGE_ROOM_DP + half
-        val hi = widthDp + TimelineGeometry.EDGE_ROOM_DP - half
+        val lo = -TimelineGeometry.START_ROOM_DP + half
+        val hi = widthDp + TimelineGeometry.END_ROOM_DP - half
 
         fun TimedPlus.kept() = copy(xDp = xDp.coerceIn(lo, maxOf(lo, hi)))
         val out = mutableListOf<TimedPlus>()
@@ -102,10 +102,9 @@ object TimedRowGeometry {
         zoom: ZoomState,
     ): Pair<ClosedFloatingPointRange<Double>, ClosedFloatingPointRange<Double>>? {
         if (clip.resize == null || clip.endMs <= clip.startMs) return null
-        val l = zoom.xOf(clip.startMs.toDouble())
         val r = zoom.xOf(clip.endMs.toDouble())
         val outside = (TimelineGeometry.HANDLE_HIT_DP - TimelineGeometry.HANDLE_DP) / 2
-        return (l - outside)..(l + TimelineGeometry.HANDLE_DP + outside) to
+        return TimelineGeometry.startHandleArea(zoom.xOf(clip.startMs.toDouble())) to
             (r - TimelineGeometry.HANDLE_DP - outside)..(r + outside)
     }
 

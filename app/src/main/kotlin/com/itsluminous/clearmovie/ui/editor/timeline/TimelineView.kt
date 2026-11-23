@@ -55,6 +55,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -294,8 +295,22 @@ private const val HEADER_DP = 48.0
 /** How much of a text card's words TalkBack reads with it. */
 private const val CARD_TEXT_SPOKEN = 60
 
-/** Padding at the start of the time span, so the first "+" can be reached (its end has the "+" column). */
-private const val PAD_DP = 28.0
+/**
+ * The room between the row icons and the video's start (0:00): only the
+ * playhead's dot (6 dp across each way) so it sits whole beside the icons.
+ * Nothing else is kept clear here: a selected first item's "+" before it is
+ * brought into view by moving the view past the start, and its trim handle's
+ * touch area moves in off the icons (TimelineGeometry.startHandleArea).
+ */
+private const val START_PAD_DP = TimelineGeometry.START_ROOM_DP
+
+/** The room after the video's end, under the rows' own floating "+" (TimelineGeometry.endPlusX). */
+private const val END_PAD_DP = TimelineGeometry.END_ROOM_DP
+
+/** Whether the timeline had no zoom yet when the nudge after a clamp last ran (TimelineView): the editor opening. */
+private class NudgeMemo {
+    var unset = true
+}
 
 /** Rounding room for the nudge that brings a selected item's "+" into view. */
 private const val NUDGE_SLACK_DP = 1.0
@@ -353,7 +368,7 @@ fun TimelineView(
     val spokenMs = if (playing) playedFrom else playheadMs
     BoxWithConstraints(modifier.fillMaxWidth().testTag(TIMELINE_TAG)) {
         val fullWidth = maxWidth
-        val spanWidth = (maxWidth.value - metrics.headerDp - 2 * PAD_DP).coerceAtLeast(1.0)
+        val spanWidth = (maxWidth.value - metrics.headerDp - START_PAD_DP - END_PAD_DP).coerceAtLeast(1.0)
         val z = zoom ?: TimelineZoom.fitAll(totalMs, spanWidth)
         LaunchedEffect(spanWidth) { onSpanWidth(spanWidth) }
         // A new width (rotation) or length (an edit): the same zoom, clamped; fit all stays fit all.
@@ -381,9 +396,17 @@ fun TimelineView(
 
         // A newly selected item shows a "+" on each side (on MAIN beyond its trim handles). When one would be
         // cut off by the end of the view, the view moves just enough (past the video's own start or end if it
-        // must) to show it. Only a small shift: a long item already well in view never jumps.
-        fun nudge(sel: ClipId?) {
+        // must) to show it. Only a small shift: a long item already well in view never jumps. [fresh] is false when
+        // the view is moved back after the clamp above put it at the start (a new width or length): then only by a
+        // little (up to half a "+": a short intro's "+" after it), so an edit never jumps the view. With [clamped]
+        // it starts from what that clamp set, as it runs first.
+        fun nudge(
+            sel: ClipId?,
+            fresh: Boolean = true,
+            clamped: Boolean = false,
+        ) {
             if (sel == null) return
+            val base = if (clamped) TimelineZoom.reclamp(z, totalMs, spanWidth) else z
             val timed = rows.firstNotNullOfOrNull { r -> r.clips.firstOrNull { it.id == sel } }
             val span =
                 slots.firstOrNull { it.clip.id == sel }?.let { it.startMs to it.endMs }
@@ -400,16 +423,25 @@ fun TimelineView(
                 }
             // How far in from each end of the time span the item's edge must be for its "+" there to show (negative: it
             // may be past the edge, into the span's padding). Null where nothing goes: before the intro, after the ending.
-            val room = if (mainClip is IntroClip) null else outward + TimelineGeometry.PLUS_HIT_DP / 2 - PAD_DP
-            val endRoom = if (mainClip is EndingClip) null else outward + TimelineGeometry.PLUS_HIT_DP / 2 - PAD_DP
-            val left = z.xOf(span.first.toDouble())
-            val right = z.xOf(span.second.toDouble())
+            val room = if (mainClip is IntroClip) null else outward + TimelineGeometry.PLUS_HIT_DP / 2 - START_PAD_DP
+            val endRoom = if (mainClip is EndingClip) null else outward + TimelineGeometry.PLUS_HIT_DP / 2 - END_PAD_DP
+            val left = base.xOf(span.first.toDouble())
+            val right = base.xOf(span.second.toDouble())
             // Only a small shift: a "+" well off screen (a long item) is left for the item's menu.
             val reach = 2 * maxOf(room ?: 0.0, endRoom ?: 0.0, TimelineGeometry.PLUS_HIT_DP / 2) + NUDGE_SLACK_DP
+            // The intro has no "+" before it, but its "+" after it, on its end, is cut by the row icons when the intro
+            // ends within half a "+" of the span's start (a short intro at fit all): its end goes that far in.
+            val introEnd = TimelineGeometry.PLUS_HIT_DP / 2 - START_PAD_DP
+            var startRoom = room ?: 0.0
             val dx =
                 when {
                     room != null && left < room && room - left <= reach -> {
                         left - room
+                    }
+
+                    mainClip is IntroClip && right < introEnd && introEnd - right <= reach -> {
+                        startRoom = introEnd - (right - left)
+                        right - introEnd
                     }
 
                     endRoom != null &&
@@ -423,7 +455,8 @@ fun TimelineView(
                         0.0
                     }
                 }
-            if (dx != 0.0) onZoom(TimelineZoom.nudgePastEnds(z, dx, room ?: 0.0, totalMs, spanWidth, endRoom ?: 0.0))
+            if (!fresh && abs(dx) > TimelineGeometry.PLUS_HIT_DP / 2 + NUDGE_SLACK_DP) return
+            if (dx != 0.0) onZoom(TimelineZoom.nudgePastEnds(base, dx, startRoom, totalMs, spanWidth, endRoom ?: 0.0))
         }
         // While playing and following, the view is the following's: an item selected near the edge is not nudged
         // one way while the following turns the page the other. The nudge is kept for when playing stops, and runs
@@ -442,6 +475,16 @@ fun TimelineView(
             if (playing) return@LaunchedEffect
             nudgeWaiting = null
             if (waiting == selected) nudge(selected)
+        }
+        // A new width or MAIN length (a rotation, an edit) or the editor's first zoom: the clamp above can put a view
+        // that was moved past the start (for a first item's or a short intro's "+") back at it. Moved back here, run
+        // after that clamp: in full on the editor's opening (the clamp undoes the opening's move), else a little.
+        val nudgeMemo = remember { NudgeMemo() }
+        LaunchedEffect(spanWidth, totalMs, zoom == null) {
+            val opening = nudgeMemo.unset
+            nudgeMemo.unset = zoom == null
+            if (playing && !followPaused) return@LaunchedEffect
+            nudge(selected, fresh = opening, clamped = true)
         }
         val spans = remember(slots) { slots.map { it.span() } }
         val selectedClip = selectedIndex?.let { slots[it].clip }
@@ -1111,7 +1154,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 val prevSpread = lastSpread
                                 val prevCentroid = lastCentroid
                                 if (prevSpread != null && prevCentroid != null && prevSpread > 0 && spread > 0) {
-                                    val focus = dp(centroid.x) - metrics.headerDp - PAD_DP
+                                    val focus = dp(centroid.x) - metrics.headerDp - START_PAD_DP
                                     var next = TimelineZoom.zoomAround(live, spread / prevSpread, focus, c.totalMs, c.spanWidth)
                                     val pan = dp(prevCentroid.x - centroid.x)
                                     if (abs(pan) > 0 && !next.fitAll) next = TimelineZoom.scrollBy(next, pan, c.totalMs, c.spanWidth)
@@ -1169,7 +1212,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 val t =
                                     c.zoom
                                         .timeAt(
-                                            dp(ch.position.x) - metrics.headerDp - PAD_DP,
+                                            dp(ch.position.x) - metrics.headerDp - START_PAD_DP,
                                         ).coerceIn(0.0, c.totalMs.toDouble())
                                         .toLong()
                                 if (ch.uptimeMillis - lastSeek >= SEEK_EVERY_MS) {
@@ -1246,7 +1289,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 endMs: Long,
                             ) {
                                 if (!TapSeek.seeks(type, c.playing, enabled)) return
-                                val x = dp(first.position.x) - metrics.headerDp - PAD_DP
+                                val x = dp(first.position.x) - metrics.headerDp - START_PAD_DP
                                 actions.seek(TapSeek.timeAt(c.zoom, x, startMs, endMs, c.totalMs))
                                 followAgain()
                             }
@@ -1310,7 +1353,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 }
 
                                 Hit.OnRuler -> {
-                                    val t = c.zoom.timeAt(dp(first.position.x) - metrics.headerDp - PAD_DP)
+                                    val t = c.zoom.timeAt(dp(first.position.x) - metrics.headerDp - START_PAD_DP)
                                     actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
                                     followAgain()
                                 }
@@ -1395,7 +1438,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.timeline
                                 GestureMode.SCRUB -> {
                                     val ch = event.changes.firstOrNull { it.id == first.id }
                                     if (ch != null) {
-                                        val t = c.zoom.timeAt(dp(ch.position.x) - metrics.headerDp - PAD_DP)
+                                        val t = c.zoom.timeAt(dp(ch.position.x) - metrics.headerDp - START_PAD_DP)
                                         actions.seek(t.coerceIn(0.0, c.totalMs.toDouble()).toLong())
                                     }
                                     followAgain()
@@ -1791,7 +1834,7 @@ private fun hit(
     // A row's own "+" floats over the row's right edge (cm-plus-position) and wins over what is under it on its 48 dp
     // (also past a slim row into the gap), while the row's middle is in view, as it is drawn. A tap is the "+"; held
     // or dragged it is what lies under it, so an item running under the "+" can still be moved or opened.
-    val sx = xDp - metrics.headerDp - PAD_DP
+    val sx = xDp - metrics.headerDp - START_PAD_DP
     if (yDp >= metrics.rulerDp && abs(sx - TimelineGeometry.endPlusX(c.spanWidth)) <= TimelineGeometry.PLUS_HIT_DP / 2) {
         val inRows = yDp - metrics.rulerDp + rowScrollDp
 
@@ -1844,7 +1887,7 @@ private fun hitBelow(
         val gy = metrics.rulerDp + (yDp - metrics.rulerDp + rowScrollDp - c.mainTopInRows)
         // Never below MAIN: in the slimmer sideways rows a marker's 48 dp hit area would reach the next row.
         if (gy < c.geometry.mainBottom) {
-            when (val t = c.geometry.hitTest(xDp - metrics.headerDp - PAD_DP, gy)) {
+            when (val t = c.geometry.hitTest(xDp - metrics.headerDp - START_PAD_DP, gy)) {
                 is HitTarget.Plus -> return Hit.OnPlus(t.point)
                 is HitTarget.Marker -> return Hit.OnMarker(t.point)
                 else -> Unit
@@ -1858,7 +1901,7 @@ private fun hitBelow(
     val band = c.bands[i]
     val row = c.shown[i]
     if (xDp < metrics.headerDp) return Hit.OnHeader(row.key)
-    val sx = xDp - metrics.headerDp - PAD_DP
+    val sx = xDp - metrics.headerDp - START_PAD_DP
     if (row.type != RowType.MAIN) {
         if (row.clips.isEmpty()) return Hit.OnRowSpace(row.key)
         return when (val t = TimedRowGeometry.hitTest(row.clips, c.timedPlus[row.key].orEmpty(), c.zoom, sx, c.selectedId)) {
@@ -1945,11 +1988,11 @@ private fun Ruler(
         Spacer(Modifier.width(metrics.headerDp.dp))
         Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
             Canvas(Modifier.fillMaxSize()) {
-                val pad = PAD_DP.dp.toPx()
+                val pad = START_PAD_DP.dp.toPx()
                 drawLine(line, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 1.dp.toPx())
                 val firstTick = (zoom.scrollMs.coerceAtLeast(0.0) / tick).toLong() * tick
                 var t = firstTick
-                val end = zoom.timeAt(spanWidth + PAD_DP)
+                val end = zoom.timeAt(spanWidth + END_PAD_DP)
                 while (t <= minOf(end, totalMs.toDouble() + tick)) {
                     val x = pad + (zoom.xOf(t.toDouble()) * density).toFloat()
                     drawLine(color, Offset(x, size.height * 0.55f), Offset(x, size.height), 1.dp.toPx())
@@ -1959,9 +2002,9 @@ private fun Ruler(
             // Labels at each tick, as text so they scale with the font.
             val firstTick = (zoom.scrollMs.coerceAtLeast(0.0) / tick).toLong() * tick
             var t = firstTick
-            val end = zoom.timeAt(spanWidth + PAD_DP)
+            val end = zoom.timeAt(spanWidth + END_PAD_DP)
             while (t <= minOf(end, totalMs.toDouble())) {
-                val x = PAD_DP + zoom.xOf(t.toDouble())
+                val x = START_PAD_DP + zoom.xOf(t.toDouble())
                 Text(
                     durationText(t * 1000),
                     style = MaterialTheme.typography.labelSmall,
@@ -1982,7 +2025,19 @@ private fun Playhead(
     metrics: RowMetrics,
 ) {
     val color = MaterialTheme.colorScheme.primary
-    val x = metrics.headerDp + PAD_DP + zoom.xOf(playheadMs.toDouble())
+    val x = START_PAD_DP + zoom.xOf(playheadMs.toDouble())
+    // Clipped at the row icons: scrolled past, it goes under them like the items (at 0:00 its dot is whole beside them).
+    Box(Modifier.padding(start = metrics.headerDp.dp).fillMaxSize().clipToBounds()) {
+        PlayheadLine(x, color, metrics)
+    }
+}
+
+@Composable
+private fun PlayheadLine(
+    x: Double,
+    color: Color,
+    metrics: RowMetrics,
+) {
     Box(
         Modifier
             .offset(x = (x - 8).dp)
@@ -2212,7 +2267,7 @@ private fun TimedRowContent(
             val dragged = drag?.id == clip.id
             val preview = trim?.takeIf { it.id == clip.id }
             val (shownStart, shownEnd) = preview?.span(clip) ?: (clip.startMs to clip.endMs)
-            val x = PAD_DP + zoom.xOf(shownStart.toDouble()) + if (dragged) drag.dxDp else 0.0
+            val x = START_PAD_DP + zoom.xOf(shownStart.toDouble()) + if (dragged) drag.dxDp else 0.0
             val w = (shownEnd - shownStart) / zoom.msPerDp
             if (x + w < -64 || w <= 0) continue
             val isSelected = clip.id == selected
@@ -2285,7 +2340,7 @@ private fun TimedRowContent(
                 }
             }
             if (isSelected && !dragged && clip.resize != null) {
-                val left = PAD_DP + zoom.xOf(shownStart.toDouble())
+                val left = START_PAD_DP + zoom.xOf(shownStart.toDouble())
                 TrimHandlePair(left, left + w, vertical = 5.dp)
             }
         }
@@ -2405,7 +2460,7 @@ private fun EndPlusCircle(
         Box(
             Modifier
                 .offset(
-                    x = (PAD_DP + TimelineGeometry.endPlusX(spanWidth) - TimelineGeometry.PLUS_HIT_DP / 2).dp,
+                    x = (START_PAD_DP + TimelineGeometry.endPlusX(spanWidth) - TimelineGeometry.PLUS_HIT_DP / 2).dp,
                     y = (centreY - TimelineGeometry.PLUS_HIT_DP / 2).dp,
                 ).size(TimelineGeometry.PLUS_HIT_DP.dp)
                 .clearAndSetSemantics { },
@@ -2452,7 +2507,7 @@ private fun TimedPlusButton(
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
-                .offset(x = (PAD_DP + p.xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp)
+                .offset(x = (START_PAD_DP + p.xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp)
                 .size(TimelineGeometry.PLUS_HIT_DP.dp)
                 .align(Alignment.CenterStart)
                 .testTag(timedPlusTag(p.anchor, p.side))
@@ -2514,7 +2569,7 @@ private fun MainRowContent(
             if (i !in visible && !dragged) continue
             // The others make room; the dragged one stays under the finger (from where it was).
             val start = if (drag != null && !dragged) reflowStart.getValue(i) else slot.startMs.toDouble()
-            val x = PAD_DP + zoom.xOf(start) + if (dragged) drag.dxDp else 0.0
+            val x = START_PAD_DP + zoom.xOf(start) + if (dragged) drag.dxDp else 0.0
             val w = slot.durationMs / zoom.msPerDp
             val contentIndex = contentBefore[i]
             ClipTile(
@@ -2668,7 +2723,7 @@ private fun TrimHandles(
     geometry: TimelineGeometry,
     index: Int,
 ) {
-    TrimHandlePair(PAD_DP + geometry.left(index), PAD_DP + geometry.right(index), vertical = 4.dp)
+    TrimHandlePair(START_PAD_DP + geometry.left(index), START_PAD_DP + geometry.right(index), vertical = 4.dp)
 }
 
 /**
@@ -2686,7 +2741,11 @@ private fun TrimHandlePair(
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val onPrimary = MaterialTheme.colorScheme.onPrimary
-    for ((edge, x) in listOf(TrimEdge.START to leftDp, TrimEdge.END to rightDp - TimelineGeometry.HANDLE_DP)) {
+    // On an item narrower than a handle that starts in view (at 0:00, beside the row icons), the end handle is kept
+    // inside the row rather than drawn under the icons: the start room is only the playhead's dot.
+    val endX = (rightDp - TimelineGeometry.HANDLE_DP).let { if (leftDp >= 0) maxOf(it, 0.0) else it }
+    // The end one first, so on an item narrower than a handle the start one is drawn whole on top of it.
+    for ((edge, x) in listOf(TrimEdge.END to endX, TrimEdge.START to leftDp)) {
         val outer = 8.dp
         val shape =
             if (edge == TrimEdge.START) {
@@ -2729,7 +2788,7 @@ private fun TransitionMarker(
     Box(
         Modifier
             .offset(
-                x = (PAD_DP + point.xDp - TimelineGeometry.MARKER_HIT_DP / 2).dp,
+                x = (START_PAD_DP + point.xDp - TimelineGeometry.MARKER_HIT_DP / 2).dp,
                 y = (centreDp - TimelineGeometry.MARKER_HIT_DP / 2).dp,
             ).size(TimelineGeometry.MARKER_HIT_DP.dp)
             .testTag(markerTag(point.boundary))
@@ -2776,7 +2835,7 @@ private fun PlusButton(
         Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
-                    .offset(x = (PAD_DP + p.xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp, y = y.dp)
+                    .offset(x = (START_PAD_DP + p.xDp - TimelineGeometry.PLUS_HIT_DP / 2).dp, y = y.dp)
                     .size(TimelineGeometry.PLUS_HIT_DP.dp)
                     .testTag(plusTag(boundary))
                     .semantics {

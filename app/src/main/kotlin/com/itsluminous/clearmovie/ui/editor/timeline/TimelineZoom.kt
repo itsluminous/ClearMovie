@@ -118,14 +118,18 @@ object TimelineZoom {
         return zoomAround(anchored, if (zoomIn) BUTTON_FACTOR else 1 / BUTTON_FACTOR, focusX, totalMs, widthDp)
     }
 
-    /** Scrolls by [dxDp] (positive moves later in the video), within the video. */
+    /**
+     * Scrolls by [dxDp] (positive moves later in the video), within the video. A view moved past an end for a
+     * selected item's "+" ([nudgePastEnds]) walks back from there, rather than jumping to the end at the first move.
+     */
     fun scrollBy(
         state: ZoomState,
         dxDp: Double,
         totalMs: Long,
         widthDp: Double,
     ): ZoomState {
-        val scroll = (state.scrollMs + dxDp * state.msPerDp).coerceIn(0.0, maxScrollMs(state.msPerDp, totalMs, widthDp))
+        val end = maxScrollMs(state.msPerDp, totalMs, widthDp)
+        val scroll = (state.scrollMs + dxDp * state.msPerDp).coerceIn(min(0.0, state.scrollMs), max(end, state.scrollMs))
         return state.copy(scrollMs = scroll)
     }
 

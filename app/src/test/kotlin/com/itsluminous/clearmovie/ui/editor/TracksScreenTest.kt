@@ -62,6 +62,7 @@ import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_ROWS_TOGGLE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
 import com.itsluminous.clearmovie.ui.editor.timeline.TRIM_END_TAG
+import com.itsluminous.clearmovie.ui.editor.timeline.TimelineGeometry
 import com.itsluminous.clearmovie.ui.editor.timeline.ZoomState
 import com.itsluminous.clearmovie.ui.editor.timeline.clipTag
 import com.itsluminous.clearmovie.ui.editor.timeline.plusTag
@@ -290,7 +291,7 @@ class TracksScreenTest {
         // The music row at 9.3 s, before its item: the row menu.
         val musicRow = h.project.rowOf("m1").value
         val row = bounds(rowTag(musicRow))
-        val at = Offset(row.left + (48 + 28 + 15) * density, row.center.y) - timeline().topLeft
+        val at = Offset(row.left + (48 + TimelineGeometry.START_ROOM_DP.toFloat() + 15) * density, row.center.y) - timeline().topLeft
         compose.onNodeWithTag(TIMELINE_TAG).performTouchInput {
             down(at)
             advanceEventTime(700)

@@ -244,13 +244,15 @@ class TapSeekScreenTest {
     @Test
     fun `while playing, a tap on an item after a swipe starts the following again from there`() {
         val h = show(playing = true)
-        // A short swipe along the time (60 dp, 3 s at 50 ms a dp): m1 (10-13 s) stays in view.
+        // A short swipe along the time towards the start (60 dp, 3 s at 50 ms a dp; the view at 6 s is already at the
+        // video's end at this width): m1 (10-13 s) stays in view.
         compose.onNodeWithTag(clipTag(ClipId("v4")), useUnmergedTree = true).performTouchInput {
-            swipe(center, center - Offset(60.dp.toPx(), 0f))
+            swipe(center, center + Offset(60.dp.toPx(), 0f))
         }
         compose.waitForIdle()
         val put = h.state!!.zoom!!.scrollMs
-        assertThat(put).isGreaterThan(6000.0)
+        assertThat(put).isLessThan(6000.0)
+        assertThat(put).isGreaterThan(1000.0)
         // The swipe stopped the following: the cursor out of view moves nothing.
         compose.runOnIdle { h.playheadUs = 1_000_000 }
         compose.waitForIdle()
