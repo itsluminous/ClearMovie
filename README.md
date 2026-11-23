@@ -49,11 +49,11 @@ ClearMovie needs Android 10 or newer.
 ## Screenshots
 
 ClearMovie from `main` on an Android 16 emulator, making a short video from three
-clips with a preset called Event frame and its caption.
+clips with a preset called Spasht Dhaara and its caption.
 
 | Pick a preset | Check the preset | Add photos and videos | Arrange the timeline |
 | :---: | :---: | :---: | :---: |
-| ![Home screen: the Event frame preset with an Edit button, Start without a preset, New preset, and the video under My videos](site/screenshots/home.webp) | ![What this preset adds: the intro and frame (the ending is further down), each with Play, Replace and Skip](site/screenshots/preset-review.webp) | ![The Android photo picker with three videos selected](site/screenshots/media-pick.webp) | ![The editor: back, title, undo and redo, the download button and More options at the top, the caption on the frame's blue strip, and every row of the timeline](site/screenshots/editor.webp) |
+| ![Home screen: the Spasht Dhaara preset with an Edit button, Start without a preset, New preset, and the video under My videos](site/screenshots/home.webp) | ![What this preset adds: the intro and frame (the ending is further down), each with Play, Replace and Skip](site/screenshots/preset-review.webp) | ![The Android photo picker with three videos selected](site/screenshots/media-pick.webp) | ![The editor: back, title, undo and redo and More options at the top, the caption on the frame's blue strip, Play and Export under the preview, and every row of the timeline with a + at its right end](site/screenshots/editor.webp) |
 
 | Add a caption | Choose a transition | Choose a size | Share it |
 | :---: | :---: | :---: | :---: |
@@ -65,7 +65,7 @@ clips with a preset called Event frame and its caption.
 
 | Set its caption style | The caption, selected | Trim on the timeline | Lower for talk |
 | :---: | :---: | :---: | :---: |
-| ![Change caption style, Animation tab: None, Fade in, Zoom in, Pop, Bounce or Slide in, with Fade in chosen](site/screenshots/preset-caption-style.webp) | ![The caption selected in the editor, with handles on its box and Edit text, Animation, Earlier, Later, Other row and Delete below](site/screenshots/editor-caption.webp) | ![A video selected on the timeline with a handle at each end to trim it](site/screenshots/item-handles.webp) | ![Lower for talk: lower the music when people talk, to 10%](site/screenshots/talk-level.webp) |
+| ![Change caption style, Animation tab: None, Fade in, Zoom in, Pop, Bounce or Slide in, with Fade in chosen](site/screenshots/preset-caption-style.webp) | ![The caption selected in the editor, with handles on its box and Edit text, Animation, Earlier, Later, Other row and Delete below](site/screenshots/editor-caption.webp) | ![A video selected on the timeline with a handle at each end to trim it and a + before and after it](site/screenshots/item-handles.webp) | ![Lower for talk: lower the music when people talk, to 10%](site/screenshots/talk-level.webp) |
 
 | Record voice | Choose a shape | More options | Settings |
 | :---: | :---: | :---: | :---: |
@@ -89,7 +89,7 @@ What ClearMovie on `main` does:
   video or a closing voice clip. You can replace any part for a single video, or skip it.
 - **Your own presets** - make a new preset from Home, and edit or delete any preset there.
   A new install starts with none: Home shows your presets, then Start without a preset and
-  New preset. An install that had the Event frame keeps it as a preset like any other. A new
+  New preset. An install that had the preset older versions came with keeps it like any other. A new
   preset can use your files where they are, or keep a copy of them. Each
   preset keeps a caption style (words, place, size, font, colour, outline, band and the
   animation it comes in with) that new captions start from, with a live preview.
@@ -103,8 +103,9 @@ What ClearMovie on `main` does:
 - **A timeline that stays simple** - photos and videos on one row you reorder by dragging,
   plus as many text, music, voice, picture-in-picture and frame rows as you want. Each row has an
   icon, rows can be rearranged, and you choose which one shows on top. Pinch to zoom, or
-  use the zoom buttons. A "+" before and after each item adds something right there, and a
-  selected item has a handle at each end to trim it.
+  use the zoom buttons. Each row, the frame row too, has a "+" at its right end to add to it.
+  A selected photo or video has a "+" before and after it to add something right there, and
+  a selected item has a handle at each end to trim it.
 - **Big, labelled buttons** - tap any item for a toolbar of icons with names under them
   (trim, split, speed, loop, photo duration, volume, text, transition, animation, replace,
   delete). It scrolls sideways when there are more.
@@ -126,7 +127,7 @@ What ClearMovie on `main` does:
   on a tablet, foldable or in split-screen gets the same layout.
 - **Autosave** - work is saved as you go and recovered after a crash. Your videos are
   listed under "My videos"; tap a video's title in the editor to give it a name.
-- **Hardware-accelerated export** - tap the download button at the top, then choose Best
+- **Hardware-accelerated export** - tap Export in the play bar under the preview, then choose Best
   (1080p), Good (720p) or Small (480p). The video is saved to your gallery, ready to play
   or share.
 
@@ -148,7 +149,7 @@ What has shipped, and what is still to come:
 **Editing**
 - [x] Drag-to-reorder main row, with Move left and Move right buttons as well
 - [x] Several rows of each kind (text, music, picture in picture, frame), with type icons, rearranging, and "Show on top" / "Send backward"
-- [x] "+" before and after each item to insert photos, videos, text cards or music
+- [x] "+" at the end of each row, and before and after a selected photo or video, to insert photos, videos, text cards or music
 - [x] Pinch to zoom the timeline, plus zoom buttons and Fit all
 - [x] Transitions between items and animations on items
 - [x] Trim, split, join, speed (0.25x-4x), loop
