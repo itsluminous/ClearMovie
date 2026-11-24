@@ -12,6 +12,7 @@ their imports.
 | --- | --- | --- |
 | `domain.model` | The project and preset model (below), `ThemeMode`, `AppSettings`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `render.plan` | `RenderPlanBuilder` and the `RenderPlan` it makes, and the preview's `PreviewSchedule`: pure Kotlin | `android.*`, `androidx.*`, Media3, or any other app layer but `domain` |
+| `domain.voice` | The voice choice's rules (cm-voice-choice): `Phrases` and `PhraseFit` (a recording's words as timed phrases, and fitting each voiced phrase before the next), `Phonemizer` (English through the pack's dictionary, unknown words by rule, numbers as words; Hindi through `HindiPhonemes`), `VoicePackManifest`: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `domain.record` | `RecordingSync`: lining a voice recording up with the picture: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `domain.export` | The export's rules: the three sizes (`ExportQuality`), the free-space rule, the gallery file name, the time left: pure Kotlin | `android.*`, `androidx.*`, or any other app layer |
 | `render.media3` | The Media3 mapping: `CompositionFactory`, the GL effects, the gain processor, `RenderExporter`, `VideoExport` (hardware first, then software) | |
@@ -21,6 +22,7 @@ their imports.
 | `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard`, `NewVideos` (new drafts), `ShareDrafts` (a share's pending draft), `ProjectMedia` (a project's files) | `ui` |
 | `data.preset` | `PresetStore`, the key-colour check, `LoudnessMeter`, `MediaProbe` | `ui` |
 | `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants, `newMainItems` (picked items to clips); for shares `ShareLinks`, `ShareTypes`, `CaptureOrder` and `CaptureDates`, `PendingShare` | `ui` |
+| `data.voice` | `VoicePackStore` (the voice pack on the phone, and taking in downloaded files), `VoiceEngine` (Vosk and Kokoro from the pack), `VoiceTools` / `PackVoiceTools` (a recording's words, and words to a new voice file) | `ui` |
 | `data.record` | `VoiceRecorder` (microphone to AAC in M4A), `MicSource` and `AudioRecordMic`, `VoiceRecordings` (the files, and removing unused ones) | `ui` |
 | `data.files` | `AppFiles` (where files live), `SafeFileName`, `StorageUsage` | `ui` |
 | `data.export` | `ExportStore`: the export's hidden-then-shown entry in `Movies/ClearMovie` | `ui` |
@@ -180,7 +182,9 @@ Android types, so all of it is tested on the JVM.
   nothing, so an older frame reads at the frame music's -8 dB; schema 7
   gave photo-and-video rows Lower for talk, and its step rewrites nothing:
   every older row already carries `lowerWhenTalking`, so a row the user
-  turned off stays off and the rest take the ladder). Golden files under `app/src/test/resources/fixtures/project/` must
+  turned off stays off and the rest take the ladder; schema 8 added a
+  voice item's `voiceOver`, and its step rewrites nothing, so an older
+  voice item plays its recording). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.
 
 ## Rendering
@@ -597,6 +601,46 @@ the screen; the playhead is saved by `EditorViewModel`.
   `VoiceRecorderSyncTest` (a click 1 s after the picture is 1 s into the
   file) and by hand with `RecordVoiceRealCheck` (`-e cm.recordsync true`),
   which records over real clips through the editor and exports.
+- **Voice choice** (cm-voice-choice). A voice row's sheet has "Voice in
+  the video" (an exposed dropdown: No change, then British, Indian and
+  American voices, male and female; `VoiceChoice` in `domain.model`, ids
+  a preset can store) and, with a voice chosen, "Spoken in" (English or
+  Hindi; only the Indian voices say Hindi) and "Type the words". A
+  recording made with a voice chosen has its words found on the phone and
+  its "Change voice" panel opens to check them (speech recognition
+  mishears, the panel says so); Make voice says them in the voice. Typed
+  words become a new item of their own length. `AudioClip.media` stays the
+  recording: `AudioClip.voiceOver` holds the voice, language, the words as
+  phrases timed in the recording, and `generated`, a new
+  `voice-<token>.m4a` as long as the recording, so trims, splits and
+  handles stay right; the plan, the loudness and the missing-file check
+  play `playedMedia`, and the sweep keeps both files. No change keeps the
+  words and plays the recording. Each phrase is voiced at its first word,
+  up to 1.3x faster if it would run into the next, and ends where the next
+  starts. `VoiceChoiceController` (owned by the view model) runs one job
+  at a time off the main thread and applies it as one undo step only if
+  the item is unchanged.
+  The engine is Vosk (speech to words, with word times) and Kokoro
+  through sherpa-onnx (words to voice; it reads phonemes, which the app
+  makes itself, since it silently skips words its dictionary lacks), all
+  Apache-2.0 or MIT, inside the app's own process, which has no internet
+  permission. They are about 150 MB, so they are not in the APK: they
+  are the voice pack, the `voice-packs/v1/` folder of the repo (zips under
+  GitHub's 100 MB limit, and `manifest.json`), outside the app build.
+  The app carries the same manifest (`assets/voice-pack/manifest-v1.json`,
+  checked equal by a unit test). Choosing a voice without the pack shows
+  its size, opens the folder's page, then lists the files and "Add the
+  downloaded files": each chosen file is copied privately while its
+  SHA-256 is worked out, and only a listed file for this phone's processor
+  is unzipped, through a staging folder, entry by entry inside its part's
+  folder and within the listed count and size, into
+  `filesDir/voice-pack/v1/`, then made read-only. The engine's native
+  libraries load from there by path (`System.load`; JNA finds `libvosk`),
+  so the APK keeps only JNA's dispatcher, and the vendored sherpa-onnx
+  Kotlin API (`src/vendor/`) has no `loadLibrary`. Engines are loaded per
+  job and released (Kokoro alone grows to about 800 MB). On a phone whose
+  processor the pack has no engine for, only No change is offered.
+  Checked by hand with `VoiceChoiceDeviceTest` (`-e cm.voicepack true`).
 - **Fit with blur.** The export blurs the background with a separable
   Gaussian at an eighth of the window (`BlurPasses`, two passes before
   `PlacementEffect`'s own); the preview draws the picture shrunk and stretched

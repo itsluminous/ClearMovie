@@ -126,6 +126,11 @@ What ClearMovie on `main` does:
   and Lower for talk.
 - **Record voice** - add a voice row, tap its "+" and choose Record voice to speak while the
   video plays, lined up with the picture.
+- **Voice in the video** - say a voice item in a British, Indian or American voice, male or
+  female, like a TV anchor: speak the words, or type them. Spoken words are found on the
+  phone and shown to check first. Hindi words are said in the Indian voices. It needs the
+  free voice pack (about 150 MB, added once from
+  [voice-packs](voice-packs/v1/)); No change keeps your own recording.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its
   colours from your wallpaper on Android 12+, and has a themed icon.
 - **Portrait and landscape** - in the editor, landscape puts the preview on the left and the
@@ -165,6 +170,7 @@ What has shipped, and what is still to come:
 - [x] Lower for talk: choose how low music, a frame's sound or your videos' sound goes under the layers above it
 - [x] Trim handles at both ends of a selected item
 - [x] Record voice: speak over the video as it plays, lined up with the picture
+- [x] Voice in the video: say a voice item in another voice, spoken or typed, in English or Hindi
 - [x] Captions with preset defaults, drag-to-place, drag-to-resize, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
 - [x] Preview that shrinks, or floats as a small window, when all rows need room
@@ -189,7 +195,8 @@ What has shipped, and what is still to come:
   items the gallery can't share permanently.
 - **The microphone only when you record.** It is asked for the first time you tap
   Record voice, used only while the recording panel shows, and recordings stay
-  inside the app.
+  inside the app. Another voice is made on the phone, by the voice pack's engine running
+  inside ClearMovie; its words and sound never leave the phone.
 - **No proprietary dependencies.** It is built on AndroidX and Jetpack Media3, with no Firebase or Play Services.
 - **No watermarks.**
 
