@@ -305,6 +305,7 @@ private fun Project.checkClipRanges(
             if (clip.fadeInMs < 0 || clip.fadeOutMs < 0 || (clip.durationMs > 0 && clip.fadeInMs + clip.fadeOutMs > clip.durationMs)) {
                 bad("fades")
             }
+            clip.voiceOver?.problem(clip)?.let { bad("voice: $it") }
         }
 
         is OverlayClip -> {

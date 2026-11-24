@@ -17,6 +17,7 @@ import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
+import com.itsluminous.clearmovie.domain.model.playedMedia
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -352,7 +353,7 @@ class MediaAccess(
             when (this) {
                 is MediaClip -> media
                 is OverlayClip -> media
-                is AudioClip -> media
+                is AudioClip -> playedMedia
                 is IntroClip -> media
                 is EndingClip -> media
                 else -> null

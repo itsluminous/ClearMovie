@@ -14,6 +14,7 @@ import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,7 @@ import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.addRow
 import com.itsluminous.clearmovie.domain.model.addToTrack
 import com.itsluminous.clearmovie.domain.model.deleteClip
@@ -224,6 +226,10 @@ internal fun TimedInsertPanel(
             // On the preset's closing-message row too: the recording then goes on another voice row (addRecording).
             if (track.audioRole == AudioRole.VOICE) {
                 val from = if (anchor != null && side == InsertSide.AFTER) anchor.endMs else hereMs
+                // cm-voice-choice: the voice the recording, or typed words, are said in.
+                val voices = callbacks.voices
+                val voice = voices?.choice?.collectAsState()?.value ?: VoiceChoice.NONE
+                if (voices != null) VoiceSheetFields(voices)
                 Choice(
                     stringResource(R.string.record_voice),
                     stringResource(R.string.record_voice_body, durationText(from * 1000)),
@@ -233,6 +239,17 @@ internal fun TimedInsertPanel(
                 ) {
                     onPanel(null)
                     callbacks.recordVoice(track.id, from)
+                }
+                if (voices != null && voice != VoiceChoice.NONE) {
+                    Choice(
+                        stringResource(R.string.voice_type_words),
+                        stringResource(R.string.voice_type_words_body, durationText(from * 1000)),
+                        null,
+                        R.drawable.ic_text_fields,
+                        insertOptionTag(TYPE_WORDS_OPTION),
+                    ) {
+                        onPanel(OpenPanel(Panel.VOICE_TYPE, trackId = track.id, atMs = from))
+                    }
                 }
             }
         }

@@ -24,6 +24,7 @@ import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.data.project.ProjectMediaSet
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.data.record.VoiceRecordings
+import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.CanvasShape
@@ -51,10 +52,12 @@ import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.RandomIds
 import com.itsluminous.clearmovie.domain.model.Side
+import com.itsluminous.clearmovie.domain.model.SpokenLanguage
 import com.itsluminous.clearmovie.domain.model.Track
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VideoClip
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.addFrameFrom
 import com.itsluminous.clearmovie.domain.model.addRecording
 import com.itsluminous.clearmovie.domain.model.addToMain
@@ -162,6 +165,16 @@ sealed interface EditorEvent {
     data class Recorded(
         val note: RecordingNote,
     ) : EditorEvent
+
+    /** Something to say about a voice or the voice pack (cm-voice-choice). */
+    data class Voice(
+        val note: VoiceNote,
+    ) : EditorEvent
+
+    /** A recording's words were found: its panel opens so they can be checked. */
+    data class CheckWords(
+        val clipId: ClipId,
+    ) : EditorEvent
 }
 
 /** What a chosen file had to be. */
@@ -262,6 +275,7 @@ class EditorViewModel
         private val frameStills: FrameStills = FrameStills { _, _, _ -> null },
         private val soundLoudness: SoundLoudness = SoundLoudness { null },
         private val soundTracks: SoundTracks = SoundTracks { _, _, known -> known },
+        private val voiceTools: VoiceTools = VoiceTools.NONE,
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -290,12 +304,36 @@ class EditorViewModel
                 recordings,
                 projectId,
                 place = { clip, row -> if (edit { addRecording(clip, row) }) clip.id else null },
-                onPlaced = { id -> viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(id)) } },
+                onPlaced = { id ->
+                    viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(id)) }
+                    // With a voice chosen, its words are found and shown to check (cm-voice-choice).
+                    voices.afterRecording(id)
+                },
                 onNote = { note -> viewModelScope.launch { eventChannel.send(EditorEvent.Recorded(note)) } },
             )
 
         /** The recording in progress, or null. */
         val recording: StateFlow<RecordingUi?> = voice.state
+
+        /** The voice choice (cm-voice-choice): the voice and language picked, the voice pack, and the voice jobs. */
+        val voices =
+            VoiceChoiceController(
+                viewModelScope,
+                voiceTools,
+                projectId,
+                project = { session.current },
+                edit = { change -> edit(change = change) },
+                onNote = { note -> viewModelScope.launch { eventChannel.send(EditorEvent.Voice(note)) } },
+                onCheckWords = { id -> viewModelScope.launch { eventChannel.send(EditorEvent.CheckWords(id)) } },
+                onInserted = { id -> viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(id)) } },
+            ).also { c ->
+                c.restore(
+                    VoiceChoice.fromId(savedState.get<String>(KEY_VOICE)),
+                    SpokenLanguage.fromId(savedState.get<String>(KEY_VOICE_LANGUAGE)),
+                )
+                viewModelScope.launch { c.choice.collect { savedState[KEY_VOICE] = it.id } }
+                viewModelScope.launch { c.language.collect { savedState[KEY_VOICE_LANGUAGE] = it.id } }
+            }
 
         /** Records a voice from [atMs] onto voice row [row] (or the first free one). The microphone permission is granted. */
         fun recordVoice(
@@ -1059,6 +1097,8 @@ class EditorViewModel
             const val KEY_POSITION = "editor_position_us"
             const val KEY_PLAYING = "editor_playing"
             const val KEY_NOTES_SHOWN = "editor_notes_shown"
+            const val KEY_VOICE = "editor_voice"
+            const val KEY_VOICE_LANGUAGE = "editor_voice_language"
 
             /** The green an extra overlay's window is keyed by when there is no preset frame to copy. */
             val DEFAULT_KEY_GREEN = ArgbColor(0xFF00D922)

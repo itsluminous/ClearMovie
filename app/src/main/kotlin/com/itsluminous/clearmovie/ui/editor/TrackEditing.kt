@@ -159,6 +159,7 @@ fun timedBar(
             canFollow = project.canFollowItem(clip.id),
             hasSound = clip is OverlayClip && project.playsFrameSound(clip, framesWithSound),
             hasVideoSound = track.hasVideoSound(),
+            isVoice = clip is AudioClip && track.audioRole == AudioRole.VOICE && track.presetRole == null,
         )
     return ClipActions.forTimed(timedKind(project, clip), facts)
 }
@@ -340,6 +341,7 @@ internal fun onTimedAction(
         EditAction.TRIM -> state.panel = OpenPanel(if (clip is AudioClip) Panel.SOUND_TRIM else Panel.TRIM, id)
         EditAction.VOLUME -> state.panel = OpenPanel(Panel.VOLUME, id)
         EditAction.FADE -> state.panel = OpenPanel(Panel.FADE, id)
+        EditAction.CHANGE_VOICE -> state.panel = OpenPanel(Panel.VOICE, id)
         EditAction.LOWER_MUSIC -> state.panel = OpenPanel(Panel.TALK_LOWER, id, trackId = track.id)
         EditAction.FOLLOW_ITEM -> actions.edit { followItem(id) }
         EditAction.FRAME_ON -> actions.edit { setTrackEnabled(track.id, !track.enabled) }

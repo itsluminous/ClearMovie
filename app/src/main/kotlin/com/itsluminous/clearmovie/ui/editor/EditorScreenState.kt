@@ -77,6 +77,12 @@ enum class Panel {
     /** A frame's look (cm-frame-area), on its Screen colour or its Picture area tab. */
     FRAME_COLOUR,
     FRAME_AREA,
+
+    /** A voice item's voice and words (cm-voice-choice). */
+    VOICE,
+
+    /** Type the words, from a voice row's sheet: a new item said in the chosen voice. */
+    VOICE_TYPE,
 }
 
 /**

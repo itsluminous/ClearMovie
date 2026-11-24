@@ -32,6 +32,7 @@ import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.containedRect
 import com.itsluminous.clearmovie.domain.model.isValid
 import com.itsluminous.clearmovie.domain.model.mainLayout
+import com.itsluminous.clearmovie.domain.model.playedMedia
 import com.itsluminous.clearmovie.domain.model.totalDurationMs
 import com.itsluminous.clearmovie.domain.model.within
 import kotlin.math.PI
@@ -610,7 +611,7 @@ class RenderPlanBuilder(
                 val startUs = clip.startMs * US
                 val durUs = clip.durationMs * US
                 if (durUs <= 0) continue
-                val norm = target?.let { t -> loudness.lufs(clip.media)?.let { (t - it).coerceIn(MIN_NORM_DB, MAX_NORM_DB) } } ?: 0.0
+                val norm = target?.let { t -> loudness.lufs(clip.playedMedia)?.let { (t - it).coerceIn(MIN_NORM_DB, MAX_NORM_DB) } } ?: 0.0
                 val copies = audioCopies(clip)
                 var env = GainEnvelope.constant(clip.volumeDb + norm)
                 if (clip.fadeInMs > 0) env += fadeIn(minOf(clip.fadeInMs * US, durUs))
@@ -626,7 +627,7 @@ class RenderPlanBuilder(
                         AudioSegment.Sound(
                             startUs = startUs + offset,
                             durationUs = length,
-                            media = clip.media,
+                            media = clip.playedMedia,
                             sourceDurationUs = clip.sourceDurationMs * US,
                             clipStartUs = srcStart,
                             clipEndUs = srcStart + length,

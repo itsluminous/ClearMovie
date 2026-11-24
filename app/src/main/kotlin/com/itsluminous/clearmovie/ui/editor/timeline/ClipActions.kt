@@ -58,6 +58,9 @@ enum class EditAction {
     /** cm-captions: a caption attached to the selected photo or video. */
     ADD_CAPTION,
 
+    /** cm-voice-choice: a voice item's voice and words. */
+    CHANGE_VOICE,
+
     /** cm-timeline-handles: a caption with a side detached covers its photo or video whole again. */
     FOLLOW_ITEM,
 
@@ -144,6 +147,8 @@ data class TimedFacts(
     val hasSound: Boolean = false,
     /** A picture-in-picture row with a video that may sound (cm-voice-ducking): its videos have Lower for talk. */
     val hasVideoSound: Boolean = false,
+    /** A sound on a voice row (cm-voice-choice): it can be said in another voice. */
+    val isVoice: Boolean = false,
 )
 
 /**
@@ -282,7 +287,8 @@ object ClipActions {
             }
 
             SelectionKind.SOUND -> {
-                listOf(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE).map(::BarAction) +
+                listOfNotNull(BarAction(EditAction.CHANGE_VOICE, opensPanel = true).takeIf { facts.isVoice }) +
+                    listOf(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE).map(::BarAction) +
                     listOfNotNull(lowerMusic(facts.lowerWhenTalking).takeIf { facts.isMusic }) +
                     moves + delete
             }

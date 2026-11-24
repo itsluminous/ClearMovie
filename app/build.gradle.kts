@@ -124,6 +124,14 @@ android {
     }
 
     packaging {
+        jniLibs {
+            // cm-voice-choice: libvosk.so ships in the voice pack (with the voice engine), so the app stays small;
+            // JNA's dispatcher stays, for the four processor types the APK supports.
+            excludes += "**/libvosk.so"
+            excludes += "lib/armeabi/**"
+            excludes += "lib/mips/**"
+            excludes += "lib/mips64/**"
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/LICENSE.md"
@@ -140,6 +148,8 @@ android {
     sourceSets {
         getByName("main") {
             kotlin.srcDir("src/main/kotlin")
+            // Third-party sources kept as they are (sherpa-onnx's Kotlin API, cm-voice-choice).
+            kotlin.srcDir("src/vendor/kotlin")
         }
         getByName("test") {
             kotlin.srcDir("src/test/kotlin")
@@ -251,6 +261,10 @@ dependencies {
     implementation(libs.media3.datasource)
     // EXIF capture dates of shared photos (cm-share); already on the classpath through Media3.
     implementation(libs.androidx.exifinterface)
+
+    // cm-voice-choice: speech recognition (Vosk) through JNA; their native code comes from the voice pack.
+    implementation(libs.vosk.android) { artifact { type = "aar" } }
+    implementation(libs.jna) { artifact { type = "aar" } }
 
     // Material Components: provides the XML Theme.Material3.* parent in themes.xml.
     implementation(libs.google.material)

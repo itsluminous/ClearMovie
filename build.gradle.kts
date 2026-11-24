@@ -19,6 +19,8 @@ allprojects {
         filter {
             exclude { it.file.path.contains("${layout.buildDirectory.get()}") }
             exclude("**/build/**")
+            // Third-party sources kept as they are (cm-voice-choice).
+            exclude("**/src/vendor/**")
         }
     }
 

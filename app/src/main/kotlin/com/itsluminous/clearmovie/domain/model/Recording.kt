@@ -21,13 +21,13 @@ object VoiceRecordingFiles {
     fun isRecording(relPath: String): Boolean = NAME.matches(relPath)
 }
 
-/** The recordings the project still plays (an undo history is not counted: it lives only while the editor is open). */
+/** The recordings the project still plays, and the voices made from them (an undo history is not counted: it lives only while the editor is open). */
 fun Project.recordingsInUse(): Set<String> =
     tracks
         .asSequence()
         .flatMap { it.clips }
         .filterIsInstance<AudioClip>()
-        .mapNotNull { (it.media as? MediaRef.Copied)?.relPath }
+        .flatMap { listOfNotNull((it.media as? MediaRef.Copied)?.relPath, it.voiceOver?.generated?.relPath) }
         .filter(VoiceRecordingFiles::isRecording)
         .toSet()
 

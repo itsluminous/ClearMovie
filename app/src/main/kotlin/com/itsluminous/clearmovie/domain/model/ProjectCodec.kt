@@ -45,9 +45,10 @@ class ProjectMigrations(
          * item's edge rather than a time in the video. 6 (cm-frame-audio): a
          * frame's `volumeDb`, the level of the frame video's own sound. 7
          * (cm-voice-ducking): Lower for talk (`lowerWhenTalking`,
-         * `lowerToDb`) on photo-and-video rows too.
+         * `lowerToDb`) on photo-and-video rows too. 8 (cm-voice-choice): a
+         * voice item's words spoken in another voice (`voiceOver`).
          */
-        const val CURRENT_VERSION = 7
+        const val CURRENT_VERSION = 8
 
         /**
          * 1 to 2: nothing to rewrite. A version 1 caption has no `attachedTo`,
@@ -82,6 +83,11 @@ class ProjectMigrations(
          * own sound is lowered under voices and a frame's sound under
          * music. An older app refuses a version 7 file rather than drop a
          * photo-and-video row's Lower for talk without a word.
+         *
+         * 7 to 8: nothing to rewrite. No older sound has a `voiceOver`, so
+         * every voice item plays its recording as before. An older app
+         * refuses a version 8 file rather than play a recording in place of
+         * the voice the user chose without a word.
          */
         val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> =
             mapOf(
@@ -91,6 +97,7 @@ class ProjectMigrations(
                 4 to { old -> renameDetachedSides(old) },
                 5 to { old -> old },
                 6 to { old -> old },
+                7 to { old -> old },
             )
     }
 }

@@ -484,6 +484,8 @@ data class AudioClip(
     val anchor: SpanAnchor? = null,
     val detachedStartOffsetMs: Long? = null,
     val detachedEndOffsetMs: Long? = null,
+    /** Its words spoken in another voice (cm-voice-choice), or null for a plain sound. */
+    val voiceOver: VoiceOver? = null,
 ) : Clip {
     override val animations: Animations get() = Animations.NONE
 

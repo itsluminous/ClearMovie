@@ -687,4 +687,46 @@
     <string name="area_right">Jagah right le jaayein</string>
     <string name="area_up">Jagah upar le jaayein</string>
     <string name="area_down">Jagah neeche le jaayein</string>
+
+    <!-- Voice choice (cm-voice-choice). -->
+    <string name="voice_in_video">Video mein awaaz</string>
+    <string name="voice_spoken_in">Boli gayi bhasha</string>
+    <string name="voice_none">Koi badlaav nahin</string>
+    <string name="voice_british_male">British purush awaaz</string>
+    <string name="voice_british_female">British mahila awaaz</string>
+    <string name="voice_indian_male">Bharatiya purush awaaz</string>
+    <string name="voice_indian_female">Bharatiya mahila awaaz</string>
+    <string name="voice_american_male">American purush awaaz</string>
+    <string name="voice_american_female">American mahila awaaz</string>
+    <string name="voice_language_english">English</string>
+    <string name="voice_language_hindi">Hindi</string>
+    <string name="voice_not_on_phone">Is phone par doosri awaazein nahin chaltin.</string>
+    <string name="voice_type_words">Shabd likhein</string>
+    <string name="voice_type_words_body">Jo kehna hai woh likhein, aur woh aapki chuni awaaz mein %1$s se bola jayega.</string>
+    <string name="voice_accuracy_note">Boli pehchaanne mein shabd galat sune ja sakte hain, isliye text jaanch lein.</string>
+    <string name="voice_panel_title">Awaaz</string>
+    <string name="voice_phrase_label">%1$s se</string>
+    <string name="voice_find_words">Shabd dhoondhein</string>
+    <string name="voice_make">Awaaz banayein</string>
+    <string name="voice_use_recording">Meri recording</string>
+    <string name="voice_typed_hint">Awaaz kya kahe?</string>
+    <string name="voice_typed_from">%1$s se bola jayega</string>
+    <string name="voice_working_words">Shabd dhoondh rahe hain…</string>
+    <string name="voice_working_voice">Awaaz bana rahe hain…</string>
+    <string name="voice_no_words">Kehne ke liye koi shabd nahin hain.</string>
+    <string name="voice_failed">Awaaz nahin ban saki.</string>
+    <string name="voice_changed">Is beech item badal gaya, isliye uski awaaz nahin badli.</string>
+    <string name="action_change_voice">Awaaz badlein</string>
+    <string name="pack_title">Awaaz pack chahiye</string>
+    <string name="pack_body">Yeh awaaz use karne ke liye awaaz pack (%1$s) download karein. Jodne ke baad yeh is phone par %2$s leta hai aur bina internet ke chalta hai.</string>
+    <string name="pack_download">Download karein</string>
+    <string name="pack_steps_title">Awaaz pack jodein</string>
+    <string name="pack_steps_body">1. Khule hue page se yeh files download karein.\n2. Wapas aakar Download ki gayi files jodein dabayein.\n3. Unhein apne Downloads folder mein chunein.</string>
+    <string name="pack_file_line">%1$s, %2$s</string>
+    <string name="pack_add_files">Download ki gayi files jodein</string>
+    <string name="pack_adding">Awaaz pack jod rahe hain…</string>
+    <string name="pack_added">Awaaz pack jud gaya.</string>
+    <string name="pack_still_missing">Awaaz pack ki kuch files abhi baaki hain.</string>
+    <string name="pack_wrong_file">Yeh file awaaz pack ki nahin hai. Page se phir download karein.</string>
+    <string name="pack_no_space">Is phone par awaaz pack ke liye jagah nahin hai.</string>
 </resources>

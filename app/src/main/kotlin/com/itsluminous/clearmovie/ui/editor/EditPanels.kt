@@ -155,6 +155,9 @@ val CARD_COLOURS: List<Pair<ArgbColor, Int>> =
 
 /** What the editor's panels and bar ask their owner to do. */
 interface EditorCallbacks {
+    /** The voice choice (cm-voice-choice), or null where there is none (previews, tests). */
+    val voices: VoiceChoiceController? get() = null
+
     /** Applies a model edit as one undo step; false when it was refused. */
     fun edit(change: Project.() -> Project): Boolean
 
@@ -375,6 +378,16 @@ fun EditPanel(
 
                     Panel.SOUND_TRIM -> {
                         (clip as? AudioClip)?.let { SoundTrimPanel(it, callbacks, close) }
+                    }
+
+                    Panel.VOICE -> {
+                        val voices = callbacks.voices
+                        if (clip is AudioClip && voices != null) VoiceItemPanel(clip, voices, close) else LaunchedEffect(open) { close() }
+                    }
+
+                    Panel.VOICE_TYPE -> {
+                        val voices = callbacks.voices
+                        if (voices != null) TypeWordsPanel(open, playheadMs, voices, close) else LaunchedEffect(open) { close() }
                     }
 
                     Panel.FADE -> {

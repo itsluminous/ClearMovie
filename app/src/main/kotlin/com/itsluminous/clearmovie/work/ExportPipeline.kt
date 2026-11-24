@@ -42,6 +42,7 @@ import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.domain.model.playedMedia
 import com.itsluminous.clearmovie.render.media3.ColourCalibration
 import com.itsluminous.clearmovie.render.media3.CompositionFactory
 import com.itsluminous.clearmovie.render.media3.EncodeSpec
@@ -336,7 +337,7 @@ class ExportPipeline(
                 .flatMap { t ->
                     val frames = t.type == TrackType.OVERLAY && t.presetRole != PresetRole.FRAME && t.enabled && !t.muted
                     t.clips.mapNotNull {
-                        (it as? AudioClip)?.media ?: (it as? OverlayClip)?.takeIf { f -> frames && f.soundLufs == null }?.media
+                        (it as? AudioClip)?.playedMedia ?: (it as? OverlayClip)?.takeIf { f -> frames && f.soundLufs == null }?.media
                     }
                 }.distinct()
                 .filter { known.lufs(it) == null }

@@ -191,6 +191,29 @@ fun EditorRoute(
                     snackbar.showSnackbar(resources.getString(R.string.editor_cant_do_that))
                 }
 
+                is EditorEvent.CheckWords -> {
+                    screen.selectedRow = null
+                    screen.selected = it.clipId
+                    screen.panel = OpenPanel(Panel.VOICE, it.clipId)
+                }
+
+                is EditorEvent.Voice -> {
+                    snackbar.showSnackbar(
+                        resources.getString(
+                            when (it.note) {
+                                VoiceNote.NO_WORDS -> R.string.voice_no_words
+                                VoiceNote.FAILED -> R.string.voice_failed
+                                VoiceNote.NOT_ON_THIS_PHONE -> R.string.voice_not_on_phone
+                                VoiceNote.CHANGED_MEANWHILE -> R.string.voice_changed
+                                VoiceNote.PACK_ADDED -> R.string.pack_added
+                                VoiceNote.PACK_STILL_MISSING -> R.string.pack_still_missing
+                                VoiceNote.PACK_WRONG_FILE -> R.string.pack_wrong_file
+                                VoiceNote.PACK_NO_SPACE -> R.string.pack_no_space
+                            },
+                        ),
+                    )
+                }
+
                 is EditorEvent.Recorded -> {
                     snackbar.showSnackbar(
                         resources.getString(
@@ -243,11 +266,14 @@ fun EditorRoute(
         CannotOpen(onBack = onClosed)
         return
     }
+    VoicePackDialog(viewModel.voices)
     val title = ui.project?.name ?: ui.preset?.let { presetName(it) } ?: stringResource(R.string.editor_title_new)
     val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
     val actions =
         remember(viewModel) {
             object : EditorActions {
+                override val voices: VoiceChoiceController get() = viewModel.voices
+
                 override fun back() = viewModel.close()
 
                 override fun export() {

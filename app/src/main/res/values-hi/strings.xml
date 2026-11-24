@@ -679,4 +679,46 @@
     <string name="area_right">जगह दाईं ओर ले जाएँ</string>
     <string name="area_up">जगह ऊपर ले जाएँ</string>
     <string name="area_down">जगह नीचे ले जाएँ</string>
+
+    <!-- Voice choice (cm-voice-choice). -->
+    <string name="voice_in_video">वीडियो में आवाज़</string>
+    <string name="voice_spoken_in">बोली गई भाषा</string>
+    <string name="voice_none">कोई बदलाव नहीं</string>
+    <string name="voice_british_male">ब्रिटिश पुरुष आवाज़</string>
+    <string name="voice_british_female">ब्रिटिश महिला आवाज़</string>
+    <string name="voice_indian_male">भारतीय पुरुष आवाज़</string>
+    <string name="voice_indian_female">भारतीय महिला आवाज़</string>
+    <string name="voice_american_male">अमेरिकी पुरुष आवाज़</string>
+    <string name="voice_american_female">अमेरिकी महिला आवाज़</string>
+    <string name="voice_language_english">अंग्रेज़ी</string>
+    <string name="voice_language_hindi">हिन्दी</string>
+    <string name="voice_not_on_phone">इस फ़ोन पर दूसरी आवाज़ें नहीं चलतीं।</string>
+    <string name="voice_type_words">शब्द लिखें</string>
+    <string name="voice_type_words_body">जो कहना है वह लिखें, और वह आपकी चुनी आवाज़ में %1$s से बोला जाएगा।</string>
+    <string name="voice_accuracy_note">बोली पहचानने में शब्द ग़लत सुने जा सकते हैं, इसलिए लिखावट जाँच लें।</string>
+    <string name="voice_panel_title">आवाज़</string>
+    <string name="voice_phrase_label">%1$s से</string>
+    <string name="voice_find_words">शब्द ढूँढें</string>
+    <string name="voice_make">आवाज़ बनाएँ</string>
+    <string name="voice_use_recording">मेरी रिकॉर्डिंग</string>
+    <string name="voice_typed_hint">आवाज़ क्या कहे?</string>
+    <string name="voice_typed_from">%1$s से बोला जाएगा</string>
+    <string name="voice_working_words">शब्द ढूँढ रहे हैं…</string>
+    <string name="voice_working_voice">आवाज़ बना रहे हैं…</string>
+    <string name="voice_no_words">कहने के लिए कोई शब्द नहीं हैं।</string>
+    <string name="voice_failed">आवाज़ नहीं बन सकी।</string>
+    <string name="voice_changed">इस बीच आइटम बदल गया, इसलिए उसकी आवाज़ नहीं बदली।</string>
+    <string name="action_change_voice">आवाज़ बदलें</string>
+    <string name="pack_title">आवाज़ पैक चाहिए</string>
+    <string name="pack_body">यह आवाज़ इस्तेमाल करने के लिए आवाज़ पैक (%1$s) डाउनलोड करें। जोड़ने के बाद यह इस फ़ोन पर %2$s लेता है और बिना इंटरनेट के चलता है।</string>
+    <string name="pack_download">डाउनलोड करें</string>
+    <string name="pack_steps_title">आवाज़ पैक जोड़ें</string>
+    <string name="pack_steps_body">1. खुले हुए पेज से ये फ़ाइलें डाउनलोड करें।\n2. वापस आकर डाउनलोड की गई फ़ाइलें जोड़ें दबाएँ।\n3. उन्हें अपने Downloads फ़ोल्डर में चुनें।</string>
+    <string name="pack_file_line">%1$s, %2$s</string>
+    <string name="pack_add_files">डाउनलोड की गई फ़ाइलें जोड़ें</string>
+    <string name="pack_adding">आवाज़ पैक जोड़ रहे हैं…</string>
+    <string name="pack_added">आवाज़ पैक जुड़ गया।</string>
+    <string name="pack_still_missing">आवाज़ पैक की कुछ फ़ाइलें अभी बाकी हैं।</string>
+    <string name="pack_wrong_file">यह फ़ाइल आवाज़ पैक की नहीं है। पेज से फिर डाउनलोड करें।</string>
+    <string name="pack_no_space">इस फ़ोन पर आवाज़ पैक के लिए जगह नहीं है।</string>
 </resources>

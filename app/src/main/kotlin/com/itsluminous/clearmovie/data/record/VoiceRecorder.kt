@@ -236,8 +236,8 @@ class VoiceRecorder(
 
     private fun frameAt(wallNs: Long): Long = RecordingSync.frameAt(wallNs, anchorFrame, anchorNs, rate)
 
-    /** AAC-LC into an M4A file, fed frames in order. */
-    private class AacEncoder(
+    /** AAC-LC into an M4A file, fed frames in order (also the voice pack's voices, cm-voice-choice). */
+    internal class AacEncoder(
         private val file: File,
         private val rate: Int,
     ) {

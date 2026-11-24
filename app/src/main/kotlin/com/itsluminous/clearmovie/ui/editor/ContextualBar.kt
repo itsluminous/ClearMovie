@@ -309,6 +309,7 @@ fun barLabel(action: EditAction): Int =
         EditAction.POSITION -> R.string.action_position
         EditAction.ADD_CAPTION -> R.string.action_add_caption
         EditAction.FOLLOW_ITEM -> R.string.bar_follow_item
+        EditAction.CHANGE_VOICE -> R.string.action_change_voice
     }
 
 fun barIcon(action: EditAction): Int =
@@ -358,6 +359,7 @@ fun barIcon(action: EditAction): Int =
         EditAction.POSITION -> R.drawable.ic_open_with
         EditAction.ADD_CAPTION -> R.drawable.ic_closed_caption
         EditAction.FOLLOW_ITEM -> R.drawable.ic_link
+        EditAction.CHANGE_VOICE -> R.drawable.ic_record_voice
     }
 
 /** Room between a label and its button's edge: [OUTER_PADDING] outside the ripple, the rest inside. */
