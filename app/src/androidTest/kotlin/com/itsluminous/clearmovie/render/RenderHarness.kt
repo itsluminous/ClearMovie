@@ -328,7 +328,13 @@ object RenderHarness {
         val mono: FloatArray,
     )
 
-    /** Decodes the first audio track of [file] to mono float PCM. */
+    /**
+     * Decodes the first audio track of [file] to mono float PCM. The samples go
+     * straight into a FloatArray sized from the track's length: 4 bytes a
+     * sample, 8 at the peak while it is trimmed. A boxed ArrayList<Float> took
+     * about 20, so half a million samples ran the 16 MB heap of CI's Android 10
+     * emulator out of memory.
+     */
     fun decodeAudio(file: File): Pcm {
         val extractor = MediaExtractor()
         extractor.setDataSource(file.absolutePath)
@@ -345,8 +351,18 @@ object RenderHarness {
         val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
         codec.configure(format, null, null, 0)
         codec.start()
-        val out = ArrayList<Float>()
         var rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        // Sized from the track's length plus a tenth of a second, at most 4 MB
+        // up front, so the array rarely has to grow; it doubles if the decoder
+        // gives more.
+        val expected =
+            if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                format.getLong(MediaFormat.KEY_DURATION) * rate / 1_000_000 + rate / 10
+            } else {
+                1L shl 16
+            }
+        var out = FloatArray(expected.coerceIn(1L shl 12, 1L shl 20).toInt())
+        var size = 0
         var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
         val info = MediaCodec.BufferInfo()
         var inputDone = false
@@ -379,7 +395,8 @@ object RenderHarness {
                     while (shorts.remaining() >= channels) {
                         var sum = 0f
                         repeat(channels) { sum += shorts.get() / 32768f }
-                        out += sum / channels
+                        if (size == out.size) out = out.copyOf(out.size * 2)
+                        out[size++] = sum / channels
                     }
                     codec.releaseOutputBuffer(o, false)
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) done = true
@@ -390,7 +407,7 @@ object RenderHarness {
             codec.release()
             extractor.release()
         }
-        return Pcm(rate, out.toFloatArray())
+        return Pcm(rate, if (size == out.size) out else out.copyOf(size))
     }
 
     /**
