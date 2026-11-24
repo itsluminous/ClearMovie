@@ -10,6 +10,7 @@ import com.itsluminous.clearmovie.data.media.MediaAccessState
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,6 +73,18 @@ class MediaIntake(
 
     private var job: Job? = null
 
+    /** Every job started here that has not finished yet, an earlier intake's clean-up included. */
+    private val unfinished = mutableSetOf<Job>()
+
+    private fun launchTracked(block: suspend CoroutineScope.() -> Unit): Job {
+        // Started only once it is in the set, so a job that ends at once is never left behind in it.
+        val started = scope.launch(start = CoroutineStart.LAZY, block = block)
+        synchronized(unfinished) { unfinished += started }
+        started.invokeOnCompletion { synchronized(unfinished) { unfinished -= started } }
+        started.start()
+        return started
+    }
+
     /** Which intake is current; a job started for an older one never publishes a state. */
     @Volatile private var current = 0
     private var plan: IntakePlan? = null
@@ -94,7 +107,7 @@ class MediaIntake(
         projectId = project
         stateFlow.value = IntakeState.Planning
         job =
-            scope.launch {
+            launchTracked {
                 previous?.join()
                 if (previousPlan != null && previous?.isCancelled != true) media.abandon(previousPlan)
                 var planned: IntakePlan? = null
@@ -121,7 +134,7 @@ class MediaIntake(
         // Set at once, on the caller's thread, so a second tap does nothing.
         stateFlow.value = IntakeState.Copying(0, planned.copyBytes)
         val id = current
-        job = scope.launch { copy(id, planned) }
+        job = launchTracked { copy(id, planned) }
     }
 
     fun chooseFewer() = abandon(IntakeState.Cancelled)
@@ -131,6 +144,17 @@ class MediaIntake(
     /** Stops a copy or a plan; every copy this intake made is removed. A finished intake stays finished. */
     fun cancel() {
         job?.cancel()
+    }
+
+    /**
+     * Stops every plan and copy, an earlier intake's clean-up included, and
+     * waits until none of them writes into its project any more (before the
+     * project is deleted).
+     */
+    suspend fun cancelAndJoin() {
+        val jobs = synchronized(unfinished) { unfinished.toList() }
+        jobs.forEach { it.cancel() }
+        jobs.forEach { it.join() }
     }
 
     /** Call after reading [IntakeState.Done], [IntakeState.Cancelled] or [IntakeState.OutOfSpace]. */

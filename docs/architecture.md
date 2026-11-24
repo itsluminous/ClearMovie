@@ -507,8 +507,13 @@ Undo and Redo side by side, and More options; the bar is always 64 dp
 tall, 56 dp on a phone held sideways, so the title shrinks to stay on one line, down to 14 sp (less at the
 largest text sizes, so two lines still fit), before it takes a second line). A tap on the title, or More options > Rename video, opens the
 rename dialog (`RenameDialog`); the new name is an edit like any other, so Undo
-takes it back. More options also holds Video shape and Settings, which opens
-the settings screen over the editor; Back returns to it as it was. Below the
+takes it back. More options also holds Video shape, Settings, which opens
+the settings screen over the editor (Back returns to it as it was), and Delete
+video (cm-delete-project). Delete asks first (`DeleteVideoDialog`), and says to
+wait instead while an export of the video is waiting or running
+(`ExportsInProgress`); on Delete the view model stops any intake, deletes the
+project through `ProjectRepository.delete` and goes Home. It is not an undo
+step, and no edit, undo or autosave can write the video back afterwards. Below the
 bar come the preview with Play, the time and Export, the timeline, and the
 contextual bar (with Zoom out / Zoom in / Fit all) or, while one is open, the panel of the
 action in use. Its on-screen state (`EditorScreenState`: selection, open panel,
@@ -720,7 +725,10 @@ is checked to stay in its folder. `MediaAccess.check` marks clips whose media
 is gone (`MISSING`) or unreadable (`NO_ACCESS`).
 
 **Files.** `filesDir/projects/<id>/media/` (copies), `filesDir/presets/<id>/`
-(preset files), `cacheDir/thumbs/`. Leftover `.part` files and unreferenced
+(preset files), `cacheDir/thumbs/`. Deleting a project removes its row, its own
+folder and thumbnail (`AppFiles.deleteProjectFiles`, which never follows a link)
+and the link permissions no other project uses; gallery items, exported videos
+and preset files are never in that folder, so they stay. Leftover `.part` files and unreferenced
 preset files older than an hour are removed at launch. Settings -> Storage
 reads `StorageUsage`.
 

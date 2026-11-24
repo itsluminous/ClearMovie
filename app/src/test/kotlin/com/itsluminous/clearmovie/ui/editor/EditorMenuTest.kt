@@ -102,7 +102,7 @@ class EditorMenuTest {
     }
 
     @Test
-    fun `More options holds Rename video, Video shape and Settings, in that order, each 48 dp tall, at every size`() {
+    fun `More options holds Rename video, Video shape, Settings and Delete video, in that order, each 48 dp tall, at every size`() {
         var shown by mutableStateOf(ScreenSize.COMPACT to 1f)
         var harness by mutableStateOf(EditorHarness(project, Fixtures.preset))
         compose.setContent { key(shown, harness) { harness.At(shown.first, shown.second) } }
@@ -113,7 +113,7 @@ class EditorMenuTest {
                 compose.waitForIdle()
                 openMenu()
                 val tops =
-                    listOf(EDITOR_MENU_RENAME_TAG, EDITOR_MENU_SHAPE_TAG, EDITOR_MENU_SETTINGS_TAG).map { tag ->
+                    listOf(EDITOR_MENU_RENAME_TAG, EDITOR_MENU_SHAPE_TAG, EDITOR_MENU_SETTINGS_TAG, EDITOR_MENU_DELETE_TAG).map { tag ->
                         compose.onNodeWithTag(tag).assertIsDisplayed().assertHeightIsAtLeast(48.dp)
                         compose
                             .onNodeWithTag(tag)
@@ -124,12 +124,36 @@ class EditorMenuTest {
                 compose.onNodeWithText(s(R.string.editor_menu_rename)).assertIsDisplayed()
                 compose.onNodeWithText(s(R.string.editor_menu_shape)).assertIsDisplayed()
                 compose.onNodeWithText(s(R.string.action_settings)).assertIsDisplayed()
+                compose.onNodeWithText(s(R.string.editor_menu_delete)).assertIsDisplayed()
+                // One height for every item, and no item wraps.
+                val heights =
+                    listOf(EDITOR_MENU_RENAME_TAG, EDITOR_MENU_SHAPE_TAG, EDITOR_MENU_SETTINGS_TAG, EDITOR_MENU_DELETE_TAG).map {
+                        compose
+                            .onNodeWithTag(it)
+                            .fetchSemanticsNode()
+                            .size.height
+                    }
+                assertThat(heights.toSet()).hasSize(1)
                 compose.onNodeWithTag(EDITOR_MENU_SETTINGS_TAG).performClick()
                 assertThat(harness.calls).containsExactly("settings")
                 // The menu closed on the way.
                 compose.onNodeWithTag(EDITOR_MENU_SETTINGS_TAG).assertDoesNotExist()
             }
         }
+    }
+
+    @Test
+    fun `Delete video in More options asks the owner, and the menu closes`() {
+        val h = show()
+        openMenu()
+        compose
+            .onNodeWithTag(EDITOR_MENU_DELETE_TAG)
+            .assertIsEnabled()
+            .performClick()
+        assertThat(h.calls).containsExactly("delete")
+        compose.onNodeWithTag(EDITOR_MENU_DELETE_TAG).assertDoesNotExist()
+        // Nothing is deleted by the menu itself: the video is still on screen.
+        assertThat(h.project.mainClips).isNotEmpty()
     }
 
     @Test
@@ -324,6 +348,7 @@ class EditorMenuTest {
         compose.onNodeWithText("वीडियो का नाम बदलें").assertIsDisplayed()
         compose.onNodeWithText("वीडियो की आकृति").assertIsDisplayed()
         compose.onNodeWithText("सेटिंग्स").assertIsDisplayed()
+        compose.onNodeWithText("वीडियो हटाएँ").assertIsDisplayed()
         compose.onNodeWithTag(EDITOR_MENU_RENAME_TAG).performClick()
         compose.onNodeWithText("नाम बदलें").assertIsDisplayed()
         compose.onNodeWithTag(RENAME_FIELD_TAG).performTextReplacement("")

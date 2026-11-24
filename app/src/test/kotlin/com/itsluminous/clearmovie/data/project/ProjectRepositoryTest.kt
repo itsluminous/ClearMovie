@@ -601,6 +601,35 @@ class ProjectRepositoryTest {
         }
 
     @Test
+    fun `deleting a project leaves its preset's files, other projects and files outside the app alone`() =
+        runBlocking<Unit> {
+            val db = db()
+            val repo = repository(db)
+            repo.createDraft(draft("p1"))
+            repo.createDraft(draft("p2"))
+            val own = File(files.projectMediaDir(ProjectId("p1")).apply { mkdirs() }, "a_photo.jpg").apply { writeText("mine") }
+            val others = File(files.projectMediaDir(ProjectId("p2")).apply { mkdirs() }, "b_photo.jpg").apply { writeText("theirs") }
+            val presetDir =
+                files
+                    .presetDir(
+                        draft("p1").presetId!!,
+                    ).apply { mkdirs() }
+            val presetFile = File(presetDir, "frame.mp4").apply { writeText("frame") }
+            // Stands in for a video saved to the gallery: outside the app's folders.
+            val exported = File(tmp.root, "Movies/ClearMovie/Party.mp4").apply { parentFile!!.mkdirs() }.apply { writeText("movie") }
+
+            assertThat(repo.delete(ProjectId("p1"))).isTrue()
+
+            assertThat(own.exists()).isFalse()
+            assertThat(others.readText()).isEqualTo("theirs")
+            assertThat(presetFile.readText()).isEqualTo("frame")
+            assertThat(exported.readText()).isEqualTo("movie")
+            assertThat(db.projects().get("p2")).isNotNull()
+            // p2, made last, is the one open: it is still the one the app goes back to.
+            assertThat(repository(db).launchDecision()).isEqualTo(LaunchDecision.ReopenEditor(ProjectId("p2"), broughtBack = false))
+        }
+
+    @Test
     fun `My videos lists drafts and named projects, last edited first`() =
         runBlocking<Unit> {
             var now = 1_000L

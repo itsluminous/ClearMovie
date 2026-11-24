@@ -85,6 +85,7 @@ import com.itsluminous.clearmovie.ui.frame.FRAME_LOOK_STILL_WIDTH
 import com.itsluminous.clearmovie.ui.media.IntakeState
 import com.itsluminous.clearmovie.ui.media.MediaIntake
 import com.itsluminous.clearmovie.ui.navigation.Routes
+import com.itsluminous.clearmovie.work.ExportsInProgress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -105,6 +106,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import javax.inject.Inject
@@ -175,6 +177,15 @@ sealed interface EditorEvent {
     data class CheckWords(
         val clipId: ClipId,
     ) : EditorEvent
+
+    /** More options > Delete video: ask before deleting (cm-delete-project). */
+    data object AskDelete : EditorEvent
+
+    /** The video cannot be deleted now: it is being saved to the gallery. */
+    data object DeleteBlocked : EditorEvent
+
+    /** The video could not be deleted (the database could not be written); it stays open. */
+    data object NotDeleted : EditorEvent
 }
 
 /** What a chosen file had to be. */
@@ -276,6 +287,7 @@ class EditorViewModel
         private val soundLoudness: SoundLoudness = SoundLoudness { null },
         private val soundTracks: SoundTracks = SoundTracks { _, _, known -> known },
         private val voiceTools: VoiceTools = VoiceTools.NONE,
+        private val exports: ExportsInProgress = ExportsInProgress { false },
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -528,6 +540,7 @@ class EditorViewModel
             mergeKey: String? = null,
             change: Project.() -> Project,
         ): Boolean {
+            if (deleting) return false
             val result = session.edit(mergeKey, change)
             val applied = result == EditResult.Applied
             if (applied) session.current?.let(::write)
@@ -538,6 +551,7 @@ class EditorViewModel
         }
 
         fun undo() {
+            if (deleting) return
             session.undo()?.let(::write)
             publishHistory()
         }
@@ -584,6 +598,7 @@ class EditorViewModel
         }
 
         fun redo() {
+            if (deleting) return
             session.redo()?.let(::write)
             publishHistory()
         }
@@ -595,6 +610,8 @@ class EditorViewModel
          * preview's schedule follows when the repository hands the project back.
          */
         private fun write(next: Project) {
+            // Being deleted: nothing may write it back.
+            if (deleting) return
             uiState.update { it.copy(project = next) }
             // Refused only when the video is no longer open (Back in flight): say it was not kept.
             if (!repository.update { next }) viewModelScope.launch { eventChannel.send(EditorEvent.NotSaved) }
@@ -1072,8 +1089,63 @@ class EditorViewModel
             engine.release()
         }
 
+        /**
+         * True from Delete's confirmation until the editor has left (or the
+         * delete failed): no edit, undo, redo or intake may write the video
+         * back, and Back does not save it.
+         */
+        @Volatile
+        private var deleting = false
+
+        /**
+         * More options > Delete video (cm-delete-project): asks first
+         * ([EditorEvent.AskDelete]), unless this video is being saved to the
+         * gallery, which must end first ([EditorEvent.DeleteBlocked]).
+         */
+        fun askDelete() {
+            if (voice.active || deleting) return
+            engine.pause()
+            viewModelScope.launch {
+                val busy = withContext(Dispatchers.IO) { exports.of(projectId) }
+                eventChannel.send(if (busy) EditorEvent.DeleteBlocked else EditorEvent.AskDelete)
+            }
+        }
+
+        /**
+         * Deletes this video after the user confirmed, then leaves the editor
+         * ([EditorEvent.Closed]). Only the project goes: its row, its own
+         * folder of copies and recordings, and link permissions no other
+         * video uses ([ProjectRepository.delete]); the videos already saved
+         * to the gallery, the photos and videos it used and its preset's
+         * files stay. Not an undo step: the dialog says it can't be brought
+         * back. An export of it still waiting or running blocks it
+         * ([EditorEvent.DeleteBlocked]), checked again here.
+         */
+        fun deleteProject() {
+            if (voice.active || deleting) return
+            deleting = true
+            engine.pause()
+            viewModelScope.launch {
+                if (withContext(Dispatchers.IO) { exports.of(projectId) }) {
+                    deleting = false
+                    eventChannel.send(EditorEvent.DeleteBlocked)
+                    return@launch
+                }
+                // A copy in flight writes into the project's folder: it stops, and cleans up, first.
+                intake.cancelAndJoin()
+                clearIntake()
+                if (!repository.delete(projectId)) {
+                    deleting = false
+                    eventChannel.send(EditorEvent.NotDeleted)
+                    return@launch
+                }
+                eventChannel.send(EditorEvent.Closed)
+            }
+        }
+
         /** Back: writes the project and leaves the editor. */
         fun close() {
+            if (deleting) return
             // Back while recording stops the recording first; the next Back leaves.
             if (voice.active) {
                 voice.stop()

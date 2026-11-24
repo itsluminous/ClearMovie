@@ -187,6 +187,7 @@ const val EDITOR_MORE_TAG = "editor_more"
 const val EDITOR_MENU_SHAPE_TAG = "editor_menu_shape"
 const val EDITOR_MENU_RENAME_TAG = "editor_menu_rename"
 const val EDITOR_MENU_SETTINGS_TAG = "editor_menu_settings"
+const val EDITOR_MENU_DELETE_TAG = "editor_menu_delete"
 
 /** The playhead and play state the controls show. */
 data class PlayheadUi(
@@ -213,6 +214,9 @@ interface EditorActions : EditorCallbacks {
 
     /** "Settings" from More options: the app's settings screen; Back comes back here. */
     fun openSettings() = Unit
+
+    /** "Delete video" from More options (cm-delete-project): asks first, then deletes the video and goes Home. */
+    fun deleteVideo() = Unit
 }
 
 /**
@@ -1127,7 +1131,8 @@ private val POPUP_MIN_WIDTH = 112.dp
 /**
  * More options: what the editor needs now and then, out of the way of the
  * everyday controls. Rename video (also a tap on the title), Video shape
- * (cm-aspect-ratio) and Settings, each with its icon.
+ * (cm-aspect-ratio), Settings and, last, Delete video (cm-delete-project),
+ * each with its icon. Delete asks before anything goes.
  */
 @Composable
 private fun MoreOptions(
@@ -1179,6 +1184,17 @@ private fun MoreOptions(
                     actions.openSettings()
                 },
                 modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_MENU_SETTINGS_TAG),
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.editor_menu_delete), style = itemStyle) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_delete), contentDescription = null, modifier = Modifier.size(ICON)) },
+                onClick = {
+                    open = false
+                    actions.deleteVideo()
+                },
+                // Not while a caption is being written: its visit must end (Done or Cancel) first.
+                enabled = canRename,
+                modifier = Modifier.heightIn(min = TOUCH).testTag(EDITOR_MENU_DELETE_TAG),
             )
         }
     }

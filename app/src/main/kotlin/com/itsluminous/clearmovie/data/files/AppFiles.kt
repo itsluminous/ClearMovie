@@ -53,6 +53,31 @@ class AppFiles(
 
     fun thumbFile(id: ProjectId): File = inside(thumbsRoot, File(thumbsRoot, "${id.value}.jpg"))
 
+    /**
+     * Removes project [id]'s own folder (its copies and recordings) and its
+     * thumbnail, and nothing else: a link inside the folder is removed as a
+     * link, never followed, so a file it points to elsewhere is left alone.
+     * True when nothing of the folder is left.
+     */
+    fun deleteProjectFiles(id: ProjectId): Boolean {
+        // A folder that resolves outside the projects (a link put in its place) is not touched at all.
+        val dir = runCatching { projectDir(id) }.getOrNull() ?: return false
+        runCatching { thumbFile(id).delete() }
+        if (!dir.exists() && !isLink(dir)) return true
+        var ok = true
+        deleteTree(dir) { ok = false }
+        return ok && !dir.exists()
+    }
+
+    /** Deletes [file], first the contents of a directory, without following any link. */
+    private fun deleteTree(
+        file: File,
+        onFailure: () -> Unit,
+    ) {
+        if (!isLink(file) && file.isDirectory) file.listFiles()?.forEach { deleteTree(it, onFailure) }
+        if (!file.delete() && (file.exists() || isLink(file))) onFailure()
+    }
+
     /** Bytes used by the files under [dir], following no links. */
     fun sizeOf(dir: File): Long =
         if (!dir.exists()) {

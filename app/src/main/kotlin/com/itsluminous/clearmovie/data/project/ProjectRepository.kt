@@ -369,7 +369,10 @@ class ProjectRepository(
     /**
      * Deletes [id] with its copied media, thumbnail and persisted link
      * permissions. Returns false, changing nothing on disk, when the database
-     * cannot be written.
+     * cannot be written. Nothing outside the project's own folder is removed:
+     * the photos and videos it links to, the videos exported from it (in the
+     * gallery) and its preset's files stay, and a link permission another
+     * project still uses is kept.
      */
     suspend fun delete(id: ProjectId): Boolean {
         val released = mutableListOf<String>()
@@ -390,8 +393,8 @@ class ProjectRepository(
             if (open.value?.id == id) switchLocked(null)
         }
         released.forEach { runCatching { grants.release(it) } }
-        files.projectDir(id).deleteRecursively()
-        files.thumbFile(id).delete()
+        // Only the project's own folder: gallery items, exported videos and preset files are never in it.
+        files.deleteProjectFiles(id)
         return true
     }
 

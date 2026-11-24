@@ -104,6 +104,8 @@ fun EditorRoute(
     var shapeDialog by rememberSaveable { mutableStateOf(false) }
     var notSaved by rememberSaveable { mutableStateOf(false) }
     var outOfSpace by rememberSaveable { mutableStateOf(false) }
+    var askingDelete by rememberSaveable { mutableStateOf(false) }
+    var deleteBlocked by rememberSaveable { mutableStateOf(false) }
     var playingPart by rememberSaveable { mutableStateOf<String?>(null) }
     // Where the picker's answer goes; saved, as the answer can arrive after a rotation.
     var pending by rememberSaveable { mutableStateOf<String?>(null) }
@@ -217,6 +219,19 @@ fun EditorRoute(
                     )
                 }
 
+                EditorEvent.AskDelete -> {
+                    askingDelete = true
+                }
+
+                EditorEvent.DeleteBlocked -> {
+                    askingDelete = false
+                    deleteBlocked = true
+                }
+
+                EditorEvent.NotDeleted -> {
+                    snackbar.showSnackbar(resources.getString(R.string.editor_delete_failed))
+                }
+
                 is EditorEvent.Recorded -> {
                     snackbar.showSnackbar(
                         resources.getString(
@@ -297,6 +312,8 @@ fun EditorRoute(
                     viewModel.pause()
                     latestOnOpenSettings()
                 }
+
+                override fun deleteVideo() = viewModel.askDelete()
 
                 override fun fixPreset() {
                     viewModel.ui.value.project
@@ -479,6 +496,16 @@ fun EditorRoute(
             confirmButton = { TextButton(onClick = { notSaved = false }) { Text(stringResource(R.string.action_ok)) } },
         )
     }
+    if (askingDelete) {
+        DeleteVideoDialog(
+            onDelete = {
+                askingDelete = false
+                viewModel.deleteProject()
+            },
+            onDismiss = { askingDelete = false },
+        )
+    }
+    if (deleteBlocked) DeleteBlockedDialog(onDismiss = { deleteBlocked = false })
     if (outOfSpace) {
         AlertDialog(
             onDismissRequest = { outOfSpace = false },

@@ -10,6 +10,7 @@ import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.work.ExportPipeline
+import com.itsluminous.clearmovie.work.ExportsInProgress
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,6 +26,9 @@ object ExportModule {
     fun provideWorkManager(
         @ApplicationContext context: Context,
     ): WorkManager = WorkManager.getInstance(context)
+
+    @Provides
+    fun provideExportsInProgress(workManager: WorkManager): ExportsInProgress = ExportsInProgress.from(workManager)
 
     @Provides
     fun provideExportStore(

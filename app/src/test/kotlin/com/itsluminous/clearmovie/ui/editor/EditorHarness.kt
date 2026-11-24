@@ -131,6 +131,10 @@ class EditorHarness(
                 calls += "settings"
             }
 
+            override fun deleteVideo() {
+                calls += "delete"
+            }
+
             override fun edit(change: Project.() -> Project): Boolean = apply(null, change)
 
             override fun editMerged(

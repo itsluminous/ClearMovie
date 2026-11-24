@@ -692,6 +692,12 @@
     <string name="editor_more">More options</string>
     <string name="editor_menu_shape">Video shape</string>
     <string name="editor_menu_rename">Rename video</string>
+    <string name="editor_menu_delete">Delete video</string>
+    <string name="editor_delete_title">Delete this video?</string>
+    <string name="editor_delete_body">It goes from My videos, with all its edits, and can\'t be brought back. Videos you already saved to your gallery stay there, and so do your photos and videos.</string>
+    <string name="editor_delete_busy_title">This video is being saved</string>
+    <string name="editor_delete_busy_body">Wait until saving to your gallery has finished, or stop it, then delete the video.</string>
+    <string name="editor_delete_failed">This video couldn\'t be deleted. Try again.</string>
     <string name="editor_rename_label">Name</string>
     <string name="editor_rename_needed">Type a name for this video</string>
     <string name="editor_rename_confirm">Rename</string>

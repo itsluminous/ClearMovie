@@ -138,6 +138,8 @@ What ClearMovie on `main` does:
   on a tablet, foldable or in split-screen gets the same layout.
 - **Autosave** - work is saved as you go and recovered after a crash. Your videos are
   listed under "My videos"; tap a video's title in the editor to give it a name.
+  More options > Delete video removes it from "My videos" after asking; videos you
+  already saved to the gallery stay there.
 - **Hardware-accelerated export** - tap Export in the play bar under the preview, then choose Best
   (1080p), Good (720p) or Small (480p). The video is saved to your gallery, ready to play
   or share.
@@ -178,6 +180,7 @@ What has shipped, and what is still to come:
 **Saving and export**
 - [x] Autosave and crash recovery
 - [x] Named projects in "My videos": tap the title in the editor, or More options > Rename video
+- [x] Delete a video from More options; what you saved to the gallery stays
 - [x] Export at Best, Good or Small size with hardware encoding; keeps running if you rotate or leave the app
 - [x] Saved to Movies/ClearMovie, then Play and Share buttons
 
