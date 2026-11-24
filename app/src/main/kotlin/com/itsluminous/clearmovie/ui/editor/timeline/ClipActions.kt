@@ -143,7 +143,7 @@ data class TimedFacts(
     /** A frame whose video has its own sound (cm-frame-audio): it has a Volume and Lower for talk. */
     val hasSound: Boolean = false,
     /** A picture-in-picture row with a video that may sound (cm-voice-ducking): its videos have Lower for talk. */
-    val hasVideoSound: Boolean = true,
+    val hasVideoSound: Boolean = false,
 )
 
 /**

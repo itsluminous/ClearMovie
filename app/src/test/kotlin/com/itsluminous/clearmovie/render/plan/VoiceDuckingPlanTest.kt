@@ -184,6 +184,33 @@ class VoiceDuckingPlanTest {
     }
 
     @Test
+    fun `the preset's intro is lowered under a voice, and a silent picture-in-picture video lowers nothing`() {
+        val presetIds = SequentialIds("vi")
+        val p =
+            Fixtures
+                .presetProject(presetIds)
+                .addToMain(listOf(Fixtures.photo("pp", 6000)), ids = presetIds)
+                .addTimedClip(
+                    AudioClip(ClipId("vo"), Fixtures.media("vo"), startMs = 2000, durationMs = 2000, sourceDurationMs = 2000),
+                    role = AudioRole.VOICE,
+                    ids = presetIds,
+                )
+        val intro = p.main.clips.first()
+        val plan = RenderPlanBuilder(Fixtures.preset, measured).build(p)
+        val introSound =
+            plan.audio
+                .flatMap { it.segments }
+                .filterIsInstance<AudioSegment.Sound>()
+                .first { it.startUs == 0L }
+        assertThat(introSound.gain.dbAt(3_000_000) - introSound.gain.dbAt(500_000)).isWithin(1e-6).of(-20.0)
+        assertThat(intro.durationMs).isGreaterThan(4000)
+        // A picture-in-picture video known to have no sound track, over music: the music stays up.
+        val silentPip = Fixtures.video("pv", 3000, pip = PipPlacement(Corner.TOP_RIGHT, 0.3)).copy(startMs = 1000, hasSound = false)
+        val s = staircase().addTimedClip(silentPip, ids = ids)
+        assertThat(plan(s).music(2_500_000)).isWithin(1e-6).of(0.0)
+    }
+
+    @Test
     fun `a video is lowered under a voice even when the video itself is silent, and lowers nothing then`() {
         val plan = plan(staircase(video = Fixtures.video("v", 6000).copy(hasSound = false)))
         assertThat(plan.video(6_000_000)).isWithin(1e-6).of(-20.0)
@@ -400,17 +427,24 @@ class VoiceDuckingPlanTest {
         val p = staircase()
         val plan = plan(p)
         val schedule = PreviewSchedule.of(plan)
+        var checked = 0
         for (ms in 0L until 12_000L step 50) {
             val us = ms * 1000
             val main = schedule.mainGainDbAt(us)
             val v = runCatching { plan.video(us) }.getOrNull()
-            if (v != null && main != null) assertThat(main).isWithin(1e-6).of(v)
+            if (v != null && main != null) {
+                assertThat(main).isWithin(1e-6).of(v)
+                checked++
+            }
             for ((row, media) in listOf(p.musicRow to "m", p.frameRow to "fr", p.voiceRow to "vo")) {
                 val lane = schedule.sounds.single { it.trackId == row }
                 val want = runCatching { plan.dbOf(Fixtures.media(media), us) }.getOrNull() ?: continue
                 assertThat(lane.gainDbAt(us)).isWithin(1e-6).of(want)
+                checked++
             }
         }
+        // Every step of the staircase was looked at: the video's 6 s, the music's 9 s, the frame's 12 s, the voice's 2.5 s.
+        assertThat(checked).isAtLeast((6_000 + 9_000 + 12_000 + 2_500) / 50 - 4)
     }
 
     @Test

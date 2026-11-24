@@ -146,9 +146,11 @@ class RowGeometryTest {
         assertThat(ClipActions.forTimed(SelectionKind.PIP_VIDEO, facts).map { it.action }.take(3))
             .containsExactly(EditAction.TRIM, EditAction.ADD_CAPTION, EditAction.VOLUME)
             .inOrder()
-        assertThat(ClipActions.forTimed(SelectionKind.PIP_VIDEO, facts).map { it.action })
+        assertThat(ClipActions.forTimed(SelectionKind.PIP_VIDEO, facts.copy(hasVideoSound = true)).map { it.action })
             .containsAtLeast(EditAction.ROTATE, EditAction.LOWER_MUSIC, EditAction.MOVE_EARLIER)
             .inOrder()
+        // A picture-in-picture row whose videos are all known to be silent has none.
+        assertThat(ClipActions.forTimed(SelectionKind.PIP_VIDEO, facts).map { it.action }).doesNotContain(EditAction.LOWER_MUSIC)
         assertThat(ClipActions.forTimed(SelectionKind.SOUND, facts.copy(fixed = true, isMusic = true)).map { it.action })
             .containsExactly(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE, EditAction.LOWER_MUSIC, EditAction.DELETE)
             .inOrder()

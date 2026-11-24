@@ -316,7 +316,9 @@ lays it out for players:
 - **Sound rows** (the frame's music, the closing message, and a user frame
   row's own sound) each play in an audio-only player; the frame's keyed
   picture player stays muted. Every player's volume follows the plan's gain envelopes,
-  so the music ducks under clip sound as it will in the export.
+  so every row ducks as it will in the export: while playing, the volumes are
+  set every 20 ms (`VOLUME_TICK_MS`) between the 100 ms syncs, so a 300 ms
+  ramp plays in steps of about 1.3 dB (the export ramps sample by sample).
 - **Captions** are the export's own images: `CaptionBitmapRenderer` draws
   each at its box's size on the 1080-line canvas and the preview scales it
   to its box, so wrapping, size, outline and band match the export. A

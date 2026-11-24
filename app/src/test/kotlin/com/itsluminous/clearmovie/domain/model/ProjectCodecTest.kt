@@ -170,9 +170,9 @@ class ProjectCodecTest {
     }
 
     @Test
-    fun `a schema 6 project keeps every row's Lower for talk and saves at the current schema`() {
+    fun `a schema 6 project reads exactly as before and saves at the current schema`() {
         // cm-voice-ducking: schema 7 gives photo-and-video rows Lower for talk. A schema 6 file already wrote
-        // lowerWhenTalking on every row, so a row the user turned off stays off and the rest take the new ladder.
+        // lowerWhenTalking on every row (its own choices: the next test).
         for (name in listOf("rich", "blank")) {
             val text = fixture("$name-v6.json")
             val result = ok(text)
@@ -180,12 +180,6 @@ class ProjectCodecTest {
             assertThat(result.repaired).isFalse()
             assertThat(codec.encode(result.project)).isEqualTo(fixture("$name-v7.json"))
         }
-        val off =
-            fixture("rich-v6.json").let { text ->
-                val music = ok(text).project.tracks.first { it.audioRole == AudioRole.MUSIC }
-                ok(codec.encode(ok(text).project.setLowerWhenTalking(music.id, false))).project.tracks.single { it.id == music.id }
-            }
-        assertThat(off.lowerWhenTalking).isFalse()
     }
 
     @Test
