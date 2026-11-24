@@ -115,10 +115,12 @@ What ClearMovie on `main` does:
   included.
 - **Transitions and animations** - crossfades, fades, wipes, slides and zooms between
   items, and gentle zooms or fade-ins on single items, each with a live preview.
-- **Background music and ducking** - the frame's music plays under the whole video and
-  is lowered automatically while your videos play with their own sound, and everything
-  is lowered for the closing voice. Lower for talk sets how low the music goes.
-  A frame you add with its own sound plays it too, with Volume and Lower for talk.
+- **Background music and ducking** - the frame's music plays under the whole video.
+  Sound is lowered automatically, one layer under another: a frame's own sound under
+  music, music under your videos' own sound, and all of them under a recorded voice;
+  everything is lowered for the closing voice. Lower for talk on a row sets how low it
+  goes, or turns it off. A frame you add with its own sound plays it too, with Volume
+  and Lower for talk.
 - **Record voice** - add a voice row, tap its "+" and choose Record voice to speak while the
   video plays, lined up with the picture.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its
@@ -157,7 +159,7 @@ What has shipped, and what is still to come:
 - [x] Photo duration
 - [x] Fit: fill the frame window (default), fit with a blurred background, or fit with bars
 - [x] Audio overlay with volume, fade and automatic ducking
-- [x] Lower for talk: choose how low the music goes while people talk
+- [x] Lower for talk: choose how low music, a frame's sound or your videos' sound goes under the layers above it
 - [x] Trim handles at both ends of a selected item
 - [x] Record voice: speak over the video as it plays, lined up with the picture
 - [x] Captions with preset defaults, drag-to-place, drag-to-resize, fonts, size, colours, outline and background

@@ -519,10 +519,10 @@ internal fun RowSection(
             close()
         }
     }
-    if (track.audioRole == AudioRole.MUSIC || frameSound) {
-        // The same popup as the bar's Lower for talk: on or off, and how low; on a frame row, for its frames' sound.
-        val label = if (track.type == TrackType.OVERLAY) R.string.action_lower_frame_sound else R.string.action_lower_music
-        Choice(stringResource(label), null, track.lowerWhenTalking, R.drawable.ic_volume_down, rowMenuTag("lower")) {
+    if (lowersForTalk(track, LocalFramesWithSound.current)) {
+        // The same popup as the bar's Lower for talk: on or off, and how low; on a frame row for its frames' sound,
+        // on a photo-and-video row for its videos' sound.
+        Choice(stringResource(talkSwitchLabel(track)), null, track.lowerWhenTalking, R.drawable.ic_volume_down, rowMenuTag("lower")) {
             onPanel(OpenPanel(Panel.TALK_LOWER, trackId = track.id))
         }
     }

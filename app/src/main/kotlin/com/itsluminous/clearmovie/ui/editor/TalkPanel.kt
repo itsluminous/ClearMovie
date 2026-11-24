@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.ui.editor
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +39,15 @@ const val TALK_SWITCH_TAG = "talk_lower_switch"
 const val TALK_SLIDER_TAG = "talk_lower_slider"
 const val TALK_VALUE_TAG = "talk_lower_value"
 
+/** Lower for talk's switch label for [track]: a music row's, a frame row's, or a photo-and-video row's. */
+@StringRes
+internal fun talkSwitchLabel(track: Track): Int =
+    when (track.type) {
+        TrackType.OVERLAY -> R.string.action_lower_frame_sound
+        TrackType.MAIN, TrackType.VISUAL -> R.string.action_lower_video_sound
+        else -> R.string.action_lower_music
+    }
+
 /** The level the slider shows, as a share of the music's own volume (100% is not lowered). */
 const val MAX_TALK_PERCENT = 100f
 
@@ -47,9 +57,10 @@ const val MAX_TALK_PERCENT = 100f
  * while people talk, the level it goes down to (0% silent to 100%, in 5%
  * steps) and a slider. Until the slider is moved the row keeps the project's
  * own levels (the slider shows the one used under a voice); a moved slider
- * sets one level for voices and videos alike. Done is one undo step. On a
- * frame row (cm-frame-audio) it does the same for its frames' own sound,
- * and says so.
+ * sets one level for everything above the row in the ducking ladder alike.
+ * Done is one undo step. On a frame row (cm-frame-audio) it does the same
+ * for its frames' own sound, and on a photo-and-video row
+ * (cm-voice-ducking) for its videos' own sound under voices, and says so.
  */
 @Composable
 internal fun TalkLowerPanel(
@@ -82,8 +93,7 @@ internal fun TalkLowerPanel(
         },
         onCancel = close,
     )
-    val frame = track.type == TrackType.OVERLAY
-    val switchLabel = stringResource(if (frame) R.string.action_lower_frame_sound else R.string.action_lower_music)
+    val switchLabel = stringResource(talkSwitchLabel(track))
     Row(
         Modifier
             .fillMaxWidth()
@@ -96,7 +106,14 @@ internal fun TalkLowerPanel(
         Spacer(Modifier.width(16.dp))
         Switch(checked = on, onCheckedChange = null)
     }
-    val label = stringResource(if (frame) R.string.talk_level_frame else R.string.talk_level)
+    val label =
+        stringResource(
+            when (track.type) {
+                TrackType.OVERLAY -> R.string.talk_level_frame
+                TrackType.MAIN, TrackType.VISUAL -> R.string.talk_level_video
+                else -> R.string.talk_level
+            },
+        )
     val shown = stringResource(R.string.volume_value, percent.roundToInt())
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(

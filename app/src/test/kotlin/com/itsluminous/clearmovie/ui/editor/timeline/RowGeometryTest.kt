@@ -126,6 +126,11 @@ class RowGeometryTest {
         val main = ClipActions.forRow(row.copy(isMain = true, removable = false))
         assertThat(main.first().action).isEqualTo(EditAction.ADD_MEDIA)
         assertThat(main.map { it.action }).doesNotContain(EditAction.REMOVE_ROW)
+        // cm-voice-ducking: a photo-and-video row with a video has Lower for talk, right after its first action.
+        assertThat(main.map { it.action }).doesNotContain(EditAction.LOWER_MUSIC)
+        val withVideo = ClipActions.forRow(row.copy(isMain = true, removable = false, hasVideoSound = true, lowerWhenTalking = false))
+        assertThat(withVideo.map { it.action }.take(2)).containsExactly(EditAction.ADD_MEDIA, EditAction.LOWER_MUSIC).inOrder()
+        assertThat(withVideo[1].checked).isFalse()
 
         val facts = TimedFacts(canMoveEarlier = false, canMoveLater = true, fixed = false)
         assertThat(ClipActions.forTimed(SelectionKind.TEXT, facts).map { it.action })
@@ -140,6 +145,9 @@ class RowGeometryTest {
         assertThat(ClipActions.forTimed(SelectionKind.TEXT, facts).first { it.action == EditAction.MOVE_EARLIER }.enabled).isFalse()
         assertThat(ClipActions.forTimed(SelectionKind.PIP_VIDEO, facts).map { it.action }.take(3))
             .containsExactly(EditAction.TRIM, EditAction.ADD_CAPTION, EditAction.VOLUME)
+            .inOrder()
+        assertThat(ClipActions.forTimed(SelectionKind.PIP_VIDEO, facts).map { it.action })
+            .containsAtLeast(EditAction.ROTATE, EditAction.LOWER_MUSIC, EditAction.MOVE_EARLIER)
             .inOrder()
         assertThat(ClipActions.forTimed(SelectionKind.SOUND, facts.copy(fixed = true, isMusic = true)).map { it.action })
             .containsExactly(EditAction.TRIM, EditAction.VOLUME, EditAction.FADE, EditAction.LOWER_MUSIC, EditAction.DELETE)

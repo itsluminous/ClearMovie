@@ -404,20 +404,23 @@ fun Project.setTrackMuted(
     muted: Boolean,
 ): Project = updateTrack(trackId) { it.copy(muted = muted) }
 
-/** "Lower music when people talk" on a MUSIC row, or on a frame row for its frames' own sound (cm-frame-audio). */
+/**
+ * Lower for talk on a MUSIC row, a frame row for its frames' own sound (cm-frame-audio), or a photo-and-video row
+ * for its videos' own sound (cm-voice-ducking): whether it is lowered under the rows above it ([SoundRank]).
+ */
 fun Project.setLowerWhenTalking(
     trackId: TrackId,
     lower: Boolean,
 ): Project =
     updateTrack(trackId) {
-        require(it.isLoweredForTalk) { "Only music and frame rows are lowered" }
+        require(it.isLoweredForTalk) { "Only music, frame and photo-and-video rows are lowered" }
         it.copy(lowerWhenTalking = lower)
     }
 
 /**
- * The "Lower for talk" popup on a MUSIC row, or on a frame row for its
- * frames' own sound (cm-frame-audio): whether the sound is lowered
- * while people talk, and to what level ([levelDb], from
+ * The "Lower for talk" popup on a row [Track.isLoweredForTalk] allows:
+ * whether its sound is lowered under the rows above it ([SoundRank]),
+ * and to what level ([levelDb], from
  * [Limits.MIN_VOLUME_DB], silent, to 0 dB, not lowered). A null level keeps
  * the project's own levels.
  */
@@ -428,7 +431,7 @@ fun Project.setTalkLowering(
 ): Project {
     require(levelDb == null || (levelDb.isFinite() && levelDb in Limits.MIN_VOLUME_DB..0.0)) { "Level out of range" }
     return updateTrack(trackId) {
-        require(it.isLoweredForTalk) { "Only music and frame rows are lowered" }
+        require(it.isLoweredForTalk) { "Only music, frame and photo-and-video rows are lowered" }
         it.copy(lowerWhenTalking = lower, lowerToDb = levelDb)
     }
 }

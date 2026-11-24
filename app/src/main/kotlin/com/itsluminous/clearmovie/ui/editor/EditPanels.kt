@@ -77,7 +77,6 @@ import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.preset.FrameSample
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
-import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.CardClip
 import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -383,7 +382,7 @@ fun EditPanel(
                     }
 
                     Panel.TALK_LOWER -> {
-                        if (track.audioRole == AudioRole.MUSIC || track.hasFrameSound(LocalFramesWithSound.current)) {
+                        if (lowersForTalk(track, LocalFramesWithSound.current)) {
                             TalkLowerPanel(track, project, callbacks, close)
                         } else {
                             LaunchedEffect(open) { close() }

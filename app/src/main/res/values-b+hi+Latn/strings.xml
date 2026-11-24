@@ -453,8 +453,10 @@
     <!-- cm-timeline-handles: the Lower for talk popup, Match item, and on/off for TalkBack. -->
     <string name="talk_level">Baat ke time music ki awaaz</string>
     <!-- cm-frame-audio: Lower for talk on a frame row, for the frame video's own sound. -->
-    <string name="action_lower_frame_sound">Baat hone par frame ki awaaz dheemi</string>
-    <string name="talk_level_frame">Baat ke time frame ki awaaz</string>
+    <string name="action_lower_frame_sound">Doosri awaaz par frame ki awaaz dheemi</string>
+    <string name="talk_level_frame">Doosri awaaz ke time frame ki awaaz</string>
+    <string name="action_lower_video_sound">Voice par video ki awaaz dheemi</string>
+    <string name="talk_level_video">Voice ke time video ki awaaz</string>
     <string name="bar_follow_item">Item jitna</string>
     <string name="state_on">On</string>
     <string name="state_off">Off</string>

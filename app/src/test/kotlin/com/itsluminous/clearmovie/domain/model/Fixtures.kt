@@ -84,7 +84,7 @@ object Fixtures {
     /**
      * A project that uses every clip kind, media reference, anchor and
      * optional field at least once: the source of the golden fixture
-     * `fixtures/project/rich-v6.json`.
+     * `fixtures/project/rich-v7.json`.
      */
     fun richProject(): Project {
         val ids = SequentialIds("g")

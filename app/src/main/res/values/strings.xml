@@ -495,9 +495,12 @@
     <string name="bar_lower_music">Lower for talk</string>
     <!-- cm-timeline-handles: the Lower for talk popup, Match item, and on/off for TalkBack. -->
     <string name="talk_level">Music level while people talk</string>
-    <!-- cm-frame-audio: Lower for talk on a frame row, for the frame video's own sound. -->
-    <string name="action_lower_frame_sound">Lower frame sound when people talk</string>
-    <string name="talk_level_frame">Frame sound level while people talk</string>
+    <!-- cm-frame-audio: Lower for talk on a frame row, for the frame video's own sound (lowered under music, videos and voices). -->
+    <string name="action_lower_frame_sound">Lower frame sound under other sound</string>
+    <string name="talk_level_frame">Frame sound level under other sound</string>
+    <!-- cm-voice-ducking: Lower for talk on a photo-and-video row, for the videos' own sound under voice rows. -->
+    <string name="action_lower_video_sound">Lower video sound under voices</string>
+    <string name="talk_level_video">Video sound level under voices</string>
     <string name="bar_follow_item">Match item</string>
     <string name="state_on">On</string>
     <string name="state_off">Off</string>

@@ -41,7 +41,10 @@ enum class EditAction {
     /** A switch: the row's sound is off. */
     MUTE_ROW,
 
-    /** "Lower music when people talk", on a music row: opens its popup (on or off, and how low); shows whether it is on. */
+    /**
+     * Lower for talk, on a music, frame or photo-and-video row (or an item on one): opens its popup (on or off, and how
+     * low); shows whether it is on.
+     */
     LOWER_MUSIC,
 
     /** A switch: the preset frame is shown. */
@@ -122,6 +125,8 @@ data class RowFacts(
     val hasFrameSound: Boolean = false,
     /** A frame row of the user's. */
     val isFrameRow: Boolean = false,
+    /** A photo-and-video row holding a video (cm-voice-ducking): its videos' sound is lowered under voices. */
+    val hasVideoSound: Boolean = false,
 )
 
 /** What a selected item on a row other than MAIN allows, for [ClipActions.forTimed]. */
@@ -142,7 +147,8 @@ data class TimedFacts(
 /**
  * The bar's actions per selection, most-used first (ARCHITECTURE section
  * 11.2). A photo or video offers Add caption second, after its length
- * (section 11.2's "Add text"). Transition (into the next item) is greyed out on an item with
+ * (section 11.2's "Add text"). A video's Lower for talk (its row's, under
+ * voices) comes after its other changes, before the moves. Transition (into the next item) is greyed out on an item with
  * nothing after it ([hasNext]). A MAIN item's "Move to another row" is left
  * out: the model moves items only between rows of one kind, and MAIN is the
  * only row of its kind.
@@ -157,6 +163,7 @@ object ClipActions {
         hasNext: Boolean = true,
         canZoomIn: Boolean = true,
         canZoomOut: Boolean = true,
+        lowerWhenTalking: Boolean = true,
     ): List<BarAction> {
         val moves = listOf(BarAction(EditAction.MOVE_LEFT, canMoveLeft), BarAction(EditAction.MOVE_RIGHT, canMoveRight))
         val effects = listOf(BarAction(EditAction.TRANSITION, hasNext), BarAction(EditAction.ANIMATION))
@@ -194,7 +201,7 @@ object ClipActions {
                             EditAction.FIT,
                             EditAction.REPLACE,
                             EditAction.DUPLICATE,
-                        ).map(::BarAction) + moves +
+                        ).map(::BarAction) + lowerMusic(lowerWhenTalking) + moves +
                         listOfNotNull(BarAction(EditAction.JOIN).takeIf { canJoin }) +
                         BarAction(EditAction.DELETE)
                 }
@@ -268,7 +275,7 @@ object ClipActions {
                     EditAction.POSITION,
                     EditAction.ROTATE,
                 ).map(::BarAction) +
-                    moves + delete
+                    lowerMusic(facts.lowerWhenTalking) + moves + delete
             }
 
             SelectionKind.SOUND -> {
@@ -303,7 +310,7 @@ object ClipActions {
             add(BarAction(if (row.isMain) EditAction.ADD_MEDIA else EditAction.ADD_HERE))
             // A frame row muted earlier keeps its switch, so it can be turned back on, sound or not.
             if (row.isSound || row.hasFrameSound || (row.isFrameRow && row.muted)) add(BarAction(EditAction.MUTE_ROW, checked = row.muted))
-            if (row.isMusic || row.hasFrameSound) add(lowerMusic(row.lowerWhenTalking))
+            if (row.isMusic || row.hasFrameSound || row.hasVideoSound) add(lowerMusic(row.lowerWhenTalking))
             if (row.isPresetFrame) add(BarAction(EditAction.FRAME_ON, checked = row.enabled))
             if (row.isVisual) {
                 add(BarAction(EditAction.SHOW_ON_TOP, row.canGoForward))

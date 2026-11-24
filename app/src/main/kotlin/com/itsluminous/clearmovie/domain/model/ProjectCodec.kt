@@ -43,9 +43,11 @@ class ProjectMigrations(
          * `detachedEndMs`), and a music row's `lowerToDb`. 5
          * (cm-timeline-handles): a dragged side is a distance from its
          * item's edge rather than a time in the video. 6 (cm-frame-audio): a
-         * frame's `volumeDb`, the level of the frame video's own sound.
+         * frame's `volumeDb`, the level of the frame video's own sound. 7
+         * (cm-voice-ducking): Lower for talk (`lowerWhenTalking`,
+         * `lowerToDb`) on photo-and-video rows too.
          */
-        const val CURRENT_VERSION = 6
+        const val CURRENT_VERSION = 7
 
         /**
          * 1 to 2: nothing to rewrite. A version 1 caption has no `attachedTo`,
@@ -72,6 +74,14 @@ class ProjectMigrations(
          * user added now plays its own sound, which older versions dropped.
          * An older app refuses a version 6 file rather than drop a frame's
          * volume without a word.
+         *
+         * 6 to 7: nothing to rewrite. Every older row was written with
+         * `lowerWhenTalking` (true unless the user turned a music or frame
+         * row's Lower for talk off), so a choice the user made is kept, and
+         * rows that never had the choice take the new default: videos'
+         * own sound is lowered under voices and a frame's sound under
+         * music. An older app refuses a version 7 file rather than drop a
+         * photo-and-video row's Lower for talk without a word.
          */
         val APP_STEPS: Map<Int, (JsonObject) -> JsonObject> =
             mapOf(
@@ -80,6 +90,7 @@ class ProjectMigrations(
                 3 to { old -> old },
                 4 to { old -> renameDetachedSides(old) },
                 5 to { old -> old },
+                6 to { old -> old },
             )
     }
 }

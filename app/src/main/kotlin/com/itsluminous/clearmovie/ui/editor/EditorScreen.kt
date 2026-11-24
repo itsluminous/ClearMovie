@@ -614,6 +614,10 @@ fun EditorScreen(
                         state.panel = OpenPanel(Panel.VOLUME, id)
                     }
 
+                    EditAction.LOWER_MUSIC -> {
+                        state.panel = OpenPanel(Panel.TALK_LOWER, id, trackId = project.main.id)
+                    }
+
                     EditAction.FIT -> {
                         state.panel = OpenPanel(Panel.FIT, id)
                     }
@@ -1036,6 +1040,7 @@ private fun barActions(
         canMoveRight = index < count - 1,
         canJoin = joinTarget(project, slots, selected) != null,
         hasNext = selected.index < slots.lastIndex,
+        lowerWhenTalking = project.main.lowerWhenTalking,
     )
 }
 

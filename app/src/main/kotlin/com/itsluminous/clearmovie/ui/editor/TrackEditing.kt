@@ -7,6 +7,9 @@ import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.Clip
 import com.itsluminous.clearmovie.domain.model.ClipId
+import com.itsluminous.clearmovie.domain.model.EndingClip
+import com.itsluminous.clearmovie.domain.model.EndingKind
+import com.itsluminous.clearmovie.domain.model.IntroClip
 import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.OverlayClip
 import com.itsluminous.clearmovie.domain.model.PhotoClip
@@ -187,6 +190,7 @@ fun rowBar(
             lowerWhenTalking = track.lowerWhenTalking,
             hasFrameSound = track.hasFrameSound(framesWithSound),
             isFrameRow = track.type == TrackType.OVERLAY && track.presetRole != PresetRole.FRAME,
+            hasVideoSound = track.hasVideoSound(),
         ),
     )
 }
@@ -204,6 +208,30 @@ fun Project.playsFrameSound(
 /** A frame row (not the preset's) with a frame whose video has sound: its Lower for talk applies. */
 fun Track.hasFrameSound(framesWithSound: Set<MediaRef>): Boolean =
     type == TrackType.OVERLAY && presetRole != PresetRole.FRAME && clips.any { it is OverlayClip && it.media in framesWithSound }
+
+/**
+ * A photo-and-video row with a video that may sound (cm-voice-ducking): its Lower for talk applies. A video known to
+ * have no sound track does not count.
+ */
+fun Track.hasVideoSound(): Boolean =
+    (type == TrackType.MAIN || type == TrackType.VISUAL) &&
+        clips.any {
+            when (it) {
+                is VideoClip -> it.hasSound != false
+                is IntroClip -> true
+                is EndingClip -> it.kind == EndingKind.VIDEO
+                else -> false
+            }
+        }
+
+/**
+ * Whether [track]'s Lower for talk popup applies: a music row, a frame row whose frames sound, or a photo-and-video
+ * row with a video.
+ */
+fun lowersForTalk(
+    track: Track,
+    framesWithSound: Set<MediaRef>,
+): Boolean = track.audioRole == AudioRole.MUSIC || track.hasFrameSound(framesWithSound) || track.hasVideoSound()
 
 /** The frame videos with their own sound, for the row menu and the popups (cm-frame-audio). */
 val LocalFramesWithSound = compositionLocalOf { emptySet<MediaRef>() }

@@ -64,16 +64,32 @@ enum class PresetRole {
 }
 
 /**
+ * Where a row's sound sits in the ducking ladder (cm-voice-ducking): while
+ * a row's sound plays, every row of a lower rank with Lower for talk on is
+ * lowered under it. A frame row's own sound is lowest, then music rows (the
+ * preset frame's music among them), then the sound of photo-and-video rows,
+ * then voice rows. The closing message lowers every other row
+ * (`DuckingSpec.speechDuckDb`), as it always has.
+ */
+enum class SoundRank {
+    FRAME,
+    MUSIC,
+    VIDEO,
+    VOICE,
+}
+
+/**
  * One timeline row. Its index in `Project.tracks` is its screen position; its
  * drawing position is its index in `Project.stacking`. [enabled] is the
  * row's On/Off switch (the preset frame is switched off rather than
- * removed); [muted] silences an audio row. [lowerWhenTalking] is a MUSIC
- * row's "Lower music when people talk", and [lowerToDb] how far it is
- * lowered then, under voices and under videos' own sound alike; null keeps
- * the project's levels (`DuckingSpec`: -20 dB under a voice, -12 dB under a
- * video), as every row made before cm-timeline-handles does. A frame row
- * (OVERLAY) has the same two settings for its frames' own sound
- * (cm-frame-audio).
+ * removed); [muted] silences an audio row. [lowerWhenTalking] is a row's
+ * Lower for talk: whether its sound is lowered under the rows above it in
+ * the [SoundRank] ladder, and [lowerToDb] how far, under every one of them
+ * alike; null keeps the project's levels (`DuckingSpec`: -20 dB under a
+ * voice, -12 dB under a video or music), as every row made before
+ * cm-timeline-handles does. Music rows have it, frame rows (OVERLAY) for
+ * their frames' own sound (cm-frame-audio), and photo-and-video rows for
+ * their videos' own sound (cm-voice-ducking).
  */
 @Serializable
 data class Track(
@@ -87,9 +103,38 @@ data class Track(
     val lowerWhenTalking: Boolean = true,
     val lowerToDb: Double? = null,
 ) {
-    /** A music row, or a frame row of the user's (its frames' own sound): Lower for talk applies to it. */
+    /**
+     * This row's place in the ducking ladder, or null for a row whose sound
+     * neither lowers nor is lowered by it (text, the preset frame, whose
+     * sound is the frame music row, and sound effects).
+     */
+    val soundRank: SoundRank?
+        get() =
+            when (type) {
+                TrackType.MAIN, TrackType.VISUAL -> {
+                    SoundRank.VIDEO
+                }
+
+                TrackType.OVERLAY -> {
+                    if (presetRole == PresetRole.FRAME) null else SoundRank.FRAME
+                }
+
+                TrackType.TEXT -> {
+                    null
+                }
+
+                TrackType.AUDIO -> {
+                    when (audioRole) {
+                        AudioRole.MUSIC -> SoundRank.MUSIC
+                        AudioRole.VOICE -> SoundRank.VOICE
+                        AudioRole.EFFECT, null -> null
+                    }
+                }
+            }
+
+    /** A row that something else can lower (music, a frame row of the user's, photos and videos): Lower for talk applies to it. */
     val isLoweredForTalk: Boolean
-        get() = audioRole == AudioRole.MUSIC || (type == TrackType.OVERLAY && presetRole != PresetRole.FRAME)
+        get() = soundRank.let { it != null && it < SoundRank.VOICE }
 
     /** MAIN and the preset frame row can't be removed. */
     val isRemovable: Boolean get() = type != TrackType.MAIN && presetRole != PresetRole.FRAME

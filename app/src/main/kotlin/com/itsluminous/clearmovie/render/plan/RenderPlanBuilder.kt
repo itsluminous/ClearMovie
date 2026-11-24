@@ -22,6 +22,7 @@ import com.itsluminous.clearmovie.domain.model.PipPlacement
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.SoundRank
 import com.itsluminous.clearmovie.domain.model.Speed
 import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.Track
@@ -52,12 +53,14 @@ fun interface LoudnessTable {
  * (cm-frame-audio): the intro and a video ending, and every video on MAIN
  * and picture-in-picture rows that sound, at a volume that lowers music,
  * without a kept [VideoClip.hasSound]. Empty when no row would be lowered
- * under them (no music or user frame row that sounds with Lower for talk
- * on), so nothing needs to be looked at.
+ * under them (no music or user frame row, below videos in the [SoundRank]
+ * ladder, that sounds with Lower for talk on), so nothing needs to be
+ * looked at.
  */
 fun duckingMedia(project: Project): List<MediaRef> {
     val audible = project.tracks.filter { it.enabled && !it.muted }
-    val lowered = audible.any { it.isLoweredForTalk && it.lowerWhenTalking && it.clips.isNotEmpty() }
+    val lowered =
+        audible.any { t -> t.soundRank.let { it != null && it < SoundRank.VIDEO } && t.lowerWhenTalking && t.clips.isNotEmpty() }
     if (!lowered) return emptyList()
     return audible
         .filter { it.type == TrackType.MAIN || it.type == TrackType.VISUAL }
@@ -96,9 +99,10 @@ fun interface SoundPresence {
  *   row never hides the rows below it;
  * - photos and videos go into the frame window ([Preset.frame]'s content
  *   rect) while the preset frame row is on, else the whole canvas;
- * - sound is planned per row, with ducking computed from the timeline:
- *   music under clip sound and under voice, everything under the closing
- *   message, clip sound and voice never under music.
+ * - sound is planned per row, with ducking computed from the timeline on
+ *   one ladder ([SoundRank]): frame sound under music, both under videos'
+ *   own sound, all three under voices, everything under the closing
+ *   message; nothing is lowered under a row below it.
  *
  * The project is untrusted input (it comes from stored JSON): [build] refuses
  * one that fails `validate()`, and a plan that would need more than
@@ -492,10 +496,18 @@ class RenderPlanBuilder(
                 }
             }
         }
-        val voice =
-            audibleTracks
-                .filter { it.type == TrackType.AUDIO && it.audioRole == AudioRole.VOICE }
-                .flatMap { t -> t.clips.map { DuckInterval(it.startMs * US, it.endMs * US, ducking.musicUnderVoiceDb) } }
+
+        // Music and voices lower the rows below them only where they sound: an item turned down to silence lowers nothing.
+        fun soundsOn(
+            rank: SoundRank,
+            db: Double,
+        ) = audibleTracks
+            .filter { it.soundRank == rank }
+            .flatMap { t -> t.clips.filterIsInstance<AudioClip>() }
+            .filter { it.durationMs > 0 && it.volumeDb > AUDIBLE_DB }
+            .map { DuckInterval(it.startMs * US, it.endMs * US, db) }
+        val music = soundsOn(SoundRank.MUSIC, ducking.musicUnderClipDb)
+        val voice = soundsOn(SoundRank.VOICE, ducking.musicUnderVoiceDb)
         val speech =
             audibleTracks
                 .filter { it.type == TrackType.AUDIO && it.presetRole == PresetRole.CLOSING_MESSAGE }
@@ -503,19 +515,28 @@ class RenderPlanBuilder(
 
         val speechDuck = duckEnvelope(speech, attackUs, releaseUs)
 
-        // How a music row, or a frame row's own sound (cm-frame-audio), is lowered: with Lower for talk on, under
-        // voices, videos' own sound and the closing message, to the row's own level from its popup when it has one;
-        // with it off, only under the closing message, as everything is.
-        fun musicDuck(track: Track): GainEnvelope {
-            if (!track.lowerWhenTalking) return speechDuck
+        // The ducking ladder (cm-voice-ducking): with Lower for talk on, a row is lowered under every row above it
+        // ([SoundRank]: frame sound, then music, then videos' own sound, then voices), to its own level from its popup
+        // when it has one; with it off, only under the closing message, as everything is. A voice row is lowered only
+        // under the closing message; the closing message under nothing.
+        fun duckFor(track: Track): GainEnvelope {
+            val rank = track.soundRank
+            if (rank == null || rank == SoundRank.VOICE || !track.lowerWhenTalking) return speechDuck
+            val above =
+                buildList {
+                    if (rank < SoundRank.MUSIC) addAll(music)
+                    if (rank < SoundRank.VIDEO) addAll(clipSound)
+                    addAll(voice)
+                    addAll(speech)
+                }
             val level = track.lowerToDb
-            val talk = clipSound + voice + speech
-            return duckEnvelope(if (level == null) talk else talk.map { it.copy(db = level) }, attackUs, releaseUs)
+            return duckEnvelope(if (level == null) above else above.map { it.copy(db = level) }, attackUs, releaseUs)
         }
         val layers = mutableListOf<AudioLayer>()
 
         // Clip sound on MAIN, in the same two lanes as the pictures.
         if (main.enabled && !main.muted) {
+            val mainDuck = duckFor(main)
             val lanes = listOf(SoundLane(ctx.totalUs), SoundLane(ctx.totalUs))
             ctx.slots.forEachIndexed { i, slot ->
                 val sound = slotSound(slot) ?: return@forEachIndexed
@@ -528,7 +549,7 @@ class RenderPlanBuilder(
                     clipEnv += soundOut(slot.clip.transitionToNext!!.kind, durUs, slot.overlapToNextMs * US)
                 }
                 val startUs = slot.startMs * US
-                val env = clipEnv + speechDuck.shifted(-startUs)
+                val env = clipEnv + mainDuck.shifted(-startUs)
                 sound.copies(durUs).forEach { (offset, length) ->
                     lanes[ctx.lanes[i]].add(sound.segment(startUs + offset, length, env.slice(offset, offset + length)))
                 }
@@ -539,10 +560,11 @@ class RenderPlanBuilder(
 
         for (track in audibleTracks.filter { it.type == TrackType.VISUAL }) {
             val lane = SoundLane(ctx.totalUs)
+            val duck = duckFor(track)
             for (clip in track.clips.filterIsInstance<VideoClip>().sortedBy { it.startMs }) {
                 val startUs = clip.startMs * US
                 val durUs = clip.durationMs * US
-                val env = GainEnvelope.constant(clip.volumeDb) + speechDuck.shifted(-startUs)
+                val env = GainEnvelope.constant(clip.volumeDb) + duck.shifted(-startUs)
                 val sound = VideoSound(clip)
                 sound.copies(durUs).forEach { (offset, length) ->
                     lane.add(
@@ -570,16 +592,12 @@ class RenderPlanBuilder(
                 }
             val duck =
                 when (role) {
-                    AudioLayerRole.MUSIC -> {
-                        musicDuck(track)
-                    }
-
                     AudioLayerRole.CLOSING_MESSAGE -> {
                         GainEnvelope.UNITY
                     }
 
                     else -> {
-                        speechDuck
+                        duckFor(track)
                     }
                 }
             val target =
@@ -636,7 +654,7 @@ class RenderPlanBuilder(
                     .mapNotNull { clip -> (clip.soundLufs ?: loudness.lufs(clip.media))?.let { clip to it } }
                     .sortedBy { it.first.startMs }
             if (frames.isEmpty()) continue
-            val duck = musicDuck(track)
+            val duck = duckFor(track)
             val lane = SoundLane(ctx.totalUs)
             for ((clip, lufs) in frames) {
                 val startUs = clip.startMs * US

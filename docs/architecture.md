@@ -142,11 +142,16 @@ Android types, so all of it is tested on the JVM.
   side that was not dragged, and the dragged side keeps its distance from
   that edge of the span (`detachedStartOffsetMs` / `detachedEndOffsetMs` on
   the clip, next to its `anchor`).
-- **Lower for talk.** A music row's `lowerToDb` is the level its music goes
-  down to under voices, videos' own sound and the closing message; without
-  one the project's `DuckingSpec` levels apply (-20 dB under a voice or the
-  closing message, -12 dB under a video). A frame row has the same setting
-  for its frames' own sound, and a frame its own `volumeDb` (schema 6). A
+- **Lower for talk.** Sound is lowered on one ladder (`SoundRank`, on
+  `Track`): a frame row's own sound is lowest, then music rows (the preset
+  frame's music among them), then the sound of photo-and-video rows (MAIN
+  and picture in picture), then voice rows. While a row's sound plays,
+  every row below it with Lower for talk on (`lowerWhenTalking`) goes down
+  to its `lowerToDb`, or without one to the project's `DuckingSpec` levels
+  (-20 dB under a voice or the closing message, -12 dB under a video or
+  music); the closing message lowers every row, as before. Music, frame and
+  photo-and-video rows have the setting (photo-and-video rows since schema
+  7), and a frame its own `volumeDb` (schema 6). A
   style stores only what differs from the preset's
   (`CaptionStyleOverride.between`), so Reset to preset clears it.
 - **Undo.** `ProjectEditor` applies one edit per undo step (50 kept), and
@@ -170,7 +175,10 @@ Android types, so all of it is tested on the JVM.
   either; schema 5 keeps a detached side as a distance from its item's edge,
   and its step renames the schema 4 keys and turns their times into
   distances; schema 6 added a frame's `volumeDb`, and its step rewrites
-  nothing, so an older frame reads at the frame music's -8 dB). Golden files under `app/src/test/resources/fixtures/project/` must
+  nothing, so an older frame reads at the frame music's -8 dB; schema 7
+  gave photo-and-video rows Lower for talk, and its step rewrites nothing:
+  every older row already carries `lowerWhenTalking`, so a row the user
+  turned off stays off and the rest take the ladder). Golden files under `app/src/test/resources/fixtures/project/` must
   round-trip byte for byte.
 
 ## Rendering
@@ -196,10 +204,12 @@ Rendering has two layers, both under `render`:
   last frame. Sound is planned per row with a `GainEnvelope` in each item's own
   time: volume, loudness normalisation, fades, an equal-power crossfade (a
   dip to silence for a fade through black or white), and
-  ducking computed from the timeline (music lowered under clip sound and under
-  voice, everything under the closing message, clip sound and voice never
-  lowered by music). A video whose file has no sound track (the intro and a video
-  ending too) lowers nothing. A video keeps the answer
+  ducking computed from the timeline on the Lower for talk ladder (frame
+  sound under music, both under videos' own sound, all three under voices,
+  everything under the closing message; no row lowered by one below it),
+  with the project's 300 ms ramps, straight in dB. A video whose file has no
+  sound track (the intro and a video ending too) lowers nothing, nor does a
+  music or voice item turned down to -40 dB or lower, nor a muted row. A video keeps the answer
   (`VideoClip.hasSound`), read when it is added; for older videos and the
   preset's parts the editor and the export read it with one function
   (`readSoundTracks`, `METADATA_KEY_HAS_AUDIO` through `UriGuard`), only

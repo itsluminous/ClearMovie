@@ -50,10 +50,14 @@ class TimelinePiecesTest {
                 EditAction.FIT,
                 EditAction.REPLACE,
                 EditAction.DUPLICATE,
+                EditAction.LOWER_MUSIC,
                 EditAction.MOVE_LEFT,
                 EditAction.MOVE_RIGHT,
                 EditAction.DELETE,
             ).inOrder()
+        // A video's Lower for talk shows its row's state and opens the popup.
+        assertThat(ClipActions.forSelection(SelectionKind.VIDEO, lowerWhenTalking = false).single { it.action == EditAction.LOWER_MUSIC })
+            .isEqualTo(BarAction(EditAction.LOWER_MUSIC, checked = false, opensPanel = true))
         assertThat(order(SelectionKind.TEXT_CARD).first()).isEqualTo(EditAction.EDIT_TEXT)
         assertThat(order(SelectionKind.COLOUR_CARD).first()).isEqualTo(EditAction.COLOUR)
         assertThat(order(SelectionKind.TEXT_CARD)).contains(EditAction.ANIMATION)
