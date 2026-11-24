@@ -24,7 +24,9 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.AppNotIdleException
 import androidx.test.espresso.IdlingPolicies
+import androidx.test.espresso.IdlingResourceTimeoutException
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkInfo
@@ -86,6 +88,12 @@ class ReopenRecreateDeviceTest {
 
     private fun s(id: Int) = h.context.getString(id)
 
+    /** True while previewPlays has Espresso's idle timeouts at [BUSY_READ_S]. */
+    private var shortIdleTimeouts = false
+
+    /** The last busy read notYetIfBusy counted as "not yet" in previewPlays. */
+    private var lastBusy: Throwable? = null
+
     @Before
     fun setUp() {
         h.setUp()
@@ -110,22 +118,56 @@ class ReopenRecreateDeviceTest {
     ) = compose.waitUntil(timeoutMs) { notYetIfBusy { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() } }
 
     /**
-     * Only two passing states count as "not yet": Compose not going idle in
+     * Only two passing states count as "not yet": the app not going idle in
      * time, and no Compose content yet (the new activity still behind its
      * splash screen, which waits for the settings). Anything else fails the
      * test with its own cause.
+     *
+     * The app not going idle shows up as Compose's ComposeNotIdleException.
+     * While previewPlays has Espresso's idle timeouts at [BUSY_READ_S]
+     * ([shortIdleTimeouts]), Espresso's own timeout can run out first; only
+     * then does that count as busy too (see [isEspressoIdleTimeout]), and the
+     * last busy read is kept in [lastBusy] for the failure if the wait runs
+     * out.
+     * With Espresso's default timeouts it still fails the read, naming the
+     * main-looper message that kept the app busy.
      */
     private fun notYetIfBusy(check: () -> Boolean): Boolean =
         try {
             check()
         } catch (e: ComposeNotIdleException) {
+            if (shortIdleTimeouts) lastBusy = e
             Log.i(ExportHarness.TAG, "Compose busy, trying again: ${e.message?.lineSequence()?.firstOrNull()}")
             false
         } catch (e: IllegalStateException) {
             if (e.message?.startsWith("No compose hierarchies found") != true) throw e
             Log.i(ExportHarness.TAG, "No Compose content yet, trying again")
             false
+        } catch (e: RuntimeException) {
+            if (!shortIdleTimeouts || !isEspressoIdleTimeout(e)) throw e
+            lastBusy = e
+            Log.i(ExportHarness.TAG, "Main thread busy, trying again: ${e.message?.lineSequence()?.firstOrNull()}")
+            false
         }
+
+    /**
+     * Espresso's idle timeout, wrapped or not: AppNotIdleException (the main
+     * looper never idled, as while the preview's players and the playhead post
+     * to it every frame), IdlingResourceTimeoutException (the Compose-Espresso
+     * link stayed busy), or the NullPointerException Espresso 3.7.0 throws from
+     * StringJoinerKt.joinToString while it builds the message for that same
+     * timeout (UiControllerImpl.loopUntil).
+     */
+    private fun isEspressoIdleTimeout(e: Throwable): Boolean =
+        generateSequence(e) { it.cause }.take(MAX_CAUSES).any {
+            it is AppNotIdleException ||
+                it is IdlingResourceTimeoutException ||
+                (it is NullPointerException && it.isEspressoTimeoutMessageNpe())
+        }
+
+    private fun NullPointerException.isEspressoTimeoutMessageNpe(): Boolean =
+        stackTrace.firstOrNull()?.className == ESPRESSO_JOINER &&
+            stackTrace.any { it.className == ESPRESSO_UI_CONTROLLER && it.methodName == "loopUntil" }
 
     /** A picture of the preview, trying again while Compose is busy. */
     private fun capture(): Bitmap {
@@ -203,11 +245,17 @@ class ReopenRecreateDeviceTest {
         // tried again; at the latest when the 14 s video ends and the preview stops.
         val master = IdlingPolicies.getMasterIdlingPolicy()
         val resource = IdlingPolicies.getDynamicIdlingResourceErrorPolicy()
-        IdlingPolicies.setMasterPolicyTimeout(BUSY_READ_S, TimeUnit.SECONDS)
-        IdlingPolicies.setIdlingResourceTimeout(BUSY_READ_S, TimeUnit.SECONDS)
         try {
+            IdlingPolicies.setMasterPolicyTimeout(BUSY_READ_S, TimeUnit.SECONDS)
+            IdlingPolicies.setIdlingResourceTimeout(BUSY_READ_S, TimeUnit.SECONDS)
+            shortIdleTimeouts = true
+            lastBusy = null
             compose.waitUntil(PLAY_TIMEOUT_MS) { notYetIfBusy { progress() > atStart + 0.02f } }
+        } catch (e: ComposeTimeoutException) {
+            lastBusy?.let(e::addSuppressed)
+            throw e
         } finally {
+            shortIdleTimeouts = false
             IdlingPolicies.setMasterPolicyTimeout(master.idleTimeout, master.idleTimeoutUnit)
             IdlingPolicies.setIdlingResourceTimeout(resource.idleTimeout, resource.idleTimeoutUnit)
         }
@@ -256,9 +304,11 @@ class ReopenRecreateDeviceTest {
             waitFor(hasTestTag(UNDO_TAG).and(isEnabled()))
             previewPlays()
 
-            // Back from the reopened editor goes Home.
+            // Back from the reopened editor goes Home. The preview may still be playing when Back
+            // is pressed, and one Compose read with Espresso's default timeouts then waited
+            // 30 s and more for idle on the emulator, longer than TIMEOUT_MS, so this wait is the longer one.
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-            waitFor(hasTestTag(HOME_LIST_TAG))
+            waitFor(hasTestTag(HOME_LIST_TAG), LAUNCH_TIMEOUT_MS)
         }
     }
 
@@ -508,6 +558,13 @@ class ReopenRecreateDeviceTest {
 
         /** How long one Compose read may wait for idle while the preview plays. */
         const val BUSY_READ_S = 2L
+
+        /** How deep [isEspressoIdleTimeout] looks for the timeout among an exception's causes. */
+        const val MAX_CAUSES = 8
+
+        /** Where Espresso 3.7.0's NullPointerException on its idle timeout is thrown, and from where. */
+        const val ESPRESSO_JOINER = "androidx.test.espresso.util.StringJoinerKt"
+        const val ESPRESSO_UI_CONTROLLER = "androidx.test.espresso.base.UiControllerImpl"
 
         /**
          * MAIN here: intro 0-2 s, a captioned photo, then clip_dark from about
