@@ -253,6 +253,8 @@ private fun PresetEditContent(
     // The motion default being chosen (MotionChoice's name), null while none is.
     var motionOpen by rememberSaveable { mutableStateOf<String?>(null) }
     val motion = MotionChoice.entries.firstOrNull { it.name == motionOpen }
+    // Where the list was scrolled to, so closing the caption editor or the motion choices comes back to it.
+    val listScroll = rememberScrollState()
     // The effect defaults draft as the motion choices found it, so their Cancel puts it back.
     var motionOpenedEffects by rememberSaveable { mutableStateOf<String?>(null) }
     // The draft as the caption editor found it, so its Cancel puts it back.
@@ -483,7 +485,7 @@ private fun PresetEditContent(
                         preview(false, Modifier.width(minOf(maxWidth, maxHeight * aspect)))
                     }
                     Column(
-                        Modifier.weight(1f).verticalScroll(rememberScrollState()).testTag(PRESET_EDIT_LIST_TAG),
+                        Modifier.weight(1f).verticalScroll(listScroll).testTag(PRESET_EDIT_LIST_TAG),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         nameField()
@@ -498,7 +500,7 @@ private fun PresetEditContent(
                 Column(
                     Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(listScroll)
                         .padding(16.dp)
                         .testTag(PRESET_EDIT_LIST_TAG),
                     horizontalAlignment = Alignment.CenterHorizontally,

@@ -295,6 +295,8 @@ class PresetEditScreenTest {
         assertThat(calls.transition).isEqualTo(TransitionKind.WIPE_LEFT)
         compose.onNodeWithText(s(R.string.action_done)).performClick()
         compose.waitForIdle()
+        // Back where the list was, the row in sight without scrolling.
+        compose.onNodeWithTag(PRESET_TRANSITION_TAG).assertIsDisplayed()
         // The preset's 0.6 s length is kept.
         assertThat(shownUi!!.transition).isEqualTo(Transition(TransitionKind.WIPE_LEFT, 600))
         val name = context.getString(R.string.effect_tile_with_direction, s(R.string.transition_wipe), s(R.string.direction_left))
