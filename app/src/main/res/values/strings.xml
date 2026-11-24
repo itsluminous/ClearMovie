@@ -774,4 +774,9 @@
     <string name="pack_still_missing">Some voice pack files are still missing.</string>
     <string name="pack_wrong_file">That file is not part of the voice pack. Download it again from the page.</string>
     <string name="pack_no_space">There is not enough room on this phone for the voice pack.</string>
+    <string name="voice_busy">The voice is still being made. Try again in a moment.</string>
+    <string name="voice_some_cut">Some words did not fit before the next ones and were cut. Shorten them and make the voice again.</string>
+    <string name="voice_too_long">This item is too long for another voice. Split it into parts of 10 minutes or less.</string>
+    <string name="settings_storage_voice_pack">Voice pack: %1$s</string>
+    <string name="settings_remove_voice_pack">Remove</string>
 </resources>

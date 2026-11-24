@@ -42,8 +42,24 @@ object Phrases {
         text
             .split('\n')
             .flatMap { line -> SENTENCE_END.split(line).map { it.trim() } }
+            .flatMap(::splitLong)
             .filter { it.any(Char::isLetterOrDigit) }
             .map { VoicePhrase(0, clip(it)) }
+
+    /** A sentence longer than a phrase may be, cut at the last comma or space before the limit, so no words are dropped. */
+    internal fun splitLong(text: String): List<String> {
+        val out = mutableListOf<String>()
+        var rest = text.replace(Regex("\\s+"), " ").trim()
+        while (rest.length > Limits.MAX_TEXT_LENGTH) {
+            val at =
+                rest.lastIndexOf(", ", Limits.MAX_TEXT_LENGTH).takeIf { it > 0 }?.plus(1) ?: rest.lastIndexOf(' ', Limits.MAX_TEXT_LENGTH)
+            val cut = if (at > 0) at else Limits.MAX_TEXT_LENGTH
+            out += rest.substring(0, cut).trim()
+            rest = rest.substring(cut).trim()
+        }
+        if (rest.isNotEmpty()) out += rest
+        return out
+    }
 
     /** Typed phrases of [lengthsMs] each, one after another with [TYPED_GAP_MS] between: their start times. */
     fun placeTyped(lengthsMs: List<Long>): List<Long> {

@@ -696,19 +696,19 @@
     <string name="voice_type_words">शब्द लिखें</string>
     <string name="voice_type_words_body">जो कहना है वह लिखें, और वह आपकी चुनी आवाज़ में %1$s से बोला जाएगा।</string>
     <string name="voice_accuracy_note">बोली पहचानने में शब्द ग़लत सुने जा सकते हैं, इसलिए लिखावट जाँच लें।</string>
-    <string name="voice_panel_title">आवाज़</string>
+    <string name="voice_panel_title">स्वर</string>
     <string name="voice_phrase_label">%1$s से</string>
     <string name="voice_find_words">शब्द ढूँढें</string>
-    <string name="voice_make">आवाज़ बनाएँ</string>
+    <string name="voice_make">स्वर बनाएँ</string>
     <string name="voice_use_recording">मेरी रिकॉर्डिंग</string>
     <string name="voice_typed_hint">आवाज़ क्या कहे?</string>
     <string name="voice_typed_from">%1$s से बोला जाएगा</string>
     <string name="voice_working_words">शब्द ढूँढ रहे हैं…</string>
-    <string name="voice_working_voice">आवाज़ बना रहे हैं…</string>
+    <string name="voice_working_voice">स्वर बना रहे हैं…</string>
     <string name="voice_no_words">कहने के लिए कोई शब्द नहीं हैं।</string>
-    <string name="voice_failed">आवाज़ नहीं बन सकी।</string>
-    <string name="voice_changed">इस बीच आइटम बदल गया, इसलिए उसकी आवाज़ नहीं बदली।</string>
-    <string name="action_change_voice">आवाज़ बदलें</string>
+    <string name="voice_failed">स्वर नहीं बन सका।</string>
+    <string name="voice_changed">इस बीच आइटम बदल गया, इसलिए उसका स्वर नहीं बदला।</string>
+    <string name="action_change_voice">स्वर बदलें</string>
     <string name="pack_title">आवाज़ पैक चाहिए</string>
     <string name="pack_body">यह आवाज़ इस्तेमाल करने के लिए आवाज़ पैक (%1$s) डाउनलोड करें। जोड़ने के बाद यह इस फ़ोन पर %2$s लेता है और बिना इंटरनेट के चलता है।</string>
     <string name="pack_download">डाउनलोड करें</string>
@@ -721,4 +721,9 @@
     <string name="pack_still_missing">आवाज़ पैक की कुछ फ़ाइलें अभी बाकी हैं।</string>
     <string name="pack_wrong_file">यह फ़ाइल आवाज़ पैक की नहीं है। पेज से फिर डाउनलोड करें।</string>
     <string name="pack_no_space">इस फ़ोन पर आवाज़ पैक के लिए जगह नहीं है।</string>
+    <string name="voice_busy">स्वर अभी बन रहा है। थोड़ी देर बाद फिर कोशिश करें।</string>
+    <string name="voice_some_cut">कुछ शब्द अगले शब्दों से पहले नहीं समा सके और कट गए। उन्हें छोटा करके फिर स्वर बनाएँ।</string>
+    <string name="voice_too_long">यह आइटम दूसरे स्वर के लिए बहुत लंबा है। इसे 10 मिनट या उससे छोटे हिस्सों में बाँटें।</string>
+    <string name="settings_storage_voice_pack">आवाज़ पैक: %1$s</string>
+    <string name="settings_remove_voice_pack">हटाएँ</string>
 </resources>

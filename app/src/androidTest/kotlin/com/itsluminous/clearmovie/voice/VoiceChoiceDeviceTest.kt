@@ -8,6 +8,7 @@ import android.os.Process
 import android.util.Log
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.android.ComposeNotIdleException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,7 +16,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.printToLog
+import androidx.compose.ui.test.swipeUp
 import androidx.media3.common.util.UnstableApi
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -52,10 +55,12 @@ import com.itsluminous.clearmovie.domain.model.setVoiceOver
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
 import com.itsluminous.clearmovie.export.ExportHarness
 import com.itsluminous.clearmovie.render.RenderHarness
+import com.itsluminous.clearmovie.ui.editor.PANEL_TAG
 import com.itsluminous.clearmovie.ui.editor.PREVIEW_TAG
 import com.itsluminous.clearmovie.ui.editor.TYPE_WORDS_OPTION
 import com.itsluminous.clearmovie.ui.editor.VOICE_CHOICE_TAG
 import com.itsluminous.clearmovie.ui.editor.VOICE_MAKE_TAG
+import com.itsluminous.clearmovie.ui.editor.VOICE_PACK_ADD_TAG
 import com.itsluminous.clearmovie.ui.editor.VOICE_PACK_DIALOG_TAG
 import com.itsluminous.clearmovie.ui.editor.VOICE_PACK_DOWNLOAD_TAG
 import com.itsluminous.clearmovie.ui.editor.VOICE_TYPED_TAG
@@ -316,6 +321,9 @@ class VoiceChoiceDeviceTest {
         projectWith(recording, "Annual day", inEditor = true)
         ActivityScenario.launch(MainActivity::class.java).use {
             showRows()
+            // A reopened video says "We brought back your last video" once; let it go before the pictures.
+            val note = h.context.getString(com.itsluminous.clearmovie.R.string.editor_brought_back)
+            compose.waitUntil(30_000) { compose.onAllNodes(hasText(note)).fetchSemanticsNodes().isEmpty() }
             waitFor(hasTestTag(rowEndPlusTag(voiceRow.value)))
             compose.onNodeWithTag(rowEndPlusTag(voiceRow.value)).performClick()
             waitFor(hasTestTag(VOICE_CHOICE_TAG))
@@ -327,10 +335,10 @@ class VoiceChoiceDeviceTest {
             waitFor(hasTestTag(VOICE_PACK_DIALOG_TAG))
             shot("$prefix-3-pack-needed")
             compose.onNodeWithTag(VOICE_PACK_DOWNLOAD_TAG).performClick()
-            Thread.sleep(2_000)
-            // The page opens in a browser when there is one; come back to the app.
-            ActivityScenario.launch(MainActivity::class.java).close()
-            Thread.sleep(500)
+            Thread.sleep(3_000)
+            // The page opens in a browser when there is one; Back returns to the dialog, now with the steps.
+            automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            waitFor(hasTestTag(VOICE_PACK_ADD_TAG), 20_000)
             shot("$prefix-4-pack-steps")
         }
         if (!File(inputs, "voicepack").isDirectory) return
@@ -341,7 +349,7 @@ class VoiceChoiceDeviceTest {
         val (withWords, clip) =
             projectWith(recording, "Annual day", inEditor = true) { _, id, c ->
                 VoiceOver(
-                    VoiceChoice.BRITISH_MALE,
+                    VoiceChoice.NONE,
                     SpokenLanguage.ENGLISH,
                     WordsSource.SPOKEN,
                     tools.recognize(id, c.media as MediaRef.Copied, SpokenLanguage.ENGLISH),
@@ -355,18 +363,30 @@ class VoiceChoiceDeviceTest {
             shot("$prefix-5-bar")
             compose.onNodeWithTag(barActionTag(EditAction.CHANGE_VOICE)).performClick()
             waitFor(hasTestTag(VOICE_MAKE_TAG))
+            compose.onNodeWithTag(VOICE_CHOICE_TAG).performClick()
+            waitFor(hasTestTag("${VOICE_CHOICE_TAG}_british_male"))
+            compose.onNodeWithTag("${VOICE_CHOICE_TAG}_british_male").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag("${VOICE_CHOICE_TAG}_none")).fetchSemanticsNodes().isEmpty() }
+            Thread.sleep(1_000)
             shot("$prefix-6-check-words")
-            compose.onNodeWithTag(VOICE_MAKE_TAG).performScrollTo().performClick()
+            compose.onNodeWithTag(VOICE_MAKE_TAG).performScrollTo()
+            compose.onNodeWithTag(PANEL_TAG).performTouchInput { swipeUp() }
+            shot("$prefix-6b-check-words-end")
+            compose.onNodeWithTag(VOICE_MAKE_TAG).performClick()
             compose.waitUntil(180_000) {
                 (runBlocking { h.app.projectRepository.read(withWords.id) }?.clip(clip.id) as? AudioClip)?.voiceOver?.generated != null
             }
             // The panel closes once the voice is made; the item stays selected.
-            Thread.sleep(1_500)
+            compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag(VOICE_MAKE_TAG)).fetchSemanticsNodes().isEmpty() }
+            Thread.sleep(1_000)
             shot("$prefix-7-voiced")
         }
         // A fresh editor (no item selected, so the row's end "+" shows): the sheet with a voice chosen, and Type the words.
         ActivityScenario.launch(MainActivity::class.java).use {
             showRows()
+            // A reopened video says "We brought back your last video" once; let it go before the pictures.
+            val note = h.context.getString(com.itsluminous.clearmovie.R.string.editor_brought_back)
+            compose.waitUntil(30_000) { compose.onAllNodes(hasText(note)).fetchSemanticsNodes().isEmpty() }
             waitFor(hasTestTag(rowEndPlusTag(voiceRow.value)))
             compose.onNodeWithTag(rowEndPlusTag(voiceRow.value)).performClick()
             waitFor(hasTestTag(VOICE_CHOICE_TAG))
@@ -374,11 +394,17 @@ class VoiceChoiceDeviceTest {
             waitFor(hasTestTag("${VOICE_CHOICE_TAG}_indian_female"))
             compose.onNodeWithTag("${VOICE_CHOICE_TAG}_indian_female").performClick()
             waitFor(hasTestTag(insertOptionTag(TYPE_WORDS_OPTION)))
+            compose.onNodeWithTag(insertOptionTag(TYPE_WORDS_OPTION)).performScrollTo()
             shot("$prefix-8-sheet-with-voice")
-            compose.onNodeWithTag(insertOptionTag(TYPE_WORDS_OPTION)).performScrollTo().performClick()
+            compose.onNodeWithTag(insertOptionTag(TYPE_WORDS_OPTION)).performClick()
             waitFor(hasTestTag(VOICE_TYPED_TAG))
             compose.onNodeWithTag(VOICE_TYPED_TAG).performTextInput("Welcome everyone to the annual day.")
             shot("$prefix-9-type-words")
+            androidx.test.espresso.Espresso
+                .closeSoftKeyboard()
+            compose.onNodeWithTag(VOICE_MAKE_TAG).performScrollTo()
+            compose.onNodeWithTag(PANEL_TAG).performTouchInput { swipeUp() }
+            shot("$prefix-9b-type-words-done")
         }
     }
 

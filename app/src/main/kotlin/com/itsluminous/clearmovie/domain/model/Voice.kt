@@ -51,6 +51,14 @@ enum class VoiceChoice(
         AMERICAN(setOf(SpokenLanguage.ENGLISH)),
     }
 
+    /** This voice, or for [language] it cannot say, the Indian voice of the same gender (No change stays). */
+    fun forLanguage(language: SpokenLanguage): VoiceChoice =
+        when {
+            speaks(language) -> this
+            gender == Gender.MALE -> INDIAN_MALE
+            else -> INDIAN_FEMALE
+        }
+
     /** Whether this voice can say words in [language] ("No change" always can: it says nothing new). */
     fun speaks(language: SpokenLanguage): Boolean = accent?.languages?.contains(language) ?: true
 
@@ -203,6 +211,7 @@ internal fun VoiceOver.problem(clip: AudioClip): String? =
         phrases.any { it.startMs !in 0..clip.sourceDurationMs } -> "phrase outside the item"
         phrases.zipWithNext().any { (a, b) -> b.startMs < a.startMs } -> "phrases out of order"
         voice == VoiceChoice.NONE && generated != null -> "a voice file with No change"
+        source == WordsSource.SPOKEN && voice != VoiceChoice.NONE && generated == null -> "a voice with no voice file"
         voice != VoiceChoice.NONE && !voice.speaks(language) -> "a voice that cannot say the words"
         source == WordsSource.TYPED && voice == VoiceChoice.NONE -> "typed words with No change"
         generated != null && !VoiceRecordingFiles.isRecording(generated.relPath) -> "voice file name"

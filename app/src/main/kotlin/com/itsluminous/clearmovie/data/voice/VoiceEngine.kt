@@ -30,6 +30,9 @@ import kotlin.math.roundToInt
 class VoiceEngine(
     private val store: VoicePackStore,
 ) {
+    /** Whether the engine loaded on this phone: null until it was tried. */
+    val works: Boolean? get() = tried
+
     /** Loads the pack's native libraries; false when this phone cannot (they are missing, or the wrong kind). */
     fun load(): Boolean =
         synchronized(LOCK) {
@@ -43,7 +46,10 @@ class VoiceEngine(
                 LibVosk.setLogLevel(LogLevel.WARNINGS)
             }.onFailure { Log.w(TAG, "The voice pack's engine could not be loaded", it) }
                 .isSuccess
-                .also { loaded = it }
+                .also {
+                    loaded = it
+                    tried = it
+                }
         }
 
     /** The words in [pcm] (16-bit mono at [rate]) with their times, by the recognizer for [language]. */
@@ -135,17 +141,52 @@ class VoiceEngine(
             return ShortArray(samples.size) { (samples[it].coerceIn(-1f, 1f) * Short.MAX_VALUE).roundToInt().toShort() }
         }
 
+        /**
+         * [phonemes] spoken in pieces of at most [MAX_TOKENS] phonemes, split at a
+         * space or a mark, since the engine takes a limited context at a time.
+         */
+        fun speakLong(
+            phonemes: String,
+            speaker: Int,
+            speed: Float,
+        ): ShortArray {
+            val parts = mutableListOf<String>()
+            var rest = phonemes.trim()
+            while (rest.codePointCount(0, rest.length) > MAX_TOKENS) {
+                val limit = rest.offsetByCodePoints(0, MAX_TOKENS)
+                val cut = maxOf(rest.lastIndexOfAny(charArrayOf(',', '.', '!', '?', ';', ':'), limit), rest.lastIndexOf(' ', limit))
+                val at = if (cut > 0) cut + 1 else limit
+                parts += rest.substring(0, at).trim()
+                rest = rest.substring(at).trim()
+            }
+            if (rest.isNotEmpty()) parts += rest
+            val pieces = parts.map { speak(it, speaker, speed) }
+            return ShortArray(pieces.sumOf { it.size }).also { out ->
+                var at = 0
+                pieces.forEach { p ->
+                    p.copyInto(out, at)
+                    at += p.size
+                }
+            }
+        }
+
         override fun close() = tts.release()
     }
 
     companion object {
         private const val TAG = "VoiceEngine"
         private const val THREADS = 2
+
+        /** Phonemes per engine call: Kokoro's context is 510 tokens. */
+        const val MAX_TOKENS = 400
         const val LEXICON = "lexicon-gb-en.txt"
         private val LOCK = Any()
 
         @Volatile
         private var loaded = false
+
+        @Volatile
+        private var tried: Boolean? = null
 
         /** The pack's English dictionary (word to phonemes) and the engine's phoneme set. */
         fun lexicon(dir: File): Map<String, String> {
@@ -164,10 +205,12 @@ class VoiceEngine(
 
 /** Decodes a sound file to 16-bit mono samples at [rate] (for the recognizer). */
 internal object AudioPcm {
+    /** Null when the file is longer than [maxMs]. */
     fun decode(
         file: File,
         rate: Int,
-    ): ShortArray {
+        maxMs: Long,
+    ): ShortArray? {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(file.path)
@@ -178,6 +221,7 @@ internal object AudioPcm {
                 }
             extractor.selectTrack(track)
             val format = extractor.getTrackFormat(track)
+            if (format.containsKey(MediaFormat.KEY_DURATION) && format.getLong(MediaFormat.KEY_DURATION) > maxMs * 1000) return null
             val codec = MediaCodec.createDecoderByType(requireNotNull(format.getString(MediaFormat.KEY_MIME)))
             codec.configure(format, null, null, 0)
             codec.start()
@@ -186,8 +230,11 @@ internal object AudioPcm {
             val mono = ShortArrayBuilder()
             val info = MediaCodec.BufferInfo()
             var inputDone = false
+            var idle = 0
             try {
                 while (true) {
+                    // A decoder that never ends its stream must not hang the voice tools.
+                    check(idle < MAX_IDLE) { "the decoder stopped" }
                     if (!inputDone) {
                         val i = codec.dequeueInputBuffer(TIMEOUT_US)
                         if (i >= 0) {
@@ -202,6 +249,11 @@ internal object AudioPcm {
                         }
                     }
                     val o = codec.dequeueOutputBuffer(info, TIMEOUT_US)
+                    if (o < 0 && inputDone) {
+                        idle++
+                    } else if (o >= 0) {
+                        idle = 0
+                    }
                     if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                         srcRate = codec.outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                         channels = codec.outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
@@ -244,6 +296,7 @@ internal object AudioPcm {
     }
 
     private const val TIMEOUT_US = 10_000L
+    private const val MAX_IDLE = 500
 
     private class ShortArrayBuilder {
         private var a = ShortArray(1 shl 16)

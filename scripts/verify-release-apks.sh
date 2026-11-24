@@ -16,7 +16,9 @@
 #   3. versionCode is base*10. Any versionName other than 0.0.1 needs a code
 #      above 14, the highest code 0.0.1's per-ABI APKs used, so every 0.0.1
 #      install accepts it as an update.
-#   4. With VERIFY_SIGNATURES=true, the APK passes `apksigner verify` with both
+#   4. No INTERNET permission: ClearMovie is offline by design, and no library
+#      (the voice engine's among them) may add it.
+#   5. With VERIFY_SIGNATURES=true, the APK passes `apksigner verify` with both
 #      a v2 and a v3 signature.
 # It needs the Android SDK build-tools (aapt2, apksigner) under $ANDROID_HOME.
 set -euo pipefail
@@ -108,7 +110,14 @@ if [ "$version_name" != "$last_split_version" ] && [ "$version_code" -le "$last_
   fail "versionCode $version_code must be above $last_split_max_code (0.0.1's per-ABI APKs), or phones with 0.0.1 cannot update. Raise baseVersionCode."
 fi
 
-# 4. Signatures (CI sets VERIFY_SIGNATURES=true when the signing secrets exist).
+# 4. Offline by design: no library may bring in the INTERNET permission.
+perms="$("$aapt2" dump permissions "$apk")" || fail "aapt2 could not read the permissions of $name"
+if printf '%s\n' "$perms" | grep -q "android.permission.INTERNET'"; then
+  fail "$name asks for the INTERNET permission; ClearMovie is offline by design"
+fi
+echo "No INTERNET permission."
+
+# 5. Signatures (CI sets VERIFY_SIGNATURES=true when the signing secrets exist).
 if [ "${VERIFY_SIGNATURES:-false}" = "true" ]; then
   [ -x "$apksigner" ] || fail "apksigner not found in $build_tools"
   echo

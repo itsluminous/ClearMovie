@@ -23,13 +23,15 @@ data class SpokenVoice(
     val lengthMs: Long,
     /** Words not in the dictionary, read by rule (names): the user may want to check them. */
     val byRule: List<String>,
+    /** The phrases (by index) that still ran into the next one at the fastest speed, so their end was cut. */
+    val cut: List<Int> = emptyList(),
 )
 
 /** Why a voice could not be made. */
 class VoiceFailure(
     val reason: Reason,
 ) : Exception(reason.name) {
-    enum class Reason { NO_PACK, NO_ENGINE, NO_WORDS, FAILED }
+    enum class Reason { NO_PACK, NO_ENGINE, NO_WORDS, TOO_LONG, FAILED }
 }
 
 /**
@@ -43,6 +45,9 @@ interface VoiceTools {
 
     /** Whether the phone can run the voice pack at all (its processor type has an engine). */
     val supported: Boolean
+
+    /** Whether the pack's engine loaded on this phone: null until it was tried (after the pack was added). */
+    val engineWorks: Boolean? get() = null
 
     /** The pack files still to add to voice words, and to recognize speech in [speech]. */
     fun missing(speech: SpokenLanguage?): List<VoicePackFile>
@@ -124,6 +129,13 @@ class PackVoiceTools(
 
     override val manifest: VoicePackManifest get() = store.manifest
     override val supported: Boolean get() = store.supported
+    override val engineWorks: Boolean? get() = engine.works
+
+    /** The pack's English dictionary, read once per process (about 190 000 words). */
+    @Volatile
+    private var lexiconCache: Map<String, String>? = null
+
+    private fun lexicon(): Map<String, String> = lexiconCache ?: VoiceEngine.lexicon(store.ttsDir).also { lexiconCache = it }
 
     override fun missing(speech: SpokenLanguage?) = store.missing(speech)
 
@@ -144,8 +156,9 @@ class PackVoiceTools(
         synchronized(this) {
             if (store.missing(language).isNotEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
             if (!engine.load()) throw VoiceFailure(VoiceFailure.Reason.NO_ENGINE)
-            val pcm = AudioPcm.decode(files.copiedFile(projectId, media), ASR_RATE)
-            val words: List<HeardWord> = engine.recognize(pcm, ASR_RATE, language)
+            val pcm =
+                AudioPcm.decode(files.copiedFile(projectId, media), ASR_RATE, MAX_MS) ?: throw VoiceFailure(VoiceFailure.Reason.TOO_LONG)
+            val words: List<HeardWord> = engine.recognize(pcm, ASR_RATE, language).filterNot { it.text in UNKNOWN_WORDS }
             Phrases.fromWords(words)
         }
 
@@ -163,7 +176,9 @@ class PackVoiceTools(
             if (said.isEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_WORDS)
             if (store.missing(null).isNotEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
             if (!engine.load()) throw VoiceFailure(VoiceFailure.Reason.NO_ENGINE)
-            val lexicon = if (language == SpokenLanguage.ENGLISH) VoiceEngine.lexicon(store.ttsDir) else emptyMap()
+            if ((lengthMs ?: 0) > MAX_MS) throw VoiceFailure(VoiceFailure.Reason.TOO_LONG)
+            // English words in Hindi (Hinglish) text use the dictionary too.
+            val lexicon = lexicon()
             val phonemizer = Phonemizer({ lexicon[it] }, VoiceEngine.tokens(store.ttsDir))
             val byRule = mutableListOf<String>()
             val spoken = mutableListOf<Pair<ShortArray, PhraseFit>>()
@@ -177,18 +192,27 @@ class PackVoiceTools(
                         r.phonemes
                     }
                 ph.forEachIndexed { i, p ->
-                    var audio = speaker.speak(p, voice.speaker, 1f)
+                    var audio = speaker.speakLong(p, voice.speaker, 1f)
                     var fit = PhraseFit(1f, false)
                     if (lengthMs != null) {
                         val next = said.getOrNull(i + 1)?.startMs ?: lengthMs
                         fit = PhraseFit.of(audio.size * 1000L / rate, next - said[i].startMs - PhraseFit.BREATH_MS)
-                        if (fit.speed > 1f) audio = speaker.speak(p, voice.speaker, fit.speed)
+                        if (fit.speed > 1f) audio = speaker.speakLong(p, voice.speaker, fit.speed)
                     }
                     spoken += audio to fit
                     progress((i + 1f) / said.size)
                 }
             }
-            val starts = if (lengthMs == null) Phrases.placeTyped(spoken.map { it.first.size * 1000L / rate }) else said.map { it.startMs }
+            // Typed words start after the encoder's priming (which writeAac leaves out), so their first sound is kept.
+            val lead = VoiceRecorder.ENCODER_DELAY_FRAMES * 1000 / rate + 1
+            val starts =
+                if (lengthMs ==
+                    null
+                ) {
+                    Phrases.placeTyped(spoken.map { it.first.size * 1000L / rate }).map { it + lead }
+                } else {
+                    said.map { it.startMs }
+                }
             val total =
                 lengthMs ?: (starts.last() + spoken.last().first.size * 1000L / rate + Phrases.TYPED_GAP_MS)
             val buffer = ShortArray((total * rate / 1000).toInt() + 1)
@@ -218,6 +242,9 @@ class PackVoiceTools(
                 said.mapIndexed { i, p -> p.copy(startMs = starts[i]) },
                 total,
                 byRule.distinct(),
+                spoken.indices.filter { i ->
+                    starts.getOrNull(i + 1)?.let { spoken[i].first.size * 1000L / rate > it - starts[i] } == true
+                },
             )
         }
 
@@ -254,5 +281,11 @@ class PackVoiceTools(
     companion object {
         const val ASR_RATE = 16_000
         private const val FADE_MS = 30
+
+        /** The longest voice item the engine takes (memory grows with length). */
+        const val MAX_MS = 10L * 60 * 1000
+
+        /** What Vosk writes for a sound it could not make a word of. */
+        private val UNKNOWN_WORDS = setOf("[unk]", "<unk>")
     }
 }

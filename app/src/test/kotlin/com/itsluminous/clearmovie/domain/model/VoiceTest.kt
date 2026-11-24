@@ -52,6 +52,10 @@ class VoiceTest {
             .inOrder()
         assertThat(VoiceChoice.forLanguage(SpokenLanguage.ENGLISH)).isEqualTo(VoiceChoice.MENU)
         assertThat(VoiceChoice.BRITISH_MALE.speaks(SpokenLanguage.HINDI)).isFalse()
+        assertThat(VoiceChoice.BRITISH_MALE.forLanguage(SpokenLanguage.HINDI)).isEqualTo(VoiceChoice.INDIAN_MALE)
+        assertThat(VoiceChoice.AMERICAN_FEMALE.forLanguage(SpokenLanguage.HINDI)).isEqualTo(VoiceChoice.INDIAN_FEMALE)
+        assertThat(VoiceChoice.NONE.forLanguage(SpokenLanguage.HINDI)).isEqualTo(VoiceChoice.NONE)
+        assertThat(VoiceChoice.BRITISH_MALE.forLanguage(SpokenLanguage.ENGLISH)).isEqualTo(VoiceChoice.BRITISH_MALE)
         assertThat(VoiceChoice.NONE.speaks(SpokenLanguage.HINDI)).isTrue()
     }
 
@@ -168,6 +172,9 @@ class VoiceTest {
         assertThat(bad(ok.copy(language = SpokenLanguage.HINDI))).isNotEmpty()
         assertThat(bad(ok.copy(source = WordsSource.TYPED, voice = VoiceChoice.NONE, generated = null))).isNotEmpty()
         assertThat(bad(ok.copy(generated = MediaRef.Copied("song.m4a")))).isNotEmpty()
+        // A spoken item that names a voice must have its voice file: it never plays the recording under another name.
+        assertThat(bad(ok.copy(generated = null))).isNotEmpty()
+        assertThat(bad(ok.copy(voice = VoiceChoice.NONE, generated = null))).isEmpty()
         assertThat(ok.text).isEqualTo("Welcome to the annual day Please take your seats")
     }
 

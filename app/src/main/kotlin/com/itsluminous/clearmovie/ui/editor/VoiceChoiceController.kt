@@ -23,6 +23,7 @@ import com.itsluminous.clearmovie.domain.model.setVoiceOver
 import com.itsluminous.clearmovie.domain.model.useOwnVoice
 import com.itsluminous.clearmovie.domain.voice.Phrases
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,6 +62,9 @@ enum class VoiceNote {
     PACK_STILL_MISSING,
     PACK_WRONG_FILE,
     PACK_NO_SPACE,
+    BUSY,
+    SOME_CUT,
+    TOO_LONG,
 }
 
 /** The voice pack dialog: the files to download, and whether the steps to add them show yet. */
@@ -87,6 +91,9 @@ class VoiceChoiceController(
     private val onNote: (VoiceNote) -> Unit,
     private val onCheckWords: (ClipId) -> Unit,
     private val onInserted: (ClipId) -> Unit,
+    /** Where the engine runs (tests use their own). */
+    private val worker: CoroutineDispatcher = Dispatchers.Default,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val choiceState = MutableStateFlow(VoiceChoice.NONE)
     val choice: StateFlow<VoiceChoice> = choiceState.asStateFlow()
@@ -101,18 +108,19 @@ class VoiceChoiceController(
     val packAsk: StateFlow<PackAsk?> = askState.asStateFlow()
 
     /** False on a phone the voice pack has no engine for: only "No change" is offered there. */
-    val available: Boolean get() = tools.supported
+    val available: Boolean get() = tools.supported && tools.engineWorks != false
 
     /** The choice for the next recording or typed words. Choosing a voice without the pack asks for it first. */
     fun choose(voice: VoiceChoice) {
         val v = if (voice.speaks(languageState.value)) voice else VoiceChoice.NONE
         choiceState.value = v
-        if (v != VoiceChoice.NONE) askForPack(languageState.value)
+        // The voices and engine; the speech file for the language is asked for when a recording's words are found.
+        if (v != VoiceChoice.NONE) askForPack(null)
     }
 
     fun speakIn(language: SpokenLanguage) {
         languageState.value = language
-        if (!choiceState.value.speaks(language)) choiceState.value = VoiceChoice.NONE
+        choiceState.value = choiceState.value.forLanguage(language)
     }
 
     /** Restores the choice saved with the screen. */
@@ -127,11 +135,18 @@ class VoiceChoiceController(
     /** Shows the pack dialog when files are missing to voice words in [language]; true when nothing is missing. */
     fun askForPack(language: SpokenLanguage?): Boolean {
         val manifest = tools.manifest
-        if (!tools.supported || manifest == null) return false
+        if (!available || manifest == null) return false
         val missing = tools.missing(language)
         if (missing.isEmpty()) return true
         askState.value = PackAsk(missing, manifest.version)
         return false
+    }
+
+    /** Brings back the pack dialog saved with the screen (the app may be stopped while the user downloads). */
+    fun restorePackAsk(steps: Boolean) {
+        val manifest = tools.manifest ?: return
+        val missing = tools.missing(languageState.value)
+        if (missing.isNotEmpty()) askState.value = PackAsk(missing, manifest.version, steps)
     }
 
     fun showSteps() {
@@ -144,12 +159,13 @@ class VoiceChoiceController(
 
     /** Takes in the files the user chose after downloading them. */
     fun addPackFiles(sources: List<() -> InputStream?>) {
-        if (sources.isEmpty() || workState.value != null) return
+        if (sources.isEmpty()) return
+        if (workState.value != null) return onNote(VoiceNote.BUSY)
         val want = askState.value
         workState.value = VoiceWork.AddingPack(0f)
         scope.launch {
             val result: PackAddResult =
-                withContext(Dispatchers.IO) {
+                withContext(io) {
                     runCatching { tools.addPackFiles(sources) { workState.value = VoiceWork.AddingPack(it) } }
                         .getOrElse { PackAddResult(emptyList(), sources.size) }
                 }
@@ -180,11 +196,8 @@ class VoiceChoiceController(
 
     /** A recording just went on the timeline: with a voice chosen, its words are found and shown to check. */
     fun afterRecording(clipId: ClipId) {
-        val voice = choiceState.value
-        if (voice == VoiceChoice.NONE) return
-        val language = languageState.value
-        edit { setVoiceOver(clipId, VoiceOver(voice, language, WordsSource.SPOKEN, emptyList())) }
-        recognize(clipId, language)
+        if (choiceState.value == VoiceChoice.NONE) return
+        recognize(clipId, languageState.value)
     }
 
     /** Finds the words of recording [clipId] in [language]; they replace its words (one undo step) and open to check. */
@@ -194,29 +207,29 @@ class VoiceChoiceController(
     ) {
         val clip = audio(clipId) ?: return
         val media = clip.media as? MediaRef.Copied ?: return
-        if (workState.value != null || !askForPack(language)) return
+        if (workState.value != null) return onNote(VoiceNote.BUSY)
+        if (!askForPack(language)) return
         workState.value = VoiceWork.Recognizing(clipId)
         scope.launch {
             val phrases =
-                withContext(Dispatchers.Default) {
+                withContext(worker) {
                     runCatching { tools.recognize(projectId, media, language) }
                 }
             workState.value = null
             phrases
                 .onSuccess { found ->
-                    val now = audio(clipId)
-                    if (now == null || now.media != media) return@onSuccess onNote(VoiceNote.CHANGED_MEANWHILE)
+                    // Only onto the item as it was: an undo, a trim or a new voice meanwhile wins.
+                    if (audio(clipId) != clip) return@onSuccess onNote(VoiceNote.CHANGED_MEANWHILE)
                     if (found.isEmpty()) onNote(VoiceNote.NO_WORDS)
-                    val over =
-                        now.voiceOver
-                            ?: VoiceOver(
-                                choiceState.value.takeIf { it.speaks(language) } ?: VoiceChoice.NONE,
-                                language,
-                                WordsSource.SPOKEN,
-                                emptyList(),
-                            )
-                    val voice = if (over.voice.speaks(language)) over.voice else VoiceChoice.NONE
-                    edit { setVoiceOver(clipId, over.copy(voice = voice, language = language, phrases = found, generated = null)) }
+                    // The words are kept with the item; it plays what it played until a voice is made from them.
+                    val over = clip.voiceOver
+                    val words =
+                        if (over == null || !over.voice.speaks(language)) {
+                            VoiceOver(VoiceChoice.NONE, language, WordsSource.SPOKEN, found)
+                        } else {
+                            over.copy(language = language, phrases = found)
+                        }
+                    edit { setVoiceOver(clipId, words) }
                     onCheckWords(clipId)
                 }.onFailure(::failed)
         }
@@ -241,12 +254,13 @@ class VoiceChoiceController(
             }
             return
         }
-        if (workState.value != null || !askForPack(null)) return
+        if (workState.value != null) return onNote(VoiceNote.BUSY)
+        if (!askForPack(null)) return
         if (words.isEmpty()) return onNote(VoiceNote.NO_WORDS)
         workState.value = VoiceWork.Voicing(clipId, 0f)
         scope.launch {
             val made =
-                withContext(Dispatchers.Default) {
+                withContext(worker) {
                     runCatching {
                         tools.speak(projectId, words, voice, language, if (typed) null else clip.sourceDurationMs) {
                             workState.value = VoiceWork.Voicing(clipId, it)
@@ -256,12 +270,8 @@ class VoiceChoiceController(
             workState.value = null
             made
                 .onSuccess { v ->
-                    val now = audio(clipId)
-                    if (now == null || now.media != clip.media ||
-                        now.sourceDurationMs != clip.sourceDurationMs
-                    ) {
-                        return@onSuccess onNote(VoiceNote.CHANGED_MEANWHILE)
-                    }
+                    if (audio(clipId) != clip) return@onSuccess onNote(VoiceNote.CHANGED_MEANWHILE)
+                    if (v.cut.isNotEmpty()) onNote(VoiceNote.SOME_CUT)
                     if (typed) {
                         edit { setTypedVoice(clipId, v.media, v.lengthMs, VoiceOver(voice, language, WordsSource.TYPED, v.phrases)) }
                     } else {
@@ -285,11 +295,15 @@ class VoiceChoiceController(
             onNote(VoiceNote.NO_WORDS)
             return false
         }
-        if (workState.value != null || !askForPack(null)) return false
+        if (workState.value != null) {
+            onNote(VoiceNote.BUSY)
+            return false
+        }
+        if (!askForPack(null)) return false
         workState.value = VoiceWork.Voicing(null, 0f)
         scope.launch {
             val made =
-                withContext(Dispatchers.Default) {
+                withContext(worker) {
                     runCatching { tools.speak(projectId, phrases, voice, language, null) { workState.value = VoiceWork.Voicing(null, it) } }
                 }
             workState.value = null
@@ -310,10 +324,27 @@ class VoiceChoiceController(
     private fun failed(e: Throwable) {
         onNote(
             when ((e as? VoiceFailure)?.reason) {
-                VoiceFailure.Reason.NO_WORDS -> VoiceNote.NO_WORDS
-                VoiceFailure.Reason.NO_ENGINE -> VoiceNote.NOT_ON_THIS_PHONE
-                VoiceFailure.Reason.NO_PACK -> VoiceNote.PACK_STILL_MISSING
-                else -> VoiceNote.FAILED
+                VoiceFailure.Reason.NO_WORDS -> {
+                    VoiceNote.NO_WORDS
+                }
+
+                VoiceFailure.Reason.TOO_LONG -> {
+                    VoiceNote.TOO_LONG
+                }
+
+                VoiceFailure.Reason.NO_ENGINE -> {
+                    // The engine cannot run here: the choice goes off (only No change stays).
+                    askState.value = null
+                    VoiceNote.NOT_ON_THIS_PHONE
+                }
+
+                VoiceFailure.Reason.NO_PACK -> {
+                    VoiceNote.PACK_STILL_MISSING
+                }
+
+                else -> {
+                    VoiceNote.FAILED
+                }
             },
         )
     }

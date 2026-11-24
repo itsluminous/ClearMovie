@@ -21,6 +21,11 @@
          the recording panel; the recording stays in the app's own storage. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- cm-voice-choice: the voice engine's libraries (Vosk, JNA) must never bring the internet in. -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
+
     <!-- Export (ARCHITECTURE section 12): a foreground worker keeps saving the
          video while the screen turns or the app is in the background, with a
          progress notification and Stop. mediaProcessing is the type on

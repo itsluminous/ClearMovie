@@ -209,6 +209,9 @@ fun EditorRoute(
                                 VoiceNote.PACK_STILL_MISSING -> R.string.pack_still_missing
                                 VoiceNote.PACK_WRONG_FILE -> R.string.pack_wrong_file
                                 VoiceNote.PACK_NO_SPACE -> R.string.pack_no_space
+                                VoiceNote.BUSY -> R.string.voice_busy
+                                VoiceNote.SOME_CUT -> R.string.voice_some_cut
+                                VoiceNote.TOO_LONG -> R.string.voice_too_long
                             },
                         ),
                     )

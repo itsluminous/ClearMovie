@@ -704,19 +704,19 @@
     <string name="voice_type_words">Shabd likhein</string>
     <string name="voice_type_words_body">Jo kehna hai woh likhein, aur woh aapki chuni awaaz mein %1$s se bola jayega.</string>
     <string name="voice_accuracy_note">Boli pehchaanne mein shabd galat sune ja sakte hain, isliye text jaanch lein.</string>
-    <string name="voice_panel_title">Awaaz</string>
+    <string name="voice_panel_title">Swar</string>
     <string name="voice_phrase_label">%1$s se</string>
     <string name="voice_find_words">Shabd dhoondhein</string>
-    <string name="voice_make">Awaaz banayein</string>
+    <string name="voice_make">Swar banayein</string>
     <string name="voice_use_recording">Meri recording</string>
     <string name="voice_typed_hint">Awaaz kya kahe?</string>
     <string name="voice_typed_from">%1$s se bola jayega</string>
     <string name="voice_working_words">Shabd dhoondh rahe hain…</string>
-    <string name="voice_working_voice">Awaaz bana rahe hain…</string>
+    <string name="voice_working_voice">Swar bana rahe hain…</string>
     <string name="voice_no_words">Kehne ke liye koi shabd nahin hain.</string>
-    <string name="voice_failed">Awaaz nahin ban saki.</string>
-    <string name="voice_changed">Is beech item badal gaya, isliye uski awaaz nahin badli.</string>
-    <string name="action_change_voice">Awaaz badlein</string>
+    <string name="voice_failed">Swar nahin ban saka.</string>
+    <string name="voice_changed">Is beech item badal gaya, isliye uska swar nahin badla.</string>
+    <string name="action_change_voice">Swar badlein</string>
     <string name="pack_title">Awaaz pack chahiye</string>
     <string name="pack_body">Yeh awaaz use karne ke liye awaaz pack (%1$s) download karein. Jodne ke baad yeh is phone par %2$s leta hai aur bina internet ke chalta hai.</string>
     <string name="pack_download">Download karein</string>
@@ -729,4 +729,9 @@
     <string name="pack_still_missing">Awaaz pack ki kuch files abhi baaki hain.</string>
     <string name="pack_wrong_file">Yeh file awaaz pack ki nahin hai. Page se phir download karein.</string>
     <string name="pack_no_space">Is phone par awaaz pack ke liye jagah nahin hai.</string>
+    <string name="voice_busy">Swar abhi ban raha hai. Thodi der baad phir koshish karein.</string>
+    <string name="voice_some_cut">Kuch shabd agle shabdon se pehle nahin sama sake aur kat gaye. Unhein chhota karke phir swar banayein.</string>
+    <string name="voice_too_long">Yeh item doosre swar ke liye bahut lamba hai. Ise 10 minute ya usse chhote hisson mein baantein.</string>
+    <string name="settings_storage_voice_pack">Awaaz pack: %1$s</string>
+    <string name="settings_remove_voice_pack">Hatayein</string>
 </resources>

@@ -34,6 +34,12 @@ class VoiceRulesTest {
         assertThat(Phrases.placeTyped(listOf(1000, 2000, 500))).containsExactly(0L, 1300L, 3600L).inOrder()
         assertThat(Phrases.clip("  a \n  b ")).isEqualTo("a b")
         assertThat(Phrases.clip("x".repeat(600)).length).isEqualTo(Limits.MAX_TEXT_LENGTH)
+        // A sentence longer than a phrase may be is split at a comma or a space, never cut short.
+        val long = (1..120).joinToString(" ") { "word$it" }
+        val parts = Phrases.fromTyped(long)
+        assertThat(parts.size).isGreaterThan(1)
+        assertThat(parts.all { it.text.length <= Limits.MAX_TEXT_LENGTH }).isTrue()
+        assertThat(parts.joinToString(" ") { it.text }).isEqualTo(long)
     }
 
     @Test

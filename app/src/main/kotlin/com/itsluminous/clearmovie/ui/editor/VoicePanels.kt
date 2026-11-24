@@ -177,8 +177,11 @@ internal fun VoiceItemPanel(
 ) {
     val over = clip.voiceOver
     val typed = over?.source == WordsSource.TYPED
-    var voice by rememberSaveable(clip.id.value) { mutableStateOf(over?.voice ?: voices.choice.value) }
     var language by rememberSaveable(clip.id.value) { mutableStateOf(over?.language ?: voices.language.value) }
+    // The item's voice; on an item that plays its recording, the voice picked in the sheet is offered (applied by Make voice).
+    var voice by rememberSaveable(clip.id.value) {
+        mutableStateOf(over?.voice?.takeIf { it != VoiceChoice.NONE } ?: voices.choice.value.forLanguage(language))
+    }
     val phrases =
         remember(clip.id.value, over?.phrases) { mutableStateListOf<String>().apply { addAll(over?.phrases.orEmpty().map { it.text }) } }
     val work by voices.work.collectAsState()
@@ -203,7 +206,7 @@ internal fun VoiceItemPanel(
         },
         onLanguage = {
             language = it
-            if (!voice.speaks(it)) voice = if (typed) VoiceChoice.INDIAN_FEMALE else VoiceChoice.NONE
+            voice = voice.forLanguage(it)
         },
         allowNone = !typed,
     )
@@ -322,17 +325,18 @@ private fun WorkLine(work: VoiceWork?) {
 internal fun VoicePackDialog(voices: VoiceChoiceController) {
     val ask by voices.packAsk.collectAsState()
     val work by voices.work.collectAsState()
-    val current = ask ?: return
     val context = LocalContext.current
+    // Registered whether or not the dialog shows, so files picked just before the app was stopped still arrive.
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             val resolver = context.contentResolver
             voices.addPackFiles(uris.map { uri -> { resolver.openInputStream(uri) } })
         }
+    val current = ask ?: return
     val download = current.files.sumOf { it.bytes }
     val unpacked = current.files.sumOf { it.unpackedBytes }
 
-    fun size(b: Long) = Formatter.formatShortFileSize(context, b)
+    fun size(b: Long) = Formatter.formatShortFileSize(context, b).replace(' ', '\u00A0')
 
     fun open(url: String) {
         val intent = Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

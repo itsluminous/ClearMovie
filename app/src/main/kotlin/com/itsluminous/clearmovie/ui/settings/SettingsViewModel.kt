@@ -5,15 +5,18 @@ import androidx.lifecycle.viewModelScope
 import com.itsluminous.clearmovie.data.files.StorageReport
 import com.itsluminous.clearmovie.data.files.StorageUsage
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
+import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AppSettings
 import com.itsluminous.clearmovie.domain.model.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -22,7 +25,21 @@ class SettingsViewModel
     constructor(
         private val settingsRepository: SettingsRepository,
         private val storageUsage: StorageUsage,
+        private val voiceTools: VoiceTools = VoiceTools.NONE,
     ) : ViewModel() {
+        private val packState = MutableStateFlow(0L)
+
+        /** Bytes the voice pack takes on the phone (cm-voice-choice); 0 when it is not added. */
+        val voicePackBytes: StateFlow<Long> = packState.asStateFlow()
+
+        /** Removes the voice pack. Voices already made stay in their videos. */
+        fun removeVoicePack() {
+            viewModelScope.launch(Dispatchers.IO) {
+                voiceTools.removePack()
+                packState.value = voiceTools.packBytes()
+            }
+        }
+
         private val storageState = MutableStateFlow<StorageReport?>(null)
 
         /** What the app keeps on the phone, for Settings -> Storage; null until measured. */
@@ -32,6 +49,7 @@ class SettingsViewModel
         fun refresh() {
             viewModelScope.launch {
                 storageState.value = runCatching { storageUsage.report() }.getOrNull()
+                packState.value = withContext(Dispatchers.IO) { runCatching { voiceTools.packBytes() }.getOrDefault(0L) }
             }
         }
 

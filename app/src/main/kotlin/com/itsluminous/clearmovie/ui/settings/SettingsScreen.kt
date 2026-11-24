@@ -32,6 +32,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -66,6 +67,7 @@ fun SettingsRoute(
 ) {
     val loaded by viewModel.settings.collectAsStateWithLifecycle()
     val storage by viewModel.storage.collectAsStateWithLifecycle()
+    val voicePack by viewModel.voicePackBytes.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose {}
@@ -92,11 +94,16 @@ fun SettingsRoute(
         },
         storage = storage,
         onOpenProjectPage = { openProjectPage(context) },
+        voicePackBytes = voicePack,
+        onRemoveVoicePack = viewModel::removeVoicePack,
     )
 }
 
 /** ClearMovie's page on GitHub, which About's version opens (cm-home-presets). */
 const val PROJECT_PAGE_URL = "https://github.com/itsluminous/ClearMovie"
+
+/** Test tag of Storage's Remove voice pack. */
+const val SETTINGS_REMOVE_PACK_TAG = "settings_remove_voice_pack"
 
 /** Test tag of About's version row. */
 const val SETTINGS_VERSION_TAG = "settings_version"
@@ -139,6 +146,8 @@ fun SettingsScreen(
     onLanguageSelected: (String?) -> Unit,
     storage: StorageReport? = null,
     onOpenProjectPage: () -> Unit = {},
+    voicePackBytes: Long = 0L,
+    onRemoveVoicePack: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -216,6 +225,22 @@ fun SettingsScreen(
                     StorageLine(stringResource(R.string.settings_storage_presets, sizeText(storage.presetBytes)))
                     StorageLine(stringResource(R.string.settings_storage_copied, sizeText(storage.projects.sumOf { it.copiedBytes })))
                     StorageLine(stringResource(R.string.settings_storage_cache, sizeText(storage.cacheBytes)))
+                    if (voicePackBytes > 0) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                Modifier.weight(1f),
+                            ) { StorageLine(stringResource(R.string.settings_storage_voice_pack, sizeText(voicePackBytes))) }
+                            TextButton(
+                                onClick = onRemoveVoicePack,
+                                modifier = Modifier.heightIn(min = 48.dp).testTag(SETTINGS_REMOVE_PACK_TAG),
+                            ) {
+                                Text(stringResource(R.string.settings_remove_voice_pack))
+                            }
+                        }
+                    }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 }
 
