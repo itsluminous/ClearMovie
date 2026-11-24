@@ -640,10 +640,10 @@
     <string name="editor_menu_shape">वीडियो की आकृति</string>
     <string name="editor_menu_rename">वीडियो का नाम बदलें</string>
     <string name="editor_menu_delete">वीडियो हटाएँ</string>
-    <string name="editor_delete_title">यह वीडियो हटाएँ?</string>
-    <string name="editor_delete_body">यह अपने सारे बदलावों के साथ मेरे वीडियो से हट जाएगा और वापस नहीं आएगा। जो वीडियो आप गैलरी में सेव कर चुके हैं, वे वहीं रहेंगे, और आपकी फ़ोटो और वीडियो भी।</string>
+    <string name="editor_delete_title">यह वीडियो मेरे वीडियो से हटाएँ?</string>
+    <string name="editor_delete_body">इसके सारे बदलाव हमेशा के लिए हट जाएँगे और वापस नहीं आएँगे। इससे गैलरी में सेव किए गए वीडियो वहीं रहेंगे, और आपकी अपनी फ़ोटो और वीडियो भी वैसे ही रहेंगी।</string>
     <string name="editor_delete_busy_title">यह वीडियो सेव हो रहा है</string>
-    <string name="editor_delete_busy_body">गैलरी में सेव होने तक रुकें, या उसे रोक दें, फिर वीडियो हटाएँ।</string>
+    <string name="editor_delete_busy_body">गैलरी में सेव होने तक रुकें, या एक्सपोर्ट में जाकर सेव करना रोकें। फिर वीडियो हटाएँ।</string>
     <string name="editor_delete_failed">यह वीडियो हटाया नहीं जा सका। फिर से कोशिश करें।</string>
     <string name="editor_rename_label">नाम</string>
     <string name="editor_rename_needed">इस वीडियो का नाम लिखें</string>

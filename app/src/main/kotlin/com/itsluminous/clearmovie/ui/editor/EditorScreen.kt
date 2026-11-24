@@ -1147,7 +1147,7 @@ private fun MoreOptions(
     Box {
         IconButton(
             onClick = { open = true },
-            enabled = ui.project != null,
+            enabled = ui.project != null && !ui.deleting,
             modifier = Modifier.size(TOUCH).testTag(EDITOR_MORE_TAG),
         ) {
             Icon(

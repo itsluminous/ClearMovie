@@ -219,19 +219,6 @@ fun EditorRoute(
                     )
                 }
 
-                EditorEvent.AskDelete -> {
-                    askingDelete = true
-                }
-
-                EditorEvent.DeleteBlocked -> {
-                    askingDelete = false
-                    deleteBlocked = true
-                }
-
-                EditorEvent.NotDeleted -> {
-                    snackbar.showSnackbar(resources.getString(R.string.editor_delete_failed))
-                }
-
                 is EditorEvent.Recorded -> {
                     snackbar.showSnackbar(
                         resources.getString(
@@ -244,6 +231,25 @@ fun EditorRoute(
                             },
                         ),
                     )
+                }
+            }
+        }
+    }
+    // Delete video's questions have their own collector, so none waits behind a snackbar.
+    LaunchedEffect(viewModel) {
+        viewModel.deletePrompts.collect {
+            when (it) {
+                DeletePrompt.ASK -> {
+                    askingDelete = true
+                }
+
+                DeletePrompt.BLOCKED -> {
+                    askingDelete = false
+                    deleteBlocked = true
+                }
+
+                DeletePrompt.FAILED -> {
+                    snackbar.showSnackbar(resources.getString(R.string.editor_delete_failed))
                 }
             }
         }
@@ -295,6 +301,7 @@ fun EditorRoute(
                 override fun back() = viewModel.close()
 
                 override fun export() {
+                    if (viewModel.ui.value.deleting) return
                     viewModel.pause()
                     exportInfo = true
                 }
@@ -496,7 +503,8 @@ fun EditorRoute(
             confirmButton = { TextButton(onClick = { notSaved = false }) { Text(stringResource(R.string.action_ok)) } },
         )
     }
-    if (askingDelete) {
+    // Brought back after a process death, the question waits until the video is open again.
+    if (askingDelete && ui.project != null && !ui.deleting) {
         DeleteVideoDialog(
             onDelete = {
                 askingDelete = false

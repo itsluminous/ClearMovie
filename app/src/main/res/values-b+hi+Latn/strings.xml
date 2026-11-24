@@ -648,11 +648,11 @@
     <string name="editor_menu_shape">Video ka shape</string>
     <string name="editor_menu_rename">Video ka naam badlein</string>
     <string name="editor_menu_delete">Video delete karein</string>
-    <string name="editor_delete_title">Ye video delete karein?</string>
-    <string name="editor_delete_body">Yeh apne saare badlaavon ke saath Mere videos se hat jaayega aur wapas nahi aayega. Jo videos aap gallery me save kar chuke hain, woh wahin rahenge, aur aapki photos aur videos bhi.</string>
-    <string name="editor_delete_busy_title">Yeh video save ho raha hai</string>
-    <string name="editor_delete_busy_body">Gallery me save hone tak rukein, ya use rok dein, phir video delete karein.</string>
-    <string name="editor_delete_failed">Yeh video delete nahi ho saka. Phir se koshish karein.</string>
+    <string name="editor_delete_title">Ye video Mere videos se delete karein?</string>
+    <string name="editor_delete_body">Iske saare badlav hamesha ke liye chale jaayenge aur wapas nahi aayenge. Isse gallery me save kiye gaye videos wahin rahenge, aur aapki apni photos aur videos bhi waise hi rahengi.</string>
+    <string name="editor_delete_busy_title">Ye video save ho raha hai</string>
+    <string name="editor_delete_busy_body">Gallery me save hone tak rukein, ya Export me jaakar Save karna rokein. Phir video delete karein.</string>
+    <string name="editor_delete_failed">Ye video delete nahi ho saka. Phir se koshish karein.</string>
     <string name="editor_rename_label">Naam</string>
     <string name="editor_rename_needed">Is video ka naam likhein</string>
     <string name="editor_rename_confirm">Naam badlein</string>

@@ -5,6 +5,11 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.ProjectId
 import java.io.File
 import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 
 /**
  * Where the app keeps files (ARCHITECTURE section 10):
@@ -64,18 +69,38 @@ class AppFiles(
         val dir = runCatching { projectDir(id) }.getOrNull() ?: return false
         runCatching { thumbFile(id).delete() }
         if (!dir.exists() && !isLink(dir)) return true
-        var ok = true
-        deleteTree(dir) { ok = false }
-        return ok && !dir.exists()
+        if (isLink(dir)) return runCatching { Files.deleteIfExists(dir.toPath()) }.getOrDefault(false)
+        return runCatching { deleteTree(dir.toPath()) }.isSuccess && !dir.exists()
     }
 
-    /** Deletes [file], first the contents of a directory, without following any link. */
-    private fun deleteTree(
-        file: File,
-        onFailure: () -> Unit,
-    ) {
-        if (!isLink(file) && file.isDirectory) file.listFiles()?.forEach { deleteTree(it, onFailure) }
-        if (!file.delete() && (file.exists() || isLink(file))) onFailure()
+    /**
+     * Deletes [root] and everything under it. The walk never follows a link
+     * (no FOLLOW_LINKS): a link, to a file or a folder, is visited as a file
+     * and removed itself, so nothing outside [root] can be reached, even if a
+     * folder is swapped for a link during the walk.
+     */
+    private fun deleteTree(root: Path) {
+        Files.walkFileTree(
+            root,
+            object : SimpleFileVisitor<Path>() {
+                override fun visitFile(
+                    file: Path,
+                    attrs: BasicFileAttributes,
+                ): FileVisitResult {
+                    Files.deleteIfExists(file)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun postVisitDirectory(
+                    dir: Path,
+                    exc: IOException?,
+                ): FileVisitResult {
+                    if (exc != null) throw exc
+                    Files.deleteIfExists(dir)
+                    return FileVisitResult.CONTINUE
+                }
+            },
+        )
     }
 
     /** Bytes used by the files under [dir], following no links. */
@@ -113,7 +138,7 @@ class AppFiles(
 
     private fun isLink(file: File): Boolean =
         try {
-            java.nio.file.Files
+            Files
                 .isSymbolicLink(file.toPath())
         } catch (e: SecurityException) {
             true

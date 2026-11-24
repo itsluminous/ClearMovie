@@ -40,7 +40,8 @@ class DeleteVideoDialogTest {
         compose.onNodeWithTag(DELETE_DIALOG_TAG).assertIsDisplayed()
         compose.onNodeWithText(s(R.string.editor_delete_title)).assertIsDisplayed()
         compose.onNodeWithText(s(R.string.editor_delete_body)).assertIsDisplayed()
-        assertThat(s(R.string.editor_delete_body)).contains("gallery stay there")
+        assertThat(s(R.string.editor_delete_title)).isEqualTo("Delete this video from My videos?")
+        assertThat(s(R.string.editor_delete_body)).contains("saved to your gallery from it stay there")
         assertThat(s(R.string.editor_delete_body)).contains("can't be brought back")
         compose.onNodeWithTag(DELETE_CANCEL_TAG).assertHeightIsAtLeast(48.dp)
         compose.onNodeWithTag(DELETE_CONFIRM_TAG).assertHeightIsAtLeast(48.dp)
@@ -66,7 +67,7 @@ class DeleteVideoDialogTest {
     @Config(qualifiers = "hi")
     fun `in Hindi it speaks Hindi`() {
         show()
-        compose.onNodeWithText("यह वीडियो हटाएँ?").assertIsDisplayed()
+        compose.onNodeWithText("यह वीडियो मेरे वीडियो से हटाएँ?").assertIsDisplayed()
         compose.onNodeWithText("हटाएँ").assertIsDisplayed()
     }
 

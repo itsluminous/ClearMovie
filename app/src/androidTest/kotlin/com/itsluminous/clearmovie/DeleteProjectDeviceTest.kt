@@ -193,7 +193,9 @@ class DeleteProjectDeviceTest {
                 .projectDir(project.id)
                 .exists(),
         ).isFalse()
-        assertThat(runBlocking { repository.projectList() }.map { it.id }).containsExactly(keep.id)
+        val left = runBlocking { repository.projectList() }.map { it.id }
+        assertThat(left).contains(keep.id)
+        assertThat(left).doesNotContain(project.id)
         // The movie saved earlier is still in the gallery, the same bytes, and plays.
         assertThat(md5(movie)).isEqualTo(movieMd5)
         assertThat(h.probe(movie)).isEqualTo(movieProbe)
@@ -222,20 +224,29 @@ class DeleteProjectDeviceTest {
         val workManager = WorkManager.getInstance(h.context)
         val id = ExportWorker.enqueue(workManager, project.id, ExportQuality.BEST, "Saving", replace = true)
         compose.waitUntil(TIMEOUT_MS) { workManager.getWorkInfoById(id).get()?.state == WorkInfo.State.RUNNING }
+        // A copy the app made for this video: it must survive a refused delete.
+        val ownCopy =
+            File(
+                h.app.appFiles
+                    .projectMediaDir(project.id)
+                    .apply { mkdirs() },
+                "own_copy.jpg",
+            ).apply { writeText("x") }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
+                // Still running when Delete is tapped: Best of four items takes far longer than this on an emulator.
+                waitFor(hasTestTag(EDITOR_EXPORT_TAG), LAUNCH_TIMEOUT_MS)
+                val before = workManager.getWorkInfoById(id).get()?.state
+                Log.i(ExportHarness.TAG, "Export before Delete: $before")
+                assertThat(before?.isFinished).isFalse()
                 deleteFromMenu()
                 waitFor(hasTestTag(DELETE_BUSY_DIALOG_TAG).or(hasTestTag(DELETE_DIALOG_TAG)), LAUNCH_TIMEOUT_MS)
                 val busy = compose.onAllNodes(hasTestTag(DELETE_BUSY_DIALOG_TAG)).fetchSemanticsNodes().isNotEmpty()
-                val state = workManager.getWorkInfoById(id).get()?.state
-                Log.i(ExportHarness.TAG, "Delete during the export: busy=$busy, export $state")
-                if (busy) {
-                    compose.onNodeWithTag(DELETE_BUSY_DIALOG_TAG).assertExists()
-                } else {
-                    // Only when the export had already ended before Delete was tapped.
-                    assertThat(state?.isFinished).isTrue()
-                }
+                Log.i(ExportHarness.TAG, "Delete during the export: busy=$busy, export ${workManager.getWorkInfoById(id).get()?.state}")
+                assertThat(busy).isTrue()
+                assertThat(compose.onAllNodes(hasTestTag(DELETE_DIALOG_TAG)).fetchSemanticsNodes()).isEmpty()
                 assertThat(stored(project)).isTrue()
+                assertThat(ownCopy.readText()).isEqualTo("x")
             }
         } finally {
             workManager.cancelWorkById(id).result.get()

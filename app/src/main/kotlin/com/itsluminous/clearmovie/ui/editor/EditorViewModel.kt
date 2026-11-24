@@ -129,6 +129,8 @@ data class EditorUi(
      * (cm-frame-audio): only they offer Volume and Lower for talk.
      */
     val framesWithSound: Set<MediaRef> = emptySet(),
+    /** Delete was confirmed and is under way (cm-delete-project): Export and the menu do nothing. */
+    val deleting: Boolean = false,
 ) {
     /** MAIN in play order: intro, the user's items, ending. */
     val slots: List<MainSlot> get() = project?.mainLayout().orEmpty()
@@ -177,15 +179,22 @@ sealed interface EditorEvent {
     data class CheckWords(
         val clipId: ClipId,
     ) : EditorEvent
+}
 
-    /** More options > Delete video: ask before deleting (cm-delete-project). */
-    data object AskDelete : EditorEvent
+/**
+ * What More options > Delete video asks the screen to show (cm-delete-project).
+ * Apart from [EditorEvent], whose collector waits while a snackbar shows, so a
+ * question never waits behind one.
+ */
+enum class DeletePrompt {
+    /** Ask before deleting. */
+    ASK,
 
     /** The video cannot be deleted now: it is being saved to the gallery. */
-    data object DeleteBlocked : EditorEvent
+    BLOCKED,
 
     /** The video could not be deleted (the database could not be written); it stays open. */
-    data object NotDeleted : EditorEvent
+    FAILED,
 }
 
 /** What a chosen file had to be. */
@@ -307,6 +316,11 @@ class EditorViewModel
 
         private val eventChannel = Channel<EditorEvent>(Channel.BUFFERED)
         val events: Flow<EditorEvent> = eventChannel.receiveAsFlow()
+
+        private val deleteChannel = Channel<DeletePrompt>(Channel.BUFFERED)
+
+        /** More options > Delete video's questions and answers (cm-delete-project). */
+        val deletePrompts: Flow<DeletePrompt> = deleteChannel.receiveAsFlow()
 
         /** "Record voice" (cm-record-voice): lives here, so a rotation keeps recording. */
         private val voice =
@@ -1103,11 +1117,11 @@ class EditorViewModel
          * gallery, which must end first ([EditorEvent.DeleteBlocked]).
          */
         fun askDelete() {
-            if (voice.active || deleting) return
+            if (voice.active || deleting || uiState.value.project == null) return
             engine.pause()
             viewModelScope.launch {
                 val busy = withContext(Dispatchers.IO) { exports.of(projectId) }
-                eventChannel.send(if (busy) EditorEvent.DeleteBlocked else EditorEvent.AskDelete)
+                deleteChannel.send(if (busy) DeletePrompt.BLOCKED else DeletePrompt.ASK)
             }
         }
 
@@ -1119,28 +1133,37 @@ class EditorViewModel
          * to the gallery, the photos and videos it used and its preset's
          * files stay. Not an undo step: the dialog says it can't be brought
          * back. An export of it still waiting or running blocks it
-         * ([EditorEvent.DeleteBlocked]), checked again here.
+         * ([DeletePrompt.BLOCKED]), checked again here; one asked for after
+         * that check is stopped once the video is gone. Nothing happens until
+         * the video has been opened here (a question brought back after a
+         * process death waits for that), so a late open can never bring it back.
          */
         fun deleteProject() {
-            if (voice.active || deleting) return
-            deleting = true
+            if (voice.active || deleting || uiState.value.project == null) return
+            setDeleting(true)
             engine.pause()
             viewModelScope.launch {
                 if (withContext(Dispatchers.IO) { exports.of(projectId) }) {
-                    deleting = false
-                    eventChannel.send(EditorEvent.DeleteBlocked)
+                    setDeleting(false)
+                    deleteChannel.send(DeletePrompt.BLOCKED)
                     return@launch
                 }
                 // A copy in flight writes into the project's folder: it stops, and cleans up, first.
                 intake.cancelAndJoin()
                 clearIntake()
                 if (!repository.delete(projectId)) {
-                    deleting = false
-                    eventChannel.send(EditorEvent.NotDeleted)
+                    setDeleting(false)
+                    deleteChannel.send(DeletePrompt.FAILED)
                     return@launch
                 }
+                withContext(Dispatchers.IO) { exports.cancel(projectId) }
                 eventChannel.send(EditorEvent.Closed)
             }
+        }
+
+        private fun setDeleting(value: Boolean) {
+            deleting = value
+            uiState.update { it.copy(deleting = value) }
         }
 
         /** Back: writes the project and leaves the editor. */

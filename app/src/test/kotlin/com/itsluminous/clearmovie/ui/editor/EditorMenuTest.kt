@@ -125,7 +125,7 @@ class EditorMenuTest {
                 compose.onNodeWithText(s(R.string.editor_menu_shape)).assertIsDisplayed()
                 compose.onNodeWithText(s(R.string.action_settings)).assertIsDisplayed()
                 compose.onNodeWithText(s(R.string.editor_menu_delete)).assertIsDisplayed()
-                // One height for every item, and no item wraps.
+                // One height for every item.
                 val heights =
                     listOf(EDITOR_MENU_RENAME_TAG, EDITOR_MENU_SHAPE_TAG, EDITOR_MENU_SETTINGS_TAG, EDITOR_MENU_DELETE_TAG).map {
                         compose

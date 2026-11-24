@@ -198,7 +198,7 @@ class MediaIntake(
         plan = null
         // Published only if no newer intake started meanwhile (its state is not this one's to replace).
         val id = current
-        scope.launch {
+        launchTracked {
             media.abandon(planned)
             publish(id, next)
         }

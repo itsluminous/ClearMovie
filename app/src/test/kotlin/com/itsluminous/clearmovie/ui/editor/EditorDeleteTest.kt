@@ -64,7 +64,10 @@ class EditorDeleteTest {
     private lateinit var files: AppFiles
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val id = ProjectId("p-delete")
-    private val events = CopyOnWriteArrayList<EditorEvent>()
+
+    /** What the editor told its screen: its events and Delete's prompts, in order. */
+    private val events = CopyOnWriteArrayList<Any>()
+    private val cancelled = CopyOnWriteArrayList<ProjectId>()
 
     @Before
     fun setUp() {
@@ -120,8 +123,18 @@ class EditorDeleteTest {
             access,
             MediaFactsProbe { _, _, _ -> null },
             VoiceRecordings(files, { error("no microphone in this test") }, exportBusy = { false }),
-            exports = ExportsInProgress { exportBusy() },
-        ).also { vm -> scope.launch(Dispatchers.Main) { vm.events.collect { events += it } } }
+            exports =
+                object : ExportsInProgress {
+                    override fun of(projectId: ProjectId) = exportBusy()
+
+                    override fun cancel(projectId: ProjectId) {
+                        cancelled += projectId
+                    }
+                },
+        ).also { vm ->
+            scope.launch(Dispatchers.Main) { vm.events.collect { events += it } }
+            scope.launch(Dispatchers.Main) { vm.deletePrompts.collect { events += it } }
+        }
     }
 
     private fun idleUntil(done: () -> Boolean) {
@@ -157,13 +170,13 @@ class EditorDeleteTest {
 
         vm.askDelete()
         idleUntil { events.isNotEmpty() }
-        assertThat(events).containsExactly(EditorEvent.AskDelete)
+        assertThat(events).containsExactly(DeletePrompt.ASK)
         // Asking alone changes nothing.
         assertThat(runBlocking { db.projects().get(id.value) }).isNotNull()
 
         vm.deleteProject()
         idleUntil { EditorEvent.Closed in events }
-        assertThat(events).containsExactly(EditorEvent.AskDelete, EditorEvent.Closed).inOrder()
+        assertThat(events).containsExactly(DeletePrompt.ASK, EditorEvent.Closed).inOrder()
         assertThat(runBlocking { db.projects().get(id.value) }).isNull()
         assertThat(copy.exists()).isFalse()
         assertThat(files.projectDir(id).exists()).isFalse()
@@ -172,6 +185,32 @@ class EditorDeleteTest {
         val fresh = ProjectRepository(db, files, scope)
         assertThat(runBlocking { fresh.launchDecision() }).isEqualTo(LaunchDecision.Home)
         assertThat(runBlocking { fresh.open(id) }).isEqualTo(OpenResult.NotFound)
+        // An export asked for after the check is stopped too.
+        assertThat(cancelled).containsExactly(id)
+    }
+
+    @Test
+    fun `a Delete confirmed before the video has opened (a question brought back after a process death) does nothing`() {
+        val repository = ProjectRepository(db, files, scope)
+        val copy = openVideo(repository)
+        // Opened elsewhere: this editor has not loaded it yet when Delete arrives.
+        val vm = editorOn(repository)
+        if (vm.ui.value.project == null) {
+            vm.deleteProject()
+            vm.askDelete()
+        }
+        idleUntil { vm.ui.value.project != null }
+        repeat(10) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+        assertThat(events).isEmpty()
+        assertThat(runBlocking { db.projects().get(id.value) }).isNotNull()
+        assertThat(copy.readText()).isEqualTo("photo")
+        // Once open, it deletes as usual.
+        vm.deleteProject()
+        idleUntil { EditorEvent.Closed in events }
+        assertThat(runBlocking { db.projects().get(id.value) }).isNull()
     }
 
     @Test
@@ -208,18 +247,19 @@ class EditorDeleteTest {
 
         vm.askDelete()
         idleUntil { events.isNotEmpty() }
-        assertThat(events).containsExactly(EditorEvent.DeleteBlocked)
+        assertThat(events).containsExactly(DeletePrompt.BLOCKED)
 
         // Confirmed in the moment an export started: checked again, still blocked.
         events.clear()
         vm.deleteProject()
         idleUntil { events.isNotEmpty() }
-        assertThat(events).containsExactly(EditorEvent.DeleteBlocked)
+        assertThat(events).containsExactly(DeletePrompt.BLOCKED)
         assertThat(runBlocking { db.projects().get(id.value) }).isNotNull()
         assertThat(copy.readText()).isEqualTo("photo")
         // The video stays open and editable.
         assertThat(vm.edit { rename("Still here") }).isTrue()
 
+        assertThat(cancelled).isEmpty()
         // Once the export has finished, it can be deleted.
         busy = false
         events.clear()
