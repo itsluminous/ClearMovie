@@ -158,6 +158,7 @@ fun timedBar(
             frameOn = track.enabled,
             canFollow = project.canFollowItem(clip.id),
             hasSound = clip is OverlayClip && project.playsFrameSound(clip, framesWithSound),
+            hasVideoSound = track.hasVideoSound(),
         )
     return ClipActions.forTimed(timedKind(project, clip), facts)
 }

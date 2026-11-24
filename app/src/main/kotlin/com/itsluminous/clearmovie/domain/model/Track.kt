@@ -66,10 +66,11 @@ enum class PresetRole {
 /**
  * Where a row's sound sits in the ducking ladder (cm-voice-ducking): while
  * a row's sound plays, every row of a lower rank with Lower for talk on is
- * lowered under it. A frame row's own sound is lowest, then music rows (the
- * preset frame's music among them), then the sound of photo-and-video rows,
- * then voice rows. The closing message lowers every other row
- * (`DuckingSpec.speechDuckDb`), as it always has.
+ * lowered under it. Frame sound is lowest (a frame row's own sound, and the
+ * preset frame's sound, its frame music row), then music rows, then the
+ * sound of photo-and-video rows, then voice rows. The closing message
+ * lowers every other row (`DuckingSpec.speechDuckDb`, or a row's own level),
+ * as it always has.
  */
 enum class SoundRank {
     FRAME,
@@ -106,7 +107,8 @@ data class Track(
     /**
      * This row's place in the ducking ladder, or null for a row whose sound
      * neither lowers nor is lowered by it (text, the preset frame, whose
-     * sound is the frame music row, and sound effects).
+     * sound is the frame music row, and sound effects). The frame music row
+     * is frame sound, below the user's own music.
      */
     val soundRank: SoundRank?
         get() =
@@ -125,7 +127,7 @@ data class Track(
 
                 TrackType.AUDIO -> {
                     when (audioRole) {
-                        AudioRole.MUSIC -> SoundRank.MUSIC
+                        AudioRole.MUSIC -> if (presetRole == PresetRole.FRAME_MUSIC) SoundRank.FRAME else SoundRank.MUSIC
                         AudioRole.VOICE -> SoundRank.VOICE
                         AudioRole.EFFECT, null -> null
                     }

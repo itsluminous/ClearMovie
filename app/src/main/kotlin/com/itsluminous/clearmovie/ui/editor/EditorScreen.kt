@@ -1040,7 +1040,7 @@ private fun barActions(
         canMoveRight = index < count - 1,
         canJoin = joinTarget(project, slots, selected) != null,
         hasNext = selected.index < slots.lastIndex,
-        lowerWhenTalking = project.main.lowerWhenTalking,
+        lowerWhenTalking = project.main.lowerWhenTalking.takeIf { project.main.hasVideoSound() },
     )
 }
 

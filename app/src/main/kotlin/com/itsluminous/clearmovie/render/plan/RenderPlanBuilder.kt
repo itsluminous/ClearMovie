@@ -497,28 +497,27 @@ class RenderPlanBuilder(
             }
         }
 
-        // Music and voices lower the rows below them only where they sound: an item turned down to silence lowers nothing.
+        // Music, voices and the closing message lower other rows only where they sound: an item turned down to
+        // silence lowers nothing. The closing message lowers at its own level, never at a voice's.
         fun soundsOn(
-            rank: SoundRank,
+            rows: (Track) -> Boolean,
             db: Double,
         ) = audibleTracks
-            .filter { it.soundRank == rank }
+            .filter(rows)
             .flatMap { t -> t.clips.filterIsInstance<AudioClip>() }
             .filter { it.durationMs > 0 && it.volumeDb > AUDIBLE_DB }
             .map { DuckInterval(it.startMs * US, it.endMs * US, db) }
-        val music = soundsOn(SoundRank.MUSIC, ducking.musicUnderClipDb)
-        val voice = soundsOn(SoundRank.VOICE, ducking.musicUnderVoiceDb)
-        val speech =
-            audibleTracks
-                .filter { it.type == TrackType.AUDIO && it.presetRole == PresetRole.CLOSING_MESSAGE }
-                .flatMap { t -> t.clips.map { DuckInterval(it.startMs * US, it.endMs * US, ducking.speechDuckDb) } }
+        val music = soundsOn({ it.soundRank == SoundRank.MUSIC }, ducking.musicUnderClipDb)
+        val voice = soundsOn({ it.soundRank == SoundRank.VOICE && it.presetRole != PresetRole.CLOSING_MESSAGE }, ducking.musicUnderVoiceDb)
+        val speech = soundsOn({ it.type == TrackType.AUDIO && it.presetRole == PresetRole.CLOSING_MESSAGE }, ducking.speechDuckDb)
 
         val speechDuck = duckEnvelope(speech, attackUs, releaseUs)
 
         // The ducking ladder (cm-voice-ducking): with Lower for talk on, a row is lowered under every row above it
-        // ([SoundRank]: frame sound, then music, then videos' own sound, then voices), to its own level from its popup
-        // when it has one; with it off, only under the closing message, as everything is. A voice row is lowered only
-        // under the closing message; the closing message under nothing.
+        // ([SoundRank]: frame sound, then music, then videos' own sound, then voices) and under the closing message,
+        // to its own level from its popup when it has one (as a music row's level always applied); with it off, only
+        // under the closing message, as everything is. A voice row is lowered only under the closing message; the
+        // closing message under nothing.
         fun duckFor(track: Track): GainEnvelope {
             val rank = track.soundRank
             if (rank == null || rank == SoundRank.VOICE || !track.lowerWhenTalking) return speechDuck

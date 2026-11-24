@@ -143,13 +143,15 @@ Android types, so all of it is tested on the JVM.
   that edge of the span (`detachedStartOffsetMs` / `detachedEndOffsetMs` on
   the clip, next to its `anchor`).
 - **Lower for talk.** Sound is lowered on one ladder (`SoundRank`, on
-  `Track`): a frame row's own sound is lowest, then music rows (the preset
-  frame's music among them), then the sound of photo-and-video rows (MAIN
-  and picture in picture), then voice rows. While a row's sound plays,
-  every row below it with Lower for talk on (`lowerWhenTalking`) goes down
-  to its `lowerToDb`, or without one to the project's `DuckingSpec` levels
-  (-20 dB under a voice or the closing message, -12 dB under a video or
-  music); the closing message lowers every row, as before. Music, frame and
+  `Track`): frame sound is lowest (a frame row's own sound, and the preset
+  frame's, its frame music row), then music rows, then the sound of
+  photo-and-video rows (MAIN and picture in picture), then voice rows. While
+  a row's sound plays, every row below it with Lower for talk on
+  (`lowerWhenTalking`) goes down to its `lowerToDb`, or without one to the
+  project's `DuckingSpec` levels (-20 dB under a voice, -12 dB under a
+  video or music). The closing message lowers every other row: to
+  `speechDuckDb` (-20 dB), or to the row's own `lowerToDb` when Lower for
+  talk is on with one, as a music row's level always did. Music, frame and
   photo-and-video rows have the setting (photo-and-video rows since schema
   7), and a frame its own `volumeDb` (schema 6). A
   style stores only what differs from the preset's

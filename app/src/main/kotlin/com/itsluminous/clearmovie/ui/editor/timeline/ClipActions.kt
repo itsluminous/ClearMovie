@@ -142,13 +142,16 @@ data class TimedFacts(
     val canFollow: Boolean = false,
     /** A frame whose video has its own sound (cm-frame-audio): it has a Volume and Lower for talk. */
     val hasSound: Boolean = false,
+    /** A picture-in-picture row with a video that may sound (cm-voice-ducking): its videos have Lower for talk. */
+    val hasVideoSound: Boolean = true,
 )
 
 /**
  * The bar's actions per selection, most-used first (ARCHITECTURE section
  * 11.2). A photo or video offers Add caption second, after its length
  * (section 11.2's "Add text"). A video's Lower for talk (its row's, under
- * voices) comes after its other changes, before the moves. Transition (into the next item) is greyed out on an item with
+ * voices; null [lowerWhenTalking] when its row has no video that may sound)
+ * comes after its other changes, before the moves. Transition (into the next item) is greyed out on an item with
  * nothing after it ([hasNext]). A MAIN item's "Move to another row" is left
  * out: the model moves items only between rows of one kind, and MAIN is the
  * only row of its kind.
@@ -163,7 +166,7 @@ object ClipActions {
         hasNext: Boolean = true,
         canZoomIn: Boolean = true,
         canZoomOut: Boolean = true,
-        lowerWhenTalking: Boolean = true,
+        lowerWhenTalking: Boolean? = true,
     ): List<BarAction> {
         val moves = listOf(BarAction(EditAction.MOVE_LEFT, canMoveLeft), BarAction(EditAction.MOVE_RIGHT, canMoveRight))
         val effects = listOf(BarAction(EditAction.TRANSITION, hasNext), BarAction(EditAction.ANIMATION))
@@ -201,7 +204,7 @@ object ClipActions {
                             EditAction.FIT,
                             EditAction.REPLACE,
                             EditAction.DUPLICATE,
-                        ).map(::BarAction) + lowerMusic(lowerWhenTalking) + moves +
+                        ).map(::BarAction) + listOfNotNull(lowerWhenTalking?.let(::lowerMusic)) + moves +
                         listOfNotNull(BarAction(EditAction.JOIN).takeIf { canJoin }) +
                         BarAction(EditAction.DELETE)
                 }
@@ -275,7 +278,7 @@ object ClipActions {
                     EditAction.POSITION,
                     EditAction.ROTATE,
                 ).map(::BarAction) +
-                    lowerMusic(facts.lowerWhenTalking) + moves + delete
+                    listOfNotNull(lowerMusic(facts.lowerWhenTalking).takeIf { facts.hasVideoSound }) + moves + delete
             }
 
             SelectionKind.SOUND -> {

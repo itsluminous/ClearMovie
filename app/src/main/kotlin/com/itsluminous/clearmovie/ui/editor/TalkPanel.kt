@@ -30,8 +30,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.Project
+import com.itsluminous.clearmovie.domain.model.SoundRank
 import com.itsluminous.clearmovie.domain.model.Track
-import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.setTalkLowering
 import kotlin.math.roundToInt
 
@@ -39,12 +39,12 @@ const val TALK_SWITCH_TAG = "talk_lower_switch"
 const val TALK_SLIDER_TAG = "talk_lower_slider"
 const val TALK_VALUE_TAG = "talk_lower_value"
 
-/** Lower for talk's switch label for [track]: a music row's, a frame row's, or a photo-and-video row's. */
+/** Lower for talk's switch label for [track]: a music row's, frame sound's (a frame row, the frame music), or a photo-and-video row's. */
 @StringRes
 internal fun talkSwitchLabel(track: Track): Int =
-    when (track.type) {
-        TrackType.OVERLAY -> R.string.action_lower_frame_sound
-        TrackType.MAIN, TrackType.VISUAL -> R.string.action_lower_video_sound
+    when (track.soundRank) {
+        SoundRank.FRAME -> R.string.action_lower_frame_sound
+        SoundRank.VIDEO -> R.string.action_lower_video_sound
         else -> R.string.action_lower_music
     }
 
@@ -108,9 +108,9 @@ internal fun TalkLowerPanel(
     }
     val label =
         stringResource(
-            when (track.type) {
-                TrackType.OVERLAY -> R.string.talk_level_frame
-                TrackType.MAIN, TrackType.VISUAL -> R.string.talk_level_video
+            when (track.soundRank) {
+                SoundRank.FRAME -> R.string.talk_level_frame
+                SoundRank.VIDEO -> R.string.talk_level_video
                 else -> R.string.talk_level
             },
         )

@@ -116,8 +116,9 @@ What ClearMovie on `main` does:
 - **Transitions and animations** - crossfades, fades, wipes, slides and zooms between
   items, and gentle zooms or fade-ins on single items, each with a live preview.
 - **Background music and ducking** - the frame's music plays under the whole video.
-  Sound is lowered automatically, one layer under another: a frame's own sound under
-  music, music under your videos' own sound, and all of them under a recorded voice;
+  Sound is lowered automatically, one layer under another: a frame's sound (the
+  frame's music too) under your music, music under your videos' own sound, and all of
+  them under a recorded voice;
   everything is lowered for the closing voice. Lower for talk on a row sets how low it
   goes, or turns it off. A frame you add with its own sound plays it too, with Volume
   and Lower for talk.

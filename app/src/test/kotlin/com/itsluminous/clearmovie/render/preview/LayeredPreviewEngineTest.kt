@@ -363,6 +363,34 @@ class LayeredPreviewEngineTest {
     }
 
     @Test
+    fun `while playing, the volumes follow a ducking ramp in small steps between syncs`() {
+        // cm-voice-ducking: the music's 300 ms attack before v2 (a video with sound) plays as 15 steps, not 3.
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        engine.play()
+        idle()
+        val music = schedule.sounds.indexOfFirst { it.role.name == "MUSIC" }
+        val p1 = project.mainSlot(ClipId("p1"))!!
+        val v2 = project.mainSlot(ClipId("v2"))!!
+        val index = schedule.mainIndexAt(p1.startMs * 1000)
+        val volumes = mutableListOf<Float>()
+        val stepMs = LayeredPreviewEngine.VOLUME_TICK_MS
+        for (k in 0..15) {
+            // MAIN plays on through the photo's last 300 ms, one volume step at a time.
+            main().currentMediaItemIndex = index
+            main().currentPosition = (v2.startMs - p1.startMs) - 300 + k * stepMs
+            scope.advanceTimeBy(stepMs)
+            idle()
+            volumes += sounds()[music].volume
+        }
+        val changes = volumes.zipWithNext().count { (a, b) -> a != b }
+        assertThat(changes).isAtLeast(12)
+        // Each step is small: at most a 20 ms share of the 12 dB ramp, plus one step of slack for the tick's phase.
+        val steps = volumes.zipWithNext().map { (a, b) -> kotlin.math.abs(20 * kotlin.math.log10(b.toDouble() / a)) }
+        assertThat(steps.max()).isLessThan(2.0 * 12.0 * stepMs / 300 + 1e-3)
+        assertThat(volumes.last()).isWithin(1e-3f).of(LayeredPreviewEngine.gainOf(schedule.sounds[music].gainDbAt(v2.startMs * 1000)))
+    }
+
+    @Test
     fun `a file that fails while playing pauses and moves on to the next item, and says so`() {
         engine.load(schedule, resolver, startUs = 0, play = true)
         val p1 = project.mainSlot(ClipId("p1"))!!

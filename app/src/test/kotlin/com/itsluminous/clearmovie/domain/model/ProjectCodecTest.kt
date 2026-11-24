@@ -189,6 +189,32 @@ class ProjectCodecTest {
     }
 
     @Test
+    fun `a schema 6 file's own Lower for talk choices are read as written`() {
+        // The frame music row turned off, and the user's frame row at its own level, as a schema 6 app wrote them.
+        val v6 =
+            fixture("rich-v6.json")
+                .replace(
+                    "\"presetRole\": \"frameMusic\",\n            \"lowerWhenTalking\": true",
+                    "\"presetRole\": \"frameMusic\",\n            \"lowerWhenTalking\": false",
+                ).replace(
+                    "\"id\": \"overlay\",",
+                    "\"id\": \"overlay\",\n            \"lowerToDb\": -9.0,",
+                )
+        assertThat(v6).contains("\"lowerWhenTalking\": false")
+        assertThat(v6).contains("\"lowerToDb\": -9.0")
+        val result = ok(v6)
+        assertThat(result.fromVersion).isEqualTo(6)
+        val p = result.project
+        assertThat(p.byRole(PresetRole.FRAME_MUSIC).lowerWhenTalking).isFalse()
+        assertThat(p.tracks.single { it.id == TrackId("overlay") }.lowerToDb).isEqualTo(-9.0)
+        // Every other row keeps the default, so it takes the ladder.
+        assertThat(p.tracks.filter { it.isLoweredForTalk && it.presetRole != PresetRole.FRAME_MUSIC }.all { it.lowerWhenTalking }).isTrue()
+        val saved = codec.encode(p)
+        assertThat(saved).startsWith("{\n    \"schemaVersion\": ${ProjectMigrations.CURRENT_VERSION},")
+        assertThat(ok(saved).project).isEqualTo(p)
+    }
+
+    @Test
     fun `a photo-and-video row's Lower for talk survives a save`() {
         val rich = Fixtures.richProject()
         val pip = rich.tracks.first { it.type == TrackType.VISUAL }

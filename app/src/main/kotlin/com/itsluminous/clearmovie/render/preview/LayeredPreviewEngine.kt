@@ -371,7 +371,13 @@ class LayeredPreviewEngine(
                     sync(force = false)
                     publish()
                     if (!isPlaying) break
-                    delay(TICK_MS)
+                    // Between two syncs only the volumes, every VOLUME_TICK_MS, so a 300 ms duck ramps in small
+                    // steps, as the export's does sample by sample (cm-voice-ducking).
+                    repeat((TICK_MS / VOLUME_TICK_MS - 1).toInt()) {
+                        delay(VOLUME_TICK_MS)
+                        if (isPlaying) schedule?.let { applyVolumes(it, mainTimeUs()) }
+                    }
+                    delay(VOLUME_TICK_MS)
                 }
             }
     }
@@ -741,6 +747,9 @@ class LayeredPreviewEngine(
 
     companion object {
         const val TICK_MS = 100L
+
+        /** How often the volumes follow the plan's gain envelopes while playing: 5 steps across 100 ms. */
+        const val VOLUME_TICK_MS = 20L
         const val MAX_DRIFT_US = 200_000L
 
         /** How long before its next part a follower playing its silence is put, paused, at that part's start (see keepInStep). */

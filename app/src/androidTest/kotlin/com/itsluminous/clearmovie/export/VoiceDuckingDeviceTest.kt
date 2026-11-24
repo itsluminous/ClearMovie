@@ -210,6 +210,40 @@ class VoiceDuckingDeviceTest {
     }
 
     @Test
+    fun thePresetFrameMusicGoesUnderTheUsersMusic() {
+        // The preset bound to the fixtures: intro.mp4 (660 Hz) 0..2 s, frame.mp4's sound (1000 Hz) as the frame music,
+        // a 9 s photo 2..11 s, and the user's music (seconds.mp4, 440 Hz) over 4.5..7.5 s.
+        h.bindPreset()
+        val preset = requireNotNull(runBlocking { h.app.presetStore.effectivePreset(h.presetId) })
+        val project =
+            ProjectFactory
+                .fromPreset(ProjectId(RandomIds.next()), preset, runBlocking { h.app.presetStore.presetMedia(h.presetId) })
+                .addToMain(listOf(h.photo(9000)))
+                .addTimedClip(
+                    AudioClip(ClipId(RandomIds.next()), store("fixtures/seconds.mp4", "video/mp4"), 4500, 3000, 10_000),
+                    role = AudioRole.MUSIC,
+                    ids = RandomIds,
+                ).rename("Voice ducking frame music")
+        check(runBlocking { h.app.projectRepository.createDraft(project, inEditor = false) })
+        val outcome = runBlocking { h.pipeline().run(project.id, ExportQuality.SMALL, "Voice ducking frame music") {} }
+        val done = (outcome as ExportOutcome.Done).done
+        h.exported(done.uri)
+        val pcm = RenderHarness.decodeAudio(h.keep(done.uri, "voice-ducking-frame-music.mp4"))
+        val alone = RenderHarness.toneDb(pcm, 1000.0, 2.6, 4.0)
+        val under = RenderHarness.toneDb(pcm, 1000.0, 5.0, 7.0)
+        val after = RenderHarness.toneDb(pcm, 1000.0, 8.0, 10.0)
+        val music = RenderHarness.toneDb(pcm, 440.0, 5.0, 7.0)
+        RenderHarness.report(
+            "voice-ducking frame-music: frame music %.2f alone (2.6-4.0 s), %.2f under music (5.0-7.0 s), %.2f after (8.0-10.0 s); music %.2f"
+                .format(Locale.ROOT, alone, under, after, music),
+        )
+        val c = Checks()
+        c.near("frame music under the user's music", under - alone, -12.0)
+        c.near("frame music after the user's music", after - alone, 0.0)
+        assertWithMessage(c.failures.joinToString("; ")).that(c.failures).isEmpty()
+    }
+
+    @Test
     fun lowerForTalkOnARowOverridesTheLadder() {
         // Photos and videos with Lower for talk off; the frame row to its own level, 6 dB down, under everything above it.
         val p = staircase("Voice ducking override")

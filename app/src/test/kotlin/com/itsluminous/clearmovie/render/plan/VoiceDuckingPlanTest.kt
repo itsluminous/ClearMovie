@@ -17,11 +17,13 @@ import com.itsluminous.clearmovie.domain.model.SequentialIds
 import com.itsluminous.clearmovie.domain.model.SoundRank
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.domain.model.VideoClip
 import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.setTalkLowering
 import com.itsluminous.clearmovie.domain.model.setTrackMuted
+import com.itsluminous.clearmovie.domain.model.setTransition
 import com.itsluminous.clearmovie.domain.model.setVolume
 import com.itsluminous.clearmovie.domain.model.validate
 import org.junit.Test
@@ -45,7 +47,7 @@ class VoiceDuckingPlanTest {
     /** Every sound measured at its target, so each plays at its own volume before ducking. */
     private val measured =
         LoudnessTable {
-            if (it == Fixtures.media("vo") || it == Fixtures.media("speech")) RenderPlanBuilder.VOICE_LUFS else RenderPlanBuilder.MUSIC_LUFS
+            if (it == Fixtures.media("vo") || it == Fixtures.media("vo2")) RenderPlanBuilder.VOICE_LUFS else RenderPlanBuilder.MUSIC_LUFS
         }
 
     private fun staircase(
@@ -223,36 +225,174 @@ class VoiceDuckingPlanTest {
         assertThat(off.dbOf(Fixtures.media("pv"), 6_000_000)).isWithin(1e-6).of(0.0)
         // Videos never lower each other.
         assertThat(plan.video(4_500_000)).isWithin(1e-6).of(0.0)
+        // The preview's picture-in-picture sound lane carries the same lowering.
+        val lane = PreviewSchedule.of(plan).sounds.single { it.trackId == row.id }
+        assertThat(lane.gainDbAt(6_000_000)).isWithin(1e-6).of(-20.0)
+        assertThat(lane.gainDbAt(4_500_000)).isWithin(1e-6).of(0.0)
     }
 
     @Test
-    fun `the preset's frame music is a music row, and the closing message still lowers everything`() {
+    fun `the preset's frame music is frame sound, under the user's music, and the closing message still lowers everything`() {
         val presetIds = SequentialIds("vp")
-        val p =
+        val base =
             Fixtures
                 .presetProject(presetIds)
-                .addToMain(listOf(Fixtures.photo("pp", 6000)), ids = presetIds)
+                .addToMain(listOf(Fixtures.photo("pp", 9000)), ids = presetIds)
+        val frameMusic = base.tracks.single { it.presetRole == PresetRole.FRAME_MUSIC }
+        assertThat(frameMusic.soundRank).isEqualTo(SoundRank.FRAME)
+        val p =
+            base
+                .setTrackMuted(frameMusic.id, false)
                 .addTimedClip(
-                    OverlayClip(ClipId("fr"), Fixtures.media("fr"), 3000, 3000, sourceDurationMs = 3000, repeat = false),
+                    OverlayClip(ClipId("fr"), Fixtures.media("fr"), 7000, 3000, sourceDurationMs = 3000, repeat = false),
+                    ids = presetIds,
+                ).addTimedClip(
+                    AudioClip(ClipId("m"), Fixtures.media("m"), startMs = 9000, durationMs = 3000, sourceDurationMs = 3000),
+                    role = AudioRole.MUSIC,
                     ids = presetIds,
                 )
-        val frameMusic = p.tracks.single { it.presetRole == PresetRole.FRAME_MUSIC }
-        assertThat(frameMusic.soundRank).isEqualTo(SoundRank.MUSIC)
         val musicDb = (frameMusic.clips.single() as AudioClip).volumeDb
-        val plan = RenderPlanBuilder(Fixtures.preset, measured).build(p.setTrackMuted(frameMusic.id, false))
-        // The user's frame (3..6 s, over the photo) sits under the frame music, which plays over the whole video.
-        assertThat(plan.frame(4_500_000)).isWithin(1e-6).of(frameDb - 12)
+        val fm = (frameMusic.clips.single() as AudioClip).media
+        val plan = RenderPlanBuilder(Fixtures.preset, measured).build(p)
+        // The intro (0..6.5 s) has sound; the photo is 6.5..15.5 s. The user's frame (7..10 s) and the frame music
+        // are both frame sound: neither lowers the other.
+        assertThat(plan.frame(8_000_000)).isWithin(1e-6).of(frameDb)
+        assertThat(plan.dbOf(fm, 8_000_000)).isWithin(1e-6).of(musicDb)
+        // The user's music (9..12 s) lowers both, and is not lowered by them.
+        assertThat(plan.frame(9_700_000)).isWithin(1e-6).of(frameDb - 12)
+        assertThat(plan.dbOf(fm, 10_500_000)).isWithin(1e-6).of(musicDb - 12)
+        assertThat(plan.music(10_500_000)).isWithin(1e-6).of(0.0)
         // Under the closing message every row is lowered, the frame music among them, and the closing message is not.
         val closing =
             p.tracks
                 .single { it.presetRole == PresetRole.CLOSING_MESSAGE }
                 .clips
-                .single()
+                .single() as AudioClip
         val mid = (closing.startMs + closing.durationMs / 2) * 1000
-        assertThat(plan.dbOf(frameMusic.clips.single().let { (it as AudioClip).media }, mid)).isWithin(1e-6).of(musicDb - 20)
-        assertThat(plan.dbOf((closing as AudioClip).media, mid))
-            .isWithin(1e-6)
-            .of(RenderPlanBuilder.VOICE_LUFS - RenderPlanBuilder.MUSIC_LUFS)
+        assertThat(plan.dbOf(fm, mid)).isWithin(1e-6).of(musicDb - 20)
+        assertThat(plan.dbOf(closing.media, mid)).isWithin(1e-6).of(RenderPlanBuilder.VOICE_LUFS - RenderPlanBuilder.MUSIC_LUFS)
+    }
+
+    @Test
+    fun `the closing message lowers at its own level, to a row's own level when it has one, and not when turned down`() {
+        val presetIds = SequentialIds("vc")
+        val base0 = Fixtures.presetProject(presetIds).addToMain(listOf(Fixtures.photo("pp", 3000)), ids = presetIds)
+        val closing =
+            base0.tracks
+                .single { it.presetRole == PresetRole.CLOSING_MESSAGE }
+                .clips
+                .single() as AudioClip
+        // The user's music runs under the whole closing message.
+        val base =
+            base0.addTimedClip(
+                AudioClip(
+                    ClipId("m"),
+                    Fixtures.media("m"),
+                    startMs = closing.startMs - 1000,
+                    durationMs = closing.durationMs + 1000,
+                    sourceDurationMs = 20_000,
+                ),
+                role = AudioRole.MUSIC,
+                ids = presetIds,
+            )
+        val musicRow = base.tracks.single { it.audioRole == AudioRole.MUSIC && it.presetRole == null }.id
+        val under = (closing.startMs + closing.durationMs / 2) * 1000
+
+        fun musicUnder(p: Project) = RenderPlanBuilder(Fixtures.preset, measured).build(p).music(under)
+        assertThat(musicUnder(base)).isWithin(1e-6).of(base.ducking.speechDuckDb)
+        // A preset whose closing message lowers less than a voice does: its own level, not the voice's.
+        assertThat(musicUnder(base.copy(ducking = base.ducking.copy(speechDuckDb = -10.0)))).isWithin(1e-6).of(-10.0)
+        // A row with its own level goes to that level under the closing message too; turned off, to the closing level.
+        assertThat(musicUnder(base.setTalkLowering(musicRow, true, -30.0))).isWithin(1e-6).of(-30.0)
+        assertThat(musicUnder(base.setTalkLowering(musicRow, false, null))).isWithin(1e-6).of(base.ducking.speechDuckDb)
+        // A closing message turned all the way down lowers nothing.
+        assertThat(musicUnder(base.setVolume(closing.id, Limits.MIN_VOLUME_DB))).isWithin(1e-6).of(0.0)
+    }
+
+    @Test
+    fun `rows of one rank never lower each other, and sound effects stay out of the ladder`() {
+        val p =
+            staircase()
+                .addTimedClip(
+                    AudioClip(ClipId("m2"), Fixtures.media("m2"), startMs = 2000, durationMs = 2000, sourceDurationMs = 2000),
+                    role = AudioRole.MUSIC,
+                    ids = ids,
+                ).addTimedClip(
+                    AudioClip(ClipId("vo2"), Fixtures.media("vo2"), startMs = 5500, durationMs = 1000, sourceDurationMs = 1000),
+                    role = AudioRole.VOICE,
+                    ids = ids,
+                ).addTimedClip(
+                    OverlayClip(ClipId("fr2"), Fixtures.media("fr2"), 1000, 2000, sourceDurationMs = 2000, repeat = false),
+                    ids = ids,
+                )
+        // A second music row starts at 2 s: the first is not lowered by it, nor it by the first.
+        val withEffect =
+            p.copy(
+                tracks =
+                    p.tracks +
+                        com.itsluminous.clearmovie.domain.model.Track(
+                            com.itsluminous.clearmovie.domain.model
+                                .TrackId("fx"),
+                            TrackType.AUDIO,
+                            listOf(
+                                AudioClip(ClipId("fx1"), Fixtures.media("fx1"), startMs = 5500, durationMs = 1000, sourceDurationMs = 1000),
+                            ),
+                            audioRole = AudioRole.EFFECT,
+                        ),
+            )
+        assertThat(withEffect.validate()).isEmpty()
+        val plan = plan(withEffect)
+        assertThat(plan.music(2_500_000)).isWithin(1e-6).of(0.0)
+        assertThat(plan.dbOf(Fixtures.media("m2"), 2_500_000)).isWithin(1e-6).of(0.0)
+        // Two voices: neither lowered.
+        assertThat(plan.voice(6_000_000)).isWithin(1e-6).of(0.0)
+        assertThat(plan.dbOf(Fixtures.media("vo2"), 6_000_000)).isWithin(1e-6).of(0.0)
+        // Two frame rows (1..3 s): neither lowers the other; both go under the music.
+        assertThat(plan.frame(1_100_000)).isWithin(1e-6).of(frameDb)
+        assertThat(plan.dbOf(Fixtures.media("fr2"), 1_100_000)).isWithin(1e-6).of(frameDb)
+        assertThat(plan.dbOf(Fixtures.media("fr2"), 2_500_000)).isWithin(1e-6).of(frameDb - 12)
+        // The effect plays under the voices unlowered and lowers nothing: the levels at 6 s are the voice's, as without it.
+        assertThat(plan.dbOf(Fixtures.media("fx1"), 6_000_000)).isWithin(1e-6).of(0.0)
+        assertThat(plan.video(6_000_000)).isWithin(1e-6).of(-20.0)
+    }
+
+    @Test
+    fun `a looped, sped-up video crossfading into the next is lowered under a voice in every copy and lane`() {
+        val looped = Fixtures.video("v", 2000).copy(loops = 2, speed = com.itsluminous.clearmovie.domain.model.Speed.X2)
+        val next = Fixtures.video("v2", 4000)
+        val p0 =
+            Fixtures
+                .blankWith(Fixtures.photo("p1"), looped, next, ids = ids)
+                .let {
+                    it.setTransition(
+                        looped.id,
+                        com.itsluminous.clearmovie.domain.model
+                            .Transition(TransitionKind.CROSSFADE, 1000),
+                    )
+                }
+        val voiced =
+            p0.addTimedClip(
+                AudioClip(ClipId("vo"), Fixtures.media("vo"), startMs = 2000, durationMs = 4000, sourceDurationMs = 4000),
+                role = AudioRole.VOICE,
+                ids = ids,
+            )
+        val quiet = plan(p0)
+        val loud = plan(voiced)
+        // 3..5 s is the looped video (two 1 s copies at 2x) and the crossfade; every sound of it, in both lanes, is 20 dB down.
+        for (ms in listOf(3_200L, 3_700L, 4_300L, 4_800L)) {
+            for (media in listOf("v", "v2")) {
+                val a = runCatching { quiet.dbOf(Fixtures.media(media), ms * 1000) }.getOrNull() ?: continue
+                assertThat(loud.dbOf(Fixtures.media(media), ms * 1000)).isWithin(1e-6).of(maxOf(a - 20, GainEnvelope.SILENT_DB))
+            }
+        }
+        // And the preview's MAIN and tail players carry it.
+        val qs = PreviewSchedule.of(quiet)
+        val ls = PreviewSchedule.of(loud)
+        for (ms in 3_100L until 5_900L step 100) {
+            val us = ms * 1000
+            qs.mainGainDbAt(us)?.let { assertThat(ls.mainGainDbAt(us)!!).isWithin(1e-6).of(maxOf(it - 20, GainEnvelope.SILENT_DB)) }
+            qs.tailGainDbAt(us)?.let { assertThat(ls.tailGainDbAt(us)!!).isWithin(1e-6).of(maxOf(it - 20, GainEnvelope.SILENT_DB)) }
+        }
     }
 
     @Test
