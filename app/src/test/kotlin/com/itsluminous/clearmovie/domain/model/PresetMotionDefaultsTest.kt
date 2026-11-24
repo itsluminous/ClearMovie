@@ -107,7 +107,7 @@ class PresetMotionDefaultsTest {
     @Test
     fun `a project keeps the defaults its preset had when it was made, for the items it has and the ones added later`() {
         val made = madeWith(EffectDefaults(KEN_OUT, WIPE))
-        // The preset is edited afterwards: the project has its own copy, saved with it.
+        // The project has its own copy of the defaults, saved with it: what its preset says later is not read.
         val saved = ProjectCodec().run { decode(encode(made)) as ProjectDecodeResult.Ok }.project
         assertThat(saved.effectDefaults).isEqualTo(EffectDefaults(KEN_OUT, WIPE))
         val later = Fixtures.photo("d")

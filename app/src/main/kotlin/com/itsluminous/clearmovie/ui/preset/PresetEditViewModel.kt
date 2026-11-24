@@ -213,6 +213,9 @@ class PresetEditViewModel
             setEffects(withTransition(ui.draftEffects ?: preset.effects, preset.effects, kind))
         }
 
+        /** Puts the effect defaults back to [effects] (the draft only), leaving the caption draft as it is. */
+        fun revertEffects(effects: EffectDefaults?) = setEffects(effects)
+
         private fun setEffects(effects: EffectDefaults?) {
             savedState[KEY_EFFECTS] = effects?.let { ProjectCodec.json.encodeToString(EffectDefaults.serializer(), it) }
             uiState.update { it.copy(draftEffects = effects) }
@@ -356,7 +359,7 @@ class PresetEditViewModel
             /**
              * [effects] with [kind] as the transition between new items ([TransitionKind.NONE] for none).
              * It keeps the length of the transition chosen so far, else of the one the preset has [saved]
-             * (so None and back keeps it), else the editor's usual length for a new transition.
+             * (so None and back, before Save, keeps it), else the editor's usual length for a new transition.
              */
             fun withTransition(
                 effects: EffectDefaults,

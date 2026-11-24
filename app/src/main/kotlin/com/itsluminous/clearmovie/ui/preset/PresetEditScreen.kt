@@ -152,6 +152,7 @@ fun PresetEditRoute(
         onWords = viewModel::setWords,
         onShape = viewModel::setShape,
         onRevertCaption = viewModel::revertStyle,
+        onRevertEffects = viewModel::revertEffects,
         onCaptionAnimation = viewModel::setCaptionAnimation,
         onPhotoAnimation = viewModel::setPhotoAnimation,
         onTransition = viewModel::setTransition,
@@ -202,6 +203,7 @@ fun PresetEditScreen(
     onCaptionAnimation: (AnimKind?) -> Unit = {},
     onPhotoAnimation: (AnimKind?) -> Unit = {},
     onTransition: (TransitionKind) -> Unit = {},
+    onRevertEffects: (EffectDefaults?) -> Unit = {},
 ) {
     // Captions are drawn for the preset's own shape (cm-aspect-ratio).
     CompositionLocalProvider(LocalCanvasShape provides ui.shape) {
@@ -220,6 +222,7 @@ fun PresetEditScreen(
             onCaptionAnimation,
             onPhotoAnimation,
             onTransition,
+            onRevertEffects,
         )
     }
 }
@@ -241,6 +244,7 @@ private fun PresetEditContent(
     onCaptionAnimation: (AnimKind?) -> Unit,
     onPhotoAnimation: (AnimKind?) -> Unit,
     onTransition: (TransitionKind) -> Unit,
+    onRevertEffects: (EffectDefaults?) -> Unit,
 ) {
     val definition = ui.definition
     val preset = ui.preset
@@ -249,6 +253,8 @@ private fun PresetEditContent(
     // The motion default being chosen (MotionChoice's name), null while none is.
     var motionOpen by rememberSaveable { mutableStateOf<String?>(null) }
     val motion = MotionChoice.entries.firstOrNull { it.name == motionOpen }
+    // The effect defaults draft as the motion choices found it, so their Cancel puts it back.
+    var motionOpenedEffects by rememberSaveable { mutableStateOf<String?>(null) }
     // The draft as the caption editor found it, so its Cancel puts it back.
     var openedStyle by rememberSaveable { mutableStateOf<String?>(null) }
     var openedWords by rememberSaveable { mutableStateOf<String?>(null) }
@@ -277,17 +283,15 @@ private fun PresetEditContent(
     }
 
     fun openMotion(choice: MotionChoice) {
-        openedEffects = ui.draftEffects?.let { ProjectCodec.json.encodeToString(EffectDefaults.serializer(), it) }
+        motionOpenedEffects = ui.draftEffects?.let { ProjectCodec.json.encodeToString(EffectDefaults.serializer(), it) }
         motionOpen = choice.name
     }
 
     // Cancel puts the effect defaults back as the choices found them; the caption draft stays as it is.
     fun closeMotion(cancel: Boolean) {
         if (cancel) {
-            onRevertCaption(
-                ui.draftStyle,
-                ui.draftWords,
-                openedEffects?.let {
+            onRevertEffects(
+                motionOpenedEffects?.let {
                     runCatching { ProjectCodec.json.decodeFromString(EffectDefaults.serializer(), it) }.getOrNull()
                 },
             )

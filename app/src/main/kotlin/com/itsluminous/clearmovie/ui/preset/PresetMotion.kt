@@ -46,6 +46,7 @@ import com.itsluminous.clearmovie.domain.model.MediaRef
 import com.itsluminous.clearmovie.domain.model.PhotoClip
 import com.itsluminous.clearmovie.domain.model.Transition
 import com.itsluminous.clearmovie.domain.model.TransitionKind
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.editor.AnimationChoices
 import com.itsluminous.clearmovie.ui.editor.PanelTitle
 import com.itsluminous.clearmovie.ui.editor.TransitionChoices
@@ -66,13 +67,18 @@ enum class MotionChoice { ANIMATION, TRANSITION }
 @Composable
 internal fun photoAnimationName(kind: AnimKind?): String = stringResource(kind?.let(::animationName) ?: R.string.effect_none)
 
-/** The full name of a default transition ("Crossfade", "Wipe, Left"); None for null. */
+/** The full name of a default transition with its length ("Crossfade, 0.6 s", "Wipe, Left, 0.6 s"); None for null. */
 @Composable
 internal fun defaultTransitionName(transition: Transition?): String {
-    val kind = transition?.kind ?: TransitionKind.NONE
-    val name = stringResource(transitionName(kind))
-    val direction = transitionDirection(kind) ?: return name
-    return stringResource(R.string.effect_tile_with_direction, name, stringResource(directionName(direction)))
+    transition ?: return stringResource(R.string.effect_none)
+    val name = stringResource(transitionName(transition.kind))
+    val named =
+        transitionDirection(transition.kind)?.let {
+            stringResource(R.string.effect_tile_with_direction, name, stringResource(directionName(it)))
+        } ?: name
+    val tenths = (transition.durationMs + 50) / 100
+    val length = stringResource(R.string.effect_seconds, (tenths / 10).toInt(), (tenths % 10).toInt())
+    return stringResource(R.string.effect_tile_with_direction, named, length)
 }
 
 /**
@@ -144,9 +150,15 @@ private fun MotionRow(
             modifier = Modifier.size(24.dp),
         )
         Spacer(Modifier.width(16.dp))
+        // As the files card's rows: the name, and what is chosen under it. Each shrinks before it wraps.
         Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            AutoSizeLabel(label, Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyLarge)
+            AutoSizeLabel(
+                value,
+                Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.width(8.dp))
         Icon(

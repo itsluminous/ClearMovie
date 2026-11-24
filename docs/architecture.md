@@ -338,10 +338,12 @@ lays it out for players:
   (cm-preset-motion-defaults): `effects.photoDuring`, the "all through"
   animation new photos get (None or a gentle zoom; videos have none), and
   `effects.mainTransition`, the transition at every junction a new item makes
-  (None or any kind, keeping the preset's length). Both choices show the
-  editor's own tiles (`AnimationChoices`, `TransitionChoices`) on sample
-  pictures. A project copies the preset's defaults when it is made, so a
-  later change to the preset reaches only videos made after it.
+  (None or any kind, keeping the preset's length, which the row shows). Both
+  choices show the editor's own tiles (`AnimationChoices`,
+  `TransitionChoices`) on sample pictures. New preset opens this editor right
+  after Create, so they are chosen there, as the caption style is. A project
+  copies the preset's defaults when it is made, so a later change to the
+  preset reaches only videos made after it.
 
 `LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. In the last
 1.5 s before one of its parts (the frame after the intro, the outgoing video of

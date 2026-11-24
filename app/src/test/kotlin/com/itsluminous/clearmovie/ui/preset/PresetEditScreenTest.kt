@@ -124,6 +124,7 @@ class PresetEditScreenTest {
                             val effects = ui.draftEffects ?: definition.preset.effects
                             ui = ui.copy(draftEffects = PresetEditViewModel.withTransition(effects, definition.preset.effects, kind))
                         },
+                        onRevertEffects = { ui = ui.copy(draftEffects = it) },
                     )
                 }
             }
@@ -257,7 +258,7 @@ class PresetEditScreenTest {
         // The preset's own: the template's gentle zoom and crossfade.
         compose.onNodeWithTag(PRESET_MOTION_TAG).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(s(R.string.anim_ken_burns_in)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(s(R.string.transition_crossfade)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(withLength(s(R.string.transition_crossfade))).performScrollTo().assertIsDisplayed()
         compose
             .onNodeWithTag(PRESET_ANIMATION_TAG)
             .performScrollTo()
@@ -297,12 +298,75 @@ class PresetEditScreenTest {
         // The preset's 0.6 s length is kept.
         assertThat(shownUi!!.transition).isEqualTo(Transition(TransitionKind.WIPE_LEFT, 600))
         val name = context.getString(R.string.effect_tile_with_direction, s(R.string.transition_wipe), s(R.string.direction_left))
-        compose.onNodeWithText(name).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(withLength(name)).performScrollTo().assertIsDisplayed()
         // A real change: leaving asks first, and Save hands it over.
         assertThat(PresetEditViewModel.changedPreset(own, shownUi!!, "Spasht Dhaara", "")!!.effects.mainTransition)
             .isEqualTo(Transition(TransitionKind.WIPE_LEFT, 600))
         compose.onNodeWithTag(PRESET_SAVE_TAG).performScrollTo().performClick()
         assertThat(calls.saved).isNotNull()
+    }
+
+    /** [name] with the preset's 0.6 s, as the transition row shows it. */
+    private fun withLength(name: String) =
+        context.getString(R.string.effect_tile_with_direction, name, context.getString(R.string.effect_seconds, 0, 6))
+
+    @Test
+    fun `None on the transition row, and Cancel of the motion choices leaves the caption draft as it was`() {
+        show(PresetDefinition(own, PresetDefinition.Source.USER))
+        // A caption change first, kept with Done.
+        compose.onNodeWithTag(PRESET_CAPTION_CHANGE_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(PRESET_WORDS_TAG).performTextReplacement("Shubh vivah")
+        compose.onNodeWithText(s(R.string.action_done)).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(PRESET_TRANSITION_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(transitionTileTag(TransitionKind.NONE)).performClick()
+        compose.waitForIdle()
+        assertThat(shownUi!!.transition).isNull()
+        compose.onNodeWithText(s(R.string.action_cancel)).performClick()
+        compose.waitForIdle()
+        assertThat(shownUi!!.transition).isEqualTo(own.effects.mainTransition)
+        assertThat(shownUi!!.draftWords).isEqualTo("Shubh vivah")
+        // None, kept: the row says None.
+        compose.onNodeWithTag(PRESET_TRANSITION_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(transitionTileTag(TransitionKind.NONE)).performClick()
+        compose.onNodeWithText(s(R.string.action_done)).performClick()
+        compose.waitForIdle()
+        assertThat(shownUi!!.transition).isNull()
+        assertThat(shownUi!!.draftWords).isEqualTo("Shubh vivah")
+        compose.onNodeWithTag(PRESET_TRANSITION_TAG).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.effect_none)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the motion choices stay open on the same choice across a rotation`() {
+        val restore = StateRestorationTester(compose)
+        var ui by mutableStateOf(PresetEditUi(definition = PresetDefinition(own, PresetDefinition.Source.USER), status = ready))
+        restore.setContent {
+            ClearMovieTheme(dynamicColor = false) {
+                PresetEditScreen(
+                    ui = ui,
+                    onName = {},
+                    onStyle = {},
+                    onWords = {},
+                    onRevertCaption = { _, _, _ -> },
+                    onFiles = {},
+                    onSave = { _, _ -> },
+                    onDelete = {},
+                    onBack = {},
+                    onDismissMessage = {},
+                    onTransition = { ui = ui.copy(draftEffects = PresetEditViewModel.withTransition(own.effects, own.effects, it)) },
+                    onRevertEffects = { ui = ui.copy(draftEffects = it) },
+                )
+            }
+        }
+        compose.onNodeWithTag(PRESET_TRANSITION_TAG).performScrollTo().performClick()
+        compose.onNodeWithTag(transitionTileTag(TransitionKind.CIRCLE)).performScrollTo().performClick()
+        restore.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag(transitionTileTag(TransitionKind.CIRCLE)).performScrollTo().assertIsSelected()
+        // Cancel after the rotation still puts back what the choices found.
+        compose.onNodeWithText(s(R.string.action_cancel)).performClick()
+        compose.waitForIdle()
+        assertThat(ui.transition).isEqualTo(own.effects.mainTransition)
     }
 
     @Test
