@@ -1,0 +1,66 @@
+{
+  "pack": "clearmovie-voice-pack",
+  "version": 1,
+  "files": [
+    {
+      "file": "voices.zip",
+      "part": "voices",
+      "bytes": 93591067,
+      "unpackedBytes": 148782857,
+      "entries": 6,
+      "sha256": "14d3a4e790076d063240807e91b85dea22cb41d2f16d8f68e1637e33921c26af"
+    },
+    {
+      "file": "speech-english.zip",
+      "part": "speech-en",
+      "bytes": 41140764,
+      "unpackedBytes": 70910417,
+      "entries": 16,
+      "sha256": "253a21b3df52b6222d9e7203d0a19f4cd19d0502116780353e3d486b66a6b9bb"
+    },
+    {
+      "file": "speech-hindi.zip",
+      "part": "speech-hi",
+      "bytes": 44378407,
+      "unpackedBytes": 82095613,
+      "entries": 16,
+      "sha256": "058d9ebf63e2e60b8b9e4d9d30af006f34869b7ee973fc8f287136604a9db1e8"
+    },
+    {
+      "file": "engine-arm64-v8a.zip",
+      "part": "engine",
+      "bytes": 13459288,
+      "unpackedBytes": 37691900,
+      "entries": 6,
+      "sha256": "403e487b654fbf2113dc87c045cacccec2ec1babaed059fff90ae9724b66744c",
+      "abi": "arm64-v8a"
+    },
+    {
+      "file": "engine-armeabi-v7a.zip",
+      "part": "engine",
+      "bytes": 12497311,
+      "unpackedBytes": 28268988,
+      "entries": 6,
+      "sha256": "96408e60d500554d1c5512771403c9618e695ef21f9666d49844075e9364aaf9",
+      "abi": "armeabi-v7a"
+    },
+    {
+      "file": "engine-x86.zip",
+      "part": "engine",
+      "bytes": 15152443,
+      "unpackedBytes": 43054180,
+      "entries": 6,
+      "sha256": "5587d7cd76605ad212158aefb57e71f2ae82aca2927a72247bac3bd2316e7087",
+      "abi": "x86"
+    },
+    {
+      "file": "engine-x86_64.zip",
+      "part": "engine",
+      "bytes": 14911381,
+      "unpackedBytes": 41842724,
+      "entries": 6,
+      "sha256": "c4884a5c35a60709b07e8f10300158791ce73d60d31f63b8e1fd9652381f34d9",
+      "abi": "x86_64"
+    }
+  ]
+}
