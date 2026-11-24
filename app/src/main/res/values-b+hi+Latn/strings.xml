@@ -592,6 +592,12 @@
     <string name="caption_reset">Preset jaisa karein</string>
     <string name="caption_box_description">Caption ka box. Caption khiskane ke liye ise kheenchein, ya size badalne ke liye iske kinare ya kone ka handle kheenchein.</string>
     <string name="preset_caption_animation_hint">Naya caption kaise aayega. Baad me har caption ke liye ise badal sakte hain.</string>
+    <string name="preset_motion_title">Animation aur transition</string>
+    <string name="preset_motion_body">Nayi photos ko yeh animation milega, aur nayi photos aur videos ke beech yeh transition. Editor me aap har ek ko baad me bhi badal sakte hain.</string>
+    <string name="preset_default_animation">Default animation</string>
+    <string name="preset_default_transition">Default transition</string>
+    <string name="preset_animation_hint">Har nayi photo dikhte samay kaise hilegi. Caption ka apna animation Caption ka style badlein me hai.</string>
+    <string name="preset_transition_hint">Har nayi photo ya video agle par kaise jaayega. Baad me har ek ke liye ise badal sakte hain.</string>
     <string name="caption_box_narrower">Box patla karein</string>
     <string name="caption_box_wider">Box chauda karein</string>
     <string name="caption_colour_choice">%1$s akshar</string>

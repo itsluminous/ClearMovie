@@ -584,6 +584,12 @@
     <string name="caption_reset">प्रीसेट जैसा करें</string>
     <string name="caption_box_description">कैप्शन का बॉक्स। कैप्शन खिसकाने के लिए इसे खींचें, या आकार बदलने के लिए इसके किनारे या कोने का हैंडल खींचें।</string>
     <string name="preset_caption_animation_hint">नया कैप्शन कैसे आएगा। बाद में हर कैप्शन के लिए इसे बदल सकते हैं।</string>
+    <string name="preset_motion_title">एनिमेशन और ट्रांज़िशन</string>
+    <string name="preset_motion_body">नई फ़ोटो को यह एनिमेशन मिलेगा, और नई फ़ोटो और वीडियो के बीच यह ट्रांज़िशन। एडिटर में आप हर एक को बाद में भी बदल सकते हैं।</string>
+    <string name="preset_default_animation">डिफ़ॉल्ट एनिमेशन</string>
+    <string name="preset_default_transition">डिफ़ॉल्ट ट्रांज़िशन</string>
+    <string name="preset_animation_hint">हर नई फ़ोटो दिखते समय कैसे हिलेगी। कैप्शन का अपना एनिमेशन कैप्शन का स्टाइल बदलें में है।</string>
+    <string name="preset_transition_hint">हर नई फ़ोटो या वीडियो अगले पर कैसे जाएगा। बाद में हर एक के लिए इसे बदल सकते हैं।</string>
     <string name="caption_box_narrower">बॉक्स पतला करें</string>
     <string name="caption_box_wider">बॉक्स चौड़ा करें</string>
     <string name="caption_colour_choice">%1$s अक्षर</string>

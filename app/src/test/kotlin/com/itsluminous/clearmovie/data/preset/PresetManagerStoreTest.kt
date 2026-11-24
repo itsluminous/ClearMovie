@@ -11,6 +11,7 @@ import com.itsluminous.clearmovie.data.db.ProjectEntity
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.media.MediaCopier
 import com.itsluminous.clearmovie.data.media.MediaStoreGateway
+import com.itsluminous.clearmovie.domain.model.AnimKind
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.EndingKind
@@ -20,6 +21,8 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.ProjectId
+import com.itsluminous.clearmovie.domain.model.Transition
+import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.testing.FakeMediaProvider
 import com.itsluminous.clearmovie.testing.FakeOtherAppProvider
@@ -313,6 +316,35 @@ class PresetManagerStoreTest {
             assertThat(project.captionDefaultText).isEqualTo(LocalizedText.same("पहला"))
             store.save(first.copy(caption = first.caption.copy(sizePx = 100)))
             assertThat(project.captionDefaults.sizePx).isEqualTo(first.caption.sizePx)
+        }
+
+    @Test
+    fun `a preset's default animation and transition are saved, and only videos made after take them`() =
+        runBlocking<Unit> {
+            val id = store.create("Mine", PresetParts())!!
+            bindAll(id)
+            val first = store.definition(id)!!.preset
+            // A new preset starts with the template's gentle zoom and crossfade.
+            assertThat(first.effects.photoDuring).isEqualTo(AnimKind.KEN_BURNS_IN)
+            assertThat(first.effects.mainTransition?.kind).isEqualTo(TransitionKind.CROSSFADE)
+            val before = ProjectFactory.fromPreset(ProjectId("p"), store.effectivePreset(id)!!, store.presetMedia(id))
+            val chosen =
+                first.effects.copy(
+                    photoDuring = AnimKind.KEN_BURNS_OUT,
+                    mainTransition = Transition(TransitionKind.WIPE_LEFT, 600),
+                )
+            assertThat(store.save(first.copy(effects = chosen))).isInstanceOf(PresetSaveResult.Saved::class.java)
+            assertThat(store.definition(id)!!.preset.effects).isEqualTo(chosen)
+            val after = ProjectFactory.fromPreset(ProjectId("q"), store.effectivePreset(id)!!, store.presetMedia(id))
+            assertThat(after.effectDefaults).isEqualTo(chosen)
+            assertThat(before.effectDefaults).isEqualTo(first.effects)
+            // None for both is stored as none.
+            val still = chosen.copy(photoDuring = null, mainTransition = null)
+            store.save(first.copy(effects = still))
+            assertThat(store.definition(id)!!.preset.effects).isEqualTo(still)
+            // A value the parser would refuse never reaches the disk.
+            assertThat(store.save(first.copy(effects = still.copy(photoDuring = AnimKind.FADE_IN)))).isEqualTo(PresetSaveResult.Invalid)
+            assertThat(store.definition(id)!!.preset.effects).isEqualTo(still)
         }
 
     @Test

@@ -23,6 +23,8 @@ import com.itsluminous.clearmovie.domain.model.PresetParser
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectCodec
 import com.itsluminous.clearmovie.domain.model.TextRules
+import com.itsluminous.clearmovie.domain.model.Transition
+import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.ui.frame.keyedPicture
 import com.itsluminous.clearmovie.ui.navigation.Routes
@@ -51,7 +53,10 @@ data class PresetEditUi(
     val draftName: String? = null,
     val draftStyle: CaptionStyle? = null,
     val draftWords: String? = null,
-    /** The effect defaults with a new start animation for new captions (cm-caption-box), null while unchanged. */
+    /**
+     * The effect defaults with a new start animation for new captions (cm-caption-box), a new animation
+     * for new photos or a new transition between items (cm-preset-motion-defaults); null while unchanged.
+     */
     val draftEffects: EffectDefaults? = null,
     /** A new shape (cm-aspect-ratio), for a preset the user made that no video uses yet. */
     val draftShape: CanvasShape? = null,
@@ -69,6 +74,12 @@ data class PresetEditUi(
 
     /** The animation a new caption starts with: the draft's, else the preset's (null is none). */
     val captionAnimation: AnimKind? get() = (draftEffects ?: preset?.effects)?.textStart
+
+    /** The animation a new photo gets all through (a gentle zoom): the draft's, else the preset's (null is none). */
+    val photoAnimation: AnimKind? get() = (draftEffects ?: preset?.effects)?.photoDuring
+
+    /** The transition new items get between them: the draft's, else the preset's (null is none). */
+    val transition: Transition? get() = (draftEffects ?: preset?.effects)?.mainTransition
 
     /** The shape shown: the draft's, else the preset's. */
     val shape: CanvasShape get() = draftShape ?: preset?.shape ?: CanvasShape.LANDSCAPE
@@ -103,7 +114,9 @@ sealed interface PresetEditEvent {
 
 /**
  * Editing a preset (cm-preset-manager): its name, the words and style a new
- * caption starts with, and (on the setup screen) its files. Changes are a
+ * caption starts with, the animation new photos get and the transition
+ * between new items (cm-preset-motion-defaults), and (on the setup screen)
+ * its files. Changes are a
  * draft, kept across rotation and the system closing the app, until Save.
  * Any preset can be deleted; the videos made from it keep working.
  */
@@ -184,6 +197,20 @@ class PresetEditViewModel
             val ui = uiState.value
             val effects = (ui.draftEffects ?: ui.preset?.effects ?: return).copy(textStart = kind)
             setEffects(effects)
+        }
+
+        /** The animation a new photo gets all through ([kind] null for none): only the ones a photo may have there. */
+        fun setPhotoAnimation(kind: AnimKind?) {
+            val ui = uiState.value
+            val effects = ui.draftEffects ?: ui.preset?.effects ?: return
+            withPhotoAnimation(effects, kind)?.let(::setEffects)
+        }
+
+        /** The transition new items get between them ([TransitionKind.NONE] for none), at [withTransition]'s length. */
+        fun setTransition(kind: TransitionKind) {
+            val ui = uiState.value
+            val preset = ui.preset ?: return
+            setEffects(withTransition(ui.draftEffects ?: preset.effects, preset.effects, kind))
         }
 
         private fun setEffects(effects: EffectDefaults?) {
@@ -315,6 +342,31 @@ class PresetEditViewModel
 
             private fun decodeEffects(text: String): EffectDefaults? =
                 runCatching { ProjectCodec.json.decodeFromString(EffectDefaults.serializer(), text) }.getOrNull()
+
+            /**
+             * [effects] with [kind] as the animation new photos get all through, or null when a photo
+             * cannot have it there (a start or end animation, or one for text).
+             */
+            fun withPhotoAnimation(
+                effects: EffectDefaults,
+                kind: AnimKind?,
+            ): EffectDefaults? =
+                if (kind != null && (AnimSlot.DURING !in kind.slots || kind.textOnly)) null else effects.copy(photoDuring = kind)
+
+            /**
+             * [effects] with [kind] as the transition between new items ([TransitionKind.NONE] for none).
+             * It keeps the length of the transition chosen so far, else of the one the preset has [saved]
+             * (so None and back keeps it), else the editor's usual length for a new transition.
+             */
+            fun withTransition(
+                effects: EffectDefaults,
+                saved: EffectDefaults,
+                kind: TransitionKind,
+            ): EffectDefaults {
+                if (kind == TransitionKind.NONE) return effects.copy(mainTransition = null)
+                val length = effects.mainTransition?.durationMs ?: saved.mainTransition?.durationMs ?: Transition.DEFAULT_MS
+                return effects.copy(mainTransition = Transition(kind, length))
+            }
 
             /** A name the preset can carry: one line that shows something, at most [PresetParser.MAX_DISPLAY_NAME] long. */
             fun isUsableName(name: String): Boolean {

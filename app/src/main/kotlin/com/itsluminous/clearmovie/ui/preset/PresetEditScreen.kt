@@ -87,6 +87,7 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectCodec
 import com.itsluminous.clearmovie.domain.model.TextClip
+import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.editor.AnimationChoices
@@ -152,6 +153,8 @@ fun PresetEditRoute(
         onShape = viewModel::setShape,
         onRevertCaption = viewModel::revertStyle,
         onCaptionAnimation = viewModel::setCaptionAnimation,
+        onPhotoAnimation = viewModel::setPhotoAnimation,
+        onTransition = viewModel::setTransition,
         onFiles = { onFiles(viewModel.presetId) },
         onSave = viewModel::save,
         onDelete = viewModel::delete,
@@ -173,7 +176,9 @@ private fun shownWords(preset: Preset): String {
 /**
  * The preset editor (cm-preset-manager): the name, the captions (a picture
  * of the frame with a new caption on it, and Change caption style), the
- * files (opening setup), and Save. Every preset has Delete in the top bar
+ * animation new photos get and the transition between new items, each
+ * opening its choices (cm-preset-motion-defaults), the files (opening
+ * setup), and Save. Every preset has Delete in the top bar
  * (its videos keep working). Change caption
  * style turns the screen into the caption editor's tabs over the same
  * picture, with Cancel and Done. In two panes the picture sits on the left.
@@ -195,6 +200,8 @@ fun PresetEditScreen(
     onDismissMessage: () -> Unit,
     onShape: (CanvasShape) -> Unit = {},
     onCaptionAnimation: (AnimKind?) -> Unit = {},
+    onPhotoAnimation: (AnimKind?) -> Unit = {},
+    onTransition: (TransitionKind) -> Unit = {},
 ) {
     // Captions are drawn for the preset's own shape (cm-aspect-ratio).
     CompositionLocalProvider(LocalCanvasShape provides ui.shape) {
@@ -211,6 +218,8 @@ fun PresetEditScreen(
             onDismissMessage,
             onShape,
             onCaptionAnimation,
+            onPhotoAnimation,
+            onTransition,
         )
     }
 }
@@ -230,11 +239,16 @@ private fun PresetEditContent(
     onDismissMessage: () -> Unit,
     onShape: (CanvasShape) -> Unit,
     onCaptionAnimation: (AnimKind?) -> Unit,
+    onPhotoAnimation: (AnimKind?) -> Unit,
+    onTransition: (TransitionKind) -> Unit,
 ) {
     val definition = ui.definition
     val preset = ui.preset
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     var captionOpen by rememberSaveable { mutableStateOf(false) }
+    // The motion default being chosen (MotionChoice's name), null while none is.
+    var motionOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    val motion = MotionChoice.entries.firstOrNull { it.name == motionOpen }
     // The draft as the caption editor found it, so its Cancel puts it back.
     var openedStyle by rememberSaveable { mutableStateOf<String?>(null) }
     var openedWords by rememberSaveable { mutableStateOf<String?>(null) }
@@ -261,8 +275,28 @@ private fun PresetEditContent(
         }
         captionOpen = false
     }
+
+    fun openMotion(choice: MotionChoice) {
+        openedEffects = ui.draftEffects?.let { ProjectCodec.json.encodeToString(EffectDefaults.serializer(), it) }
+        motionOpen = choice.name
+    }
+
+    // Cancel puts the effect defaults back as the choices found them; the caption draft stays as it is.
+    fun closeMotion(cancel: Boolean) {
+        if (cancel) {
+            onRevertCaption(
+                ui.draftStyle,
+                ui.draftWords,
+                openedEffects?.let {
+                    runCatching { ProjectCodec.json.decodeFromString(EffectDefaults.serializer(), it) }.getOrNull()
+                },
+            )
+        }
+        motionOpen = null
+    }
     BackHandler(enabled = captionOpen) { closeCaption(cancel = true) }
-    BackHandler(enabled = !captionOpen && dirty) { dialog = DIALOG_DISCARD }
+    BackHandler(enabled = motion != null) { closeMotion(cancel = true) }
+    BackHandler(enabled = !captionOpen && motion == null && dirty) { dialog = DIALOG_DISCARD }
 
     val snackbar = remember { SnackbarHostState() }
     val resources = LocalResources.current
@@ -283,6 +317,8 @@ private fun PresetEditContent(
                     IconButton(onClick = {
                         if (captionOpen) {
                             closeCaption(cancel = true)
+                        } else if (motion != null) {
+                            closeMotion(cancel = true)
                         } else if (dirty) {
                             dialog = DIALOG_DISCARD
                         } else {
@@ -293,7 +329,7 @@ private fun PresetEditContent(
                     }
                 },
                 actions = {
-                    if (definition != null && !captionOpen) {
+                    if (definition != null && !captionOpen && motion == null) {
                         IconButton(
                             onClick = { dialog = DIALOG_DELETE },
                             enabled = !ui.busy,
@@ -371,6 +407,25 @@ private fun PresetEditContent(
                 }
                 return@AdaptiveScreen
             }
+            if (motion != null) {
+                Column(
+                    Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Column(Modifier.widthIn(max = 640.dp)) {
+                        MotionEditor(
+                            choice = motion,
+                            animation = ui.photoAnimation,
+                            transition = ui.transition,
+                            onAnimation = onPhotoAnimation,
+                            onTransition = onTransition,
+                            onCancel = { closeMotion(cancel = true) },
+                            onDone = { closeMotion(cancel = false) },
+                        )
+                    }
+                }
+                return@AdaptiveScreen
+            }
             val nameField: @Composable () -> Unit = {
                 OutlinedTextField(
                     value = name,
@@ -408,6 +463,7 @@ private fun PresetEditContent(
                     )
                 }
             }
+            val motionCard: @Composable () -> Unit = { MotionCard(ui.photoAnimation, ui.transition, ::openMotion) }
             val files: @Composable () -> Unit = { FilesCard(ui.status, onFiles) }
             val save: @Composable () -> Unit = {
                 Button(
@@ -429,6 +485,7 @@ private fun PresetEditContent(
                         nameField()
                         shapeCard()
                         CaptionsCard(preview = null, onChange = openCaption)
+                        motionCard()
                         files()
                         save()
                     }
@@ -446,6 +503,7 @@ private fun PresetEditContent(
                         nameField()
                         shapeCard()
                         captions()
+                        motionCard()
                         files()
                         save()
                     }

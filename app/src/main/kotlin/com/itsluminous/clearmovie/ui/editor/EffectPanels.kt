@@ -262,8 +262,32 @@ internal fun TransitionPanel(
     }
     val pictures =
         junctionPictures(slot, next, thumbnail, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.primaryContainer)
+    TransitionTiles(current?.kind ?: TransitionKind.NONE, pictures, ::choose)
+}
+
+/**
+ * The transition tiles on two sample pictures ([outgoing] under [incoming], each a plain colour
+ * while null): the Transition panel's own groups and tiles, for a preset's default transition
+ * (cm-preset-motion-defaults). [chosen] is outlined.
+ */
+@Composable
+internal fun TransitionChoices(
+    chosen: TransitionKind,
+    outgoing: ImageBitmap?,
+    incoming: ImageBitmap?,
+    onChoose: (TransitionKind) -> Unit,
+) {
+    val colours = MaterialTheme.colorScheme
+    TransitionTiles(chosen, TilePicture(outgoing, colours.outlineVariant) to TilePicture(incoming, colours.primaryContainer), onChoose)
+}
+
+@Composable
+private fun TransitionTiles(
+    chosen: TransitionKind,
+    pictures: Pair<TilePicture, TilePicture>,
+    onChoose: (TransitionKind) -> Unit,
+) {
     val clock = tileClock()
-    val chosen = current?.kind ?: TransitionKind.NONE
     for (g in TransitionGroup.entries) {
         val heading = stringResource(g.label)
         GroupHeading(heading)
@@ -281,7 +305,7 @@ internal fun TransitionPanel(
                     },
                 selected = chosen == tile.kind,
                 tag = transitionTileTag(tile.kind),
-                onClick = { choose(tile.kind) },
+                onClick = { onChoose(tile.kind) },
             ) { transitionTileFrame(tile.kind, clock.longValue, pictures) }
         }
     }

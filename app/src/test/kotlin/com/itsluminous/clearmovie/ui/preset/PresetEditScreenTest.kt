@@ -35,12 +35,15 @@ import com.itsluminous.clearmovie.domain.model.LocalizedText
 import com.itsluminous.clearmovie.domain.model.Preset
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
+import com.itsluminous.clearmovie.domain.model.Transition
+import com.itsluminous.clearmovie.domain.model.TransitionKind
 import com.itsluminous.clearmovie.testing.AtSize
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.components.shapeOptionTag
 import com.itsluminous.clearmovie.ui.editor.CaptionTab
 import com.itsluminous.clearmovie.ui.editor.animationTileTag
 import com.itsluminous.clearmovie.ui.editor.captionTabTag
+import com.itsluminous.clearmovie.ui.editor.transitionTileTag
 import com.itsluminous.clearmovie.ui.theme.ClearMovieTheme
 import org.junit.Rule
 import org.junit.Test
@@ -72,6 +75,8 @@ class PresetEditScreenTest {
         var style: CaptionStyle? = null
         var words: String? = null
         var animation: AnimKind? = AnimKind.ZOOM_OUT
+        var photoAnimation: AnimKind? = AnimKind.ZOOM_OUT
+        var transition: TransitionKind? = null
     }
 
     private fun show(
@@ -106,6 +111,18 @@ class PresetEditScreenTest {
                         onCaptionAnimation = {
                             calls.animation = it
                             ui = ui.copy(draftEffects = (ui.draftEffects ?: definition.preset.effects).copy(textStart = it))
+                        },
+                        // As the view model does (cm-preset-motion-defaults).
+                        onPhotoAnimation = { kind ->
+                            calls.photoAnimation = kind
+                            PresetEditViewModel
+                                .withPhotoAnimation(ui.draftEffects ?: definition.preset.effects, kind)
+                                ?.let { ui = ui.copy(draftEffects = it) }
+                        },
+                        onTransition = { kind ->
+                            calls.transition = kind
+                            val effects = ui.draftEffects ?: definition.preset.effects
+                            ui = ui.copy(draftEffects = PresetEditViewModel.withTransition(effects, definition.preset.effects, kind))
                         },
                     )
                 }
@@ -232,6 +249,98 @@ class PresetEditScreenTest {
         assertThat(shownUi!!.captionAnimation).isEqualTo(AnimKind.FADE_IN)
         compose.onNodeWithContentDescription(s(R.string.action_back)).performClick()
         assertThat(calls.back).isEqualTo(1)
+    }
+
+    @Test
+    fun `the motion card shows what new items get, and the animation choices set it, None included, until Cancel`() {
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
+        // The preset's own: the template's gentle zoom and crossfade.
+        compose.onNodeWithTag(PRESET_MOTION_TAG).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.anim_ken_burns_in)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.transition_crossfade)).performScrollTo().assertIsDisplayed()
+        compose
+            .onNodeWithTag(PRESET_ANIMATION_TAG)
+            .performScrollTo()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        compose.onNodeWithText(s(R.string.preset_animation_hint)).assertIsDisplayed()
+        // Only what a photo may have all through: None and the two gentle zooms, the preset's marked.
+        compose.onNodeWithTag(animationTileTag(AnimSlot.DURING, AnimKind.KEN_BURNS_IN)).assertIsSelected()
+        compose.onNodeWithTag(animationTileTag(AnimSlot.DURING, AnimKind.PULSE)).assertDoesNotExist()
+        compose.onNodeWithTag(animationTileTag(AnimSlot.START, AnimKind.FADE_IN)).assertDoesNotExist()
+        compose.onNodeWithTag(animationTileTag(AnimSlot.DURING, AnimKind.KEN_BURNS_OUT)).performClick()
+        assertThat(calls.photoAnimation).isEqualTo(AnimKind.KEN_BURNS_OUT)
+        compose.waitForIdle()
+        assertThat(shownUi!!.photoAnimation).isEqualTo(AnimKind.KEN_BURNS_OUT)
+        compose.onNodeWithTag(animationTileTag(AnimSlot.DURING, null)).performClick()
+        compose.waitForIdle()
+        assertThat(shownUi!!.photoAnimation).isNull()
+        // Cancel: the preset's own again, the card shows it, and there is nothing to save.
+        compose.onNodeWithText(s(R.string.action_cancel)).performClick()
+        compose.waitForIdle()
+        assertThat(shownUi!!.photoAnimation).isEqualTo(AnimKind.KEN_BURNS_IN)
+        compose.onNodeWithTag(PRESET_MOTION_TAG).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription(s(R.string.action_back)).performClick()
+        assertThat(calls.back).isEqualTo(1)
+    }
+
+    @Test
+    fun `the transition choices set the default transition, Done keeps it on the card, and Save stores it`() {
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
+        compose.onNodeWithTag(PRESET_TRANSITION_TAG).performScrollTo().performClick()
+        compose.onNodeWithText(s(R.string.preset_transition_hint)).assertIsDisplayed()
+        compose.onNodeWithTag(transitionTileTag(TransitionKind.CROSSFADE)).assertIsSelected()
+        compose.onNodeWithTag(transitionTileTag(TransitionKind.WIPE_LEFT)).performScrollTo().performClick()
+        assertThat(calls.transition).isEqualTo(TransitionKind.WIPE_LEFT)
+        compose.onNodeWithText(s(R.string.action_done)).performClick()
+        compose.waitForIdle()
+        // The preset's 0.6 s length is kept.
+        assertThat(shownUi!!.transition).isEqualTo(Transition(TransitionKind.WIPE_LEFT, 600))
+        val name = context.getString(R.string.effect_tile_with_direction, s(R.string.transition_wipe), s(R.string.direction_left))
+        compose.onNodeWithText(name).performScrollTo().assertIsDisplayed()
+        // A real change: leaving asks first, and Save hands it over.
+        assertThat(PresetEditViewModel.changedPreset(own, shownUi!!, "Spasht Dhaara", "")!!.effects.mainTransition)
+            .isEqualTo(Transition(TransitionKind.WIPE_LEFT, 600))
+        compose.onNodeWithTag(PRESET_SAVE_TAG).performScrollTo().performClick()
+        assertThat(calls.saved).isNotNull()
+    }
+
+    @Test
+    fun `the motion rows and their choices fit at font scale 2 on a phone`() = motionFits(ScreenSize.COMPACT, 2f)
+
+    @Test
+    fun `the motion rows and their choices fit in two panes`() = motionFits(ScreenSize.MEDIUM, 1f)
+
+    private fun motionFits(
+        size: ScreenSize,
+        scale: Float,
+    ) {
+        show(PresetDefinition(own, PresetDefinition.Source.USER), size, scale)
+        inSight(PRESET_ANIMATION_TAG).assertHeightIsAtLeast(48.dp)
+        inSight(PRESET_TRANSITION_TAG).assertHeightIsAtLeast(48.dp).performClick()
+        inSight(transitionTileTag(TransitionKind.ZOOM_IN)).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.action_cancel)).performClick()
+        inSight(PRESET_ANIMATION_TAG).performClick()
+        inSight(animationTileTag(AnimSlot.DURING, AnimKind.KEN_BURNS_OUT)).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a default photo animation must suit a photo all through, and a transition keeps its length through None`() {
+        val effects = own.effects
+        assertThat(PresetEditViewModel.withPhotoAnimation(effects, AnimKind.FADE_IN)).isNull()
+        assertThat(PresetEditViewModel.withPhotoAnimation(effects, AnimKind.PULSE)).isNull()
+        assertThat(PresetEditViewModel.withPhotoAnimation(effects, null)!!.photoDuring).isNull()
+        assertThat(PresetEditViewModel.withPhotoAnimation(effects, AnimKind.KEN_BURNS_OUT)!!.photoDuring).isEqualTo(AnimKind.KEN_BURNS_OUT)
+        // Only the photo animation changes.
+        assertThat(PresetEditViewModel.withPhotoAnimation(effects, null)!!.copy(photoDuring = effects.photoDuring)).isEqualTo(effects)
+        val none = PresetEditViewModel.withTransition(effects, effects, TransitionKind.NONE)
+        assertThat(none.mainTransition).isNull()
+        // None and back: the preset's own length.
+        assertThat(PresetEditViewModel.withTransition(none, effects, TransitionKind.SLIDE_UP).mainTransition)
+            .isEqualTo(Transition(TransitionKind.SLIDE_UP, effects.mainTransition!!.durationMs))
+        // A preset without one gets the editor's usual length.
+        assertThat(PresetEditViewModel.withTransition(EffectDefaults(), EffectDefaults(), TransitionKind.CIRCLE).mainTransition)
+            .isEqualTo(Transition(TransitionKind.CIRCLE, Transition.DEFAULT_MS))
     }
 
     @Test
