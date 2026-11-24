@@ -40,6 +40,13 @@ class VoiceRulesTest {
         assertThat(parts.size).isGreaterThan(1)
         assertThat(parts.all { it.text.length <= Limits.MAX_TEXT_LENGTH }).isTrue()
         assertThat(parts.joinToString(" ") { it.text }).isEqualTo(long)
+        // Never more phrases than an item may store.
+        val many = Phrases.fromTyped((1..1500).joinToString(" ") { "Yes." })
+        assertThat(many.size).isAtMost(com.itsluminous.clearmovie.domain.model.VoiceOver.MAX_PHRASES)
+        assertThat(many.sumOf { it.text.split(' ').size }).isEqualTo(1500)
+        val heard = Phrases.fromWords((0 until 1200).map { w("w", it * 1000L, it * 1000L + 200) })
+        assertThat(heard.size).isAtMost(com.itsluminous.clearmovie.domain.model.VoiceOver.MAX_PHRASES)
+        assertThat(heard.first().startMs).isEqualTo(0)
     }
 
     @Test

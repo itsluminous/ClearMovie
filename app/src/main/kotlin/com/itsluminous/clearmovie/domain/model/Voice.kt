@@ -203,6 +203,26 @@ private fun Project.replaceClip(clip: AudioClip): Project {
     return withTrackClips(track.id, track.clips.map { if (it.id == clip.id) clip else it }).normalized()
 }
 
+/**
+ * Spoken items that name a voice but have no voice file (an earlier build
+ * stored that while a voice was being made) as words waiting for a voice:
+ * they play their recording, as they did. Everything else is unchanged.
+ */
+internal fun Project.withVoicesThatPlay(): Project {
+    fun fixed(c: Clip): Clip {
+        val o = (c as? AudioClip)?.voiceOver ?: return c
+        return if (o.source == WordsSource.SPOKEN && o.voice != VoiceChoice.NONE &&
+            o.generated == null
+        ) {
+            c.copy(voiceOver = o.copy(voice = VoiceChoice.NONE))
+        } else {
+            c
+        }
+    }
+    if (tracks.none { t -> t.clips.any { fixed(it) !== it } }) return this
+    return copy(tracks = tracks.map { t -> t.copy(clips = t.clips.map(::fixed)) })
+}
+
 /** Why a [VoiceOver] read from storage is not valid, or null when it is. */
 internal fun VoiceOver.problem(clip: AudioClip): String? =
     when {

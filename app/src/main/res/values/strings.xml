@@ -779,4 +779,6 @@
     <string name="voice_too_long">This item is too long for another voice. Split it into parts of 10 minutes or less.</string>
     <string name="settings_storage_voice_pack">Voice pack: %1$s</string>
     <string name="settings_remove_voice_pack">Remove</string>
+    <string name="settings_remove_voice_pack_title">Remove the voice pack?</string>
+    <string name="settings_remove_voice_pack_body">This frees %1$s. Voices you already made stay in your videos. To make new ones, add the pack again.</string>
 </resources>

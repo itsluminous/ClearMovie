@@ -49,6 +49,9 @@ interface VoiceTools {
     /** Whether the pack's engine loaded on this phone: null until it was tried (after the pack was added). */
     val engineWorks: Boolean? get() = null
 
+    /** Loads the pack's engine now; false when this phone cannot run it. */
+    fun checkEngine(): Boolean = engineWorks != false
+
     /** The pack files still to add to voice words, and to recognize speech in [speech]. */
     fun missing(speech: SpokenLanguage?): List<VoicePackFile>
 
@@ -142,11 +145,20 @@ class PackVoiceTools(
     override fun addPackFiles(
         sources: List<() -> InputStream?>,
         progress: (Float) -> Unit,
-    ) = synchronized(this) { store.add(sources, progress) }
+    ) = synchronized(this) {
+        lexiconCache = null
+        store.add(sources, progress)
+    }
 
     override fun packBytes() = store.bytesOnDisk()
 
-    override fun removePack() = synchronized(this) { store.remove() }
+    override fun removePack() =
+        synchronized(this) {
+            store.remove()
+            lexiconCache = null
+        }
+
+    override fun checkEngine(): Boolean = synchronized(this) { store.missing(null).isEmpty() && engine.load() }
 
     override fun recognize(
         projectId: ProjectId,

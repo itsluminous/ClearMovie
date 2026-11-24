@@ -16,13 +16,16 @@ import com.itsluminous.clearmovie.domain.model.SpokenLanguage
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
 import com.itsluminous.clearmovie.domain.model.VoiceChoice
+import com.itsluminous.clearmovie.domain.model.VoiceOver
 import com.itsluminous.clearmovie.domain.model.VoicePhrase
 import com.itsluminous.clearmovie.domain.model.VoiceRecordingFiles
+import com.itsluminous.clearmovie.domain.model.WordsSource
 import com.itsluminous.clearmovie.domain.model.addRecording
 import com.itsluminous.clearmovie.domain.model.addRow
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.playedMedia
 import com.itsluminous.clearmovie.domain.model.recordingClip
+import com.itsluminous.clearmovie.domain.model.setVoiceOver
 import com.itsluminous.clearmovie.domain.model.setVolume
 import com.itsluminous.clearmovie.domain.model.validate
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
@@ -49,6 +52,7 @@ class VoiceChoiceControllerTest {
     ) : VoiceTools {
         val release = CountDownLatch(1)
         var missing: List<VoicePackFile> = emptyList()
+        var speakFails: Exception? = null
         override val manifest =
             VoicePackManifest(VoicePackManifest.NAME, 1, listOf(VoicePackFile("voices.zip", VoicePackFile.VOICES, 1, 1, 1, "a".repeat(64))))
         override val supported = true
@@ -83,6 +87,7 @@ class VoiceChoiceControllerTest {
             progress: (Float) -> Unit,
         ): SpokenVoice {
             release.await(10, TimeUnit.SECONDS)
+            speakFails?.let { throw it }
             return SpokenVoice(made, phrases, lengthMs ?: 1000, emptyList())
         }
     }
@@ -103,17 +108,21 @@ class VoiceChoiceControllerTest {
             ProjectId("p"),
             project = { project },
             edit = { change ->
-                project = project.change()
+                synchronized(this) { project = project.change() }
                 true
             },
-            onNote = { notes += it },
-            onCheckWords = { checked += it },
+            onNote = { synchronized(this) { notes += it } },
+            onCheckWords = { synchronized(this) { checked += it } },
             onInserted = {},
+            worker = Dispatchers.IO,
+            io = Dispatchers.Unconfined,
         )
 
     private fun rec() = project.clip(ClipId("rec")) as AudioClip
 
-    private fun waitIdle(c: VoiceChoiceController) = runBlocking { withTimeout(10_000) { while (c.work.value != null) Thread.sleep(10) } }
+    /** Waits until [done] holds (the job's result lands after its work state clears). */
+    private fun waitFor(done: () -> Boolean) =
+        runBlocking { withTimeout(10_000) { while (!synchronized(this@VoiceChoiceControllerTest) { done() }) Thread.sleep(10) } }
 
     @Test
     fun `a voice made while the item changed is not put in`() {
@@ -122,11 +131,10 @@ class VoiceChoiceControllerTest {
         c.makeVoice(ClipId("rec"), words, VoiceChoice.BRITISH_MALE, SpokenLanguage.ENGLISH)
         assertThat(c.work.value).isInstanceOf(VoiceWork.Voicing::class.java)
         // An edit (or an undo) meanwhile.
-        project = project.setVolume(ClipId("rec"), -6.0)
+        project = project.setVoiceOver(ClipId("rec"), VoiceOver(VoiceChoice.NONE, SpokenLanguage.ENGLISH, WordsSource.SPOKEN, emptyList()))
         tools.release.countDown()
-        waitIdle(c)
-        assertThat(rec().voiceOver).isNull()
-        assertThat(notes).contains(VoiceNote.CHANGED_MEANWHILE)
+        waitFor { VoiceNote.CHANGED_MEANWHILE in notes }
+        assertThat(rec().voiceOver?.generated).isNull()
     }
 
     @Test
@@ -134,9 +142,12 @@ class VoiceChoiceControllerTest {
         val tools = FakeTools(words, made)
         tools.release.countDown()
         val c = controller(tools)
+        // A volume change meanwhile does not matter: the voice depends on the file and the words.
         c.makeVoice(ClipId("rec"), words, VoiceChoice.INDIAN_FEMALE, SpokenLanguage.ENGLISH)
-        waitIdle(c)
+        project = project.setVolume(ClipId("rec"), -6.0)
+        waitFor { rec().voiceOver?.generated != null }
         assertThat(rec().playedMedia).isEqualTo(made)
+        assertThat(rec().volumeDb).isEqualTo(-6.0)
         assertThat(rec().media).isEqualTo(recording)
         c.makeVoice(ClipId("rec"), words, VoiceChoice.NONE, SpokenLanguage.ENGLISH)
         assertThat(rec().playedMedia).isEqualTo(recording)
@@ -150,8 +161,9 @@ class VoiceChoiceControllerTest {
         val c = controller(tools)
         c.choose(VoiceChoice.BRITISH_FEMALE)
         c.afterRecording(ClipId("rec"))
-        waitIdle(c)
+        waitFor { checked.isNotEmpty() }
         assertThat(rec().voiceOver?.phrases).isEqualTo(words)
+        assertThat(c.pendingVoice(ClipId("rec"))).isEqualTo(VoiceChoice.BRITISH_FEMALE)
         assertThat(rec().voiceOver?.voice).isEqualTo(VoiceChoice.NONE)
         assertThat(rec().playedMedia).isEqualTo(recording)
         assertThat(checked).containsExactly(ClipId("rec"))
@@ -179,8 +191,23 @@ class VoiceChoiceControllerTest {
         c.speakIn(SpokenLanguage.HINDI)
         assertThat(c.choice.value).isEqualTo(VoiceChoice.INDIAN_MALE)
         assertThat(c.available).isTrue()
-        tools.engineWorks = false
+    }
+
+    @Test
+    fun `an engine that does not load turns the choice off and says so`() {
+        val tools = FakeTools(words, made)
+        tools.speakFails =
+            com.itsluminous.clearmovie.data.voice
+                .VoiceFailure(com.itsluminous.clearmovie.data.voice.VoiceFailure.Reason.NO_ENGINE)
+        tools.release.countDown()
+        val c = controller(tools)
+        c.choose(VoiceChoice.BRITISH_MALE)
+        c.makeVoice(ClipId("rec"), words, VoiceChoice.BRITISH_MALE, SpokenLanguage.ENGLISH)
+        waitFor { VoiceNote.NOT_ON_THIS_PHONE in notes }
         assertThat(c.available).isFalse()
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.NONE)
         assertThat(c.askForPack(null)).isFalse()
+        c.choose(VoiceChoice.BRITISH_MALE)
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.NONE)
     }
 }

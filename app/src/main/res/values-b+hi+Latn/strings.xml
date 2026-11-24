@@ -734,4 +734,6 @@
     <string name="voice_too_long">Yeh item doosre swar ke liye bahut lamba hai. Ise 10 minute ya usse chhote hisson mein baantein.</string>
     <string name="settings_storage_voice_pack">Awaaz pack: %1$s</string>
     <string name="settings_remove_voice_pack">Hatayein</string>
+    <string name="settings_remove_voice_pack_title">Awaaz pack hatayein?</string>
+    <string name="settings_remove_voice_pack_body">Isse %1$s khaali hoga. Jo swar aap bana chuke hain woh aapke video mein rahenge. Naye banane ke liye pack phir jodein.</string>
 </resources>

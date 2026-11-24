@@ -1,6 +1,7 @@
 package com.itsluminous.clearmovie.domain.voice
 
 import com.itsluminous.clearmovie.domain.model.Limits
+import com.itsluminous.clearmovie.domain.model.VoiceOver
 import com.itsluminous.clearmovie.domain.model.VoicePhrase
 
 /** A word the recognizer heard, with where it starts and ends in the recording. */
@@ -30,7 +31,7 @@ object Phrases {
             val joins = current != null && w.startMs - current.last().endMs <= GAP_MS && w.endMs - current.first().startMs <= MAX_PHRASE_MS
             if (joins) current.add(w) else groups.add(mutableListOf(w))
         }
-        return groups.map { g -> VoicePhrase(g.first().startMs.coerceAtLeast(0), clip(g.joinToString(" ") { it.text.trim() })) }
+        return capped(groups.map { g -> VoicePhrase(g.first().startMs.coerceAtLeast(0), clip(g.joinToString(" ") { it.text.trim() })) })
     }
 
     /**
@@ -45,6 +46,34 @@ object Phrases {
             .flatMap(::splitLong)
             .filter { it.any(Char::isLetterOrDigit) }
             .map { VoicePhrase(0, clip(it)) }
+            .let(::capped)
+
+    /**
+     * At most [VoiceOver.MAX_PHRASES] phrases: beyond that, neighbours are joined
+     * (each keeps the first one's start), as long as the words fit a phrase.
+     */
+    internal fun capped(phrases: List<VoicePhrase>): List<VoicePhrase> {
+        var list = phrases
+        while (list.size > VoiceOver.MAX_PHRASES) {
+            val next = mutableListOf<VoicePhrase>()
+            var i = 0
+            var joined = false
+            while (i < list.size) {
+                val a = list[i]
+                val b = list.getOrNull(i + 1)
+                if (b != null && a.text.length + 1 + b.text.length <= Limits.MAX_TEXT_LENGTH) {
+                    next += a.copy(text = a.text + " " + b.text)
+                    joined = true
+                    i += 2
+                } else {
+                    next += a
+                    i++
+                }
+            }
+            list = if (joined) next else next.take(VoiceOver.MAX_PHRASES)
+        }
+        return list
+    }
 
     /** A sentence longer than a phrase may be, cut at the last comma or space before the limit, so no words are dropped. */
     internal fun splitLong(text: String): List<String> {
@@ -52,7 +81,8 @@ object Phrases {
         var rest = text.replace(Regex("\\s+"), " ").trim()
         while (rest.length > Limits.MAX_TEXT_LENGTH) {
             val at =
-                rest.lastIndexOf(", ", Limits.MAX_TEXT_LENGTH).takeIf { it > 0 }?.plus(1) ?: rest.lastIndexOf(' ', Limits.MAX_TEXT_LENGTH)
+                rest.lastIndexOf(", ", Limits.MAX_TEXT_LENGTH - 1).takeIf { it > 0 }?.plus(1)
+                    ?: rest.lastIndexOf(' ', Limits.MAX_TEXT_LENGTH)
             val cut = if (at > 0) at else Limits.MAX_TEXT_LENGTH
             out += rest.substring(0, cut).trim()
             rest = rest.substring(cut).trim()

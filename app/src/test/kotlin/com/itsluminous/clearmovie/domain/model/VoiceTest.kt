@@ -192,6 +192,43 @@ class VoiceTest {
         assertThat(text).contains("\"language\": \"hi\"")
         val back = codec.decode(text) as ProjectDecodeResult.Ok
         assertThat(back.project).isEqualTo(voiced)
+        // A voice item an earlier build stored mid-way (a voice, no file yet) opens, and plays its recording.
+        val base = withRecording()
+        val noFile = base.rec().copy(voiceOver = VoiceOver(VoiceChoice.BRITISH_MALE, SpokenLanguage.ENGLISH, WordsSource.SPOKEN, words))
+        val midway =
+            codec.encode(
+                base.copy(
+                    tracks =
+                        base.tracks.map { tr ->
+                            tr.copy(
+                                clips =
+                                    tr.clips.map {
+                                        if (it.id ==
+                                            noFile.id
+                                        ) {
+                                            noFile
+                                        } else {
+                                            it
+                                        }
+                                    },
+                            )
+                        },
+                ),
+            )
+        val opened = codec.decode(midway).let { r -> (r as? ProjectDecodeResult.Ok) ?: error("not opened: $r") }
+        assertThat(opened.repaired).isTrue()
+        assertThat(
+            opened.project
+                .rec()
+                .voiceOver
+                ?.voice,
+        ).isEqualTo(VoiceChoice.NONE)
+        assertThat(
+            opened.project
+                .rec()
+                .voiceOver
+                ?.phrases,
+        ).isEqualTo(words)
         val older = codec.encode(withRecording()).replace("\"schemaVersion\": 8", "\"schemaVersion\": 7")
         val read = codec.decode(older) as ProjectDecodeResult.Ok
         assertThat(read.fromVersion).isEqualTo(7)

@@ -334,8 +334,16 @@ class EditorViewModel
                 viewModelScope.launch { c.choice.collect { savedState[KEY_VOICE] = it.id } }
                 viewModelScope.launch { c.language.collect { savedState[KEY_VOICE_LANGUAGE] = it.id } }
                 // The pack dialog survives the app being stopped while the user downloads.
-                savedState.get<Boolean>(KEY_PACK_STEPS)?.let(c::restorePackAsk)
-                viewModelScope.launch { c.packAsk.collect { savedState[KEY_PACK_STEPS] = it?.steps } }
+                savedState
+                    .get<Boolean>(
+                        KEY_PACK_STEPS,
+                    )?.let { c.restorePackAsk(it, SpokenLanguage.fromId(savedState.get<String>(KEY_PACK_SPEECH))) }
+                viewModelScope.launch {
+                    c.packAsk.collect {
+                        savedState[KEY_PACK_STEPS] = it?.steps
+                        savedState[KEY_PACK_SPEECH] = it?.speech?.id
+                    }
+                }
             }
 
         /** Records a voice from [atMs] onto voice row [row] (or the first free one). The microphone permission is granted. */
@@ -1103,6 +1111,7 @@ class EditorViewModel
             const val KEY_VOICE = "editor_voice"
             const val KEY_VOICE_LANGUAGE = "editor_voice_language"
             const val KEY_PACK_STEPS = "editor_voice_pack_steps"
+            const val KEY_PACK_SPEECH = "editor_voice_pack_speech"
 
             /** The green an extra overlay's window is keyed by when there is no preset frame to copy. */
             val DEFAULT_KEY_GREEN = ArgbColor(0xFF00D922)

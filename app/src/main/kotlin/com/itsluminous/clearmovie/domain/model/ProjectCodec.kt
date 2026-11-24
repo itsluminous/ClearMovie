@@ -222,9 +222,11 @@ class ProjectCodec(
                 return failed(ProjectDecodeResult.Reason.MALFORMED, e.message.orEmpty().take(200))
             }
         // Schema 4 kept a dragged side as its time in the video; the model keeps it as a distance from the item's edge.
-        val project = if (version == 4) decoded.withDetachedSidesAsDistances() else decoded
+        val read = if (version == 4) decoded.withDetachedSidesAsDistances() else decoded
+        // A voice item stored mid-way by an earlier build plays its recording (the words are kept).
+        val project = read.withVoicesThatPlay()
         val problems = project.validate()
-        if (problems.isEmpty()) return ProjectDecodeResult.Ok(project, version)
+        if (problems.isEmpty()) return ProjectDecodeResult.Ok(project, version, repaired = project !== read)
         // Values the model derives (spans that follow MAIN, fitted transitions,
         // animations and fades) may be stale if an app update changed how they
         // are worked out. Re-deriving them repairs that. The repair never moves,

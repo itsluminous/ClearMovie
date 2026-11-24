@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.domain.model.AudioClip
+import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.SpokenLanguage
 import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.VoicePhrase
@@ -165,7 +166,8 @@ internal fun VoiceFields(
 internal fun VoiceSheetFields(voices: VoiceChoiceController) {
     val voice by voices.choice.collectAsState()
     val language by voices.language.collectAsState()
-    VoiceFields(voice, language, voices.available, voices::choose, voices::speakIn)
+    val available by voices.availability.collectAsState()
+    VoiceFields(voice, language, available, voices::choose, voices::speakIn)
 }
 
 /** The panel of a voice item: its voice, the words it says (to check or type), and Make voice. */
@@ -178,31 +180,46 @@ internal fun VoiceItemPanel(
     val over = clip.voiceOver
     val typed = over?.source == WordsSource.TYPED
     var language by rememberSaveable(clip.id.value) { mutableStateOf(over?.language ?: voices.language.value) }
-    // The item's voice; on an item that plays its recording, the voice picked in the sheet is offered (applied by Make voice).
+    // The item's voice. Words waiting for a voice offer the one they were found for, a new item the sheet's;
+    // an item set to "My recording" shows that.
     var voice by rememberSaveable(clip.id.value) {
-        mutableStateOf(over?.voice?.takeIf { it != VoiceChoice.NONE } ?: voices.choice.value.forLanguage(language))
+        mutableStateOf(
+            when {
+                over == null -> voices.choice.value.forLanguage(language)
+                over.voice != VoiceChoice.NONE -> over.voice
+                else -> voices.pendingVoice(clip.id)?.forLanguage(language) ?: VoiceChoice.NONE
+            },
+        )
     }
+    val available by voices.availability.collectAsState()
     val phrases =
         remember(clip.id.value, over?.phrases) { mutableStateListOf<String>().apply { addAll(over?.phrases.orEmpty().map { it.text }) } }
     val work by voices.work.collectAsState()
     val busy = work != null
-    // Once the voice is made (or could not be, which a note says), the panel closes and the timeline shows again.
+    // Once this item's voice is made, the panel closes and the timeline shows again; if it could not be made, the
+    // panel stays with its words (a note says why).
     var voicing by rememberSaveable(clip.id.value) { mutableStateOf(false) }
-    LaunchedEffect(work, voicing) {
-        if (work is VoiceWork.Voicing) {
+    val played = clip.voiceOver?.generated ?: clip.media
+    var playedBefore by rememberSaveable(clip.id.value) { mutableStateOf<String?>(null) }
+    LaunchedEffect(work, played) {
+        val mine = (work as? VoiceWork.Voicing)?.clipId == clip.id
+        if (mine && !voicing) {
             voicing = true
+            playedBefore = played.toString()
         } else if (voicing && work == null) {
-            onDone()
+            voicing = false
+            if (played.toString() != playedBefore) onDone()
         }
     }
     PanelTitle(stringResource(R.string.voice_panel_title), onDone = null, onCancel = onDone)
     VoiceFields(
         voice,
         language,
-        voices.available,
+        available,
         onVoice = {
             voice = it
-            if (it != VoiceChoice.NONE) voices.askForPack(language)
+            // The words are here: only the voices and engine are needed.
+            if (it != VoiceChoice.NONE) voices.askForPack(if (phrases.isEmpty()) language else null)
         },
         onLanguage = {
             language = it
@@ -220,7 +237,7 @@ internal fun VoiceItemPanel(
             if (i < phrases.size) {
                 OutlinedTextField(
                     value = phrases[i],
-                    onValueChange = { phrases[i] = it },
+                    onValueChange = { phrases[i] = it.take(Limits.MAX_TEXT_LENGTH) },
                     label = { Text(stringResource(R.string.voice_phrase_label, durationText(p.startMs * 1000)), maxLines = 1) },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("voice_phrase_$i"),
@@ -233,7 +250,7 @@ internal fun VoiceItemPanel(
         if (!typed) {
             OutlinedButton(
                 onClick = { voices.recognize(clip.id, language) },
-                enabled = !busy && voices.available,
+                enabled = !busy && available,
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.voice_find_words), maxLines = 2) }
         }
@@ -269,7 +286,7 @@ internal fun TypeWordsPanel(
     VoiceFields(
         chosen.takeIf { it != VoiceChoice.NONE } ?: VoiceChoice.INDIAN_FEMALE,
         chosenLanguage,
-        voices.available,
+        voices.availability.collectAsState().value,
         onVoice = voices::choose,
         onLanguage = voices::speakIn,
         allowNone = false,
@@ -289,7 +306,7 @@ internal fun TypeWordsPanel(
             val v = chosen.takeIf { it != VoiceChoice.NONE && it.speaks(chosenLanguage) } ?: VoiceChoice.INDIAN_FEMALE
             started = voices.makeTyped(open.trackId, at, text, v, chosenLanguage)
         },
-        enabled = work == null && text.isNotBlank() && voices.available,
+        enabled = work == null && text.isNotBlank() && voices.availability.collectAsState().value,
         modifier =
             Modifier
                 .fillMaxWidth()

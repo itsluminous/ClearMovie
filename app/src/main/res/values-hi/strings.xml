@@ -726,4 +726,6 @@
     <string name="voice_too_long">यह आइटम दूसरे स्वर के लिए बहुत लंबा है। इसे 10 मिनट या उससे छोटे हिस्सों में बाँटें।</string>
     <string name="settings_storage_voice_pack">आवाज़ पैक: %1$s</string>
     <string name="settings_remove_voice_pack">हटाएँ</string>
+    <string name="settings_remove_voice_pack_title">आवाज़ पैक हटाएँ?</string>
+    <string name="settings_remove_voice_pack_body">इससे %1$s खाली होगा। जो स्वर आप बना चुके हैं वे आपके वीडियो में रहेंगे। नए बनाने के लिए पैक फिर जोड़ें।</string>
 </resources>
