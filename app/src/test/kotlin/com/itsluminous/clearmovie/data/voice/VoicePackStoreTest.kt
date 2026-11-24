@@ -73,6 +73,7 @@ class VoicePackStoreTest {
         assertThat(s.missing(SpokenLanguage.ENGLISH)).isEmpty()
         assertThat(s.ttsDir.resolve("tokens.txt").readText()).isEqualTo("a 1")
         assertThat(s.libDir.resolve("libvosk.so").readText()).isEqualTo("elf")
+        assertThat(s.libDir.resolve("libvosk.so").canWrite()).isFalse()
         assertThat(s.asrDir(SpokenLanguage.ENGLISH).resolve("am/final.mdl").readText()).isEqualTo("am")
         assertThat(s.root.resolve(".incoming").exists()).isFalse()
         assertThat(s.bytesOnDisk()).isGreaterThan(0)

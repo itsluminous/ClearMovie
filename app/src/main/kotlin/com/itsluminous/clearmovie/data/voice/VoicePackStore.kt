@@ -62,6 +62,7 @@ class VoicePackStore(
 
     /** Removes the whole pack from the phone. Voices already made stay in their videos. */
     fun remove() {
+        root.walkTopDown().forEach { it.setWritable(true, true) }
         root.deleteRecursively()
     }
 
@@ -168,12 +169,16 @@ class VoicePackStore(
         val folder = if (f.part == VoicePackFile.ENGINE) "lib/$abi" else VoicePackFile.folderOf(f.part)
         val target = File(root, folder)
         marker(f).delete()
+        target.walkTopDown().forEach { it.setWritable(true, true) }
         target.deleteRecursively()
         target.parentFile?.mkdirs()
         val moved = File(staging, folder).renameTo(target)
         staging.deleteRecursively()
-        if (moved) marker(f).writeText(f.sha256)
-        return moved
+        if (!moved) return false
+        // Native code is loaded only from files the app cannot write (Android warns, and will refuse, otherwise).
+        target.walkTopDown().filter { it.isFile }.forEach { it.setWritable(false, false) }
+        marker(f).writeText(f.sha256)
+        return true
     }
 
     companion object {

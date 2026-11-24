@@ -183,6 +183,15 @@ internal fun VoiceItemPanel(
         remember(clip.id.value, over?.phrases) { mutableStateListOf<String>().apply { addAll(over?.phrases.orEmpty().map { it.text }) } }
     val work by voices.work.collectAsState()
     val busy = work != null
+    // Once the voice is made (or could not be, which a note says), the panel closes and the timeline shows again.
+    var voicing by rememberSaveable(clip.id.value) { mutableStateOf(false) }
+    LaunchedEffect(work, voicing) {
+        if (work is VoiceWork.Voicing) {
+            voicing = true
+        } else if (voicing && work == null) {
+            onDone()
+        }
+    }
     PanelTitle(stringResource(R.string.voice_panel_title), onDone = null, onCancel = onDone)
     VoiceFields(
         voice,
