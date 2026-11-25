@@ -1113,11 +1113,12 @@ class EditorViewModel
 
         /**
          * More options > Delete video (cm-delete-project): asks first
-         * ([EditorEvent.AskDelete]), unless this video is being saved to the
-         * gallery, which must end first ([EditorEvent.DeleteBlocked]).
+         * ([DeletePrompt.ASK]), unless this video is being saved to the
+         * gallery, which must end first ([DeletePrompt.BLOCKED]).
          */
         fun askDelete() {
             if (voice.active || deleting || uiState.value.project == null) return
+            if (voiceBusy()) return
             engine.pause()
             viewModelScope.launch {
                 val busy = withContext(Dispatchers.IO) { exports.of(projectId) }
@@ -1140,6 +1141,7 @@ class EditorViewModel
          */
         fun deleteProject() {
             if (voice.active || deleting || uiState.value.project == null) return
+            if (voiceBusy()) return
             setDeleting(true)
             engine.pause()
             viewModelScope.launch {
@@ -1159,6 +1161,16 @@ class EditorViewModel
                 withContext(Dispatchers.IO) { exports.cancel(projectId) }
                 eventChannel.send(EditorEvent.Closed)
             }
+        }
+
+        /**
+         * A voice being made (cm-voice-choice) writes its file into the
+         * video's own folder, so Delete waits for it, and says so.
+         */
+        private fun voiceBusy(): Boolean {
+            if (voices.work.value == null) return false
+            viewModelScope.launch { eventChannel.send(EditorEvent.Voice(VoiceNote.BUSY)) }
+            return true
         }
 
         private fun setDeleting(value: Boolean) {
