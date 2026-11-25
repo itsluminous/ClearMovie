@@ -1101,6 +1101,7 @@ class EditorViewModel
 
         /** Drops any intake in flight and its saved links (the screen is leaving). */
         override fun onCleared() {
+            voices.close()
             voice.release()
             intake.cancel()
             engine.release()

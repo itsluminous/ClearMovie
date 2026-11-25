@@ -6,7 +6,6 @@ import com.itsluminous.clearmovie.data.files.StorageReport
 import com.itsluminous.clearmovie.data.files.StorageUsage
 import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
-import com.itsluminous.clearmovie.data.voice.PackDownloadState
 import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AppSettings
@@ -45,8 +44,8 @@ class SettingsViewModel
         /** Removes the voice pack, stopping a download of it first. Voices already made stay in their videos. */
         fun removeVoicePack() {
             viewModelScope.launch(Dispatchers.IO) {
-                // A download still running would add its file back into the removed pack.
-                if (packDownloads.state.value !is PackDownloadState.Idle) packDownloads.cancelAndWait()
+                // A download still running, or still stopping, must not add its file back into the removed pack.
+                packDownloads.cancelAndWait()
                 voiceTools.removePack()
                 packState.value = voiceTools.packBytes()
             }

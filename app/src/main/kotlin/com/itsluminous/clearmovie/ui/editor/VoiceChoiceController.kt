@@ -1,7 +1,9 @@
 package com.itsluminous.clearmovie.ui.editor
 
 import com.itsluminous.clearmovie.data.voice.PackAddResult
+import com.itsluminous.clearmovie.data.voice.PackDownloadError
 import com.itsluminous.clearmovie.data.voice.PackDownloadState
+import com.itsluminous.clearmovie.data.voice.PackDownloadWatchers
 import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.VoiceFailure
 import com.itsluminous.clearmovie.data.voice.VoicePackStore
@@ -150,7 +152,24 @@ class VoiceChoiceController(
     private var downloadFor: PackAsk? = null
 
     init {
+        PackDownloadWatchers.count.incrementAndGet()
         scope.launch { downloads.state.collect(::onDownload) }
+    }
+
+    /** The editor closed: the download's end is told by its notification from now on. */
+    fun close() {
+        PackDownloadWatchers.count.decrementAndGet()
+    }
+
+    /**
+     * Leaving a "not enough room" error: the verified file kept for Try again is removed, so a phone short of
+     * room does not keep it. A part kept after a dropped connection stays, so Download carries on from it.
+     */
+    private fun leaveFailure() {
+        val failed = downloadState.value as? PackDownloadState.Failed ?: return
+        watched = null
+        downloadState.value = PackDownloadState.Idle
+        if (failed.error == PackDownloadError.NO_SPACE) downloads.cancel()
     }
 
     private fun onDownload(state: PackDownloadState) {
@@ -222,7 +241,7 @@ class VoiceChoiceController(
 
     /** The browser fallback: the steps to download the files from GitHub's page and add them. */
     fun useBrowser() {
-        if (downloadState.value is PackDownloadState.Failed) downloadState.value = PackDownloadState.Idle
+        leaveFailure()
         showSteps()
     }
 
@@ -312,10 +331,7 @@ class VoiceChoiceController(
 
     fun dismissPack() {
         askState.value = null
-        if (downloadState.value is PackDownloadState.Failed) {
-            watched = null
-            downloadState.value = PackDownloadState.Idle
-        }
+        leaveFailure()
         // The preset's voice, declined with its pack: the next recordings play as recorded, without asking again.
         if (preselected) {
             preselected = false

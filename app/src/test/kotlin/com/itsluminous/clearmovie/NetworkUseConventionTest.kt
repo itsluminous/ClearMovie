@@ -33,7 +33,9 @@ class NetworkUseConventionTest {
             Regex("""\b(Http|Https)?URLConnection\b"""),
             Regex("""\b(Datagram|Server|SSL)?Socket(Factory)?\b"""),
             Regex("""\bopen(Connection|Stream)\s*\("""),
-            Regex("""\btoURL\s*\(|\bInetAddress\b|\bgetSocketFactory\b|\bbindSocket\b|\bMediaPlayer\b"""),
+            Regex("""\btoURL\s*\(|\bInet(Socket)?Address\b|\bgetSocketFactory\b|\bbindSocket\b|\bMediaPlayer\b"""),
+            // Media readers that also take a web address (the app gives them content:// links only).
+            Regex("""\b(MediaExtractor|MediaMetadataRetriever)\b[\s\S]{0,200}?\.setDataSource\(\s*"|\bsetVideo(URI|Path)\b"""),
             Regex("""\b(okhttp3|retrofit2|io\.ktor|org\.chromium\.net|com\.android\.volley)\b"""),
             Regex("""\bandroid\.net\.http\b"""),
             Regex("""\b(WebView|DownloadManager)\b"""),
@@ -49,47 +51,127 @@ class NetworkUseConventionTest {
         return networking.mapNotNull { re -> re.find(code)?.let { "$path uses ${it.value.trim()}" } }
     }
 
-    /** [source] with its `//` and `/* */` comments blanked out; string literals are kept as they are. */
+    /** One level of the scanner: code (with its open braces), a "string", or a """raw string""". */
+    private class Frame(
+        val mode: Char,
+        var braces: Int = 0,
+    )
+
+    /**
+     * [source] with its `//` and `/* */` comments left out. Strings, raw strings and char literals are
+     * kept as they are, and `${...}` inside a string is read as code again (where a comment can start),
+     * so neither a "//" in a string nor a quote in a template hides the code after it.
+     */
     private fun withoutComments(source: String): String {
         val out = StringBuilder(source.length)
+        val frames = ArrayDeque(listOf(Frame('c')))
         var i = 0
-        var quote: Char? = null
+
+        fun at(s: String) = source.startsWith(s, i)
+
+        fun copy(n: Int) {
+            val end = minOf(source.length, i + n)
+            out.append(source, i, end)
+            i = end
+        }
         while (i < source.length) {
+            val frame = frames.last()
             val c = source[i]
-            val next = source.getOrNull(i + 1)
-            when {
-                quote != null -> {
-                    out.append(c)
-                    if (c == '\\' && next != null) {
-                        out.append(next)
-                        i++
-                    } else if (c == quote) {
-                        quote = null
+            when (frame.mode) {
+                'c' -> {
+                    when {
+                        at("//") -> {
+                            while (i < source.length && source[i] != '\n') i++
+                        }
+
+                        at("/*") -> {
+                            val end = source.indexOf("*/", i + 2)
+                            i = if (end < 0) source.length else end + 2
+                            out.append(' ')
+                        }
+
+                        at("\"\"\"") -> {
+                            frames.addLast(Frame('r'))
+                            copy(3)
+                        }
+
+                        c == '"' -> {
+                            frames.addLast(Frame('"'))
+                            copy(1)
+                        }
+
+                        c == '\'' -> {
+                            // A char literal: 'a', '\n', '\'' or '\u0041'.
+                            var j = i + 1
+                            if (source.getOrNull(j) == '\\') j += 2 else j += 1
+                            val close = source.indexOf('\'', j)
+                            copy(if (close < 0) 1 else close + 1 - i)
+                        }
+
+                        c == '{' -> {
+                            frame.braces++
+                            copy(1)
+                        }
+
+                        c == '}' && frame.braces == 0 && frames.size > 1 -> {
+                            frames.removeLast()
+                            copy(1)
+                        }
+
+                        c == '}' -> {
+                            frame.braces--
+                            copy(1)
+                        }
+
+                        else -> {
+                            copy(1)
+                        }
                     }
                 }
 
-                c == '"' || c == '\'' -> {
-                    quote = c
-                    out.append(c)
-                }
+                '"' -> {
+                    when {
+                        c == '\\' -> {
+                            copy(2)
+                        }
 
-                c == '/' && next == '/' -> {
-                    while (i < source.length && source[i] != '\n') i++
-                    continue
-                }
+                        c == '"' -> {
+                            frames.removeLast()
+                            copy(1)
+                        }
 
-                c == '/' && next == '*' -> {
-                    val end = source.indexOf("*/", i + 2)
-                    i = if (end < 0) source.length else end + 2
-                    out.append(' ')
-                    continue
+                        at("\${") -> {
+                            frames.addLast(Frame('c'))
+                            copy(2)
+                        }
+
+                        else -> {
+                            copy(1)
+                        }
+                    }
                 }
 
                 else -> {
-                    out.append(c)
+                    when {
+                        at("\"\"\"") -> {
+                            // A raw string ends at its last quote in a row.
+                            var n = 3
+                            while (source.getOrNull(i + n) == '"') n++
+                            frames.removeLast()
+                            copy(n)
+                        }
+
+                        at("\${") -> {
+                            frames.addLast(Frame('c'))
+                            copy(2)
+                        }
+
+                        else -> {
+                            copy(1)
+                        }
+                    }
                 }
             }
-            i++
         }
         return out.toString()
     }
@@ -120,6 +202,11 @@ class NetworkUseConventionTest {
         assertThat(violations("ui/X.kt", "val x = 2 *\n    URL(u).openStream()")).hasSize(1)
         assertThat(violations("ui/X.kt", "/* URL(u).openStream() */ val s = \"// not a comment\"")).isEmpty()
         assertThat(violations("ui/X.kt", "val s = \"a\" // x\nval c = u.openConnection()")).hasSize(1)
+        // A quote inside a template, or a raw string ending in a backslash, does not hide the code after it.
+        assertThat(violations("ui/X.kt", "val c = URI(\"\${base ?: \"https://h\"}/f\").toURL().openStream()")).hasSize(2)
+        assertThat(violations("ui/X.kt", "val p = \"\"\"C:\\\"\"\"\nval q = \"a/*\"\nval c = u.openConnection()")).hasSize(1)
+        assertThat(violations("ui/X.kt", "val q = '\"'\nval c = u.openConnection() // '\"'")).hasSize(1)
+        assertThat(violations("ui/X.kt", "val a = InetSocketAddress(host, 443)")).hasSize(1)
         assertThat(violations("com/itsluminous/clearmovie/data/voice/PackDownloader.kt", "import java.net.URL")).isEmpty()
     }
 

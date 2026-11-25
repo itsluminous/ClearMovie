@@ -48,7 +48,6 @@ import androidx.core.net.toUri
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.voice.PackDownloadError
 import com.itsluminous.clearmovie.data.voice.PackDownloadState
-import com.itsluminous.clearmovie.data.voice.VoicePackStore
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.SpokenLanguage
@@ -494,15 +493,11 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
 
                     PackMode.ERROR -> {
                         val error = failed?.error ?: PackDownloadError.FAILED
+                        val missing = (failed?.missingBytes?.takeIf { it > 0 } ?: current.room).takeIf { it > 0 }
                         Text(
                             if (error == PackDownloadError.NO_SPACE) {
-                                stringResource(
-                                    R.string.pack_error_space,
-                                    size(
-                                        failed?.missingBytes?.takeIf { it > 0 } ?: current.room.takeIf { it > 0 }
-                                            ?: VoicePackStore.SPARE_BYTES,
-                                    ),
-                                )
+                                missing?.let { stringResource(R.string.pack_error_space, size(it)) }
+                                    ?: stringResource(R.string.pack_no_space)
                             } else {
                                 stringResource(VoicePackNotifications.errorText(error))
                             },
@@ -592,7 +587,8 @@ private fun PackNotice(
 private fun BrowserInstead(onClick: () -> Unit) {
     TextButton(
         onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 0.dp),
+        // Lined up with the text above it; a little room at the end, so a Hindi mark past the last letter is not cut.
+        contentPadding = PaddingValues(start = 0.dp, end = 8.dp),
         modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_BROWSER_TAG),
     ) {
         AutoSizeLabel(stringResource(R.string.pack_use_browser))

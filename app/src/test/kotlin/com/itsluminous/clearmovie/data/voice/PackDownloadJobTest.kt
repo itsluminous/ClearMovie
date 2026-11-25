@@ -87,7 +87,8 @@ class PackDownloadJobTest {
         override fun addDownloaded(
             f: VoicePackFile,
             zip: File,
-        ) = store.addDownloaded(f, zip)
+            stopped: () -> Boolean,
+        ) = if (stopped()) PackAddResult(emptyList(), 0) else store.addDownloaded(f, zip)
 
         override fun freeBytes() = store.freeBytes()
 
@@ -249,15 +250,16 @@ class PackDownloadJobTest {
                     val part = t.store.downloadFile(manifest.files.first { it.file == name })
                     val have = if (part.isFile) part.length().toInt() else 0
                     calls++
-                    // Every answer drops after one more byte: five drops in a row, each with progress.
+                    // Every answer drops after a tenth of the file: about ten drops in a row, each with progress.
                     val rest = b.copyOfRange(have, b.size)
                     val headers = if (have > 0) mapOf("Content-Range" to "bytes $have-${b.size - 1}/${b.size}") else emptyMap()
-                    return FakeHttps(u, if (have > 0) 206 else 200, headers, rest, failAfter = if (rest.size > 1) 1 else null)
+                    return FakeHttps(u, if (have > 0) 206 else 200, headers, rest, failAfter = (b.size / 10).takeIf { rest.size > it })
                 }
             }
         val out = PackDownloadJob(t, PackDownloader(flaky::open), pause = {}).run(listOf("engine-x86_64.zip"), {}, { false })
         assertThat(out).isEqualTo(PackDownloadOutcome.Done)
         assertThat(calls).isGreaterThan(PackDownloadJob.PAUSES_MS.size + 1)
+        assertThat(calls).isAtMost(PackDownloadJob.MAX_TRIES)
 
         val server = Server()
         var stop = false

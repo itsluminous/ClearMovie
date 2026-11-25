@@ -23,6 +23,7 @@ import com.itsluminous.clearmovie.data.voice.PackDownloadError
 import com.itsluminous.clearmovie.data.voice.PackDownloadJob
 import com.itsluminous.clearmovie.data.voice.PackDownloadOutcome
 import com.itsluminous.clearmovie.data.voice.PackDownloadState
+import com.itsluminous.clearmovie.data.voice.PackDownloadWatchers
 import com.itsluminous.clearmovie.data.voice.PackDownloader
 import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.PackProgress
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
@@ -67,11 +69,11 @@ class VoicePackDownloadWorker
         override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(PackProgress(0, 0))
 
         override suspend fun doWork(): Result {
-            active.value = true
+            runs.update { it.copy(running = it.running + 1, started = it.started + 1) }
             try {
                 return download()
             } finally {
-                active.value = false
+                runs.update { it.copy(running = it.running - 1) }
             }
         }
 
@@ -103,13 +105,16 @@ class VoicePackDownloadWorker
                 }
             return when (outcome) {
                 PackDownloadOutcome.Done -> {
-                    // With ClearMovie on screen, its own note says so; a notification as well would say it twice.
+                    // An open editor says so itself; a notification as well would say it twice. Elsewhere, or with
+                    // the app in the background, the notification is the only report.
                     val onScreen =
                         ProcessLifecycleOwner
                             .get()
                             .lifecycle.currentState
                             .isAtLeast(Lifecycle.State.STARTED)
-                    if (!onScreen) notifications.post(VoicePackNotifications.RESULT_ID, notifications.done())
+                    if (!onScreen || PackDownloadWatchers.count.get() == 0) {
+                        notifications.post(VoicePackNotifications.RESULT_ID, notifications.done())
+                    }
                     Result.success()
                 }
 
@@ -141,11 +146,18 @@ class VoicePackDownloadWorker
             const val KEY_FAILURE = "failure"
             const val KEY_MISSING_BYTES = "missing_bytes"
 
+            /** How many download workers of this process run their job now, and how many have started. */
+            data class Runs(
+                val running: Int = 0,
+                val started: Long = 0,
+            )
+
             /**
-             * True while a download worker of this process runs its job, so Cancel and Remove can wait for it
-             * to let go of the pack's files: WorkManager marks the work cancelled before the worker stops.
+             * The download workers of this process, so Cancel and Remove can wait for them to let go of the
+             * pack's files: WorkManager marks the work cancelled before the worker stops, and a REPLACE can
+             * start a new worker while the old one is still stopping.
              */
-            val active = MutableStateFlow(false)
+            val runs = MutableStateFlow(Runs())
 
             fun percent(p: PackProgress): Int = if (p.total <= 0) 0 else (p.done * 100 / p.total).toInt().coerceIn(0, 100)
 
@@ -225,11 +237,13 @@ class WorkPackDownloads(
     }
 
     override suspend fun cancelAndWait() {
+        val before = VoicePackDownloadWorker.runs.value.started
         workManager.cancelUniqueWork(VoicePackDownloadWorker.UNIQUE_NAME)
-        // Once the worker has let go of its files, what it downloaded goes too; not when a newer
+        // Once every worker has let go of its files, what they downloaded goes too; not when a newer
         // download has started meanwhile, whose part it would be.
-        withTimeoutOrNull(STOP_WAIT_MS) { VoicePackDownloadWorker.active.first { !it } }
-        if (!VoicePackDownloadWorker.active.value) tools.clearDownloads()
+        val stopped = withTimeoutOrNull(STOP_WAIT_MS) { VoicePackDownloadWorker.runs.first { it.running == 0 } } != null
+        val now = VoicePackDownloadWorker.runs.value
+        if (stopped && now.running == 0 && now.started == before) tools.clearDownloads()
     }
 
     private companion object {

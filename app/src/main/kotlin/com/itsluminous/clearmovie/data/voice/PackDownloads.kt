@@ -30,6 +30,13 @@ sealed interface PackDownloadState {
     ) : PackDownloadState
 }
 
+/** How many editors follow the download now: with one on screen, it reports the end itself, not the notification. */
+object PackDownloadWatchers {
+    val count =
+        java.util.concurrent.atomic
+            .AtomicInteger(0)
+}
+
 /**
  * Starts, follows and stops the voice pack download, which runs in the
  * background (a foreground worker, with its own notification), so it goes

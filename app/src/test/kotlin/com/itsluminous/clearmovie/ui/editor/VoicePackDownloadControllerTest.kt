@@ -203,6 +203,26 @@ class VoicePackDownloadControllerTest {
     }
 
     @Test
+    fun `leaving a no-room error removes the kept file, while a network error keeps its part`() {
+        val downloads = Downloads()
+        val c = controller(Tools(), downloads)
+        c.choose(VoiceChoice.BRITISH_FEMALE)
+        c.downloadPack()
+        downloads.state.value = PackDownloadState.Waiting("w1")
+        downloads.state.value = PackDownloadState.Failed("w1", PackDownloadError.NETWORK)
+        c.dismissPack()
+        assertThat(downloads.cancelled).isEqualTo(0)
+        c.choose(VoiceChoice.BRITISH_MALE)
+        c.downloadPack()
+        downloads.state.value = PackDownloadState.Waiting("w2")
+        downloads.state.value = PackDownloadState.Failed("w2", PackDownloadError.NO_SPACE, 10)
+        assertThat(c.download.value).isInstanceOf(PackDownloadState.Failed::class.java)
+        c.useBrowser()
+        assertThat(downloads.cancelled).isEqualTo(1)
+        assertThat(c.download.value).isEqualTo(PackDownloadState.Idle)
+    }
+
+    @Test
     fun `Cancel stops the download and closes the dialog`() {
         val downloads = Downloads()
         val c = controller(Tools(), downloads)

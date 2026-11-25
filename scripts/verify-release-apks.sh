@@ -190,17 +190,23 @@ shape="$(printf '%s\n' "$nsc" | sed -E 's/^ +//; s/ \(line=[0-9]+\)$//')"
 # 4c. The code that calls the network, as "<class> <method> -> <call>", from every dex file.
 # Run at the top level (not in a pipeline or $(...)), so a dexdump that fails fails the check.
 dex_dir="$(mktemp -d)"
+trap 'rm -rf "$dex_dir"' EXIT
 unzip -q -o "$apk" 'classes*.dex' -d "$dex_dir" || fail "could not unpack the dex files of $name"
 shopt -s nullglob
 dex_files=("$dex_dir"/classes*.dex)
 shopt -u nullglob
 [ "${#dex_files[@]}" -gt 0 ] || fail "$name has no dex files"
 for dex in "${dex_files[@]}"; do
-  "$dexdump" -d "$dex" > "$dex.txt" 2> /dev/null || fail "dexdump could not read $(basename "$dex") of $name"
+  "$dexdump" -d "$dex" > "$dex.txt" 2> "$dex.err" || fail "dexdump could not read $(basename "$dex") of $name: $(tail -n 3 "$dex.err")"
   [ -s "$dex.txt" ] || fail "dexdump wrote nothing for $(basename "$dex") of $name"
 done
-network_re='(Ljava/net/URL;\.(openConnection|openStream|getContent)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\.<init>|Ljava/net/InetAddress;\.(getByName|getAllByName|getLocalHost)|Ljavax/net/(ssl/SSL)?SocketFactory;\.createSocket|Ljava/nio/channels/(Asynchronous)?(Socket|Datagram|ServerSocket)Channel;\.open|Landroid/net/Network;\.(openConnection|getSocketFactory|bindSocket|getByName|getAllByName)|Landroid/media/MediaPlayer;\.setDataSource|Landroid/webkit/WebView;\.load|Landroid/app/DownloadManager;\.enqueue|Landroid/net/http/)'
-awk -v re="$network_re" '
+# MediaExtractor and MediaMetadataRetriever.setDataSource(String) are left out: the app reads its own
+# files with them, in code R8 merges into other classes, and NetworkUseConventionTest checks the sources
+# never give them a web address.
+network_re='(Ljava/net/URL;\.(openConnection|openStream|getContent)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\.<init>|Ljava/net/InetAddress;\.(getByName|getAllByName|getLocalHost)|Ljavax/net/(ssl/SSL)?SocketFactory;\.createSocket|Ljava/nio/channels/(Asynchronous)?(Socket|Datagram|ServerSocket)Channel;\.open|Landroid/net/Network;\.(openConnection|getSocketFactory|bindSocket|getByName|getAllByName)|Ljava/net/InetSocketAddress;\.<init>:\(Ljava/lang/String;|Landroid/media/MediaPlayer;\.setDataSource|Landroid/widget/VideoView;\.setVideo(URI|Path)|Landroid/webkit/WebView;\.load|Landroid/app/DownloadManager;\.enqueue|Landroid/net/http/)'
+# The pattern goes through the environment: awk -v would treat its backslashes as escapes.
+NETWORK_RE="$network_re" awk 'BEGIN { re = ENVIRON["NETWORK_RE"] }
+  
   /Class descriptor/ { cls = $NF; gsub(/\047/, "", cls) }
   /^      name          :/ { m = $NF; gsub(/\047/, "", m) }
   /invoke-/ && $0 ~ re { match($0, re); print cls " " m " -> " substr($0, RSTART, RLENGTH) }' "$dex_dir"/classes*.dex.txt | sort -u > "$dex_dir/calls.txt" ||
@@ -232,7 +238,10 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 engines=("$script_dir"/../voice-packs/v*/engine-*.zip)
 [ -f "${engines[0]}" ] || fail "no voice pack engines under voice-packs/"
 echo
-python3 "$script_dir/check-native-network.py" "$apk" "${engines[@]}" || fail "native code that ClearMovie runs imports network functions"
+# The app's own manifest: the engines checked must be the bytes phones accept.
+pack_manifest="$script_dir/../app/src/main/assets/voice-pack/manifest-v1.json"
+python3 "$script_dir/check-native-network.py" --manifest "$pack_manifest" "$apk" "${engines[@]}" ||
+  fail "native code that ClearMovie runs imports network functions, or the engines checked are not the pack's"
 echo "INTERNET only with the network security config, and only the voice pack downloader calls the network."
 
 # 5. Signatures (CI sets VERIFY_SIGNATURES=true when the signing secrets exist).

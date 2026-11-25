@@ -81,11 +81,24 @@ class PackDownloadJob(
                 if (failed != null) return failed
                 if (stopped()) return PackDownloadOutcome.Stopped
                 progress(PackProgress(before + f.bytes, total, checking = true))
-                val added = tools.addDownloaded(f, part)
+                val added = tools.addDownloaded(f, part, stopped)
+                if (stopped()) return PackDownloadOutcome.Stopped
                 when {
-                    added.outOfSpace -> return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, added.missingBytes)
-                    added.rejected == 0 -> break
-                    ++checks >= CHECKS -> return PackDownloadOutcome.Failed(PackDownloadError.CHECK)
+                    added.outOfSpace -> {
+                        // Room for this file and the ones after it, less what is already downloaded.
+                        val rest = todo.dropWhile { it != f }
+                        val onDiskNow = rest.sumOf { r -> parts.getValue(r).let { if (it.isFile) it.length() else 0L } }
+                        val missing = roomToDownload(rest, VoicePackStore.SPARE_BYTES) - onDiskNow - tools.freeBytes()
+                        return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, missing.coerceAtLeast(added.missingBytes))
+                    }
+
+                    added.rejected == 0 -> {
+                        break
+                    }
+
+                    ++checks >= CHECKS -> {
+                        return PackDownloadOutcome.Failed(PackDownloadError.CHECK)
+                    }
                 }
                 // Damaged on the way (or a resumed part that did not fit): once more, from the start.
             }
@@ -108,7 +121,9 @@ class PackDownloadJob(
         progress: (Long) -> Unit,
     ): PackDownloadOutcome.Failed? {
         var attempt = 0
+        var tries = 0
         while (true) {
+            if (++tries > MAX_TRIES) return PackDownloadOutcome.Failed(PackDownloadError.NETWORK)
             val had = part.length()
             try {
                 downloader.fetch(url, part, f.bytes, progress, stopped)
@@ -137,5 +152,8 @@ class PackDownloadJob(
 
         /** How many times a file is downloaded when it does not match. */
         const val CHECKS = 2
+
+        /** At most this many connections for one file, however many of them made progress. */
+        const val MAX_TRIES = 30
     }
 }

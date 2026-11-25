@@ -65,10 +65,14 @@ interface VoiceTools {
     /** Where a download of pack file [f] goes until it is added (cm-voice-pack-download); null without a pack. */
     fun downloadFile(f: VoicePackFile): File? = null
 
-    /** Takes in [zip], a finished download of [f], if its SHA-256 matches the app's own manifest. */
+    /**
+     * Takes in [zip], a finished download of [f], if its SHA-256 matches the app's own manifest. Nothing is
+     * added once [stopped] (Cancel, or Settings' Remove meanwhile).
+     */
     fun addDownloaded(
         f: VoicePackFile,
         zip: File,
+        stopped: () -> Boolean = { false },
     ): PackAddResult = PackAddResult(emptyList(), 1)
 
     /** Removes stopped downloads. */
@@ -169,10 +173,14 @@ class PackVoiceTools(
 
     override fun downloadFile(f: VoicePackFile): File = store.downloadFile(f)
 
+    // Under the same lock as removePack, and checked for the stop inside it: a Remove that waited for the
+    // download to stop never has a file added back after it.
     override fun addDownloaded(
         f: VoicePackFile,
         zip: File,
+        stopped: () -> Boolean,
     ) = synchronized(this) {
+        if (stopped()) return@synchronized PackAddResult(emptyList(), 0)
         lexiconCache = null
         store.addDownloaded(f, zip)
     }

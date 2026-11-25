@@ -43,13 +43,16 @@ data class VoicePackManifest(
         const val NAME = "clearmovie-voice-pack"
 
         /** The folder page that lists the pack's files. */
-        fun folderUrl(version: Int): String = "https://github.com/itsluminous/ClearMovie/tree/main/voice-packs/v$version"
+        fun folderUrl(version: Int): String = "https://github.com/itsluminous/ClearMovie/tree/${ref(version)}/voice-packs/v$version"
 
         /** A file's link on the folder's page (the browser fallback). */
         fun downloadUrl(
             version: Int,
             file: String,
-        ): String = "https://github.com/itsluminous/ClearMovie/raw/main/voice-packs/v$version/$file"
+        ): String = "https://github.com/itsluminous/ClearMovie/raw/${ref(version)}/voice-packs/v$version/$file"
+
+        /** The pack's pinned commit (the same bytes the app downloads), or main for a version without one. */
+        private fun ref(version: Int): String = VoicePackSource.COMMITS[version] ?: "main"
 
         private val json = Json { ignoreUnknownKeys = true }
 

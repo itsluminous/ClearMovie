@@ -139,12 +139,15 @@ class VoicePackStore(
             return PackAddResult(emptyList(), 1)
         }
         val need = listed.unpackedBytes + SPARE_BYTES
-        if (!isAdded(listed) &&
-            freeSpace() < need
-        ) {
-            return PackAddResult(emptyList(), 0, outOfSpace = true, missingBytes = need - freeSpace())
+        val free = freeSpace()
+        if (!isAdded(listed) && free < need) {
+            return PackAddResult(emptyList(), 0, outOfSpace = true, missingBytes = need - free)
         }
-        val ok = isAdded(listed) || unpack(listed, zip)
+        if (isAdded(listed)) {
+            zip.delete()
+            return PackAddResult(emptyList(), 0)
+        }
+        val ok = unpack(listed, zip)
         zip.delete()
         return if (ok) PackAddResult(listOf(listed), 0) else PackAddResult(emptyList(), 1)
     }

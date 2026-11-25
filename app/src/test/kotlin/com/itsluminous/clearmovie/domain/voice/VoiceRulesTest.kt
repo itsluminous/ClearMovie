@@ -189,7 +189,7 @@ class VoiceRulesTest {
         for (f in m.files) assertThat(File(repoManifest.parentFile, f.file).length()).isEqualTo(f.bytes)
         assertThat(
             VoicePackManifest.downloadUrl(1, "voices.zip"),
-        ).isEqualTo("https://github.com/itsluminous/ClearMovie/raw/main/voice-packs/v1/voices.zip")
+        ).isEqualTo("https://github.com/itsluminous/ClearMovie/raw/${VoicePackSource.COMMITS.getValue(1)}/voice-packs/v1/voices.zip")
     }
 
     @Test
