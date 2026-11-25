@@ -104,7 +104,8 @@ class KeepScreenOnDeviceTest {
 
     /**
      * While the export still saves the flag is set; an export that ends first
-     * (a fast phone) only has to have set it while it ran, which the log shows.
+     * (a fast phone) only has to have set it while it ran: the app's own
+     * KeepScreenOn log line shows that, not this test's.
      */
     private fun expectFlagWhileSaving(
         scenario: ActivityScenario<MainActivity>,
@@ -133,20 +134,21 @@ class KeepScreenOnDeviceTest {
         Log.i(TAG, "$step: FLAG_KEEP_SCREEN_ON=${if (on) "set" else "clear"} for $ms ms")
     }
 
-    private fun exportState(): WorkInfo.State? =
+    /** The export the test started last, by its id: rows of earlier exports (finished, cancelled) stay in WorkManager. */
+    private var current: java.util.UUID? = null
+
+    private fun exportWorks(): List<WorkInfo> =
         WorkManager
             .getInstance(h.context)
             .getWorkInfosForUniqueWork(ExportWorker.UNIQUE_NAME)
             .get()
-            .lastOrNull()
-            ?.state
+
+    private fun currentWork(): WorkInfo? = current?.let { id -> exportWorks().firstOrNull { it.id == id } }
+
+    private fun exportState(): WorkInfo.State? = currentWork()?.state
 
     private fun exportUri(): android.net.Uri? =
-        WorkManager
-            .getInstance(h.context)
-            .getWorkInfosForUniqueWork(ExportWorker.UNIQUE_NAME)
-            .get()
-            .lastOrNull()
+        currentWork()
             ?.outputData
             ?.getString(ExportWorker.KEY_URI)
             ?.let(android.net.Uri::parse)
@@ -175,11 +177,15 @@ class KeepScreenOnDeviceTest {
     }
 
     private fun startExport(quality: ExportQuality) {
+        val before = exportWorks().map { it.id }.toSet()
         compose.onNodeWithTag(EDITOR_EXPORT_TAG).performClick()
         waitFor(hasTestTag(EXPORT_SAVE_TAG))
         compose.onNodeWithTag(exportQualityTag(quality)).performScrollTo().performClick()
         compose.onNodeWithTag(EXPORT_SAVE_TAG).performClick()
         waitFor(hasTestTag(EXPORT_PROGRESS_TAG) or hasText(s(R.string.export_done_title)))
+        // The sheet shows a new export at 0% before WorkManager has written it: wait for its row.
+        compose.waitUntil(20_000) { exportWorks().any { it.id !in before } }
+        current = exportWorks().first { it.id !in before }.id
     }
 
     @Test

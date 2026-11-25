@@ -200,8 +200,15 @@ class RecordVoiceDeviceTest {
             openRecordVoice()
             // The countdown, then Stop once it is recording.
             waitFor(hasTestTag(RECORDING_PANEL_TAG))
-            // The screen is kept on from the countdown to the end of the recording (cm-keep-screen-on).
-            compose.waitUntil(TIMEOUT_MS) { screenKeptOn(scenario) }
+            // The screen is kept on from the countdown to the end of the recording (cm-keep-screen-on): already
+            // during the countdown, while the preview is still paused and Stop is not shown yet.
+            var duringCountdown = false
+            compose.waitUntil(COUNTDOWN_TIMEOUT_MS) {
+                val stopShown = compose.onAllNodes(hasTestTag(RECORDING_STOP_TAG)).fetchSemanticsNodes().isNotEmpty()
+                if (!stopShown && screenKeptOn(scenario)) duringCountdown = true
+                duringCountdown || stopShown
+            }
+            assertThat(duringCountdown).isTrue()
             waitFor(hasTestTag(RECORDING_STOP_TAG), COUNTDOWN_TIMEOUT_MS)
             assertThat(mic.started).isTrue()
             assertThat(screenKeptOn(scenario)).isTrue()
