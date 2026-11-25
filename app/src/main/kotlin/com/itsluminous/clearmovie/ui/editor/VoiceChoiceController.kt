@@ -1,7 +1,10 @@
 package com.itsluminous.clearmovie.ui.editor
 
 import com.itsluminous.clearmovie.data.voice.PackAddResult
+import com.itsluminous.clearmovie.data.voice.PackDownloadState
+import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.VoiceFailure
+import com.itsluminous.clearmovie.data.voice.VoicePackStore
 import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -23,6 +26,7 @@ import com.itsluminous.clearmovie.domain.model.setVoiceOver
 import com.itsluminous.clearmovie.domain.model.useOwnVoice
 import com.itsluminous.clearmovie.domain.voice.Phrases
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
+import com.itsluminous.clearmovie.domain.voice.roomToDownload
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,15 +72,18 @@ enum class VoiceNote {
 }
 
 /**
- * The voice pack dialog: the files to download, whether the steps to add them
- * show yet, and what they are for: voicing words only ([speech] null), or
- * also finding the words of speech in [speech].
+ * The voice pack dialog: the files to download, whether the browser steps to
+ * add them show instead of the app's own download, and what they are for:
+ * voicing words only ([speech] null), or also finding the words of speech in
+ * [speech]. [room] is how many more bytes the phone must free first (0: it
+ * has room).
  */
 data class PackAsk(
     val files: List<VoicePackFile>,
     val version: Int,
     val steps: Boolean = false,
     val speech: SpokenLanguage? = null,
+    val room: Long = 0,
 )
 
 /**
@@ -97,6 +104,8 @@ class VoiceChoiceController(
     private val onNote: (VoiceNote) -> Unit,
     private val onCheckWords: (ClipId) -> Unit,
     private val onInserted: (ClipId) -> Unit,
+    /** The app's own download of the voice pack (cm-voice-pack-download). */
+    private val downloads: PackDownloads = PackDownloads.NONE,
     /** Where the engine runs (tests use their own). */
     private val worker: CoroutineDispatcher = Dispatchers.Default,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -127,6 +136,110 @@ class VoiceChoiceController(
 
     /** True while the choice is the preset's default voice ([preselect]), not one the user picked. */
     private var preselected = false
+
+    private val downloadState = MutableStateFlow<PackDownloadState>(PackDownloadState.Idle)
+
+    /**
+     * The voice pack download as the dialog shows it (cm-voice-pack-download): one running or waiting
+     * now, or the end of one this editor started or saw running. An older download's end is not shown.
+     */
+    val download: StateFlow<PackDownloadState> = downloadState.asStateFlow()
+
+    /** The download this editor follows, and the dialog it answers. */
+    private var watched: String? = null
+    private var downloadFor: PackAsk? = null
+
+    init {
+        scope.launch { downloads.state.collect(::onDownload) }
+    }
+
+    private fun onDownload(state: PackDownloadState) {
+        when (state) {
+            is PackDownloadState.Waiting, is PackDownloadState.Running -> {
+                watched = (state as? PackDownloadState.Waiting)?.id ?: (state as PackDownloadState.Running).id
+                downloadState.value = state
+            }
+
+            is PackDownloadState.Failed -> {
+                downloadState.value = if (state.id == watched) state else PackDownloadState.Idle
+            }
+
+            is PackDownloadState.Done -> {
+                val mine = state.id == watched
+                watched = null
+                downloadState.value = PackDownloadState.Idle
+                if (mine) {
+                    val want = downloadFor ?: askState.value
+                    downloadFor = null
+                    scope.launch { settle(want, null) }
+                }
+            }
+
+            PackDownloadState.Idle -> {
+                watched = null
+                downloadState.value = PackDownloadState.Idle
+            }
+        }
+    }
+
+    /**
+     * Download: the app downloads the dialog's files itself, in the background, and adds each one once
+     * it matches the app's own manifest. The dialog then shows its progress.
+     */
+    fun downloadPack() {
+        val current = askState.value ?: return
+        if (!available || current.files.isEmpty()) return
+        // Room is checked again on each tap: the user may have freed some since the dialog opened.
+        val ask = current.copy(steps = false, room = roomFor(current.files))
+        if (ask.room > 0) {
+            watched = null
+            downloadState.value = PackDownloadState.Idle
+            askState.value = ask
+            return
+        }
+        downloadFor = ask
+        askState.value = downloadFor
+        // Shown at once; the worker's own state follows.
+        downloadState.value = PackDownloadState.Waiting(PENDING)
+        watched = PENDING
+        downloads.start(ask.files)
+    }
+
+    /** Cancel: the download stops, what it downloaded is removed, and the dialog closes. */
+    fun cancelDownload() {
+        downloads.cancel()
+        watched = null
+        downloadFor = null
+        downloadState.value = PackDownloadState.Idle
+        dismissPack()
+    }
+
+    /** Hide: the dialog closes and the download goes on; "Voice pack added" shows when it is done. */
+    fun hidePack() {
+        askState.value = null
+    }
+
+    /** The browser fallback: the steps to download the files from GitHub's page and add them. */
+    fun useBrowser() {
+        if (downloadState.value is PackDownloadState.Failed) downloadState.value = PackDownloadState.Idle
+        showSteps()
+    }
+
+    /**
+     * The files the dialog offers: what is missing for [speech] (null: voicing only), together with the
+     * words file of the language in use, so the first download is the only one most people need.
+     */
+    private fun askFiles(speech: SpokenLanguage?): List<VoicePackFile> {
+        val manifest = tools.manifest ?: return emptyList()
+        val wanted = (tools.missing(speech) + tools.missing(speech ?: languageState.value)).toSet()
+        return manifest.files.filter { it in wanted }
+    }
+
+    /** How many more bytes the phone must free before [files] can be downloaded and added (0: none). */
+    private fun roomFor(files: List<VoicePackFile>): Long {
+        val partial = files.sumOf { f -> tools.downloadFile(f)?.takeIf { it.isFile }?.length() ?: 0L }
+        return (roomToDownload(files, VoicePackStore.SPARE_BYTES) - partial - tools.freeBytes()).coerceAtLeast(0)
+    }
 
     /** The choice for the next recording or typed words. Choosing a voice without the pack asks for it first. */
     fun choose(voice: VoiceChoice) {
@@ -173,9 +286,9 @@ class VoiceChoiceController(
             if (tools.supported && manifest != null) onNote(VoiceNote.NOT_ON_THIS_PHONE)
             return false
         }
-        val missing = tools.missing(speech)
-        if (missing.isEmpty()) return true
-        askState.value = PackAsk(missing, manifest.version, speech = speech)
+        if (tools.missing(speech).isEmpty()) return true
+        val files = askFiles(speech)
+        askState.value = PackAsk(files, manifest.version, speech = speech, room = roomFor(files))
         return false
     }
 
@@ -187,8 +300,8 @@ class VoiceChoiceController(
         val manifest = tools.manifest ?: return
         if (!available) return
         scope.launch {
-            val missing = withContext(io) { tools.missing(speech) }
-            if (missing.isNotEmpty()) askState.value = PackAsk(missing, manifest.version, steps, speech)
+            val files = withContext(io) { if (tools.missing(speech).isEmpty()) emptyList() else askFiles(speech) }
+            if (files.isNotEmpty()) askState.value = PackAsk(files, manifest.version, steps, speech, withContext(io) { roomFor(files) })
         }
     }
 
@@ -198,6 +311,10 @@ class VoiceChoiceController(
 
     fun dismissPack() {
         askState.value = null
+        if (downloadState.value is PackDownloadState.Failed) {
+            watched = null
+            downloadState.value = PackDownloadState.Idle
+        }
         // The preset's voice, declined with its pack: the next recordings play as recorded, without asking again.
         if (preselected) {
             preselected = false
@@ -217,30 +334,44 @@ class VoiceChoiceController(
                     runCatching { tools.addPackFiles(sources) { workState.value = VoiceWork.AddingPack(it) } }
                         .getOrElse { PackAddResult(emptyList(), sources.size) }
                 }
-            val missing = withContext(io) { tools.missing(want?.speech) }
-            // Told now, not after the first voice, when the engine cannot run here.
-            val works = if (missing.isEmpty() || tools.missing(null).isEmpty()) withContext(io) { tools.checkEngine() } else true
-            workState.value = null
-            if (!works) return@launch engineFailed()
-            when {
-                result.outOfSpace -> {
-                    onNote(VoiceNote.PACK_NO_SPACE)
-                }
+            settle(want, result)
+        }
+    }
 
-                missing.isEmpty() -> {
-                    askState.value = null
-                    onNote(VoiceNote.PACK_ADDED)
-                }
-
-                result.added.isEmpty() && result.rejected > 0 -> {
-                    onNote(VoiceNote.PACK_WRONG_FILE)
-                }
-
-                else -> {
-                    onNote(VoiceNote.PACK_STILL_MISSING)
-                }
+    /**
+     * After pack files went in, from the user's files ([result]) or the app's own download (null): checks
+     * the engine runs on this phone, says what happened, and keeps the dialog for what is still missing.
+     */
+    private suspend fun settle(
+        want: PackAsk?,
+        result: PackAddResult?,
+    ) {
+        val missing = withContext(io) { tools.missing(want?.speech) }
+        // Told now, not after the first voice, when the engine cannot run here.
+        val works = if (missing.isEmpty() || tools.missing(null).isEmpty()) withContext(io) { tools.checkEngine() } else true
+        workState.value = null
+        if (!works) return engineFailed()
+        when {
+            result?.outOfSpace == true -> {
+                onNote(VoiceNote.PACK_NO_SPACE)
             }
-            if (missing.isNotEmpty() && want != null) askState.value = want.copy(files = missing, steps = true)
+
+            missing.isEmpty() -> {
+                askState.value = null
+                onNote(VoiceNote.PACK_ADDED)
+            }
+
+            result != null && result.added.isEmpty() && result.rejected > 0 -> {
+                onNote(VoiceNote.PACK_WRONG_FILE)
+            }
+
+            else -> {
+                onNote(VoiceNote.PACK_STILL_MISSING)
+            }
+        }
+        if (missing.isNotEmpty() && want != null) {
+            val files = withContext(io) { askFiles(want.speech) }
+            askState.value = want.copy(files = files, steps = result != null, room = withContext(io) { roomFor(files) })
         }
     }
 
@@ -404,4 +535,9 @@ class VoiceChoiceController(
     }
 
     private fun audio(id: ClipId): AudioClip? = project()?.clip(id) as? AudioClip
+
+    private companion object {
+        /** The download just asked for, before WorkManager names it. */
+        const val PENDING = "pending"
+    }
 }

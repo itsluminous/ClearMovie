@@ -57,7 +57,11 @@ secrets, and attaches it to the GitHub Release (see
 [release-signing.md](release-signing.md)). CI fails if there is not exactly one
 APK, if its name does not match its versionName, if it has no native libraries
 or an ABI lacks ones the others have, or if its versionCode is not `base × 10`
-(above 14 after 0.0.1). Keystores are never committed
+(above 14 after 0.0.1), if it asks for any permission not on the script's
+list, if its network security config is not the expected one (no plain
+HTTP, only `raw.githubusercontent.com` trusted), or if any code but the
+voice pack downloader (and a known list of unused library methods) calls
+the network. Keystores are never committed
 (`*.jks` and `*.keystore` are gitignored).
 
 ## Instrumented tests

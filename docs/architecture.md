@@ -22,11 +22,11 @@ their imports.
 | `data.project` | `ProjectRepository` (autosave, named save, recovery), `AutosaveGuard`, `NewVideos` (new drafts), `ShareDrafts` (a share's pending draft), `ProjectMedia` (a project's files) | `ui` |
 | `data.preset` | `PresetStore`, the key-colour check, `LoudnessMeter`, `MediaProbe` | `ui` |
 | `data.media` | `MediaAccess`, `MediaResolver`, `MediaCopier`, `CopyBudget`, `MediaPermissions`, persisted grants, `newMainItems` (picked items to clips); for shares `ShareLinks`, `ShareTypes`, `CaptureOrder` and `CaptureDates`, `PendingShare` | `ui` |
-| `data.voice` | `VoicePackStore` (the voice pack on the phone, and taking in downloaded files), `VoiceEngine` (Vosk and Kokoro from the pack), `VoiceTools` / `PackVoiceTools` (a recording's words, and words to a new voice file) | `ui` |
+| `data.voice` | `VoicePackStore` (the voice pack on the phone, and taking in downloaded files), `VoiceEngine` (Vosk and Kokoro from the pack), `VoiceTools` / `PackVoiceTools` (a recording's words, and words to a new voice file); the pack download (cm-voice-pack-download): `PackDownloader` (the only code that uses the network), `PackDownloadJob`, `PackDownloads` | `ui` |
 | `data.record` | `VoiceRecorder` (microphone to AAC in M4A), `MicSource` and `AudioRecordMic`, `VoiceRecordings` (the files, and removing unused ones) | `ui` |
 | `data.files` | `AppFiles` (where files live), `SafeFileName`, `StorageUsage` | `ui` |
 | `data.export` | `ExportStore`: the export's hidden-then-shown entry in `Movies/ClearMovie` | `ui` |
-| `work` | `ExportWorker` (the foreground worker), `ExportPipeline` (what one export does), its notifications and Stop receiver | |
+| `work` | `ExportWorker` (the foreground worker), `ExportPipeline` (what one export does), its notifications and Stop receiver; `VoicePackDownloadWorker` and `WorkPackDownloads` (the voice pack download), its notifications and Cancel receiver | |
 | `di` | Hilt modules (the settings DataStore, the database, the storage classes, the app scope) | |
 | `ui.theme` | `ClearMovieTheme`, the branded fallback colour schemes, `MediaColors` | |
 | `ui.navigation` | `ClearMovieApp` (the navigation graph), `NewVideoFlow` (which screen follows which), `Routes` | |
@@ -647,17 +647,18 @@ the screen; the playhead is saved by `EditorViewModel`.
   The engine is Vosk (speech to words, with word times) and Kokoro
   through sherpa-onnx (words to voice; it reads phonemes, which the app
   makes itself, since it silently skips words its dictionary lacks), all
-  Apache-2.0 or MIT, inside the app's own process, which has no internet
-  permission. They are about 150 MB, so they are not in the APK: they
+  Apache-2.0 or MIT, inside the app's own process; nothing they do uses
+  the network. They are about 150 MB, so they are not in the APK: they
   are the voice pack, the `voice-packs/v1/` folder of the repo (zips under
   GitHub's 100 MB limit, and `manifest.json`), outside the app build.
   The app carries the same manifest (`assets/voice-pack/manifest-v1.json`,
   checked equal by a unit test). Choosing a voice without the pack shows
-  its size, opens the folder's page, then lists the files and "Add the
-  downloaded files": each chosen file is copied privately while its
-  SHA-256 is worked out, and only a listed file for this phone's processor
-  is unzipped, through a staging folder, entry by entry inside its part's
-  folder and within the listed count and size, into
+  its size and Download (cm-voice-pack-download, below). "Download in the
+  browser instead" keeps the older way: the folder's page, the files, and
+  "Add the downloaded files": each chosen file is copied privately while its
+  SHA-256 is worked out. Either way, only a listed file for this phone's
+  processor is unzipped, through a staging folder, entry by entry inside
+  its part's folder and within the listed count and size, into
   `filesDir/voice-pack/v1/`, then made read-only. The engine's native
   libraries load from there by path (`System.load`; JNA finds `libvosk`),
   so the APK keeps only JNA's dispatcher, and the vendored sherpa-onnx
@@ -665,6 +666,35 @@ the screen; the playhead is saved by `EditorViewModel`.
   job and released (Kokoro alone grows to about 800 MB). On a phone whose
   processor the pack has no engine for, only No change is offered.
   Checked by hand with `VoiceChoiceDeviceTest` (`-e cm.voicepack true`).
+- **Voice pack download** (cm-voice-pack-download). The internet is used
+  for this alone. Download in the pack dialog starts the unique
+  `VoicePackDownloadWorker` (WorkManager, a `dataSync` foreground worker
+  that needs a connection, with a notification and Cancel), so it goes on
+  while the user edits or leaves the editor. It fetches the files this phone
+  needs: `voices.zip`, the engine for its processor type, and the words
+  file of the language in use ("Spoken in", English unless Hindi was
+  chosen); the other language's file comes later, the same way, if its
+  words are to be found. `PackDownloader`, the only code allowed to use the
+  network, opens only `https://raw.githubusercontent.com/itsluminous/ClearMovie/<commit>/voice-packs/v1/<file>`
+  at the commit pinned in `VoicePackSource` (so a later push cannot change
+  the bytes), follows no redirect, takes no more than the listed size, and
+  resumes a part on disk with a Range request. A dropped connection is
+  tried again three times (2, 5 and 10 s), and a lost connection pauses the
+  worker until WorkManager runs it again. Each finished file goes to
+  `VoicePackStore.addDownloaded`, which works out its SHA-256 and unzips it
+  only if it is the file the app's own manifest lists (a manifest is never
+  fetched), then deletes the zip; a mismatch is downloaded once more from
+  the start. Before downloading, the dialog checks free space (everything
+  unpacked, the largest zip and 50 MB), and warns on mobile data or without
+  a connection. Parts live in `filesDir/voice-pack/v1/.download/`; Cancel
+  and Settings' Remove delete them. The network security config
+  (`res/xml/network_security_config.xml`) allows no plain HTTP and trusts
+  only `raw.githubusercontent.com`. `NetworkUseConventionTest` fails the
+  build if any other source uses networking APIs or a networking library
+  is added; `scripts/verify-release-apks.sh` checks the release APK's exact
+  permissions, its network security config, and that every network call in
+  its code is the downloader's or a known library method the app never
+  reaches.
 - **Fit with blur.** The export blurs the background with a separable
   Gaussian at an eighth of the window (`BlurPasses`, two passes before
   `PlacementEffect`'s own); the preview draws the picture shrunk and stretched

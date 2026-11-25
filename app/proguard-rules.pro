@@ -15,3 +15,8 @@
 -keep class com.sun.jna.** { *; }
 -keep class * implements com.sun.jna.** { *; }
 -dontwarn java.awt.**
+
+# cm-voice-pack-download: the voice pack downloader is the only code that may use the network. It is
+# kept whole (not inlined or merged into other classes), so scripts/verify-release-apks.sh can check
+# that every network call in the release APK is in this class or a known, unused library one.
+-keep class com.itsluminous.clearmovie.data.voice.PackDownloader { *; }

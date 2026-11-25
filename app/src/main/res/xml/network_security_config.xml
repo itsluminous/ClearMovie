@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- cm-voice-pack-download: the only connection ClearMovie makes is the voice
+     pack download, over HTTPS, from raw.githubusercontent.com. No plain HTTP
+     anywhere, and no other host is trusted: with no trust anchors, a secure
+     connection to any other host fails. NetworkUseConventionTest checks this
+     file, and scripts/verify-release-apks.sh the copy in the release APK. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors />
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">raw.githubusercontent.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

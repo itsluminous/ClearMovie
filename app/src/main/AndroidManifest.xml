@@ -2,8 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ClearMovie is offline by design: there is no INTERNET permission.
-         The permissions read the phone's photos and videos, asked for once
+    <!-- ClearMovie works without the internet. The permissions read the
+         phone's photos and videos, asked for once
          on a plain-language screen (data/media/MediaPermissions.kt), and use
          the microphone for Record voice (below).
          Android 13+: images and videos; 14+ also lets the user choose
@@ -21,10 +21,16 @@
          the recording panel; the recording stays in the app's own storage. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- cm-voice-choice: the voice engine's libraries (Vosk, JNA) must never bring the internet in. -->
-    <uses-permission
-        android:name="android.permission.INTERNET"
-        tools:node="remove" />
+    <!-- cm-voice-pack-download: the internet, used only to download the voice
+         pack, once, from the app's GitHub repository
+         (data/voice/PackDownloader.kt, the only code that uses the network;
+         NetworkUseConventionTest and scripts/verify-release-apks.sh enforce
+         that). The network security config (res/xml/network_security_config.xml)
+         allows no plain HTTP and trusts no host but raw.githubusercontent.com.
+         ACCESS_NETWORK_STATE: waiting for a connection, and the mobile data
+         warning before the download. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Export (ARCHITECTURE section 12): a foreground worker keeps saving the
          video while the screen turns or the app is in the background, with a
@@ -52,6 +58,8 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="false"
         android:supportsRtl="true"
         android:theme="@style/Theme.ClearMovie">
 
@@ -82,6 +90,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProcessing"
             tools:node="merge" />
+
+        <!-- The voice pack download notification's Cancel button. Not exported:
+             only the app's own immutable PendingIntent reaches it. -->
+        <receiver
+            android:name=".work.VoicePackCancelReceiver"
+            android:exported="false" />
 
         <!-- The export notification's Stop button. Not exported: only the app's
              own immutable PendingIntent reaches it. -->

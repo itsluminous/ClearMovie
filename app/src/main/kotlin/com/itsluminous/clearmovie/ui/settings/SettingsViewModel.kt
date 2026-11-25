@@ -6,6 +6,8 @@ import com.itsluminous.clearmovie.data.files.StorageReport
 import com.itsluminous.clearmovie.data.files.StorageUsage
 import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
+import com.itsluminous.clearmovie.data.voice.PackDownloadState
+import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AppSettings
 import com.itsluminous.clearmovie.domain.model.ThemeMode
@@ -28,6 +30,7 @@ class SettingsViewModel
         private val storageUsage: StorageUsage,
         private val voiceTools: VoiceTools = VoiceTools.NONE,
         private val crashLog: CrashLog? = null,
+        private val packDownloads: PackDownloads = PackDownloads.NONE,
     ) : ViewModel() {
         private val crashState = MutableStateFlow<CrashLog.Crash?>(null)
 
@@ -39,8 +42,9 @@ class SettingsViewModel
         /** Bytes the voice pack takes on the phone (cm-voice-choice); 0 when it is not added. */
         val voicePackBytes: StateFlow<Long> = packState.asStateFlow()
 
-        /** Removes the voice pack. Voices already made stay in their videos. */
+        /** Removes the voice pack, stopping a download of it first. Voices already made stay in their videos. */
         fun removeVoicePack() {
+            if (packDownloads.state.value !is PackDownloadState.Idle) packDownloads.cancel()
             viewModelScope.launch(Dispatchers.IO) {
                 voiceTools.removePack()
                 packState.value = voiceTools.packBytes()

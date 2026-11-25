@@ -11,4 +11,8 @@
     <string name="notification_export_done_title">Your video is ready</string>
     <string name="notification_export_done_text">%1$s is in your gallery. Tap to play it.</string>
     <string name="notification_export_failed_title">Your video wasn\'t saved</string>
+    <string name="notification_channel_voice_pack">Voice pack download</string>
+    <string name="notification_channel_voice_pack_description">Shows how far the voice pack download has got, and when the pack is added.</string>
+    <string name="notification_pack_done_title">Voice pack added</string>
+    <string name="notification_pack_done_text">You can now choose a voice in ClearMovie.</string>
 </resources>

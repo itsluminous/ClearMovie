@@ -9,4 +9,8 @@
     <string name="notification_export_done_title">आपका वीडियो तैयार है</string>
     <string name="notification_export_done_text">%1$s आपकी गैलरी में है। चलाने के लिए टैप करें।</string>
     <string name="notification_export_failed_title">आपका वीडियो सेव नहीं हुआ</string>
+    <string name="notification_channel_voice_pack">आवाज़ पैक डाउनलोड</string>
+    <string name="notification_channel_voice_pack_description">दिखाता है कि आवाज़ पैक का डाउनलोड कहाँ तक पहुँचा, और पैक कब जुड़ा।</string>
+    <string name="notification_pack_done_title">आवाज़ पैक जुड़ गया</string>
+    <string name="notification_pack_done_text">अब आप ClearMovie में आवाज़ चुन सकते हैं।</string>
 </resources>

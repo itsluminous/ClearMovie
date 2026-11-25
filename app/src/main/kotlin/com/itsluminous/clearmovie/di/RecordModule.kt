@@ -10,16 +10,20 @@ import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.record.AudioRecordMic
 import com.itsluminous.clearmovie.data.record.MicSources
 import com.itsluminous.clearmovie.data.record.VoiceRecordings
+import com.itsluminous.clearmovie.data.voice.PackDownloader
+import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.PackVoiceTools
 import com.itsluminous.clearmovie.data.voice.VoicePackStore
 import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
 import com.itsluminous.clearmovie.work.ExportWorker
+import com.itsluminous.clearmovie.work.WorkPackDownloads
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
 import javax.inject.Singleton
 
 /** Voice recordings made in the editor (cm-record-voice). */
@@ -75,4 +79,18 @@ object RecordModule {
         val abi = abis.firstOrNull { manifest.supports(it) } ?: abis.firstOrNull().orEmpty()
         return PackVoiceTools(VoicePackStore(context.filesDir, manifest, abi, freeSpace::bytes), files, recordings)
     }
+
+    /** The one class that uses the internet: it downloads voice pack files (cm-voice-pack-download). */
+    @Provides
+    @Singleton
+    fun providePackDownloader(): PackDownloader = PackDownloader()
+
+    /** The voice pack download, in a background worker. */
+    @Provides
+    @Singleton
+    fun providePackDownloads(
+        workManager: WorkManager,
+        tools: VoiceTools,
+        @ApplicationScope scope: CoroutineScope,
+    ): PackDownloads = WorkPackDownloads(workManager, tools, scope)
 }

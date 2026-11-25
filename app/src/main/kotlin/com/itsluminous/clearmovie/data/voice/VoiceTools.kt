@@ -14,6 +14,7 @@ import com.itsluminous.clearmovie.domain.voice.PhraseFit
 import com.itsluminous.clearmovie.domain.voice.Phrases
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
+import java.io.File
 import java.io.InputStream
 
 /** A voice made for a voice item: its file, its phrases with their times, and its length. */
@@ -36,8 +37,9 @@ class VoiceFailure(
 
 /**
  * Speech to words and words to a voice (cm-voice-choice), for the editor.
- * Everything runs on the phone; nothing is sent anywhere (the app has no
- * internet permission). Call off the main thread.
+ * Everything runs on the phone; nothing is sent anywhere. The internet is
+ * used only to download the voice pack itself ([PackDownloader]). Call off
+ * the main thread.
  */
 interface VoiceTools {
     /** The pack this version of the app takes, or null when it has none. */
@@ -59,6 +61,21 @@ interface VoiceTools {
         sources: List<() -> InputStream?>,
         progress: (Float) -> Unit,
     ): PackAddResult
+
+    /** Where a download of pack file [f] goes until it is added (cm-voice-pack-download); null without a pack. */
+    fun downloadFile(f: VoicePackFile): File? = null
+
+    /** Takes in [zip], a finished download of [f], if its SHA-256 matches the app's own manifest. */
+    fun addDownloaded(
+        f: VoicePackFile,
+        zip: File,
+    ): PackAddResult = PackAddResult(emptyList(), 1)
+
+    /** Removes stopped downloads. */
+    fun clearDownloads() = Unit
+
+    /** Free bytes where the pack goes. */
+    fun freeBytes(): Long = Long.MAX_VALUE
 
     fun packBytes(): Long
 
@@ -149,6 +166,20 @@ class PackVoiceTools(
         lexiconCache = null
         store.add(sources, progress)
     }
+
+    override fun downloadFile(f: VoicePackFile): File = store.downloadFile(f)
+
+    override fun addDownloaded(
+        f: VoicePackFile,
+        zip: File,
+    ) = synchronized(this) {
+        lexiconCache = null
+        store.addDownloaded(f, zip)
+    }
+
+    override fun clearDownloads() = store.clearDownloads()
+
+    override fun freeBytes() = store.freeBytes()
 
     override fun packBytes() = store.bytesOnDisk()
 

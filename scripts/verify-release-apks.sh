@@ -16,11 +16,20 @@
 #   3. versionCode is base*10. Any versionName other than 0.0.1 needs a code
 #      above 14, the highest code 0.0.1's per-ABI APKs used, so every 0.0.1
 #      install accepts it as an update.
-#   4. No INTERNET permission: ClearMovie is offline by design, and no library
-#      (the voice engine's among them) may add it.
+#   4. The internet is used only to download the voice pack
+#      (cm-voice-pack-download):
+#      a. The APK asks for exactly the permissions listed below; a new one,
+#         from the app or a library, fails until it is added here on purpose.
+#      b. Its network security config allows no plain HTTP, and trusts no
+#         host but raw.githubusercontent.com (no trust anchors elsewhere, no
+#         debug overrides).
+#      c. Every call into the network in its code is in the voice pack
+#         downloader (data/voice/PackDownloader.kt), or one of a known list
+#         of library methods the app never reaches (Media3's HTTP and UDP
+#         sources, JNA reading its own resources). A new one fails.
 #   5. With VERIFY_SIGNATURES=true, the APK passes `apksigner verify` with both
 #      a v2 and a v3 signature.
-# It needs the Android SDK build-tools (aapt2, apksigner) under $ANDROID_HOME.
+# It needs the Android SDK build-tools (aapt2, dexdump, apksigner) under $ANDROID_HOME.
 set -euo pipefail
 
 dir="${1:-app/build/outputs/apk/release}"
@@ -40,7 +49,9 @@ sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 build_tools="$(find "$sdk/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
 aapt2="$build_tools/aapt2"
 apksigner="$build_tools/apksigner"
+dexdump="$build_tools/dexdump"
 [ -x "$aapt2" ] || fail "aapt2 not found in $build_tools"
+[ -x "$dexdump" ] || fail "dexdump not found in $build_tools"
 command -v zipinfo > /dev/null || fail "zipinfo (from unzip) is required"
 
 # The .so entries of an APK. zipinfo failing must fail the check, not read as
@@ -110,12 +121,99 @@ if [ "$version_name" != "$last_split_version" ] && [ "$version_code" -le "$last_
   fail "versionCode $version_code must be above $last_split_max_code (0.0.1's per-ABI APKs), or phones with 0.0.1 cannot update. Raise baseVersionCode."
 fi
 
-# 4. Offline by design: no library may bring in the INTERNET permission.
+# 4. The internet, for the voice pack download only.
+# 4a. Exactly these permissions (aapt2's lines, sorted).
+expected_permissions="$(sort <<'EOF'
+uses-permission: name='android.permission.READ_EXTERNAL_STORAGE' maxSdkVersion='32'
+uses-permission: name='android.permission.READ_MEDIA_IMAGES'
+uses-permission: name='android.permission.READ_MEDIA_VIDEO'
+uses-permission: name='android.permission.READ_MEDIA_VISUAL_USER_SELECTED'
+uses-permission: name='android.permission.RECORD_AUDIO'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+uses-permission: name='android.permission.FOREGROUND_SERVICE'
+uses-permission: name='android.permission.FOREGROUND_SERVICE_DATA_SYNC'
+uses-permission: name='android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.WAKE_LOCK'
+uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'
+permission: com.itsluminous.ClearMovie.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+uses-permission: name='com.itsluminous.ClearMovie.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+EOF
+)"
 perms="$("$aapt2" dump permissions "$apk")" || fail "aapt2 could not read the permissions of $name"
-if printf '%s\n' "$perms" | grep -q "android.permission.INTERNET'"; then
-  fail "$name asks for the INTERNET permission; ClearMovie is offline by design"
+perms="$(printf '%s\n' "$perms" | grep -v '^package: ' | sort)"
+echo
+echo "Permissions in $name:"
+printf '%s\n' "$perms" | sed 's/^/  /'
+if [ "$perms" != "$expected_permissions" ]; then
+  echo "Differences (< expected, > in the APK):" >&2
+  diff <(printf '%s\n' "$expected_permissions") <(printf '%s\n' "$perms") >&2 || true
+  fail "$name asks for other permissions than expected; a new one must be added to this check on purpose"
 fi
-echo "No INTERNET permission."
+
+# 4b. The network security config the manifest points at, read from the APK.
+manifest_tree="$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")" || fail "aapt2 could not read the manifest of $name"
+printf '%s\n' "$manifest_tree" | grep -q 'usesCleartextTraffic(0x010104ec)=false' || fail "$name does not set usesCleartextTraffic=false"
+nsc_id="$(printf '%s\n' "$manifest_tree" | sed -nE 's/.*:networkSecurityConfig\(0x01010527\)=@(0x[0-9a-f]+).*/\1/p' | head -n 1)"
+[ -n "$nsc_id" ] || fail "$name has INTERNET but no network security config"
+resources="$("$aapt2" dump resources "$apk")" || fail "aapt2 could not read the resources of $name"
+nsc_file="$(printf '%s\n' "$resources" | awk -v id="$nsc_id" '$1 == "resource" && $2 == id {found = 1; next} found && /\(file\)/ {print $3; exit}')"
+[ -n "$nsc_file" ] || fail "could not find the file of resource $nsc_id in $name"
+nsc="$("$aapt2" dump xmltree --file "$nsc_file" "$apk")" || fail "aapt2 could not read $nsc_file in $name"
+echo
+echo "Network security config ($nsc_file):"
+printf '%s\n' "$nsc" | sed 's/^/  /'
+# Its shape, without indentation and line numbers: exactly this, nothing more.
+expected_nsc="$(cat <<'EOF'
+E: network-security-config
+E: base-config
+A: cleartextTrafficPermitted=false
+E: trust-anchors
+E: domain-config
+A: cleartextTrafficPermitted=false
+E: domain
+A: includeSubdomains=false
+T: 'raw.githubusercontent.com'
+E: trust-anchors
+E: certificates
+A: src="system" (Raw: "system")
+EOF
+)"
+shape="$(printf '%s\n' "$nsc" | sed -E 's/^ +//; s/ \(line=[0-9]+\)$//')"
+[ "$shape" = "$expected_nsc" ] || fail "the network security config in $name is not the expected one (no plain HTTP, only raw.githubusercontent.com trusted)"
+
+# 4c. The code that calls the network, as "<class> <method> -> <call>", from every dex file.
+network_calls() {
+  local tmp
+  tmp="$(mktemp -d)"
+  unzip -q -o "$1" 'classes*.dex' -d "$tmp" || fail "could not unpack the dex files of $(basename "$1")"
+  for dex in "$tmp"/classes*.dex; do
+    "$dexdump" -d "$dex" 2> /dev/null || fail "dexdump could not read $(basename "$dex")"
+  done | awk -v re='(Ljava/net/URL;\\.(openConnection|openStream)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\\.<init>|Ljavax/net/(ssl/SSL)?SocketFactory;\\.createSocket|Ljava/nio/channels/(Socket|Datagram|ServerSocket)Channel;\\.open|Landroid/webkit/WebView;\\.load|Landroid/app/DownloadManager;\\.enqueue|Landroid/net/http/)' '
+    /Class descriptor/ { cls = $NF; gsub(/\047/, "", cls) }
+    /^      name          :/ { m = $NF; gsub(/\047/, "", m) }
+    /invoke-/ && $0 ~ re { match($0, re); print cls " " m " -> " substr($0, RSTART, RLENGTH) }' | sort -u
+  rm -rf "$tmp"
+}
+expected_calls="$(sort <<'EOF'
+Lcom/itsluminous/clearmovie/data/voice/PackDownloader; connect -> Ljava/net/URL;.openConnection
+Landroidx/media3/datasource/DefaultHttpDataSource; makeConnection -> Ljava/net/URL;.openConnection
+Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/DatagramSocket;.<init>
+Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/MulticastSocket;.<init>
+Lcom/sun/jna/Native; extractFromResourcePath -> Ljava/net/URL;.openStream
+EOF
+)"
+calls="$(network_calls "$apk")" || exit 1
+echo
+echo "Network calls in the code of $name:"
+printf '%s\n' "$calls" | sed 's/^/  /'
+if [ "$calls" != "$expected_calls" ]; then
+  echo "Differences (< expected, > in the APK):" >&2
+  diff <(printf '%s\n' "$expected_calls") <(printf '%s\n' "$calls") >&2 || true
+  fail "$name has network calls other than the voice pack downloader's and the known library ones"
+fi
+echo "INTERNET only with the network security config, and only the voice pack downloader calls the network."
 
 # 5. Signatures (CI sets VERIFY_SIGNATURES=true when the signing secrets exist).
 if [ "${VERIFY_SIGNATURES:-false}" = "true" ]; then

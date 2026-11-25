@@ -54,6 +54,9 @@ class VoicePackStore(
     fun missing(speech: SpokenLanguage?): List<VoicePackFile> =
         if (!supported) emptyList() else manifest.needed(abi, speech).filterNot(::isAdded)
 
+    /** Free bytes on the phone's storage, where the pack goes. */
+    fun freeBytes(): Long = freeSpace()
+
     /** Bytes the pack takes on this phone. */
     fun bytesOnDisk(): Long = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
@@ -104,6 +107,56 @@ class VoicePackStore(
         }
         return PackAddResult(added, rejected)
     }
+
+    /** Where downloads of pack files go until they are added (cm-voice-pack-download); inside the pack's folder, so Remove clears them too. */
+    val downloadDir: File get() = File(root, ".download")
+
+    /** The download of [f] in progress, resumed from where it stopped. */
+    fun downloadFile(f: VoicePackFile): File = File(downloadDir, f.file + ".part")
+
+    /** Removes downloads that were stopped (Cancel). */
+    fun clearDownloads() {
+        downloadDir.deleteRecursively()
+    }
+
+    /**
+     * Takes in [zip], a download of [f] in the app's own storage: its SHA-256
+     * is worked out over the file and it is unzipped only when it is [f] as
+     * the app's own [manifest] lists it (never a manifest from the network).
+     * The zip is deleted either way.
+     */
+    fun addDownloaded(
+        f: VoicePackFile,
+        zip: File,
+    ): PackAddResult {
+        try {
+            val listed = manifest.files.firstOrNull { it == f }?.takeIf { it.part != VoicePackFile.ENGINE || it.abi == abi }
+            val sha = if (listed != null && zip.isFile && zip.length() == listed.bytes) sha256Of(zip) else null
+            return when {
+                listed == null || sha == null || !sha.equals(listed.sha256, ignoreCase = true) -> PackAddResult(emptyList(), 1)
+                isAdded(listed) -> PackAddResult(emptyList(), 0)
+                freeSpace() < listed.unpackedBytes + SPARE_BYTES -> PackAddResult(emptyList(), 0, outOfSpace = true)
+                unpack(listed, zip) -> PackAddResult(listOf(listed), 0)
+                else -> PackAddResult(emptyList(), 1)
+            }
+        } finally {
+            zip.delete()
+        }
+    }
+
+    private fun sha256Of(file: File): String? =
+        runCatching {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buf = ByteArray(BUFFER)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    digest.update(buf, 0, n)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        }.getOrNull()
 
     /** Copies [input] to [to], refusing more than the largest pack file; the copy's SHA-256, or null. */
     private fun copyHashing(

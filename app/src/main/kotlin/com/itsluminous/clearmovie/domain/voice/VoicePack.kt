@@ -45,7 +45,7 @@ data class VoicePackManifest(
         /** The folder page that lists the pack's files. */
         fun folderUrl(version: Int): String = "https://github.com/itsluminous/ClearMovie/tree/main/voice-packs/v$version"
 
-        /** A file's direct download link. */
+        /** A file's link on the folder's page (the browser fallback). */
         fun downloadUrl(
             version: Int,
             file: String,
@@ -117,3 +117,50 @@ data class VoicePackFile(
         }
     }
 }
+
+/**
+ * Where the app itself downloads the voice pack from (cm-voice-pack-download):
+ * the repository's raw file host over HTTPS, at one fixed commit, so a later
+ * push to the repository cannot change the bytes under the app. The files are
+ * still checked against the app's own manifest before anything is unzipped.
+ * This host is the only one the app's network security config trusts.
+ */
+object VoicePackSource {
+    const val HOST = "raw.githubusercontent.com"
+    const val REPOSITORY = "itsluminous/ClearMovie"
+
+    /**
+     * The commit each pack version is downloaded at. Version 1: the commit that
+     * added `voice-packs/v1/` ("feat(voice): Add the voice pack, version 1").
+     */
+    val COMMITS: Map<Int, String> = mapOf(1 to "33f2ac362e5196752fc5a084d9944eb225ff05d5")
+
+    /** The link the app downloads [file] of pack [version] from, or null for a version without a pinned commit. */
+    fun url(
+        version: Int,
+        file: String,
+    ): String? {
+        val commit = COMMITS[version] ?: return null
+        if (!FILE.matches(file)) return null
+        return "https://$HOST/$REPOSITORY/$commit/voice-packs/v$version/$file"
+    }
+
+    /** Whether [url] is a pack file at its pinned commit: the only links the downloader opens. */
+    fun allowed(url: String): Boolean {
+        val m = LINK.matchEntire(url) ?: return false
+        val version = m.groupValues[2].toIntOrNull() ?: return false
+        return COMMITS[version] == m.groupValues[1]
+    }
+
+    private val FILE = Regex("^[a-z0-9_-]{1,40}\\.zip$")
+    private val LINK =
+        Regex(
+            "^https://raw\\.githubusercontent\\.com/itsluminous/ClearMovie/([0-9a-f]{40})/voice-packs/v([1-9][0-9]{0,3})/[a-z0-9_-]{1,40}\\.zip$",
+        )
+}
+
+/** The room a download of [files] needs: everything unpacked, the largest zip while it is unpacked, and [spare] left over. */
+fun roomToDownload(
+    files: List<VoicePackFile>,
+    spare: Long,
+): Long = files.sumOf { it.unpackedBytes } + (files.maxOfOrNull { it.bytes } ?: 0L) + spare

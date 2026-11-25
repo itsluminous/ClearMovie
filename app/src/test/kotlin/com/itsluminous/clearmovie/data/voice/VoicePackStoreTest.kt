@@ -141,4 +141,44 @@ class VoicePackStoreTest {
         assertThat(s.supported).isFalse()
         assertThat(s.missing(SpokenLanguage.ENGLISH)).isEmpty()
     }
+
+    @Test
+    fun `a download is unzipped only when its bytes are the file the app's own manifest lists`() {
+        val s = store()
+        val listed = manifest.files.first { it.file == "voices.zip" }
+        // Another listed file's bytes under this name, a damaged copy, and another phone's engine are refused.
+        for ((f, bytes) in listOf(
+            listed to engine,
+            listed to voices.copyOf().also { it[it.size / 2] = (it[it.size / 2] + 1).toByte() },
+            manifest.files.first { it.abi == "arm64-v8a" } to armEngine,
+            listed.copy(sha256 = sha(engine), bytes = engine.size.toLong()) to engine,
+        )) {
+            val zip = s.downloadFile(f).apply { parentFile.mkdirs() }
+            zip.writeBytes(bytes)
+            val r = s.addDownloaded(f, zip)
+            assertThat(r.added).isEmpty()
+            assertThat(r.rejected).isEqualTo(1)
+            assertThat(zip.exists()).isFalse()
+        }
+        assertThat(s.anyAdded()).isFalse()
+        val zip = s.downloadFile(listed).apply { parentFile.mkdirs() }
+        zip.writeBytes(voices)
+        assertThat(s.addDownloaded(listed, zip).added).containsExactly(listed)
+        assertThat(zip.exists()).isFalse()
+        assertThat(s.ttsDir.resolve("tokens.txt").readText()).isEqualTo("a 1")
+        // Partial downloads go with Cancel, and with Remove.
+        s.downloadFile(listed).apply { parentFile.mkdirs() }.writeBytes(ByteArray(3))
+        s.clearDownloads()
+        assertThat(s.downloadDir.exists()).isFalse()
+    }
+
+    @Test
+    fun `a download needs room for what it unpacks`() {
+        val s = store(free = 10)
+        val listed = manifest.files.first { it.file == "voices.zip" }
+        val zip = s.downloadFile(listed).apply { parentFile.mkdirs() }
+        zip.writeBytes(voices)
+        assertThat(s.addDownloaded(listed, zip).outOfSpace).isTrue()
+        assertThat(s.anyAdded()).isFalse()
+    }
 }

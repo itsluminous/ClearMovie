@@ -9,7 +9,7 @@
 [![Stars](https://img.shields.io/github/stars/itsluminous/ClearMovie?style=flat&color=gold)](https://github.com/itsluminous/ClearMovie/stargazers)
 [![Forks](https://img.shields.io/github/forks/itsluminous/ClearMovie?style=flat&color=blue)](https://github.com/itsluminous/ClearMovie/forks)
 
-**ClearMovie** is a simple, offline video maker for Android, built for people who
+**ClearMovie** is a simple video maker for Android that works without the internet, built for people who
 just want to turn the photos and videos from an event into a finished video. Pick a
 preset (an intro, a green-screen frame overlay that runs across the whole video, and
 an ending), add your photos and videos, drop in a few captions, and export. Encoding
@@ -129,8 +129,10 @@ What ClearMovie on `main` does:
 - **Voice in the video** - say a voice item in a British, Indian or American voice, male or
   female, like a TV anchor: speak the words, or type them. Spoken words are found on the
   phone and shown to check first. Hindi words are said in the Indian voices. It needs the
-  free voice pack (about 150 MB, added once from
-  [voice-packs](voice-packs/v1/)); No change keeps your own recording.
+  free voice pack (about 150 MB): when you first choose a voice, ClearMovie offers to
+  download it, once, from this repository's [voice-packs](voice-packs/v1/) folder, with a
+  progress bar and a warning on mobile data. You can also download the files in a browser
+  and add them. No change keeps your own recording.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its
   colours from your wallpaper on Android 12+, and has a themed icon.
 - **Portrait and landscape** - in the editor, landscape puts the preview on the left and the
@@ -193,14 +195,18 @@ What has shipped, and what is still to come:
 
 ## Privacy Principles
 
-- **Offline by design.** The app has no INTERNET permission: no servers, no
-  telemetry, no analytics, no ads.
+- **The internet only for the voice pack.** ClearMovie uses the internet for one thing:
+  downloading the optional voice pack, once, from this repository on GitHub, when you
+  first choose a voice. Each file is checked against a SHA-256 fingerprint built into the
+  app before it is used. Nothing is ever uploaded: no servers, no accounts, no telemetry,
+  no analytics, no ads. CI fails any build in which other code uses the network, or that
+  trusts any other site.
 - **Your media stays put.** Photos and videos are read from your gallery where they are.
   The only files copied into the app are preset files you chose to keep a copy of, and
   items the gallery can't share permanently.
 - **The microphone only when you record.** It is asked for the first time you tap
   Record voice, used only while the recording panel shows, and recordings stay
-  inside the app. Another voice is made on the phone, by the voice pack's engine running
+  inside the app and never leave the phone. Another voice is made on the phone, by the voice pack's engine running
   inside ClearMovie; its words and sound never leave the phone.
 - **No proprietary dependencies.** It is built on AndroidX and Jetpack Media3, with no Firebase or Play Services.
 - **No watermarks.**

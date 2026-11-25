@@ -9,4 +9,8 @@
     <string name="notification_export_done_title">Aapka video taiyaar hai</string>
     <string name="notification_export_done_text">%1$s aapki gallery me hai. Play karne ke liye tap karein.</string>
     <string name="notification_export_failed_title">Aapka video save nahi hua</string>
+    <string name="notification_channel_voice_pack">Awaaz pack download</string>
+    <string name="notification_channel_voice_pack_description">Dikhata hai ki awaaz pack ka download kahan tak pahuncha, aur pack kab juda.</string>
+    <string name="notification_pack_done_title">Awaaz pack jud gaya</string>
+    <string name="notification_pack_done_text">Ab aap ClearMovie mein awaaz chun sakte hain.</string>
 </resources>

@@ -2,6 +2,9 @@ package com.itsluminous.clearmovie.ui.editor
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +45,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.itsluminous.clearmovie.R
+import com.itsluminous.clearmovie.data.voice.PackDownloadError
+import com.itsluminous.clearmovie.data.voice.PackDownloadState
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.SpokenLanguage
@@ -48,7 +54,9 @@ import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.VoicePhrase
 import com.itsluminous.clearmovie.domain.model.WordsSource
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
+import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.durationText
+import com.itsluminous.clearmovie.work.VoicePackNotifications
 
 // The voice choice (cm-voice-choice): the dropdowns in a voice row's sheet, the voice item's panel, typed words, and
 // the voice pack dialog.
@@ -60,6 +68,11 @@ const val VOICE_TYPED_TAG = "voice_typed_text"
 const val VOICE_PACK_DIALOG_TAG = "voice_pack_dialog"
 const val VOICE_PACK_DOWNLOAD_TAG = "voice_pack_download"
 const val VOICE_PACK_ADD_TAG = "voice_pack_add"
+const val VOICE_PACK_PROGRESS_TAG = "voice_pack_progress"
+const val VOICE_PACK_HIDE_TAG = "voice_pack_hide"
+const val VOICE_PACK_CANCEL_TAG = "voice_pack_cancel"
+const val VOICE_PACK_BROWSER_TAG = "voice_pack_browser"
+const val VOICE_PACK_WARNING_TAG = "voice_pack_warning"
 const val TYPE_WORDS_OPTION = "type_words"
 
 /** A voice's name, as the menu shows it. */
@@ -360,15 +373,18 @@ private fun WorkLine(work: VoiceWork?) {
 }
 
 /**
- * The voice pack dialog: what it is, how big, Download (the pack's folder
- * opens in the browser), then the steps to add the downloaded files, and
- * Add the downloaded files. Its state lives in [voices], so it is as it
- * was when the user comes back from the browser.
+ * The voice pack dialog (cm-voice-pack-download): what it is, how big, and
+ * Download, which downloads it in the app; then its progress (Hide keeps it
+ * going in the background, Cancel stops it), or why it stopped, with Try
+ * again. "Download in the browser instead" keeps the older way: the steps,
+ * the files' links, and Add the downloaded files. Its state lives in
+ * [voices], so it is as it was after a rotation or a trip to the browser.
  */
 @Composable
 internal fun VoicePackDialog(voices: VoiceChoiceController) {
     val ask by voices.packAsk.collectAsState()
     val work by voices.work.collectAsState()
+    val download by voices.download.collectAsState()
     val context = LocalContext.current
     // Registered whether or not the dialog shows, so files picked just before the app was stopped still arrive.
     val picker =
@@ -377,7 +393,8 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
             voices.addPackFiles(uris.map { uri -> { resolver.openInputStream(uri) } })
         }
     val current = ask ?: return
-    val download = current.files.sumOf { it.bytes }
+    val network = rememberNetwork()
+    val downloadBytes = current.files.sumOf { it.bytes }
     val unpacked = current.files.sumOf { it.unpackedBytes }
 
     fun size(b: Long) = Formatter.formatShortFileSize(context, b).replace(' ', '\u00A0')
@@ -390,54 +407,207 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
             // No browser: the steps still name the page, so it can be opened elsewhere.
         }
     }
+    val running = download is PackDownloadState.Waiting || download is PackDownloadState.Running
+    val failed = download as? PackDownloadState.Failed
+    val mode =
+        when {
+            running -> PackMode.PROGRESS
+            current.steps -> PackMode.STEPS
+            failed != null -> PackMode.ERROR
+            else -> PackMode.CONFIRM
+        }
     AlertDialog(
-        onDismissRequest = { if (work == null) voices.dismissPack() },
-        title = { Text(stringResource(if (current.steps) R.string.pack_steps_title else R.string.pack_title)) },
+        // Outside the dialog: while it downloads, the dialog hides and the download goes on.
+        onDismissRequest = {
+            when {
+                running -> voices.hidePack()
+                work == null -> voices.dismissPack()
+            }
+        },
+        title = {
+            Text(
+                stringResource(
+                    when (mode) {
+                        PackMode.CONFIRM -> R.string.pack_title
+                        PackMode.PROGRESS -> R.string.pack_downloading_title
+                        PackMode.ERROR -> R.string.pack_failed_title
+                        PackMode.STEPS -> R.string.pack_steps_title
+                    },
+                ),
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!current.steps) {
-                    Text(stringResource(R.string.pack_body, size(download), size(unpacked)))
-                } else {
-                    Text(stringResource(R.string.pack_steps_body))
-                    current.files.forEach { f ->
-                        TextButton(
-                            onClick = { open(VoicePackManifest.downloadUrl(current.version, f.file)) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        ) {
-                            Text(
-                                stringResource(R.string.pack_file_line, f.file, size(f.bytes)),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                when (mode) {
+                    PackMode.CONFIRM -> {
+                        Text(stringResource(R.string.pack_body, size(downloadBytes), size(unpacked)))
+                        Text(stringResource(R.string.pack_privacy))
+                        when {
+                            current.room > 0 -> PackWarning(stringResource(R.string.pack_error_space, size(current.room)))
+                            !network.connected -> PackWarning(stringResource(R.string.pack_offline))
+                            network.metered -> PackWarning(stringResource(R.string.pack_mobile_data, size(downloadBytes)))
                         }
+                        BrowserInstead(voices::useBrowser)
                     }
-                    Text(VoicePackManifest.folderUrl(current.version), style = MaterialTheme.typography.bodySmall)
-                    WorkLine(work)
+
+                    PackMode.PROGRESS -> {
+                        val progress = (download as? PackDownloadState.Running)?.progress
+                        val line =
+                            when {
+                                progress?.checking == true -> {
+                                    stringResource(R.string.pack_checking)
+                                }
+
+                                progress != null && progress.total > 0 -> {
+                                    stringResource(
+                                        R.string.pack_progress,
+                                        size(progress.done),
+                                        size(progress.total),
+                                    )
+                                }
+
+                                !network.connected -> {
+                                    stringResource(R.string.pack_waiting)
+                                }
+
+                                else -> {
+                                    stringResource(R.string.pack_starting)
+                                }
+                            }
+                        if (progress != null && progress.total > 0 && !progress.checking) {
+                            LinearProgressIndicator(
+                                { (progress.done.toFloat() / progress.total).coerceIn(0f, 1f) },
+                                Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag(VOICE_PACK_PROGRESS_TAG),
+                            )
+                        } else {
+                            LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag(VOICE_PACK_PROGRESS_TAG))
+                        }
+                        Text(line)
+                        Text(stringResource(R.string.pack_keep_editing), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    PackMode.ERROR -> {
+                        val error = failed?.error ?: PackDownloadError.FAILED
+                        Text(
+                            if (error == PackDownloadError.NO_SPACE) {
+                                stringResource(R.string.pack_error_space, size(failed?.missingBytes ?: current.room))
+                            } else {
+                                stringResource(VoicePackNotifications.errorText(error))
+                            },
+                        )
+                        BrowserInstead(voices::useBrowser)
+                    }
+
+                    PackMode.STEPS -> {
+                        Text(stringResource(R.string.pack_steps_body))
+                        current.files.forEach { f ->
+                            TextButton(
+                                onClick = { open(VoicePackManifest.downloadUrl(current.version, f.file)) },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.pack_file_line, f.file, size(f.bytes)),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        Text(VoicePackManifest.folderUrl(current.version), style = MaterialTheme.typography.bodySmall)
+                        WorkLine(work)
+                    }
                 }
             }
         },
         confirmButton = {
-            if (!current.steps) {
-                TextButton(
-                    onClick = {
-                        open(VoicePackManifest.folderUrl(current.version))
-                        voices.showSteps()
-                    },
-                    modifier = Modifier.testTag(VOICE_PACK_DOWNLOAD_TAG),
-                ) { Text(stringResource(R.string.pack_download)) }
-            } else {
-                TextButton(
-                    onClick = { picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
-                    enabled = work == null,
-                    modifier = Modifier.testTag(VOICE_PACK_ADD_TAG),
-                ) { Text(stringResource(R.string.pack_add_files)) }
+            when (mode) {
+                PackMode.CONFIRM, PackMode.ERROR -> {
+                    TextButton(
+                        onClick = voices::downloadPack,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_DOWNLOAD_TAG),
+                    ) { AutoSizeLabel(stringResource(if (mode == PackMode.ERROR) R.string.export_try_again else R.string.pack_download)) }
+                }
+
+                PackMode.PROGRESS -> {
+                    TextButton(onClick = voices::hidePack, modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_HIDE_TAG)) {
+                        AutoSizeLabel(stringResource(R.string.export_hide))
+                    }
+                }
+
+                PackMode.STEPS -> {
+                    TextButton(
+                        onClick = { picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
+                        enabled = work == null,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_ADD_TAG),
+                    ) { AutoSizeLabel(stringResource(R.string.pack_add_files)) }
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = voices::dismissPack, enabled = work == null) { Text(stringResource(R.string.media_access_not_now)) }
+            if (mode == PackMode.PROGRESS) {
+                TextButton(onClick = voices::cancelDownload, modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_CANCEL_TAG)) {
+                    AutoSizeLabel(stringResource(R.string.action_cancel))
+                }
+            } else {
+                TextButton(onClick = voices::dismissPack, enabled = work == null, modifier = Modifier.heightIn(min = 48.dp)) {
+                    AutoSizeLabel(stringResource(R.string.media_access_not_now))
+                }
+            }
         },
         modifier = Modifier.testTag(VOICE_PACK_DIALOG_TAG),
     )
+}
+
+private enum class PackMode { CONFIRM, PROGRESS, ERROR, STEPS }
+
+/** Something to know before downloading: mobile data, no connection, or no room. */
+@Composable
+private fun PackWarning(text: String) {
+    Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(VOICE_PACK_WARNING_TAG))
+}
+
+/** The older way, kept as a fallback: download the files in the browser and add them. */
+@Composable
+private fun BrowserInstead(onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_BROWSER_TAG)) {
+        AutoSizeLabel(stringResource(R.string.pack_use_browser))
+    }
+}
+
+/** Whether the phone is online now, and whether that connection is metered (mobile data), kept up to date. */
+private data class NetworkNow(
+    val connected: Boolean,
+    val metered: Boolean,
+)
+
+@Composable
+private fun rememberNetwork(): NetworkNow {
+    val context = LocalContext.current
+    val manager = remember(context) { context.getSystemService(ConnectivityManager::class.java) }
+
+    fun now(): NetworkNow {
+        val caps = manager?.let { m -> m.activeNetwork?.let { m.getNetworkCapabilities(it) } }
+        val connected = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        return NetworkNow(connected, connected && caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) != true)
+    }
+    var state by remember { mutableStateOf(now()) }
+    DisposableEffect(manager) {
+        val callback =
+            object : ConnectivityManager.NetworkCallback() {
+                override fun onCapabilitiesChanged(
+                    network: Network,
+                    networkCapabilities: NetworkCapabilities,
+                ) {
+                    state = now()
+                }
+
+                override fun onLost(network: Network) {
+                    state = now()
+                }
+            }
+        val registered = runCatching { manager?.registerDefaultNetworkCallback(callback) }.isSuccess && manager != null
+        onDispose { if (registered) runCatching { manager?.unregisterNetworkCallback(callback) } }
+    }
+    return state
 }
 
 private const val TYPED_MAX = 4000

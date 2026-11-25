@@ -24,6 +24,7 @@ import com.itsluminous.clearmovie.data.project.ProjectMedia
 import com.itsluminous.clearmovie.data.project.ProjectMediaSet
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.data.record.VoiceRecordings
+import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.AudioClip
@@ -297,6 +298,7 @@ class EditorViewModel
         private val soundTracks: SoundTracks = SoundTracks { _, _, known -> known },
         private val voiceTools: VoiceTools = VoiceTools.NONE,
         private val exports: ExportsInProgress = ExportsInProgress { false },
+        private val packDownloads: PackDownloads = PackDownloads.NONE,
     ) : ViewModel() {
         val projectId: ProjectId = ProjectId(requireNotNull(savedState.get<String>(Routes.ARG_PROJECT)))
 
@@ -355,6 +357,7 @@ class EditorViewModel
                 onNote = { note -> viewModelScope.launch { eventChannel.send(EditorEvent.Voice(note)) } },
                 onCheckWords = { id -> viewModelScope.launch { eventChannel.send(EditorEvent.CheckWords(id)) } },
                 onInserted = { id -> viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(id)) } },
+                downloads = packDownloads,
             ).also { c ->
                 c.restore(
                     VoiceChoice.fromId(savedState.get<String>(KEY_VOICE)),
