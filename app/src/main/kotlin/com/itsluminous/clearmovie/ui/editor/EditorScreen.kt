@@ -57,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -267,6 +268,11 @@ fun EditorScreen(
     // Worked out once per project, not per playhead tick (it holds every item's handle limits).
     val rows = remember(project) { project?.let { timelineRows(it) }.orEmpty() }
     val missing = ui.missing.filterValues { it != MediaStatus.AVAILABLE }.keys
+    // The voice item whose words are being found or whose voice is being made (cm-voice-progress).
+    val voices = actions.voices
+    val voiceWork = voices?.work?.collectAsState()?.value
+    val busyClip = voiceWork?.clipId
+    val busyLabel = voiceWork?.let { voiceWorkText(it) }
 
     // A delete's "Undo" belongs to that delete only: any later change to the video closes it.
     // [undoArmed] is set by a delete; the next project seen is the one the delete made, and any
@@ -754,13 +760,20 @@ fun EditorScreen(
                         rowScroll = rowScroll,
                         metrics = metrics,
                         photoMs = project?.photoDurationMs ?: com.itsluminous.clearmovie.ui.editor.timeline.RowEndPlus.SEEN_MS,
+                        busy = busyClip,
+                        busyLabel = busyLabel,
                     )
                 }
             }
             val bottom: @Composable (Modifier) -> Unit = { m ->
-                Box(m.onSizeChanged { bottomDp = with(density) { it.height.toDp().value } }) {
+                Column(m.onSizeChanged { bottomDp = with(density) { it.height.toDp().value } }) {
                     CompositionLocalProvider(LocalShownRows provides visible, LocalFramesWithSound provides ui.framesWithSound) {
                         val open = state.panel
+                        // Words being found or a voice being made, when no panel shows it (cm-voice-progress).
+                        voices?.let { v ->
+                            VoiceStatusBar(v, open, shown = recording == null)
+                            VoiceAnnouncer(v)
+                        }
                         if (recording != null) {
                             recording(Modifier)
                         } else if (open != null && project != null) {
@@ -821,7 +834,7 @@ fun EditorScreen(
                                         }
 
                                         project != null && timedClip != null -> {
-                                            timedBar(project, timedClip, ui.framesWithSound)
+                                            timedBar(project, timedClip, ui.framesWithSound).offWhileVoiceBusy(timedClip.id == busyClip)
                                         }
 
                                         else -> {

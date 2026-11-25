@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.data.voice
 
+import android.util.Log
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.record.VoiceRecorder
 import com.itsluminous.clearmovie.data.record.VoiceRecordings
@@ -85,18 +86,26 @@ interface VoiceTools {
 
     fun removePack()
 
-    /** The words of recording [media] in project [projectId], in [language], as phrases. */
+    /**
+     * The words of recording [media] in project [projectId], in [language], as phrases. [progress]
+     * gets the share of the recording heard, from 0 once the engine is ready to 1, and NaN between
+     * the steps of getting ready (no figure yet); it may throw to stop the job there.
+     */
     fun recognize(
         projectId: ProjectId,
         media: MediaRef.Copied,
         language: SpokenLanguage,
+        progress: (Float) -> Unit = {},
     ): List<VoicePhrase>
 
     /**
      * [phrases] spoken in [voice] into a new file of project [projectId]. A
      * recording's phrases keep their times and the file is [lengthMs] long
      * (the recording's own length); typed phrases ([lengthMs] null) are
-     * spoken one after another and get their times here.
+     * spoken one after another and get their times here. [progress] gets the
+     * share of the phrases said, from 0 once the voices are loaded to 1, and
+     * NaN between the steps of getting ready (no figure yet); it may throw
+     * to stop the job there.
      */
     fun speak(
         projectId: ProjectId,
@@ -129,6 +138,7 @@ interface VoiceTools {
                     projectId: ProjectId,
                     media: MediaRef.Copied,
                     language: SpokenLanguage,
+                    progress: (Float) -> Unit,
                 ): List<VoicePhrase> = throw VoiceFailure(VoiceFailure.Reason.NO_ENGINE)
 
                 override fun speak(
@@ -203,13 +213,28 @@ class PackVoiceTools(
         projectId: ProjectId,
         media: MediaRef.Copied,
         language: SpokenLanguage,
+        progress: (Float) -> Unit,
     ): List<VoicePhrase> =
         synchronized(this) {
+            val t = Steps()
             if (store.missing(language).isNotEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
             if (!engine.load()) throw VoiceFailure(VoiceFailure.Reason.NO_ENGINE)
+            val engineMs = t.lap()
+            progress(Float.NaN)
             val pcm =
                 AudioPcm.decode(files.copiedFile(projectId, media), ASR_RATE, MAX_MS) ?: throw VoiceFailure(VoiceFailure.Reason.TOO_LONG)
-            val words: List<HeardWord> = engine.recognize(pcm, ASR_RATE, language).filterNot { it.text in UNKNOWN_WORDS }
+            val decodeMs = t.lap()
+            progress(Float.NaN)
+            var modelMs = 0L
+            val words: List<HeardWord> =
+                engine.recognize(pcm, ASR_RATE, language, progress) { modelMs = it }.filterNot { it.text in UNKNOWN_WORDS }
+            val heardMs = t.lap() - modelMs
+            // Only the times and the length, never the words or how many (cm-voice-progress).
+            Log.i(
+                TAG,
+                "Words found in ${t.totalMs} ms: engine $engineMs, decode $decodeMs, recognizer $modelMs, " +
+                    "hearing $heardMs; ${pcm.size * 1000L / ASR_RATE} ms of sound",
+            )
             Phrases.fromWords(words)
         }
 
@@ -225,17 +250,25 @@ class PackVoiceTools(
             require(voice != VoiceChoice.NONE && voice.speaks(language)) { "That voice can't say these words" }
             val said = phrases.filter { it.text.isNotBlank() }
             if (said.isEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_WORDS)
+            val t = Steps()
             if (store.missing(null).isNotEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
             if (!engine.load()) throw VoiceFailure(VoiceFailure.Reason.NO_ENGINE)
             if ((lengthMs ?: 0) > MAX_MS) throw VoiceFailure(VoiceFailure.Reason.TOO_LONG)
+            val engineMs = t.lap()
+            progress(Float.NaN)
             // English words in Hindi (Hinglish) text use the dictionary too.
             val lexicon = lexicon()
             val phonemizer = Phonemizer({ lexicon[it] }, VoiceEngine.tokens(store.ttsDir))
             val byRule = mutableListOf<String>()
             val spoken = mutableListOf<Pair<ShortArray, PhraseFit>>()
             val rate: Int
+            val dictionaryMs = t.lap()
+            progress(Float.NaN)
+            var voicesMs = 0L
             engine.speaker().use { speaker ->
                 rate = speaker.rate
+                voicesMs = t.lap()
+                progress(0f)
                 val ph =
                     said.map {
                         val r = if (language == SpokenLanguage.HINDI) phonemizer.hindi(it.text) else phonemizer.english(it.text)
@@ -251,9 +284,10 @@ class PackVoiceTools(
                         if (fit.speed > 1f) audio = speaker.speakLong(p, voice.speaker, fit.speed)
                     }
                     spoken += audio to fit
-                    progress((i + 1f) / said.size)
+                    progress((i + 1f) / said.size * PHRASES_SHARE)
                 }
             }
+            val phrasesMs = t.lap()
             // Typed words start after the encoder's priming (which writeAac leaves out), so their first sound is kept.
             val lead = VoiceRecorder.ENCODER_DELAY_FRAMES * 1000 / rate + 1
             val starts =
@@ -284,10 +318,17 @@ class PackVoiceTools(
             }
             val pending = recordings.newRecording(projectId)
             val ok = writeAac(buffer, rate, pending.part)
-            if (!ok || !recordings.keep(pending)) {
+            // The last point Stop can take effect: a voice stopped now is not kept.
+            val stopped = runCatching { progress(1f) }.exceptionOrNull()
+            if (stopped != null || !ok || !recordings.keep(pending)) {
                 recordings.discard(pending)
-                throw VoiceFailure(VoiceFailure.Reason.FAILED)
+                throw stopped ?: VoiceFailure(VoiceFailure.Reason.FAILED)
             }
+            Log.i(
+                TAG,
+                "Voice made in ${t.totalMs} ms: engine $engineMs, dictionary $dictionaryMs, voices $voicesMs, " +
+                    "phrases $phrasesMs, file ${t.lap()}; $total ms long",
+            )
             SpokenVoice(
                 pending.ref,
                 said.mapIndexed { i, p -> p.copy(startMs = starts[i]) },
@@ -329,8 +370,26 @@ class PackVoiceTools(
         }
     }
 
+    /** How long each step of a job took, for the log. */
+    private class Steps {
+        private val start = System.nanoTime()
+        private var last = start
+
+        /** Milliseconds since the last lap (or the start). */
+        fun lap(): Long {
+            val now = System.nanoTime()
+            return ((now - last) / 1_000_000).also { last = now }
+        }
+
+        val totalMs: Long get() = (System.nanoTime() - start) / 1_000_000
+    }
+
     companion object {
+        private const val TAG = "VoiceTools"
         const val ASR_RATE = 16_000
+
+        /** The share of a voice's progress for saying its phrases; the rest is writing its file. */
+        private const val PHRASES_SHARE = 0.9f
         private const val FADE_MS = 30
 
         /** The longest voice item the engine takes (memory grows with length). */

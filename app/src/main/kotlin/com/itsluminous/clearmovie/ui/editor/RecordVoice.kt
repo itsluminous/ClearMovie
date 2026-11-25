@@ -225,7 +225,7 @@ internal fun RecordingPanel(
                 }
 
                 is RecordingUi.Saving -> {
-                    Text(stringResource(R.string.record_saving), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.record_saving), style = MaterialTheme.typography.titleMedium, modifier = announce)
                     CircularProgressIndicator(Modifier.padding(8.dp))
                 }
             }

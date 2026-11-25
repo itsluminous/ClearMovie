@@ -105,6 +105,7 @@ class PackDownloadJobTest {
             projectId: ProjectId,
             media: MediaRef.Copied,
             language: SpokenLanguage,
+            progress: (Float) -> Unit,
         ): List<VoicePhrase> = error("unused")
 
         override fun speak(

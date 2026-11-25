@@ -6,6 +6,7 @@ import android.os.Process
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.work.WorkManager
+import com.itsluminous.clearmovie.BuildConfig
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.record.AudioRecordMic
 import com.itsluminous.clearmovie.data.record.MicSources
@@ -15,6 +16,12 @@ import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.PackVoiceTools
 import com.itsluminous.clearmovie.data.voice.VoicePackStore
 import com.itsluminous.clearmovie.data.voice.VoiceTools
+import com.itsluminous.clearmovie.domain.model.MediaRef
+import com.itsluminous.clearmovie.domain.model.ProjectId
+import com.itsluminous.clearmovie.domain.model.SpokenLanguage
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
+import com.itsluminous.clearmovie.domain.model.VoicePhrase
+import com.itsluminous.clearmovie.domain.voice.VoicePackFile
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
 import com.itsluminous.clearmovie.work.ExportWorker
 import com.itsluminous.clearmovie.work.WorkPackDownloads
@@ -24,6 +31,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
+import java.io.File
+import java.io.InputStream
 import javax.inject.Singleton
 
 /** Voice recordings made in the editor (cm-record-voice). */
@@ -36,6 +45,14 @@ object RecordModule {
      */
     @Volatile
     var testMics: MicSources? = null
+
+    /**
+     * A test may put its own voice engine in place of the voice pack's
+     * (cm-voice-progress), to hold a job in one state; null in the app, and
+     * never read in a release build.
+     */
+    @Volatile
+    var testVoiceTools: VoiceTools? = null
 
     @OptIn(UnstableApi::class)
     @Provides
@@ -74,10 +91,63 @@ object RecordModule {
                         VoicePackStore.MANIFEST_ASSET,
                     ).bufferedReader()
                     .use { VoicePackManifest.parse(it.readText()) }
-            }.getOrNull() ?: return VoiceTools.NONE
+            }.getOrNull() ?: return if (BuildConfig.DEBUG) TestableVoiceTools(VoiceTools.NONE) else VoiceTools.NONE
         val abis = if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS
         val abi = abis.firstOrNull { manifest.supports(it) } ?: abis.firstOrNull().orEmpty()
-        return PackVoiceTools(VoicePackStore(context.filesDir, manifest, abi, freeSpace::bytes), files, recordings)
+        val app = PackVoiceTools(VoicePackStore(context.filesDir, manifest, abi, freeSpace::bytes), files, recordings)
+        // The test seam only in a debug build (device tests); a release build uses the pack's engine directly.
+        return if (BuildConfig.DEBUG) TestableVoiceTools(app) else app
+    }
+
+    /** [app]'s tools, or [testVoiceTools] while a test has put its own in (read on every call, as [testMics] is). */
+    private class TestableVoiceTools(
+        private val app: VoiceTools,
+    ) : VoiceTools {
+        private val tools: VoiceTools get() = testVoiceTools ?: app
+        override val manifest get() = tools.manifest
+        override val supported get() = tools.supported
+        override val engineWorks get() = tools.engineWorks
+
+        override fun checkEngine() = tools.checkEngine()
+
+        override fun missing(speech: SpokenLanguage?) = tools.missing(speech)
+
+        override fun addPackFiles(
+            sources: List<() -> InputStream?>,
+            progress: (Float) -> Unit,
+        ) = tools.addPackFiles(sources, progress)
+
+        override fun packBytes() = tools.packBytes()
+
+        override fun removePack() = tools.removePack()
+
+        override fun downloadFile(f: VoicePackFile) = tools.downloadFile(f)
+
+        override fun addDownloaded(
+            f: VoicePackFile,
+            zip: File,
+            stopped: () -> Boolean,
+        ) = tools.addDownloaded(f, zip, stopped)
+
+        override fun clearDownloads() = tools.clearDownloads()
+
+        override fun freeBytes() = tools.freeBytes()
+
+        override fun recognize(
+            projectId: ProjectId,
+            media: MediaRef.Copied,
+            language: SpokenLanguage,
+            progress: (Float) -> Unit,
+        ) = tools.recognize(projectId, media, language, progress)
+
+        override fun speak(
+            projectId: ProjectId,
+            phrases: List<VoicePhrase>,
+            voice: VoiceChoice,
+            language: SpokenLanguage,
+            lengthMs: Long?,
+            progress: (Float) -> Unit,
+        ) = tools.speak(projectId, phrases, voice, language, lengthMs, progress)
     }
 
     /** The one class that uses the internet: it downloads voice pack files (cm-voice-pack-download). */

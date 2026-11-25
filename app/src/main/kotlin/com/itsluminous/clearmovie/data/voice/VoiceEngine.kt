@@ -52,16 +52,27 @@ class VoiceEngine(
                 }
         }
 
-    /** The words in [pcm] (16-bit mono at [rate]) with their times, by the recognizer for [language]. */
+    /**
+     * The words in [pcm] (16-bit mono at [rate]) with their times, by the recognizer for [language].
+     * [progress] gets the share of the sound heard so far, from 0 once the recognizer is ready to 1;
+     * [onModel] the time the recognizer took to load.
+     */
     fun recognize(
         pcm: ShortArray,
         rate: Int,
         language: SpokenLanguage,
+        progress: (Float) -> Unit = {},
+        onModel: (Long) -> Unit = {},
     ): List<HeardWord> {
         check(load()) { "engine not loaded" }
         val words = mutableListOf<HeardWord>()
+        val t0 = System.nanoTime()
         Model(store.asrDir(language).path).use { model ->
+            // A Stop asked for while the model loaded takes effect here.
+            progress(Float.NaN)
             Recognizer(model, rate.toFloat()).use { rec ->
+                onModel((System.nanoTime() - t0) / 1_000_000)
+                progress(0f)
                 rec.setWords(true)
 
                 fun take(json: String) {
@@ -82,6 +93,7 @@ class VoiceEngine(
                     val n = minOf(chunk, pcm.size - i)
                     if (rec.acceptWaveForm(pcm.copyOfRange(i, i + n), n)) take(rec.result)
                     i += n
+                    progress(i.toFloat() / pcm.size)
                 }
                 take(rec.finalResult)
             }

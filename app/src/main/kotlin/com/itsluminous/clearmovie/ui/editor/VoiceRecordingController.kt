@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.ui.editor
 
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.annotation.VisibleForTesting
 import androidx.media3.common.util.UnstableApi
@@ -239,6 +240,7 @@ internal class VoiceRecordingController(
             return
         }
         stateFlow.value = RecordingUi.Saving(startMs)
+        val savingNs = nanoTime()
         scope.launch {
             val result = withContext(Dispatchers.IO + NonCancellable) { r.finish(atNs, start) }
             val kept = result.ok && withContext(Dispatchers.IO + NonCancellable) { recordings.keep(p) }
@@ -249,6 +251,8 @@ internal class VoiceRecordingController(
             if (placed == null) {
                 withContext(Dispatchers.IO + NonCancellable) { recordings.discard(p) }
             }
+            // Stop to on the timeline (cm-voice-progress): the panel shows Saving meanwhile.
+            Log.i(TAG, "Recording saved in ${(nanoTime() - savingNs) / 1_000_000} ms, ${result.durationMs} ms long")
             stateFlow.value = null
             engine.seekTo(startUs)
             val spokenMs = (atNs - start) / 1_000_000
@@ -274,6 +278,8 @@ internal class VoiceRecordingController(
     }
 
     companion object {
+        private const val TAG = "VoiceRecording"
+
         /** Tests only: each reading of the preview while recording (the moment, and the video's time then). */
         @VisibleForTesting
         @Volatile

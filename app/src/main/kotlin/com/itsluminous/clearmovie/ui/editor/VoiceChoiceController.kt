@@ -28,34 +28,70 @@ import com.itsluminous.clearmovie.domain.model.useOwnVoice
 import com.itsluminous.clearmovie.domain.voice.Phrases
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
 import com.itsluminous.clearmovie.domain.voice.roomToDownload
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 
-/** What the voice engine is doing (cm-voice-choice). */
+/**
+ * What the voice engine is doing (cm-voice-choice), shown while it runs
+ * (cm-voice-progress). A [done] of null is a step that reports no progress
+ * (loading the engine, reading the recording); then it goes from 0 to 1.
+ */
 sealed interface VoiceWork {
+    /** The item the work is for (null: typed words for a new item, or the voice pack). */
+    val clipId: ClipId? get() = null
+
     /** Finding the words of recording [clipId]. */
     data class Recognizing(
-        val clipId: ClipId,
+        override val clipId: ClipId,
+        val done: Float? = null,
     ) : VoiceWork
 
-    /** Speaking the words of [clipId] (null: typed words for a new item), [done] from 0 to 1. */
+    /** Speaking the words of [clipId] (null: typed words for a new item). */
     data class Voicing(
-        val clipId: ClipId?,
-        val done: Float,
+        override val clipId: ClipId?,
+        val done: Float? = null,
     ) : VoiceWork
 
     /** Taking in voice pack files, [done] from 0 to 1. */
     data class AddingPack(
         val done: Float,
     ) : VoiceWork
+
+    /** Stop was asked for: [of] ends at the engine's next step, and its result is not put in. */
+    data class Stopping(
+        val of: VoiceWork,
+    ) : VoiceWork {
+        override val clipId: ClipId? get() = of.clipId
+    }
 }
+
+/** How a voice job ended, told once for TalkBack (cm-voice-progress); an end said by a note has none. */
+enum class VoiceOutcome { WORDS_FOUND, VOICE_MADE, STOPPED, FAILED }
+
+/**
+ * A voice job that failed where trying again may work (cm-voice-progress):
+ * finding the words of [clipId] ([finding]), or making its voice ([clipId]
+ * null: typed words). Shown until Try again, its close, or the next job.
+ */
+data class VoiceTrouble(
+    val clipId: ClipId?,
+    val finding: Boolean,
+)
 
 /** Something the editor says once about voices. */
 enum class VoiceNote {
@@ -119,6 +155,26 @@ class VoiceChoiceController(
 
     private val workState = MutableStateFlow<VoiceWork?>(null)
     val work: StateFlow<VoiceWork?> = workState.asStateFlow()
+
+    private val troubleState = MutableStateFlow<VoiceTrouble?>(null)
+
+    /** The last job's failure, while it may be tried again (cm-voice-progress). */
+    val trouble: StateFlow<VoiceTrouble?> = troubleState.asStateFlow()
+
+    /** Runs the failed job again. */
+    private var again: (() -> Unit)? = null
+
+    /** The job finding words or making a voice, while it runs. */
+    @Volatile
+    private var job: Job? = null
+
+    private val outcomeFlow = Channel<VoiceOutcome>(Channel.BUFFERED)
+
+    /** Each job's end, given out once: kept for the next screen while none listens (a rotation). */
+    val outcomes: Flow<VoiceOutcome> = outcomeFlow.receiveAsFlow()
+
+    /** What the screen last told TalkBack was running; here, so a rotation does not say it again. */
+    internal var announced: String? = null
 
     private val askState = MutableStateFlow<PackAsk?>(null)
     val packAsk: StateFlow<PackAsk?> = askState.asStateFlow()
@@ -365,7 +421,8 @@ class VoiceChoiceController(
         val missing = withContext(io) { tools.missing(want?.speech) }
         // Told now, not after the first voice, when the engine cannot run here.
         val works = if (missing.isEmpty() || tools.missing(null).isEmpty()) withContext(io) { tools.checkEngine() } else true
-        workState.value = null
+        // Only the pack's own work: a download ending while words are found must not blank their status (cm-voice-progress).
+        workState.update { if (it is VoiceWork.AddingPack) null else it }
         if (!works) return engineFailed()
         when {
             result?.outOfSpace == true -> {
@@ -391,12 +448,104 @@ class VoiceChoiceController(
         }
     }
 
-    /** A recording just went on the timeline: with a voice chosen, its words are found and shown to check. */
-    fun afterRecording(clipId: ClipId) {
+    /**
+     * A recording just went on the timeline: with a voice chosen, its words are found and shown to
+     * check. True when they are being found now (its panel can open at once, to show that).
+     */
+    fun afterRecording(clipId: ClipId): Boolean {
         val voice = choiceState.value
-        if (voice == VoiceChoice.NONE) return
+        if (voice == VoiceChoice.NONE) return false
         pending[clipId] = voice
         recognize(clipId, languageState.value)
+        return (workState.value as? VoiceWork.Recognizing)?.clipId == clipId
+    }
+
+    /**
+     * Stops the job finding words or making a voice (cm-voice-progress). The engine stops at its next
+     * step (the next quarter second of sound, or the next phrase); until then the work shows as
+     * [VoiceWork.Stopping]. Nothing it made is put in. The pack being added is not stopped.
+     */
+    fun stop() {
+        val now = workState.value
+        if (now !is VoiceWork.Recognizing && now !is VoiceWork.Voicing) return
+        workState.value = VoiceWork.Stopping(now)
+        job?.cancel()
+    }
+
+    /** Try again, after [trouble]. */
+    fun tryAgain() {
+        val run = again ?: return
+        if (workState.value != null) return onNote(VoiceNote.BUSY)
+        val item = troubleState.value?.clipId
+        dismissTrouble()
+        // Its item went away (an undo): there is nothing to try again for.
+        if (item != null && audio(item) == null) return onNote(VoiceNote.CHANGED_MEANWHILE)
+        run()
+    }
+
+    /** Forgets a failure whose item is no longer in the video (an undo or a delete). */
+    fun forgetGone() {
+        val item = troubleState.value?.clipId ?: return
+        if (audio(item) == null) dismissTrouble()
+    }
+
+    /** Closes [trouble] without trying again. */
+    fun dismissTrouble() {
+        troubleState.value = null
+        again = null
+    }
+
+    /**
+     * Runs one job off the main thread as [start] (cm-voice-progress): [body] reports its progress
+     * as the work to show, and can be stopped ([stop]) whenever it does. The work clears when the
+     * job ends, however it ends; then, unless it was stopped, its result goes to [onDone], and a
+     * failure to [failed] ([retry] runs it again).
+     */
+    private fun <T> launchJob(
+        start: VoiceWork,
+        trouble: VoiceTrouble,
+        retry: () -> Unit,
+        body: ((VoiceWork) -> Unit) -> T,
+        onDone: (T) -> Unit,
+    ) {
+        dismissTrouble()
+        workState.value = start
+        var gone = false
+        job =
+            scope.launch {
+                val result =
+                    try {
+                        withContext(worker) {
+                            val context = coroutineContext
+                            runCatching {
+                                body { shown ->
+                                    // The item went away meanwhile (an undo): nothing to put it in, so it ends here.
+                                    val item = start.clipId
+                                    if (item != null && audio(item) == null) {
+                                        gone = true
+                                        context.job.cancel()
+                                    }
+                                    // Stop takes effect here, between the engine's steps.
+                                    context.ensureActive()
+                                    workState.update { if (it is VoiceWork.Stopping) it else shown }
+                                }
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        // Stopped by the user, or its item went away; the editor closing tells no one.
+                        if (gone) {
+                            onNote(VoiceNote.CHANGED_MEANWHILE)
+                        } else if (workState.value is VoiceWork.Stopping) {
+                            outcomeFlow.trySend(VoiceOutcome.STOPPED)
+                        }
+                        throw e
+                    } finally {
+                        // Stopped, failed or done: never left looking busy.
+                        job = null
+                        workState.value = null
+                    }
+                result.onSuccess(onDone).onFailure { failed(it, trouble, retry) }
+            }
     }
 
     /**
@@ -417,23 +566,27 @@ class VoiceChoiceController(
             ?.voice
             ?.takeIf { it != VoiceChoice.NONE }
             ?.let { pending[clipId] = it }
-        workState.value = VoiceWork.Recognizing(clipId)
-        scope.launch {
-            val phrases =
-                withContext(worker) {
-                    runCatching { tools.recognize(projectId, media, language) }
-                }
-            workState.value = null
-            phrases
-                .onSuccess { found ->
-                    val now = audio(clipId)
-                    if (now == null || now.media != media || now.voiceOver != clip.voiceOver) {
-                        return@onSuccess onNote(VoiceNote.CHANGED_MEANWHILE)
-                    }
-                    if (found.isEmpty()) onNote(VoiceNote.NO_WORDS)
-                    val ok = edit { setVoiceOver(clipId, VoiceOver(VoiceChoice.NONE, language, WordsSource.SPOKEN, found)) }
-                    if (ok) onCheckWords(clipId) else onNote(VoiceNote.FAILED)
-                }.onFailure(::failed)
+        launchJob(
+            VoiceWork.Recognizing(clipId),
+            VoiceTrouble(clipId, finding = true),
+            retry = { recognize(clipId, language) },
+            body = { show ->
+                tools.recognize(projectId, media, language) { show(VoiceWork.Recognizing(clipId, it.takeUnless(Float::isNaN))) }
+            },
+        ) { found ->
+            val now = audio(clipId)
+            if (now == null || now.media != media || now.voiceOver != clip.voiceOver) {
+                return@launchJob onNote(VoiceNote.CHANGED_MEANWHILE)
+            }
+            if (found.isEmpty()) onNote(VoiceNote.NO_WORDS)
+            val ok = edit { setVoiceOver(clipId, VoiceOver(VoiceChoice.NONE, language, WordsSource.SPOKEN, found)) }
+            if (ok) {
+                // No words: the note says so, once.
+                if (found.isNotEmpty()) outcomeFlow.trySend(VoiceOutcome.WORDS_FOUND)
+                onCheckWords(clipId)
+            } else {
+                onNote(VoiceNote.FAILED)
+            }
         }
     }
 
@@ -460,35 +613,36 @@ class VoiceChoiceController(
         if (workState.value != null) return onNote(VoiceNote.BUSY)
         if (!askForPack(null)) return
         if (words.isEmpty()) return onNote(VoiceNote.NO_WORDS)
-        workState.value = VoiceWork.Voicing(clipId, 0f)
-        scope.launch {
-            val made =
-                withContext(worker) {
-                    runCatching {
-                        tools.speak(projectId, words, voice, language, if (typed) null else clip.sourceDurationMs) {
-                            workState.value = VoiceWork.Voicing(clipId, it)
-                        }
-                    }
+        launchJob(
+            VoiceWork.Voicing(clipId),
+            VoiceTrouble(clipId, finding = false),
+            retry = { makeVoice(clipId, phrases, voice, language) },
+            body = { show ->
+                tools.speak(projectId, words, voice, language, if (typed) null else clip.sourceDurationMs) {
+                    show(VoiceWork.Voicing(clipId, it.takeUnless(Float::isNaN)))
                 }
-            workState.value = null
-            made
-                .onSuccess { v ->
-                    // Only if what the voice was made from is still there; a move, a volume or a fade change does not matter.
-                    val now = audio(clipId)
-                    if (now == null || now.media != clip.media || now.sourceDurationMs != clip.sourceDurationMs ||
-                        now.voiceOver != clip.voiceOver
-                    ) {
-                        return@onSuccess onNote(VoiceNote.CHANGED_MEANWHILE)
-                    }
-                    if (v.cut.isNotEmpty()) onNote(VoiceNote.SOME_CUT)
-                    val ok =
-                        if (typed) {
-                            edit { setTypedVoice(clipId, v.media, v.lengthMs, VoiceOver(voice, language, WordsSource.TYPED, v.phrases)) }
-                        } else {
-                            edit { setVoiceOver(clipId, VoiceOver(voice, language, WordsSource.SPOKEN, v.phrases, v.media)) }
-                        }
-                    if (ok) pending.remove(clipId) else onNote(VoiceNote.FAILED)
-                }.onFailure(::failed)
+            },
+        ) { v ->
+            // Only if what the voice was made from is still there; a move, a volume or a fade change does not matter.
+            val now = audio(clipId)
+            if (now == null || now.media != clip.media || now.sourceDurationMs != clip.sourceDurationMs ||
+                now.voiceOver != clip.voiceOver
+            ) {
+                return@launchJob onNote(VoiceNote.CHANGED_MEANWHILE)
+            }
+            if (v.cut.isNotEmpty()) onNote(VoiceNote.SOME_CUT)
+            val ok =
+                if (typed) {
+                    edit { setTypedVoice(clipId, v.media, v.lengthMs, VoiceOver(voice, language, WordsSource.TYPED, v.phrases)) }
+                } else {
+                    edit { setVoiceOver(clipId, VoiceOver(voice, language, WordsSource.SPOKEN, v.phrases, v.media)) }
+                }
+            if (ok) {
+                pending.remove(clipId)
+                outcomeFlow.trySend(VoiceOutcome.VOICE_MADE)
+            } else {
+                onNote(VoiceNote.FAILED)
+            }
         }
     }
 
@@ -511,23 +665,26 @@ class VoiceChoiceController(
             return false
         }
         if (!askForPack(null)) return false
-        workState.value = VoiceWork.Voicing(null, 0f)
-        scope.launch {
-            val made =
-                withContext(worker) {
-                    runCatching { tools.speak(projectId, phrases, voice, language, null) { workState.value = VoiceWork.Voicing(null, it) } }
-                }
-            workState.value = null
-            made
-                .onSuccess { v ->
-                    val end = project()?.mainLayout()?.lastOrNull()?.endMs ?: 0L
-                    val id = RandomIds.clipId()
-                    val clip =
-                        recordingClip(id, v.media, atMs, v.lengthMs, end)
-                            ?.copy(voiceOver = VoiceOver(voice, language, WordsSource.TYPED, v.phrases))
-                            ?: return@onSuccess onNote(VoiceNote.FAILED)
-                    if (edit { addRecording(clip, trackId) }) onInserted(id) else onNote(VoiceNote.FAILED)
-                }.onFailure(::failed)
+        launchJob(
+            VoiceWork.Voicing(null),
+            VoiceTrouble(null, finding = false),
+            retry = { makeTyped(trackId, atMs, text, voice, language) },
+            body = { show ->
+                tools.speak(projectId, phrases, voice, language, null) { show(VoiceWork.Voicing(null, it.takeUnless(Float::isNaN))) }
+            },
+        ) { v ->
+            val end = project()?.mainLayout()?.lastOrNull()?.endMs ?: 0L
+            val id = RandomIds.clipId()
+            val clip =
+                recordingClip(id, v.media, atMs, v.lengthMs, end)
+                    ?.copy(voiceOver = VoiceOver(voice, language, WordsSource.TYPED, v.phrases))
+                    ?: return@launchJob onNote(VoiceNote.FAILED)
+            if (edit { addRecording(clip, trackId) }) {
+                outcomeFlow.trySend(VoiceOutcome.VOICE_MADE)
+                onInserted(id)
+            } else {
+                onNote(VoiceNote.FAILED)
+            }
         }
         return true
     }
@@ -540,13 +697,36 @@ class VoiceChoiceController(
         onNote(VoiceNote.NOT_ON_THIS_PHONE)
     }
 
-    private fun failed(e: Throwable) {
+    /** A job failed: said once, or, where trying again may work, kept as [trouble] with Try again. */
+    private fun failed(
+        e: Throwable,
+        trouble: VoiceTrouble,
+        retry: () -> Unit,
+    ) {
+        // A stop never gets here (its cancelled job ends in launchJob): a CancellationException here came from the
+        // engine itself, a failure like any other.
         when ((e as? VoiceFailure)?.reason) {
-            VoiceFailure.Reason.NO_ENGINE -> engineFailed()
-            VoiceFailure.Reason.NO_WORDS -> onNote(VoiceNote.NO_WORDS)
-            VoiceFailure.Reason.TOO_LONG -> onNote(VoiceNote.TOO_LONG)
-            VoiceFailure.Reason.NO_PACK -> onNote(VoiceNote.PACK_STILL_MISSING)
-            else -> onNote(VoiceNote.FAILED)
+            VoiceFailure.Reason.NO_ENGINE -> {
+                engineFailed()
+            }
+
+            VoiceFailure.Reason.NO_WORDS -> {
+                onNote(VoiceNote.NO_WORDS)
+            }
+
+            VoiceFailure.Reason.TOO_LONG -> {
+                onNote(VoiceNote.TOO_LONG)
+            }
+
+            VoiceFailure.Reason.NO_PACK -> {
+                onNote(VoiceNote.PACK_STILL_MISSING)
+            }
+
+            else -> {
+                again = retry
+                troubleState.value = trouble
+                outcomeFlow.trySend(VoiceOutcome.FAILED)
+            }
         }
     }
 

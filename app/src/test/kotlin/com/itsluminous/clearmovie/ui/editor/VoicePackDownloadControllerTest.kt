@@ -77,6 +77,7 @@ class VoicePackDownloadControllerTest {
             projectId: ProjectId,
             media: MediaRef.Copied,
             language: SpokenLanguage,
+            progress: (Float) -> Unit,
         ): List<VoicePhrase> = emptyList()
 
         override fun speak(

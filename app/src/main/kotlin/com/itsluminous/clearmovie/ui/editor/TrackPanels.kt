@@ -229,13 +229,23 @@ internal fun TimedInsertPanel(
                 // cm-voice-choice: the voice the recording, or typed words, are said in.
                 val voices = callbacks.voices
                 val voice = voices?.choice?.collectAsState()?.value ?: VoiceChoice.NONE
+                // While words are found or a voice is made, a new recording or typed words wait for it
+                // (cm-voice-progress): the bar above says what runs.
+                val idle = voices?.work?.collectAsState()?.value == null
+                // A recording kept as recorded (No change) needs no engine, so it never waits.
+                val canRecord = idle || voice == VoiceChoice.NONE
                 if (voices != null) VoiceSheetFields(voices)
                 Choice(
                     stringResource(R.string.record_voice),
-                    stringResource(R.string.record_voice_body, durationText(from * 1000)),
+                    if (canRecord) {
+                        stringResource(R.string.record_voice_body, durationText(from * 1000))
+                    } else {
+                        stringResource(R.string.voice_wait_body)
+                    },
                     null,
                     R.drawable.ic_record_voice,
                     insertOptionTag(RECORD_OPTION),
+                    enabled = canRecord,
                 ) {
                     onPanel(null)
                     callbacks.recordVoice(track.id, from)
@@ -243,10 +253,18 @@ internal fun TimedInsertPanel(
                 if (voices != null && voice != VoiceChoice.NONE) {
                     Choice(
                         stringResource(R.string.voice_type_words),
-                        stringResource(R.string.voice_type_words_body, durationText(from * 1000)),
+                        if (idle) {
+                            stringResource(
+                                R.string.voice_type_words_body,
+                                durationText(from * 1000),
+                            )
+                        } else {
+                            stringResource(R.string.voice_wait_body)
+                        },
                         null,
                         R.drawable.ic_text_fields,
                         insertOptionTag(TYPE_WORDS_OPTION),
+                        enabled = idle,
                     ) {
                         onPanel(OpenPanel(Panel.VOICE_TYPE, trackId = track.id, atMs = from))
                     }

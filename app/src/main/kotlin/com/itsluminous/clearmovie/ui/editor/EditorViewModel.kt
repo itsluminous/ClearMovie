@@ -176,7 +176,7 @@ sealed interface EditorEvent {
         val note: VoiceNote,
     ) : EditorEvent
 
-    /** A recording's words were found: its panel opens so they can be checked. */
+    /** A recording's words are being found, or were: its panel opens so they can be checked. */
     data class CheckWords(
         val clipId: ClipId,
     ) : EditorEvent
@@ -333,9 +333,10 @@ class EditorViewModel
                 projectId,
                 place = { clip, row -> if (edit { addRecording(clip, row) }) clip.id else null },
                 onPlaced = { id ->
-                    viewModelScope.launch { eventChannel.send(EditorEvent.Inserted(id)) }
-                    // With a voice chosen, its words are found and shown to check (cm-voice-choice).
-                    voices.afterRecording(id)
+                    // With a voice chosen, its words are found and shown to check (cm-voice-choice); its panel opens
+                    // at once, so the words being found show where the recording panel was (cm-voice-progress).
+                    val finding = voices.afterRecording(id)
+                    viewModelScope.launch { eventChannel.send(if (finding) EditorEvent.CheckWords(id) else EditorEvent.Inserted(id)) }
                 },
                 onNote = { note -> viewModelScope.launch { eventChannel.send(EditorEvent.Recorded(note)) } },
             )
@@ -634,7 +635,11 @@ class EditorViewModel
             if (!repository.update { next }) viewModelScope.launch { eventChannel.send(EditorEvent.NotSaved) }
         }
 
-        private fun publishHistory() = uiState.update { it.copy(canUndo = session.canUndo, canRedo = session.canRedo) }
+        private fun publishHistory() {
+            uiState.update { it.copy(canUndo = session.canUndo, canRedo = session.canRedo) }
+            // A voice failure for an item an undo or a delete took away is no longer shown (cm-voice-progress).
+            voices.forgetGone()
+        }
 
         /** A text or colour card at a "+" (section 11.6), 3 s long. */
         fun insertCard(

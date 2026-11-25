@@ -286,7 +286,7 @@ internal fun VoiceItemPanel(
             }
         }
     }
-    WorkLine(work)
+    VoiceStatusLine(voices, clip.id)
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!typed) {
             OutlinedButton(
@@ -319,10 +319,9 @@ internal fun TypeWordsPanel(
     val chosenLanguage by voices.language.collectAsState()
     var text by rememberSaveable { mutableStateOf("") }
     val work by voices.work.collectAsState()
-    var started by rememberSaveable { mutableStateOf(false) }
     val at = open.atMs ?: playheadMs
-    // When the typed words went on the timeline, the panel closes.
-    LaunchedEffect(work, started) { if (started && work == null) onDone() }
+    // When the typed words go on the timeline the editor closes the panel (its Inserted event); stopped, or not
+    // said, the panel stays with the words (cm-voice-progress).
     PanelTitle(stringResource(R.string.voice_type_words), onDone = null, onCancel = onDone)
     VoiceFields(
         chosen.takeIf { it != VoiceChoice.NONE } ?: VoiceChoice.INDIAN_FEMALE,
@@ -341,11 +340,11 @@ internal fun TypeWordsPanel(
         enabled = work == null,
         modifier = Modifier.fillMaxWidth().testTag(VOICE_TYPED_TAG),
     )
-    WorkLine(work)
+    VoiceStatusLine(voices, null)
     Button(
         onClick = {
             val v = chosen.takeIf { it != VoiceChoice.NONE && it.speaks(chosenLanguage) } ?: VoiceChoice.INDIAN_FEMALE
-            started = voices.makeTyped(open.trackId, at, text, v, chosenLanguage)
+            voices.makeTyped(open.trackId, at, text, v, chosenLanguage)
         },
         enabled = work == null && text.isNotBlank() && voices.availability.collectAsState().value,
         modifier =
@@ -363,9 +362,10 @@ private fun WorkLine(work: VoiceWork?) {
     if (work == null) return
     val (text, done) =
         when (work) {
-            is VoiceWork.Recognizing -> stringResource(R.string.voice_working_words) to null
+            is VoiceWork.Recognizing -> stringResource(R.string.voice_working_words) to work.done
             is VoiceWork.Voicing -> stringResource(R.string.voice_working_voice) to work.done
             is VoiceWork.AddingPack -> stringResource(R.string.pack_adding) to work.done
+            is VoiceWork.Stopping -> stringResource(R.string.voice_stopping) to null
         }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text, style = MaterialTheme.typography.bodyMedium)

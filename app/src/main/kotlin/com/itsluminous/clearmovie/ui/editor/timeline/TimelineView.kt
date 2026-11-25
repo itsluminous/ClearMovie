@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -121,6 +122,9 @@ const val TIMELINE_RULER_TAG = "timeline_ruler"
 const val TIMELINE_PLAYHEAD_TAG = "timeline_playhead"
 const val TIMELINE_MAIN_ROW_TAG = "timeline_main_row"
 const val TIMELINE_ROWS_TOGGLE_TAG = "timeline_rows_toggle"
+
+/** The round indicator on a voice item being worked on (cm-voice-progress). */
+const val TIMELINE_BUSY_TAG = "timeline_busy"
 
 /** The rows under the ruler, which scroll up and down. */
 const val TIMELINE_ROWS_TAG = "timeline_rows"
@@ -363,6 +367,10 @@ fun TimelineView(
     selectedRow: String? = null,
     /** How long a new photo is (the project's setting): the room a row's "+" looks for on a picture-in-picture row. */
     photoMs: Long = RowEndPlus.SEEN_MS,
+    /** A voice item being worked on (cm-voice-progress): a small round indicator takes its icon's place. */
+    busy: ClipId? = null,
+    /** What is being done to [busy], said by TalkBack as the item's state. */
+    busyLabel: String? = null,
 ) {
     val totalMs = slots.lastOrNull()?.endMs ?: 0L
     // The cursor the row-end "+" buttons describe, and act at for TalkBack: while playing, the time play started from,
@@ -703,6 +711,8 @@ fun TimelineView(
                                             timedTrim,
                                             latestActions,
                                             START_PAD_DP + spanWidth + END_PAD_DP,
+                                            busy,
+                                            busyLabel,
                                         )
                                     }
                                     // The row's own "+" floats over its right edge (cm-plus-position), items running on under it.
@@ -2263,6 +2273,8 @@ private fun TimedRowContent(
     actions: TimelineActions,
     /** The row's width (dp) after its header: the part of an item past it, by more than a margin, is not laid out. */
     viewDp: Double,
+    busy: ClipId?,
+    busyLabel: String?,
 ) {
     // Only the row being trimmed sees the preview change, so a handle drag recomposes that row alone.
     val trim by remember(row.key, trimState) { derivedStateOf { trimState.value?.takeIf { it.key == row.key } } }
@@ -2306,6 +2318,7 @@ private fun TimedRowContent(
                     durationText(clip.endMs * 1000),
                 )
             val playing = playheadMs in clip.startMs until clip.endMs
+            val working = clip.id == busy
             Box(
                 Modifier
                     .offset { IntOffset((left * density).roundToInt(), 0) }
@@ -2319,7 +2332,17 @@ private fun TimedRowContent(
                         contentDescription = description
                         role = Role.Button
                         this.selected = isSelected
-                        if (isSelected) {
+                        if (working && busyLabel != null) {
+                            val also =
+                                if (isSelected) {
+                                    selectedLabel
+                                } else if (playing) {
+                                    playingLabel
+                                } else {
+                                    null
+                                }
+                            stateDescription = also?.let { "$it, $busyLabel" } ?: busyLabel
+                        } else if (isSelected) {
                             stateDescription = selectedLabel
                         } else if (playing) {
                             stateDescription = playingLabel
@@ -2344,12 +2367,16 @@ private fun TimedRowContent(
                     Modifier.align(Alignment.CenterStart).padding(start = inset + hiddenStart.dp, end = inset),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        painterResource(rowClipIcon(clip.kind, row.type)),
-                        contentDescription = null,
-                        tint = on,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    if (working) {
+                        CircularProgressIndicator(Modifier.size(16.dp).testTag(TIMELINE_BUSY_TAG), color = on, strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            painterResource(rowClipIcon(clip.kind, row.type)),
+                            contentDescription = null,
+                            tint = on,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                     if (words != null && seen >= 48 + if (inset > 6.dp) 2 * TimelineGeometry.HANDLE_DP else 0.0) {
                         Spacer(Modifier.width(4.dp))
                         Text(

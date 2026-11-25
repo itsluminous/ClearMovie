@@ -73,6 +73,7 @@ class VoiceChoiceControllerTest {
             projectId: ProjectId,
             media: MediaRef.Copied,
             language: SpokenLanguage,
+            progress: (Float) -> Unit,
         ): List<VoicePhrase> {
             release.await(10, TimeUnit.SECONDS)
             return words
