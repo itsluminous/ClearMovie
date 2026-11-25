@@ -43,9 +43,10 @@ object TimelineZoom {
      * The widest the whole video is ever laid out, in dp. Compose cannot
      * measure a box wider than 262,143 px, and every item is laid out at its
      * full width, so at 4.5 px per dp (the densest phones, with a large
-     * display size) the whole video must stay under 58,000 dp: at 240 dp a
-     * second a video longer than 18 minutes would not, and the editor crashed
-     * opening it (cm-crash-after-media-pick).
+     * display size) the whole video must stay under 58,000 dp. At 240 dp a
+     * second a video of more than 4 minutes is wider than that, and zooming
+     * in all the way on a 7-minute video crashed a 450 dpi phone
+     * (cm-crash-after-media-pick).
      */
     const val MAX_SPAN_DP = 50_000.0
     const val SHORT_VIDEO_MAX_SECOND_FRACTION = 0.4
