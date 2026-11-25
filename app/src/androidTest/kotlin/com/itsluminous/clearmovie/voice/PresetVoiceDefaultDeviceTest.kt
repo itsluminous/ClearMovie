@@ -265,8 +265,12 @@ class PresetVoiceDefaultDeviceTest {
                 openSheet(voice)
                 compose.onNodeWithTag(insertOptionTag(RECORD_OPTION)).performScrollTo().performClick()
                 waitFor(hasTestTag(RECORDING_STOP_TAG), 20_000)
-                Thread.sleep(RECORD_MS)
-                compose.onNodeWithTag(RECORDING_STOP_TAG).performClick()
+                // The recording ends by itself at the end of the video (20 s), after the speech; Stop if it has not.
+                val ended =
+                    runCatching {
+                        compose.waitUntil(RECORD_MS) { compose.onAllNodes(hasTestTag(RECORDING_STOP_TAG)).fetchSemanticsNodes().isEmpty() }
+                    }.isSuccess
+                if (!ended) compose.onNodeWithTag(RECORDING_STOP_TAG).performClick()
                 compose.waitUntil(20_000) { stored(project)?.track(voiceRow)?.clips?.isNotEmpty() == true }
                 if (voice != VoiceChoice.NONE) {
                     // The words are found and shown to check, with the preset's voice; the pack is there, so no dialog.
@@ -311,7 +315,7 @@ class PresetVoiceDefaultDeviceTest {
         /** The speech starts this long after the recording, once the video plays. */
         const val LEAD_IN_MS = 2_500L
 
-        /** The speech is 14.9 s; the recording runs a little past it. */
-        const val RECORD_MS = 18_000L
+        /** The speech is 14.9 s, from 2.5 s; the video is 20 s, and the recording stops at its end. */
+        const val RECORD_MS = 30_000L
     }
 }
