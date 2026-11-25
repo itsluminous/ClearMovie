@@ -33,9 +33,10 @@ data class PreviewState(
     val durationUs: Long = 0,
     val playing: Boolean = false,
     /**
-     * Playing, but held back by the system for a moment (audio focus lost to a
-     * call or an assistant): the picture does not move, so the screen need not
-     * stay on (cm-keep-screen-on).
+     * Playing, but MAIN (the clock, and the only player that asks for audio
+     * focus) is held back by the system for a moment (focus lost to a call or
+     * an assistant): the video does not move on, so the screen need not stay
+     * on (cm-keep-screen-on).
      */
     val suppressed: Boolean = false,
     /** Index into [PreviewSchedule.main], or -1 with nothing to play. */

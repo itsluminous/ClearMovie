@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.UiAutomation
 import android.content.pm.PackageManager
 import android.util.Log
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
@@ -195,15 +196,20 @@ class RecordVoiceDeviceTest {
         automation.grantRuntimePermission(h.context.packageName, Manifest.permission.RECORD_AUDIO)
         val mic = FakeMic()
         RecordModule.testMics = MicSources { mic }
-        ActivityScenario.launch(MainActivity::class.java).use {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             openRecordVoice()
             // The countdown, then Stop once it is recording.
             waitFor(hasTestTag(RECORDING_PANEL_TAG))
+            // The screen is kept on from the countdown to the end of the recording (cm-keep-screen-on).
+            compose.waitUntil(TIMEOUT_MS) { screenKeptOn(scenario) }
             waitFor(hasTestTag(RECORDING_STOP_TAG), COUNTDOWN_TIMEOUT_MS)
             assertThat(mic.started).isTrue()
+            assertThat(screenKeptOn(scenario)).isTrue()
             Thread.sleep(RECORD_MS)
             compose.onNodeWithTag(RECORDING_STOP_TAG).performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(TIMEOUT_MS) { clipOnVoiceRow() != null }
+            // Saved, the preview paused: the screen may turn off again.
+            compose.waitUntil(TIMEOUT_MS) { !screenKeptOn(scenario) }
             val clip = clipOnVoiceRow()!!
             Log.i(ExportHarness.TAG, "Recorded ${clip.durationMs} ms at ${clip.startMs} ms: ${clip.media}")
             assertThat(clip.startMs).isEqualTo(0)
@@ -255,6 +261,12 @@ class RecordVoiceDeviceTest {
         } finally {
             automation.setRotation(UiAutomation.ROTATION_UNFREEZE)
         }
+    }
+
+    private fun screenKeptOn(scenario: ActivityScenario<MainActivity>): Boolean {
+        var on = false
+        scenario.onActivity { on = it.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0 }
+        return on
     }
 
     private fun clipOnVoiceRow(): AudioClip? =

@@ -45,8 +45,11 @@ object KeepScreenOn {
  * stops, the holds and the export answer are dropped, because Compose
  * stops updating while the activity is stopped, so what they said then may
  * be stale (a preview paused by going to the background still holds).
- * Back on screen, each screen asks again ([generation]) and the export is
- * read again, so the flag is never set from a stale answer.
+ * Back on screen, those no longer count: each screen asks again on its
+ * next composition ([generation]) and the export is read again. (A screen
+ * whose own state is restored a moment after the start, as the editor's
+ * preview state is, recomposes in the same frame, so in practice nothing
+ * stale shows; at worst it would be for one frame.)
  */
 class ScreenAwake(
     private val apply: (Boolean) -> Unit,

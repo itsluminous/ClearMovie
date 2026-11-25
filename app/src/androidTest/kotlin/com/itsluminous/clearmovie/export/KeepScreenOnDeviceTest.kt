@@ -102,6 +102,22 @@ class KeepScreenOnDeviceTest {
         assertWithMessage(step).that(now).isEqualTo(on)
     }
 
+    /**
+     * While the export still saves the flag is set; an export that ends first
+     * (a fast phone) only has to have set it while it ran, which the log shows.
+     */
+    private fun expectFlagWhileSaving(
+        scenario: ActivityScenario<MainActivity>,
+        step: String,
+    ) {
+        runCatching { compose.waitUntil(FLAG_TIMEOUT_MS) { flag(scenario) || exportState()?.isFinished == true } }
+        val on = flag(scenario)
+        val finished = exportState()?.isFinished == true
+        Log.i(TAG, "$step: FLAG_KEEP_SCREEN_ON=${if (on) "set" else "clear"}${if (finished) ", export already finished" else ""}")
+        // Read in this order, a flag that is clear while the export is not finished is a failure.
+        if (!finished) assertWithMessage(step).that(on || exportState()?.isFinished == true).isTrue()
+    }
+
     /** The flag stays [on] for [ms]: nothing sets it, or clears it, a moment later. */
     private fun holdsFlag(
         scenario: ActivityScenario<MainActivity>,
@@ -206,11 +222,12 @@ class KeepScreenOnDeviceTest {
             Log.i(TAG, "background while playing: FLAG_KEEP_SCREEN_ON=clear")
             scenario.moveToState(Lifecycle.State.RESUMED)
             // Going to the background paused the editor, so back on screen it may go dark.
-            expectFlag(scenario, on = false, step = "back from the background, editor paused")
+            // Not even for a moment after the return (a hold from before the background must not count).
+            holdsFlag(scenario, on = false, step = "back from the background, editor paused")
 
             // An export: on while it waits or saves, off in the background, on again when the app is back.
             startExport(ExportQuality.SMALL)
-            expectFlag(scenario, on = true, step = "export saving")
+            expectFlagWhileSaving(scenario, step = "export saving")
             scenario.moveToState(Lifecycle.State.CREATED)
             assertWithMessage("background while exporting").that(flag(scenario)).isFalse()
             Log.i(TAG, "background while exporting: FLAG_KEEP_SCREEN_ON=clear")
@@ -219,8 +236,7 @@ class KeepScreenOnDeviceTest {
             assertThat(exportState()).isAnyOf(WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.SUCCEEDED)
             scenario.moveToState(Lifecycle.State.RESUMED)
             // Back on screen while it still saves, it is set again (a fast export may have finished meanwhile).
-            compose.waitUntil(FLAG_TIMEOUT_MS) { flag(scenario) || exportState()?.isFinished == true }
-            if (exportState()?.isFinished != true) expectFlag(scenario, on = true, step = "back while still exporting")
+            expectFlagWhileSaving(scenario, step = "back while still exporting")
 
             // Done: cleared.
             waitFor(hasText(s(R.string.export_done_title)), timeoutMs = 600_000)
@@ -242,6 +258,8 @@ class KeepScreenOnDeviceTest {
             // A stopped export clears it too.
             compose.onNodeWithTag(EXPORT_CLOSE_TAG).performClick()
             startExport(ExportQuality.BEST)
+            // A Best export of this video takes minutes on an emulator; Stop is pressed within seconds.
+            assertWithMessage("the second export ended before it could be stopped").that(exportState()?.isFinished).isNotEqualTo(true)
             expectFlag(scenario, on = true, step = "second export saving")
             compose.onNodeWithTag(EXPORT_STOP_TAG).performClick()
             val confirm = hasText(s(R.string.export_stop)) and hasClickAction() and !hasTestTag(EXPORT_STOP_TAG)
