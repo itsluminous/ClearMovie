@@ -139,6 +139,14 @@ class HindiHdScreenshots {
         h.setUp()
         val manifest = asset(VoicePackStore.MANIFEST_ASSET) + asset(VoicePackStore.HINDI_HD_MANIFEST_ASSET)
         val abi = (if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS).first { manifest.supports(it) }
+        // No download left over from an earlier run: the dialog would show its progress instead of asking.
+        androidx.work.WorkManager
+            .getInstance(
+                h.context,
+            ).cancelUniqueWork(com.itsluminous.clearmovie.work.VoicePackDownloadWorker.UNIQUE_NAME)
+            .result
+            .get()
+        Thread.sleep(3_000)
         VoicePackStore(h.context.filesDir, manifest, abi, HindiModel.SMALL) { 0 }.remove()
         project(File(external, "hdtest/hi-read-1.m4a"))
         ActivityScenario.launch(MainActivity::class.java).use {
@@ -191,7 +199,12 @@ class HindiHdScreenshots {
                 compose.onAllNodes(hasTestTag(SETTINGS_HINDI_HD_DOWNLOAD_TAG)).fetchSemanticsNodes().isNotEmpty()
             ) {
                 compose.onNodeWithTag(SETTINGS_HINDI_HD_DOWNLOAD_TAG).performClick()
-                Thread.sleep(6_000)
+                // Waits through Compose, so the picture is the row as it is now (a plain sleep leaves the frame stale):
+                // the download's Cancel must show.
+                val cancel = h.context.getString(R.string.action_cancel)
+                compose.waitUntil(30_000) { compose.onAllNodes(hasText(cancel)).fetchSemanticsNodes().isNotEmpty() }
+                Thread.sleep(4_000)
+                compose.waitForIdle()
                 shot("$prefix-4-settings-downloading")
                 // It ends with Hindi HD added, or with what stopped it (and Try again).
                 compose.waitUntil(1_800_000) {
