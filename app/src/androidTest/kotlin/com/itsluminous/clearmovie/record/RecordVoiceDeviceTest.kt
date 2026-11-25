@@ -204,7 +204,16 @@ class RecordVoiceDeviceTest {
             // during the countdown, while the preview is still paused and Stop is not shown yet.
             var duringCountdown = false
             compose.waitUntil(COUNTDOWN_TIMEOUT_MS) {
-                val stopShown = compose.onAllNodes(hasTestTag(RECORDING_STOP_TAG)).fetchSemanticsNodes().isNotEmpty()
+                // A lookup while the panel recomposes can find Compose busy, as in waitFor: that sample is skipped.
+                val stopShown =
+                    try {
+                        compose.onAllNodes(hasTestTag(RECORDING_STOP_TAG)).fetchSemanticsNodes().isNotEmpty()
+                    } catch (e: ComposeNotIdleException) {
+                        return@waitUntil false
+                    } catch (e: IllegalStateException) {
+                        if (e.message?.startsWith("No compose hierarchies found") != true) throw e
+                        return@waitUntil false
+                    }
                 if (!stopShown && screenKeptOn(scenario)) duringCountdown = true
                 duringCountdown || stopShown
             }
