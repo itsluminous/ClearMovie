@@ -666,6 +666,27 @@ the screen; the playhead is saved by `EditorViewModel`.
   job and released (Kokoro alone grows to about 800 MB). On a phone whose
   processor the pack has no engine for, only No change is offered.
   Checked by hand with `VoiceChoiceDeviceTest` (`-e cm.voicepack true`).
+- **Hindi HD** (cm-hindi-voices). An add-on pack in `voice-packs/hindi-hd-v1/`
+  with its own manifest (`assets/voice-pack/manifest-hindi-hd-v1.json`,
+  checked equal by a unit test), merged into the v1 manifest at start-up
+  with each file marked by its folder, so its files unpack into the same
+  `filesDir/voice-pack/v1/` and one Remove takes everything. Its parts:
+  `voices-hi-hd` (a voices.bin with Kokoro hf_beta and hm_psi beside the
+  six of v1, for "Indian male voice 2" and "Indian female voice 2"),
+  `speech-hi-hd` (Vosk `vosk-model-hi-0.22` without rescoring: am, conf,
+  graph, ivector) and `speech-hi-hd-rescore` (its rescore and rnnlm
+  folders), both into the one model folder `asr/hi-hd`. A zip over 100 MB
+  is listed with `pieces` (`<file>.001` and on, 95,000,000 bytes each, each
+  with its SHA-256): the download checks each piece as it ends and fetches a
+  bad one once more; `addDownloaded` re-checks every piece and unzips them
+  read in order. `HindiModel` comes from the phone's total memory: under
+  3.4 GB the small recognizer only, from 3.4 GB the light model, from
+  7 GB (phones sold with 8 GB) also the rescoring files, which a phone below
+  that never takes in. Hindi asks for the best model the phone runs, unless
+  a Hindi recognizer is already there; Settings > Storage offers the rest.
+  The phonemizer reads numbers as Hindi words (years 1100-1999 in
+  hundreds; a leading zero or more than nine digits digit by digit) and an
+  anusvara after a short vowel before a stop as that stop's nasal.
 - **Voice pack download** (cm-voice-pack-download). The internet is used
   for this alone. Download in the pack dialog starts the unique
   `VoicePackDownloadWorker` (WorkManager, a `dataSync` foreground worker
@@ -675,7 +696,7 @@ the screen; the playhead is saved by `EditorViewModel`.
   file of the language in use ("Spoken in", English unless Hindi was
   chosen); the other language's file comes later, the same way, if its
   words are to be found. `PackDownloader`, the only code allowed to use the
-  network, opens only `https://raw.githubusercontent.com/itsluminous/ClearMovie/<commit>/voice-packs/v1/<file>`
+  network, opens only `https://raw.githubusercontent.com/itsluminous/ClearMovie/<commit>/voice-packs/<folder>/<file>`
   at the commit pinned in `VoicePackSource` (so a later push cannot change
   the bytes), follows no redirect, takes no more than the listed size, and
   resumes a part on disk with a Range request. A dropped connection is

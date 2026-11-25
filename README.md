@@ -133,6 +133,11 @@ What ClearMovie on `main` does:
   download it, once, from this repository's [voice-packs](voice-packs/v1/) folder, with a
   progress bar and a warning on mobile data. You can also download the files in a browser
   and add them. No change keeps your own recording.
+- **Hindi HD** - more accurate Hindi speech recognition and two more Indian voices, from
+  the [hindi-hd-v1](voice-packs/hindi-hd-v1/) folder. ClearMovie offers it when Hindi
+  words are to be found, and in Settings > Storage. A phone with 8 GB of memory gets the
+  most accurate model (about 1.6 GB to download), one with 4 GB or more a lighter one
+  (about 350 MB), and one with less keeps the standard Hindi recognition.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its
   colours from your wallpaper on Android 12+, and has a themed icon.
 - **Portrait and landscape** - in the editor, landscape puts the preview on the left and the
@@ -196,8 +201,8 @@ What has shipped, and what is still to come:
 ## Privacy Principles
 
 - **The internet only for the voice pack.** ClearMovie uses the internet for one thing:
-  downloading the optional voice pack, once, from this repository on GitHub, when you
-  first choose a voice. Each file is checked against a SHA-256 fingerprint built into the
+  downloading the optional voice pack (and Hindi HD, if you want it), once, from this
+  repository on GitHub, when you first choose a voice. Each file is checked against a SHA-256 fingerprint built into the
   app before it is used. Nothing is ever uploaded: no servers, no accounts, no telemetry,
   no analytics, no ads. CI fails any build in which other code uses the network, or that
   trusts any other site.
