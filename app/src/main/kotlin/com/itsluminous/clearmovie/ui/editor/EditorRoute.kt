@@ -281,10 +281,12 @@ fun EditorRoute(
     // The screen stays on while the preview plays (not while the system holds it back, as when another app takes
     // the sound for a moment), and through a whole recording, its countdown too, so a long commentary is never cut
     // off by the screen going dark (cm-keep-screen-on). Paused, it may go dark.
-    // Read without the lifecycle (unlike `preview`): the pause made by going to the background reaches it while the
-    // app is away, so on the return the screen is not held for a frame by the playing that was (review R2-F3).
+    // Read without the lifecycle (unlike `preview` and `recording`): the pause or the stopped recording made by going
+    // to the background reaches them while the app is away, so on the return nothing that was holds the screen for
+    // a frame (reviews R2-F3, R5-F1).
     val live by viewModel.engine.state.collectAsState()
-    KeepScreenOnWhile((live.playing && !live.suppressed) || recording != null)
+    val recordingNow by viewModel.recording.collectAsState()
+    KeepScreenOnWhile((live.playing && !live.suppressed) || recordingNow != null)
     val askToRecord = rememberRecordVoice { row, atMs -> viewModel.recordVoice(row, atMs) }
     val latestAskToRecord by rememberUpdatedState(askToRecord)
 
