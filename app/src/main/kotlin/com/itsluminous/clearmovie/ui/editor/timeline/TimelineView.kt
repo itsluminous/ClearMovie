@@ -2288,10 +2288,12 @@ private fun TimedRowContent(
             if (x + w < -VIEW_MARGIN_DP || w <= 0) continue
             // Only the part on screen (and a margin) is laid out: an item on these rows is not cut at the video's
             // end (a song longer than the video), so zoomed in its whole width can be too wide for Compose to
-            // measure (cm-crash-after-media-pick). Its icon and words then sit at the screen's edge.
+            // measure (cm-crash-after-media-pick). Its icon and words are kept at the screen's left edge.
             val left = maxOf(x, -VIEW_MARGIN_DP)
             val laid = minOf(x + w, viewDp + VIEW_MARGIN_DP) - left
             if (laid <= 0) continue
+            val hiddenStart = maxOf(0.0, -left)
+            val seen = minOf(x + w, viewDp) - maxOf(x, 0.0)
             val isSelected = clip.id == selected
             val words = clip.text?.takeIf { it.isNotBlank() }?.take(TEXT_SHOWN)
             val kind = stringResource(rowClipName(clip.kind, row.type))
@@ -2339,7 +2341,7 @@ private fun TimedRowContent(
                 // On the selected item the handles take its edges: its icon and words sit between them.
                 val inset = if (isSelected && clip.resize != null) TimelineGeometry.HANDLE_DP.dp + 4.dp else 6.dp
                 Row(
-                    Modifier.align(Alignment.CenterStart).padding(horizontal = inset),
+                    Modifier.align(Alignment.CenterStart).padding(start = inset + hiddenStart.dp, end = inset),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
@@ -2348,7 +2350,7 @@ private fun TimedRowContent(
                         tint = on,
                         modifier = Modifier.size(16.dp),
                     )
-                    if (words != null && laid >= 48 + if (inset > 6.dp) 2 * TimelineGeometry.HANDLE_DP else 0.0) {
+                    if (words != null && seen >= 48 + if (inset > 6.dp) 2 * TimelineGeometry.HANDLE_DP else 0.0) {
                         Spacer(Modifier.width(4.dp))
                         Text(
                             words,
@@ -2362,8 +2364,9 @@ private fun TimedRowContent(
                 }
             }
             if (isSelected && !dragged && clip.resize != null) {
-                val left = START_PAD_DP + zoom.xOf(shownStart.toDouble())
-                TrimHandlePair(left, left + w, vertical = 5.dp)
+                // At the item's true edges, wherever its laid-out part ends.
+                val itemLeft = START_PAD_DP + zoom.xOf(shownStart.toDouble())
+                TrimHandlePair(itemLeft, itemLeft + w, vertical = 5.dp)
             }
         }
     }

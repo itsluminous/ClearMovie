@@ -13,8 +13,8 @@ class CrashLogTest {
 
     private fun log(
         dir: File = File(tmp.root, "crash"),
-        notBefore: Long = 0L,
-    ) = CrashLog(dir, about = { "ClearMovie 0.0.6 (60), Android 16 (API 36), samsung SM-G990E" }, clock = { 0L }, notBefore = { notBefore })
+        version: Long = 60L,
+    ) = CrashLog(dir, about = { "ClearMovie 0.0.6 (60), Android 16 (API 36), samsung SM-G990E" }, clock = { 0L }, version = { version })
 
     @Test
     fun `a crash is kept with the app, the phone, the thread and the whole trace`() {
@@ -61,13 +61,24 @@ class CrashLogTest {
     }
 
     @Test
-    fun `a crash from before the app was updated is not offered, and is forgotten`() {
+    fun `a crash kept by another version is not offered, whatever the clock says`() {
         val dir = File(tmp.root, "crash")
-        log(dir).record(Thread("main"), IllegalStateException("old version"))
-        val written = File(dir, CrashLog.TEXT).lastModified()
-        assertThat(log(dir, notBefore = written + 1).last()).isNull()
-        assertThat(File(dir, CrashLog.TEXT).exists()).isFalse()
+        log(dir, version = 50).record(Thread("main"), IllegalStateException("old version"))
+        // The phone's clock plays no part: an offline phone's clock can be wrong.
+        File(dir, CrashLog.TEXT).setLastModified(4_102_444_800_000L)
+        assertThat(log(dir, version = 60).last()).isNull()
+        assertThat(log(dir, version = 50).last()!!.text).contains("old version")
         // The launch's mark is not tied to the version: the next launch still opens Home.
-        assertThat(log(dir).crashedLastTime()).isTrue()
+        assertThat(log(dir, version = 60).crashedLastTime()).isTrue()
+    }
+
+    @Test
+    fun `the cut never splits a character outside the BMP`() {
+        val emoji = "\uD83C\uDFAC"
+        val all = emoji.repeat(CrashLog.MAX_CHARS)
+        val cut = CrashLog.cut(all)
+        assertThat(cut.length).isAtMost(CrashLog.MAX_CHARS)
+        assertThat(cut.filterIndexed { i, c -> c.isHighSurrogate() && (i + 1 >= cut.length || !cut[i + 1].isLowSurrogate()) }).isEmpty()
+        assertThat(cut.filterIndexed { i, c -> c.isLowSurrogate() && (i == 0 || !cut[i - 1].isHighSurrogate()) }).isEmpty()
     }
 }

@@ -90,8 +90,7 @@ object StorageModule {
                 "ClearMovie ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${Build.VERSION.RELEASE} " +
                     "(API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}"
             },
-            // A crash from before the app was last updated is not offered: that version is gone.
-            notBefore = { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime }.getOrDefault(0L) },
+            version = { BuildConfig.VERSION_CODE.toLong() },
         )
 
     @Provides

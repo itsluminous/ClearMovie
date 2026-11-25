@@ -31,7 +31,7 @@ data class ZoomState(
  *   short video).
  * - **Close-up** (the narrowest): one second spans 240 dp, unless that would
  *   make the whole video wider than [MAX_SPAN_DP] (a video of more than about
- *   3.5 minutes): then the whole video at [MAX_SPAN_DP] is as close as it goes.
+ *   2 minutes): then the whole video at [MAX_SPAN_DP] is as close as it goes.
  * - Zooming multiplies the scale, so equal pinches change it by equal ratios.
  * - A zoom keeps the time under the focal point where it is, unless that
  *   would scroll past either end of the video.
@@ -43,13 +43,14 @@ object TimelineZoom {
      * The widest the whole video is ever laid out, in dp. Compose cannot
      * measure a box wider than 262,143 px, and each MAIN item is laid out at
      * its full width (its pictures need it; the other rows lay out only their
-     * part on screen), so at 4.5 px per dp (the densest phones, with a large
-     * display size) the whole video must stay under 58,000 dp. At 240 dp a
-     * second a video of more than 4 minutes is wider than that, and zooming
-     * in all the way on a 7-minute video crashed a 450 dpi phone
-     * (cm-crash-after-media-pick).
+     * part on screen). A trim pulls a tile out by up to a screen's width more.
+     * 30,000 dp leaves room for that up to 8 px per dp, beyond the densest
+     * phones even with a large display size or a small smallest width set in
+     * developer options. At 240 dp a second a video of more than 2 minutes is
+     * wider than that; zooming in all the way on a 7-minute video crashed a
+     * 450 dpi phone (cm-crash-after-media-pick).
      */
-    const val MAX_SPAN_DP = 50_000.0
+    const val MAX_SPAN_DP = 30_000.0
     const val SHORT_VIDEO_MAX_SECOND_FRACTION = 0.4
 
     /** The Zoom in and Zoom out buttons change the scale by this much, around the playhead. */

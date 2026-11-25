@@ -18,6 +18,7 @@ import com.itsluminous.clearmovie.data.media.ShareProbe
 import com.itsluminous.clearmovie.data.media.ShareTypes
 import com.itsluminous.clearmovie.data.media.SharedLinks
 import com.itsluminous.clearmovie.data.media.newMainItems
+import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.project.LaunchDecision
 import com.itsluminous.clearmovie.data.project.OpenResult
 import com.itsluminous.clearmovie.data.project.ProjectRepository
@@ -203,6 +204,8 @@ class ShareViewModel
         private val pending: PendingShare,
         private val settings: SettingsRepository,
         @param:Named(IO_DISPATCHER) private val io: CoroutineDispatcher,
+        /** After a crash, no video counts as in the editor (cm-crash-after-media-pick), even if its session stayed. */
+        private val crashes: CrashLog? = null,
     ) : ViewModel() {
         private val stateFlow = MutableStateFlow<ShareState>(ShareState.Idle)
         val state: StateFlow<ShareState> = stateFlow.asStateFlow()
@@ -390,7 +393,7 @@ class ShareViewModel
             // The video in the editor: the one on screen, else the one the session names (the app in the
             // background, or starting); a review or photo-step draft is neither (cm-flow D5).
             val inEditor =
-                editorOnScreen ?: (runCatching { repository.launchDecision() }.getOrNull() as? LaunchDecision.ReopenEditor)?.id
+                editorOnScreen ?: (runCatching { repository.launchDecision(crashes) }.getOrNull() as? LaunchDecision.ReopenEditor)?.id
             val open: ProjectId? = waiting?.draft ?: inEditor
             links = shared.uris
             notes = first

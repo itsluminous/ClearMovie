@@ -558,7 +558,7 @@ the screen; the playhead is saved by `EditorViewModel`.
 - **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
   finger before a long-press is a pinch (zoom around the fingers, clamped
   between Fit all and 1 s per 240 dp, `TimelineZoom`, but never so close that
-  the whole video is wider than `MAX_SPAN_DP`, 50,000 dp: a MAIN item is laid
+  the whole video is wider than `MAX_SPAN_DP`, 30,000 dp: a MAIN item is laid
   out at its full width, and Compose cannot measure a box wider than 262,143
   px; an item on another row, which can run past the video's end, lays out
   only its part on screen), movement is a scroll
@@ -702,7 +702,7 @@ taking the mark only once that worked (`launchDecision` opens Home while it
 is there). So a video whose editor crashes on opening is not reopened at
 every launch; its edits were written and it stays in My videos. Any uncaught
 crash does this, not only one in the editor. Settings > About then shows
-Share crash details, until the app is next updated, which sends the text
+Share crash details (only for a crash kept by this version, by version code), which sends the text
 through the share sheet: the app has no internet permission, so nothing
 leaves the phone unless the user shares it. The timeline lays out
 with the stored zoom fitted to the current length (`TimelineZoom.forLayout`):
