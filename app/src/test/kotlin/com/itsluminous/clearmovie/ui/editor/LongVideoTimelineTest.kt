@@ -7,12 +7,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import com.google.common.truth.Truth.assertThat
+import com.itsluminous.clearmovie.domain.model.AudioRole
 import com.itsluminous.clearmovie.domain.model.ClipId
 import com.itsluminous.clearmovie.domain.model.Fixtures
 import com.itsluminous.clearmovie.domain.model.PresetRole
 import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.ProjectFactory
 import com.itsluminous.clearmovie.domain.model.SequentialIds
+import com.itsluminous.clearmovie.domain.model.addTimedClip
 import com.itsluminous.clearmovie.domain.model.addToMain
 import com.itsluminous.clearmovie.domain.model.mainLayout
 import com.itsluminous.clearmovie.ui.editor.timeline.TIMELINE_TAG
@@ -100,9 +102,10 @@ class LongVideoTimelineTest {
         val long = project(10)
         show(long, screen)
         // Zoom in as far as it goes: the 10-minute video must still be under Compose's limit.
-        compose.runOnIdle { screen.zoom = ZoomState(TimelineZoom.closeUpMsPerDp / 4, 0.0, fitAll = false) }
+        // Scrolled to the intro's end, where the frame row's item starts.
+        compose.runOnIdle { screen.zoom = ZoomState(TimelineZoom.closeUpMsPerDp / 4, 6_000.0, fitAll = false) }
         compose.waitForIdle()
-        // The frame row's item runs from the intro's end to the video's end, so it starts on screen.
+        // The frame row's item runs from the intro's end to the video's end.
         val frame =
             long.tracks
                 .first { it.presetRole == PresetRole.FRAME }
@@ -112,6 +115,25 @@ class LongVideoTimelineTest {
         val px =
             compose
                 .onNodeWithTag(clipTag(frame), useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .size.width
+        assertThat(px).isAtMost(COMPOSE_MAX_PX)
+    }
+
+    @Test
+    fun `a song longer than the video, zoomed in all the way, stays within what can be laid out`() {
+        // A one-minute slideshow with a 7-minute song on a music row: the song is not cut at the video's end.
+        val song = Fixtures.audio("song", 0, 7 * 60_000)
+        val short =
+            ProjectFactory
+                .fromPreset(Fixtures.PROJECT_ID, Fixtures.preset, Fixtures.presetMedia, SequentialIds("e"))
+                .addToMain((1..15).map { Fixtures.photo("p$it") })
+                .addTimedClip(song, AudioRole.MUSIC, SequentialIds("m"))
+        val screen = EditorScreenState(zoom = ZoomState(TimelineZoom.closeUpMsPerDp, 0.0, fitAll = false))
+        show(short, screen)
+        val px =
+            compose
+                .onNodeWithTag(clipTag(ClipId("song")), useUnmergedTree = true)
                 .fetchSemanticsNode()
                 .size.width
         assertThat(px).isAtMost(COMPOSE_MAX_PX)

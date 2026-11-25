@@ -558,9 +558,10 @@ the screen; the playhead is saved by `EditorViewModel`.
 - **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
   finger before a long-press is a pinch (zoom around the fingers, clamped
   between Fit all and 1 s per 240 dp, `TimelineZoom`, but never so close that
-  the whole video is wider than `MAX_SPAN_DP`, 50,000 dp: every item is laid
+  the whole video is wider than `MAX_SPAN_DP`, 50,000 dp: a MAIN item is laid
   out at its full width, and Compose cannot measure a box wider than 262,143
-  px), movement is a scroll
+  px; an item on another row, which can run past the video's end, lays out
+  only its part on screen), movement is a scroll
   (one way per gesture: up and down the rows when it starts more upright than
   sideways and the rows scroll, otherwise along the time), a trim from a
   handle (unless clearly upright) or a scrub from the ruler, a hold then a drag moves an
@@ -694,12 +695,16 @@ with no question; "We brought back your last video" shows only when it has
 edits newer than that time. A session naming an unreadable project starts at
 Home. After a crash the launch starts at Home too (cm-crash-after-media-pick):
 the crash handler keeps the crash in `CrashLog` (`noBackupFilesDir/crash`,
-the app and phone, the time and the trace) with a mark the next launch takes,
-and that launch clears the session, so a video whose editor crashes on
-opening is not reopened at every launch; its edits were written and it stays
-in My videos. Settings > About then shows Share crash details, which sends
-the text through the share sheet: the app has no internet permission, so
-nothing leaves the phone unless the user shares it. The timeline lays out
+the app and phone, the time and the trace, its start and end when it is
+long) with a mark, and the next process clears the session in
+`Application.onCreate`, before a screen or a share asks which video is open,
+taking the mark only once that worked (`launchDecision` opens Home while it
+is there). So a video whose editor crashes on opening is not reopened at
+every launch; its edits were written and it stays in My videos. Any uncaught
+crash does this, not only one in the editor. Settings > About then shows
+Share crash details, until the app is next updated, which sends the text
+through the share sheet: the app has no internet permission, so nothing
+leaves the phone unless the user shares it. The timeline lays out
 with the stored zoom fitted to the current length (`TimelineZoom.forLayout`):
 the zoom kept while the editor waits for its project is fit all of an empty
 video, and 0.0.5 drew a long video's rows at that scale in the frame the

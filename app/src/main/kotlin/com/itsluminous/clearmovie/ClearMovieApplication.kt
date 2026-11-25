@@ -68,6 +68,12 @@ class ClearMovieApplication :
         val settings = runCatching { runBlocking { settingsRepository.settings.first() } }.getOrDefault(AppSettings())
         applyNightMode(settings.themeMode)
 
+        // After a crash the video that was in the editor is not reopened (cm-crash-after-media-pick). Done now,
+        // before any screen or share asks which video is open; only after a crash, so it costs nothing otherwise.
+        if (crashLog.crashedLastTime()) {
+            runCatching { runBlocking { projectRepository.forgetEditorAfterCrash(crashLog) } }
+        }
+
         // Autosave: write pending edits when the app goes to the background
         // (before any low-memory kill) and when it crashes; a crash is also kept,
         // so the next launch opens Home and Settings can share it.

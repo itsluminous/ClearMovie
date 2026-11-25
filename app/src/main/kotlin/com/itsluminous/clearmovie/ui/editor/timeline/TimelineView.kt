@@ -307,6 +307,9 @@ private const val START_PAD_DP = TimelineGeometry.START_ROOM_DP
 /** The room after the video's end, under the rows' own floating "+" (TimelineGeometry.endPlusX). */
 private const val END_PAD_DP = TimelineGeometry.END_ROOM_DP
 
+/** How far past the screen's edges an item on a row other than MAIN is still laid out (dp). */
+private const val VIEW_MARGIN_DP = 64.0
+
 /** Whether the timeline had no zoom yet when the nudge after a clamp last ran (TimelineView): the editor opening. */
 private class NudgeMemo {
     var unset = true
@@ -691,7 +694,16 @@ fun TimelineView(
                                             drag,
                                         )
                                     } else {
-                                        TimedRowContent(row, z, selected, playheadMs, timedDrag, timedTrim, latestActions)
+                                        TimedRowContent(
+                                            row,
+                                            z,
+                                            selected,
+                                            playheadMs,
+                                            timedDrag,
+                                            timedTrim,
+                                            latestActions,
+                                            START_PAD_DP + spanWidth + END_PAD_DP,
+                                        )
                                     }
                                     // The row's own "+" floats over its right edge (cm-plus-position), items running on under it.
                                     // Its TalkBack stop is here, read right after the row's items; the circle itself is drawn in
@@ -2249,6 +2261,8 @@ private fun TimedRowContent(
     drag: TimedDragPreview?,
     trimState: State<TimedTrimPreview?>,
     actions: TimelineActions,
+    /** The row's width (dp) after its header: the part of an item past it, by more than a margin, is not laid out. */
+    viewDp: Double,
 ) {
     // Only the row being trimmed sees the preview change, so a handle drag recomposes that row alone.
     val trim by remember(row.key, trimState) { derivedStateOf { trimState.value?.takeIf { it.key == row.key } } }
@@ -2271,7 +2285,13 @@ private fun TimedRowContent(
             val (shownStart, shownEnd) = preview?.span(clip) ?: (clip.startMs to clip.endMs)
             val x = START_PAD_DP + zoom.xOf(shownStart.toDouble()) + if (dragged) drag.dxDp else 0.0
             val w = (shownEnd - shownStart) / zoom.msPerDp
-            if (x + w < -64 || w <= 0) continue
+            if (x + w < -VIEW_MARGIN_DP || w <= 0) continue
+            // Only the part on screen (and a margin) is laid out: an item on these rows is not cut at the video's
+            // end (a song longer than the video), so zoomed in its whole width can be too wide for Compose to
+            // measure (cm-crash-after-media-pick). Its icon and words then sit at the screen's edge.
+            val left = maxOf(x, -VIEW_MARGIN_DP)
+            val laid = minOf(x + w, viewDp + VIEW_MARGIN_DP) - left
+            if (laid <= 0) continue
             val isSelected = clip.id == selected
             val words = clip.text?.takeIf { it.isNotBlank() }?.take(TEXT_SHOWN)
             val kind = stringResource(rowClipName(clip.kind, row.type))
@@ -2286,10 +2306,10 @@ private fun TimedRowContent(
             val playing = playheadMs in clip.startMs until clip.endMs
             Box(
                 Modifier
-                    .offset { IntOffset((x * density).roundToInt(), 0) }
-                    // An item can be far wider than the screen when zoomed in: never squeezed to the row's width.
+                    .offset { IntOffset((left * density).roundToInt(), 0) }
+                    // An item can be wider than the screen when zoomed in: never squeezed to the row's width.
                     .wrapContentWidth(Alignment.Start, unbounded = true)
-                    .width(w.coerceAtLeast(2.0).dp)
+                    .width(laid.coerceAtLeast(2.0).dp)
                     .fillMaxHeight()
                     .zIndex(if (dragged) 1f else 0f)
                     .testTag(clipTag(clip.id))
@@ -2328,7 +2348,7 @@ private fun TimedRowContent(
                         tint = on,
                         modifier = Modifier.size(16.dp),
                     )
-                    if (words != null && w >= 48 + if (inset > 6.dp) 2 * TimelineGeometry.HANDLE_DP else 0.0) {
+                    if (words != null && laid >= 48 + if (inset > 6.dp) 2 * TimelineGeometry.HANDLE_DP else 0.0) {
                         Spacer(Modifier.width(4.dp))
                         Text(
                             words,

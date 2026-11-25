@@ -41,8 +41,9 @@ object TimelineZoom {
 
     /**
      * The widest the whole video is ever laid out, in dp. Compose cannot
-     * measure a box wider than 262,143 px, and every item is laid out at its
-     * full width, so at 4.5 px per dp (the densest phones, with a large
+     * measure a box wider than 262,143 px, and each MAIN item is laid out at
+     * its full width (its pictures need it; the other rows lay out only their
+     * part on screen), so at 4.5 px per dp (the densest phones, with a large
      * display size) the whole video must stay under 58,000 dp. At 240 dp a
      * second a video of more than 4 minutes is wider than that, and zooming
      * in all the way on a 7-minute video crashed a 450 dpi phone

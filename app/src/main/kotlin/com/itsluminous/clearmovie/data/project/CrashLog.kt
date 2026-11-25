@@ -25,6 +25,8 @@ class CrashLog(
     private val dir: File,
     private val about: () -> String = { "" },
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Crashes kept before this time (the app's last update) are not shown: that version is gone. */
+    private val notBefore: () -> Long = { 0L },
 ) {
     private val text get() = File(dir, TEXT)
     private val mark get() = File(dir, MARK)
@@ -45,7 +47,7 @@ class CrashLog(
                     appendLine("Thread: ${thread.name}")
                     appendLine()
                 }
-            text.writeText((header + trace).take(MAX_CHARS))
+            text.writeText(cut(header + trace))
         }
     }
 
@@ -55,12 +57,17 @@ class CrashLog(
     /** True once after a crash: the launch that takes it opens Home. */
     fun takeCrashMark(): Boolean = runCatching { mark.exists() && mark.delete() }.getOrDefault(false)
 
-    /** The last crash's text, or null when none is kept. */
+    /** The last crash's text, or null when none is kept, or it is from before the app was updated. */
     fun last(): Crash? =
         runCatching {
             val f = text
             if (!f.isFile) return null
-            Crash(atMs = f.lastModified(), text = f.readText())
+            val at = f.lastModified()
+            if (at < notBefore()) {
+                f.delete()
+                return null
+            }
+            Crash(atMs = at, text = f.readText())
         }.getOrNull()
 
     /** Forgets the last crash. */
@@ -75,6 +82,18 @@ class CrashLog(
     )
 
     companion object {
+        /**
+         * [all] at most [MAX_CHARS] long: its start (where it happened) and its end (the `Caused by` lines,
+         * which come last), with how much was left out between them.
+         */
+        internal fun cut(all: String): String {
+            if (all.length <= MAX_CHARS) return all
+            // The note takes at most 48 characters, so the whole stays within MAX_CHARS.
+            val keep = MAX_CHARS - 48
+            val gap = "\n... ${all.length - keep} characters left out ...\n"
+            return all.take(keep / 2) + gap + all.takeLast(keep - keep / 2)
+        }
+
         const val TEXT = "last-crash.txt"
         const val MARK = "open-home-next"
 

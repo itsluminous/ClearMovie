@@ -355,12 +355,9 @@ class ProjectRepository(
      * starts in an editor that cannot open.
      */
     suspend fun launchDecision(crashes: CrashLog? = null): LaunchDecision {
-        // Right after a crash, Home (cm-crash-after-media-pick): a video whose editor crashes on opening it must
-        // not crash every launch. Its edits were written by the crash handler and it stays in My videos. The
-        // session goes before the mark, so a launch asked again (a rotation) finds no editor to reopen either.
+        // Right after a crash, Home (cm-crash-after-media-pick), even when the session could not be cleared yet.
         if (crashes?.crashedLastTime() == true) {
-            clearSession()
-            crashes.takeCrashMark()
+            forgetEditorAfterCrash(crashes)
             return LaunchDecision.Home
         }
         val session = db.session().get() ?: return LaunchDecision.Home
@@ -404,6 +401,17 @@ class ProjectRepository(
         // Only the project's own folder: gallery items, exported videos and preset files are never in it.
         files.deleteProjectFiles(id)
         return true
+    }
+
+    /**
+     * After a crash (cm-crash-after-media-pick), the video that was in the editor is no longer reopened: a video
+     * whose editor crashes on opening it must not crash every launch. Its edits were written by the crash handler
+     * and it stays in My videos. The app does this at start, before a share can ask which video is open; the mark
+     * is taken only once the session is cleared, so a failed clear is tried again rather than reopening it.
+     */
+    suspend fun forgetEditorAfterCrash(crashes: CrashLog) {
+        if (!crashes.crashedLastTime()) return
+        if (runCatching { db.session().clear() }.isSuccess) crashes.takeCrashMark()
     }
 
     /** No project is in the editor. A failure only means a restart may reopen the editor. */

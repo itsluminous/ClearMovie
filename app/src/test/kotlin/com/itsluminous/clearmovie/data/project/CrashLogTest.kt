@@ -11,10 +11,10 @@ class CrashLogTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
-    private fun log(dir: File = File(tmp.root, "crash")) =
-        CrashLog(dir, about = {
-            "ClearMovie 0.0.6 (60), Android 16 (API 36), samsung SM-G990E"
-        }, clock = { 0L })
+    private fun log(
+        dir: File = File(tmp.root, "crash"),
+        notBefore: Long = 0L,
+    ) = CrashLog(dir, about = { "ClearMovie 0.0.6 (60), Android 16 (API 36), samsung SM-G990E" }, clock = { 0L }, notBefore = { notBefore })
 
     @Test
     fun `a crash is kept with the app, the phone, the thread and the whole trace`() {
@@ -44,15 +44,30 @@ class CrashLogTest {
     }
 
     @Test
-    fun `a very long trace is cut, and a folder that cannot be written never throws`() {
+    fun `a very long trace keeps its start and its causes, and a folder that cannot be written never throws`() {
         val crashes = log()
-        crashes.record(Thread("main"), IllegalStateException("x".repeat(200_000)))
-        assertThat(crashes.last()!!.text.length).isEqualTo(CrashLog.MAX_CHARS)
+        crashes.record(Thread("main"), IllegalStateException("x".repeat(200_000), IllegalArgumentException("the cause")))
+        val text = crashes.last()!!.text
+        assertThat(text.length).isAtMost(CrashLog.MAX_CHARS)
+        assertThat(text).startsWith("ClearMovie 0.0.6")
+        assertThat(text).contains("characters left out")
+        assertThat(text).contains("Caused by: java.lang.IllegalArgumentException: the cause")
         // A file where the folder should be: nothing is kept, and nothing throws.
         val blocked = File(tmp.root, "blocked").apply { writeText("") }
         val broken = log(blocked)
         broken.record(Thread("main"), IllegalStateException("x"))
         assertThat(broken.last()).isNull()
         assertThat(broken.takeCrashMark()).isFalse()
+    }
+
+    @Test
+    fun `a crash from before the app was updated is not offered, and is forgotten`() {
+        val dir = File(tmp.root, "crash")
+        log(dir).record(Thread("main"), IllegalStateException("old version"))
+        val written = File(dir, CrashLog.TEXT).lastModified()
+        assertThat(log(dir, notBefore = written + 1).last()).isNull()
+        assertThat(File(dir, CrashLog.TEXT).exists()).isFalse()
+        // The launch's mark is not tied to the version: the next launch still opens Home.
+        assertThat(log(dir).crashedLastTime()).isTrue()
     }
 }

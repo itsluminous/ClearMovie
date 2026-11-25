@@ -466,10 +466,13 @@ class ProjectRepositoryTest {
         }
         databases.forEach { it.close() }
         runBlocking {
-            // Without the crash log (a share asking which video is open) the editor would still be reopened.
+            // The session still names the video that crashed, until the app clears it at start.
             assertThat(repository().launchDecision()).isInstanceOf(LaunchDecision.ReopenEditor::class.java)
-            // The launch: Home, and so is the one after it, until the video is opened again.
+            // Even if the app could not, the launch itself opens Home while the mark is there.
             assertThat(repository().launchDecision(crashes)).isEqualTo(LaunchDecision.Home)
+            assertThat(crashes.crashedLastTime()).isFalse()
+            // A share asking which video is open (it passes no crash log) finds none now, and the next launch is Home.
+            assertThat(repository().launchDecision()).isEqualTo(LaunchDecision.Home)
             assertThat(repository().launchDecision(crashes)).isEqualTo(LaunchDecision.Home)
             // Its edits were written and it can still be opened.
             val opened = repository().open(ProjectId("p1")) as OpenResult.Opened
@@ -480,6 +483,26 @@ class ProjectRepositoryTest {
         assertThat(kept).contains("IllegalArgumentException: Can't represent a width of 300447")
         assertThat(kept).contains("ProjectRepositoryTest")
     }
+
+    @Test
+    fun `the app clears the crashed editor at start, before a share asks which video is open`() =
+        runBlocking<Unit> {
+            val crashes = CrashLog(File(tmp.root, "crash"))
+            val repo = repository()
+            repo.createDraft(draft())
+            repo.open(ProjectId("p1"))
+            crashes.record(Thread.currentThread(), IllegalStateException("boom"))
+            databases.forEach { it.close() }
+            repository().forgetEditorAfterCrash(crashes)
+            assertThat(crashes.crashedLastTime()).isFalse()
+            assertThat(repository().launchDecision()).isEqualTo(LaunchDecision.Home)
+            // Without a crash it does nothing: a video left open by a kill is reopened as before.
+            val again = repository()
+            again.open(ProjectId("p1"))
+            databases.forEach { it.close() }
+            repository().forgetEditorAfterCrash(crashes)
+            assertThat(repository().launchDecision()).isInstanceOf(LaunchDecision.ReopenEditor::class.java)
+        }
 
     @Test
     fun `an editor that was only looked at reopens without the brought-back note`() =
