@@ -27,10 +27,19 @@ class VoiceTest {
     fun `the voice list starts with No change and has British, Indian and American voices of each gender`() {
         assertThat(VoiceChoice.MENU.first()).isEqualTo(VoiceChoice.NONE)
         assertThat(VoiceChoice.MENU.map { it.id })
-            .containsExactly("none", "british_male", "british_female", "indian_male", "indian_female", "american_male", "american_female")
-            .inOrder()
+            .containsExactly(
+                "none",
+                "british_male",
+                "british_female",
+                "indian_male",
+                "indian_female",
+                "indian_male_2",
+                "indian_female_2",
+                "american_male",
+                "american_female",
+            ).inOrder()
         for (accent in VoiceChoice.Accent.entries) {
-            assertThat(VoiceChoice.MENU.filter { it.accent == accent }.map { it.gender })
+            assertThat(VoiceChoice.MENU.filter { it.accent == accent && !it.needsHd }.map { it.gender })
                 .containsExactly(VoiceChoice.Gender.MALE, VoiceChoice.Gender.FEMALE)
         }
         assertThat(
@@ -38,7 +47,11 @@ class VoiceTest {
                 .filter { it != VoiceChoice.NONE }
                 .map { it.speaker }
                 .toSet(),
-        ).hasSize(6)
+        ).hasSize(8)
+        // Hindi HD's two voices (cm-hindi-voices): Kokoro hm_psi and hf_beta, only in its voices file.
+        assertThat(VoiceChoice.MENU.filter { it.needsHd }).containsExactly(VoiceChoice.INDIAN_MALE_2, VoiceChoice.INDIAN_FEMALE_2)
+        assertThat(VoiceChoice.INDIAN_MALE_2.speaker).isEqualTo(34)
+        assertThat(VoiceChoice.INDIAN_FEMALE_2.speaker).isEqualTo(32)
         assertThat(VoiceChoice.fromId("indian_female")).isEqualTo(VoiceChoice.INDIAN_FEMALE)
         assertThat(VoiceChoice.fromId("klingon")).isNull()
         assertThat(SpokenLanguage.fromId("hi")).isEqualTo(SpokenLanguage.HINDI)
@@ -48,8 +61,13 @@ class VoiceTest {
     @Test
     fun `Hindi words are said only by the Indian voices, English by all`() {
         assertThat(VoiceChoice.forLanguage(SpokenLanguage.HINDI))
-            .containsExactly(VoiceChoice.NONE, VoiceChoice.INDIAN_MALE, VoiceChoice.INDIAN_FEMALE)
-            .inOrder()
+            .containsExactly(
+                VoiceChoice.NONE,
+                VoiceChoice.INDIAN_MALE,
+                VoiceChoice.INDIAN_FEMALE,
+                VoiceChoice.INDIAN_MALE_2,
+                VoiceChoice.INDIAN_FEMALE_2,
+            ).inOrder()
         assertThat(VoiceChoice.forLanguage(SpokenLanguage.ENGLISH)).isEqualTo(VoiceChoice.MENU)
         assertThat(VoiceChoice.BRITISH_MALE.speaks(SpokenLanguage.HINDI)).isFalse()
         assertThat(VoiceChoice.BRITISH_MALE.forLanguage(SpokenLanguage.HINDI)).isEqualTo(VoiceChoice.INDIAN_MALE)
