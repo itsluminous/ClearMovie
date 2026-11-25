@@ -136,7 +136,9 @@ What ClearMovie on `main` does:
 - **Portrait and landscape** - in the editor, landscape puts the preview on the left and the
   timeline on the right. The home and preset screens use the extra width too. A wide window
   on a tablet, foldable or in split-screen gets the same layout.
-- **Autosave** - work is saved as you go and recovered after a crash. Your videos are
+- **Autosave** - work is saved as you go and recovered after a crash. After a crash
+  ClearMovie starts at Home, and Settings > About offers to share what went wrong;
+  nothing is sent unless you share it. Your videos are
   listed under "My videos"; tap a video's title in the editor to give it a name.
   More options > Delete video removes it from "My videos" after asking; videos you
   already saved to the gallery stay there.

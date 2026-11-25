@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.itsluminous.clearmovie.data.files.StorageReport
 import com.itsluminous.clearmovie.data.files.StorageUsage
+import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
 import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AppSettings
@@ -26,7 +27,13 @@ class SettingsViewModel
         private val settingsRepository: SettingsRepository,
         private val storageUsage: StorageUsage,
         private val voiceTools: VoiceTools = VoiceTools.NONE,
+        private val crashLog: CrashLog? = null,
     ) : ViewModel() {
+        private val crashState = MutableStateFlow<CrashLog.Crash?>(null)
+
+        /** The last crash, which About offers to share (cm-crash-after-media-pick); null when none is kept. */
+        val crash: StateFlow<CrashLog.Crash?> = crashState.asStateFlow()
+
         private val packState = MutableStateFlow(0L)
 
         /** Bytes the voice pack takes on the phone (cm-voice-choice); 0 when it is not added. */
@@ -50,6 +57,7 @@ class SettingsViewModel
             viewModelScope.launch {
                 storageState.value = runCatching { storageUsage.report() }.getOrNull()
                 packState.value = withContext(Dispatchers.IO) { runCatching { voiceTools.packBytes() }.getOrDefault(0L) }
+                crashState.value = withContext(Dispatchers.IO) { crashLog?.last() }
             }
         }
 

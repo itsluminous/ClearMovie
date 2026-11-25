@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.ui.settings
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,6 +71,7 @@ fun SettingsRoute(
     val loaded by viewModel.settings.collectAsStateWithLifecycle()
     val storage by viewModel.storage.collectAsStateWithLifecycle()
     val voicePack by viewModel.voicePackBytes.collectAsStateWithLifecycle()
+    val crash by viewModel.crash.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose {}
@@ -98,7 +100,33 @@ fun SettingsRoute(
         onOpenProjectPage = { openProjectPage(context) },
         voicePackBytes = voicePack,
         onRemoveVoicePack = viewModel::removeVoicePack,
+        crashAtMs = crash?.atMs,
+        onShareCrash = { crash?.let { shareCrash(context, it.text) } },
     )
+}
+
+/** Test tag of About's Share crash details. */
+const val SETTINGS_CRASH_TAG = "settings_share_crash"
+
+/**
+ * Shares the last crash's text (cm-crash-after-media-pick) through the app the user picks: ClearMovie has no
+ * internet permission, so this is the only way a crash reaches anyone, and only when the user sends it.
+ */
+internal fun shareCrash(
+    context: Context,
+    text: String,
+) {
+    val send =
+        Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.settings_crash_subject))
+            .putExtra(Intent.EXTRA_TEXT, text)
+    // The system's share sheet is always there; should a phone have none, the row just does nothing.
+    try {
+        context.startActivity(Intent.createChooser(send, context.getString(R.string.settings_crash_share)))
+    } catch (e: ActivityNotFoundException) {
+        Unit
+    }
 }
 
 /** ClearMovie's page on GitHub, which About's version opens (cm-home-presets). */
@@ -150,6 +178,9 @@ fun SettingsScreen(
     onOpenProjectPage: () -> Unit = {},
     voicePackBytes: Long = 0L,
     onRemoveVoicePack: () -> Unit = {},
+    /** When ClearMovie last crashed, if a crash is kept: About then offers to share it. */
+    crashAtMs: Long? = null,
+    onShareCrash: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -266,6 +297,7 @@ fun SettingsScreen(
                 }
 
                 SectionHeader(stringResource(R.string.settings_section_about))
+                crashAtMs?.let { CrashRow(it, onShareCrash) }
                 VersionRow(versionName, onOpenProjectPage)
                 Spacer(Modifier.heightIn(min = 16.dp))
             }
@@ -279,6 +311,48 @@ private fun ThemeMode.labelRes(): Int =
         ThemeMode.LIGHT -> R.string.theme_light
         ThemeMode.DARK -> R.string.theme_dark
     }
+
+/** Share crash details, with when ClearMovie closed; the whole row shares. */
+@Composable
+private fun CrashRow(
+    atMs: Long,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    val at =
+        remember(atMs, context) {
+            DateUtils.formatDateTime(
+                context,
+                atMs,
+                DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
+            )
+        }
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 72.dp)
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag(SETTINGS_CRASH_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(text = stringResource(R.string.settings_crash_share), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = stringResource(R.string.settings_crash_line, at),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            painter = painterResource(R.drawable.ic_share),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 /** The version, with a line saying it opens ClearMovie on GitHub; the whole row is the link. */
 @Composable

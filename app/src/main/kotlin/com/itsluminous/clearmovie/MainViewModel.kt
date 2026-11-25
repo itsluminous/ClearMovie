@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.project.LaunchDecision
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
@@ -20,14 +21,18 @@ class MainViewModel
     constructor(
         settingsRepository: SettingsRepository,
         private val projects: ProjectRepository,
+        private val crashes: CrashLog,
     ) : ViewModel() {
         val settings: StateFlow<AppSettings?> =
             settingsRepository.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-        /** Home, or the editor again when the app stopped with a video open in it (ARCHITECTURE section 10). */
+        /**
+         * Home, or the editor again when the app stopped with a video open in it (ARCHITECTURE section 10);
+         * always Home right after a crash, so a video whose editor crashes does not crash every launch.
+         */
         suspend fun launchDecision(): LaunchDecision =
             try {
-                projects.launchDecision()
+                projects.launchDecision(crashes)
             } catch (e: CancellationException) {
                 // The screen went away while reading (a rotation at launch): it asks again.
                 throw e

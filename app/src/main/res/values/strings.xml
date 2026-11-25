@@ -30,6 +30,10 @@
     <string name="settings_version">Version %1$s</string>
     <string name="settings_version_link">Open ClearMovie on GitHub</string>
     <string name="settings_no_browser">No app on this phone can open web pages</string>
+    <!-- cm-crash-after-media-pick: About shows this only when ClearMovie crashed; %1$s is the date and time. -->
+    <string name="settings_crash_share">Share crash details</string>
+    <string name="settings_crash_line">ClearMovie closed unexpectedly on %1$s. Share the details to report it. Nothing is sent unless you share it.</string>
+    <string name="settings_crash_subject">ClearMovie crash details</string>
 
     <!-- The bundled generic preset's name. assets/presets/event-frame/preset.json
          refers to it by name (displayNameRes), which Lint can't see. -->

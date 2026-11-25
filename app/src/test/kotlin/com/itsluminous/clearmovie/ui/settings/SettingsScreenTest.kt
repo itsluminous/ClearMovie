@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -55,6 +58,8 @@ class SettingsScreenTest {
         dynamicColorSupported: Boolean = true,
         selectedLanguageTag: String? = null,
         onOpenProjectPage: () -> Unit = {},
+        crashAtMs: Long? = null,
+        onShareCrash: () -> Unit = {},
     ) {
         SettingsScreen(
             settings = settings,
@@ -67,6 +72,8 @@ class SettingsScreenTest {
             onDynamicColorChanged = { dynamicChanges += it },
             onLanguageSelected = { selectedLanguages += it },
             onOpenProjectPage = onOpenProjectPage,
+            crashAtMs = crashAtMs,
+            onShareCrash = onShareCrash,
         )
     }
 
@@ -173,6 +180,37 @@ class SettingsScreenTest {
         }
         compose.onNodeWithTag(SETTINGS_VERSION_TAG).performScrollTo().performClick()
         assertThat(ShadowToast.getTextOfLatestToast()).isEqualTo(string(R.string.settings_no_browser))
+    }
+
+    @Test
+    fun `About offers to share the crash only after one, and shares its text through the share sheet`() {
+        var crashAt by mutableStateOf<Long?>(null)
+        compose.setContent {
+            val activity = LocalContext.current
+            AtSize(ScreenSize.COMPACT) {
+                ClearMovieTheme(dynamicColor = false) {
+                    Screen(crashAtMs = crashAt, onShareCrash = { shareCrash(activity, "the trace") })
+                }
+            }
+        }
+        compose.onNodeWithTag(SETTINGS_CRASH_TAG).assertDoesNotExist()
+        crashAt = 1_790_000_000_000L
+        compose
+            .onNodeWithTag(SETTINGS_CRASH_TAG)
+            .performScrollTo()
+            .assertHasClickAction()
+            .performClick()
+        val chooser = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertThat(chooser.action).isEqualTo(Intent.ACTION_CHOOSER)
+        @Suppress("DEPRECATION")
+        val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        assertThat(send.action).isEqualTo(Intent.ACTION_SEND)
+        assertThat(send.type).isEqualTo("text/plain")
+        assertThat(send.getStringExtra(Intent.EXTRA_TEXT)).isEqualTo("the trace")
+        assertThat(send.getStringExtra(Intent.EXTRA_SUBJECT)).isEqualTo(string(R.string.settings_crash_subject))
+        // Text only: no file or link of the app's own goes with it.
+        assertThat(send.data).isNull()
+        assertThat(send.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)).isEqualTo(0)
     }
 
     @Test

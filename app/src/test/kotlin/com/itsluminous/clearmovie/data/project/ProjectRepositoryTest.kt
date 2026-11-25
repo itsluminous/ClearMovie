@@ -447,6 +447,41 @@ class ProjectRepositoryTest {
     }
 
     @Test
+    fun `after a crash in the editor the next launch opens Home, keeps the video, and says what crashed`() {
+        val crashes = CrashLog(File(tmp.root, "crash"), about = { "ClearMovie test" })
+        val repo = repository(debounceMs = 60_000, maxWaitMs = 60_000)
+        runBlocking {
+            repo.createDraft(draft())
+            repo.open(ProjectId("p1"))
+        }
+        repo.update { it.withPhotos(2) }
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
+            AutosaveGuard(repo, CoroutineScope(Dispatchers.IO).also { scopes += it }, crashLog = crashes).installCrashHandler()
+            val crash = IllegalArgumentException("Can't represent a width of 300447 and height of 0 in Constraints")
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+        databases.forEach { it.close() }
+        runBlocking {
+            // Without the crash log (a share asking which video is open) the editor would still be reopened.
+            assertThat(repository().launchDecision()).isInstanceOf(LaunchDecision.ReopenEditor::class.java)
+            // The launch: Home, and so is the one after it, until the video is opened again.
+            assertThat(repository().launchDecision(crashes)).isEqualTo(LaunchDecision.Home)
+            assertThat(repository().launchDecision(crashes)).isEqualTo(LaunchDecision.Home)
+            // Its edits were written and it can still be opened.
+            val opened = repository().open(ProjectId("p1")) as OpenResult.Opened
+            assertThat(opened.project.mainClips.count { it is PhotoClip }).isEqualTo(2)
+        }
+        val kept = crashes.last()!!.text
+        assertThat(kept).startsWith("ClearMovie test\n")
+        assertThat(kept).contains("IllegalArgumentException: Can't represent a width of 300447")
+        assertThat(kept).contains("ProjectRepositoryTest")
+    }
+
+    @Test
     fun `an editor that was only looked at reopens without the brought-back note`() =
         runBlocking<Unit> {
             var now = 1_000L

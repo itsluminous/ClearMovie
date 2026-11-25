@@ -354,7 +354,15 @@ class ProjectRepository(
      * project that is gone or cannot be read is cleared, so the app never
      * starts in an editor that cannot open.
      */
-    suspend fun launchDecision(): LaunchDecision {
+    suspend fun launchDecision(crashes: CrashLog? = null): LaunchDecision {
+        // Right after a crash, Home (cm-crash-after-media-pick): a video whose editor crashes on opening it must
+        // not crash every launch. Its edits were written by the crash handler and it stays in My videos. The
+        // session goes before the mark, so a launch asked again (a rotation) finds no editor to reopen either.
+        if (crashes?.crashedLastTime() == true) {
+            clearSession()
+            crashes.takeCrashMark()
+            return LaunchDecision.Home
+        }
         val session = db.session().get() ?: return LaunchDecision.Home
         val id = session.openProjectId?.let { runCatching { ProjectId(it) }.getOrNull() }
         val row = id?.let { db.projects().get(it.value) }

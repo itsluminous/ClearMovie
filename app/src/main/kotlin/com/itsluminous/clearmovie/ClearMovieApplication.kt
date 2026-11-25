@@ -8,6 +8,7 @@ import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.media.MediaAccess
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.project.AutosaveGuard
+import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
 import com.itsluminous.clearmovie.di.ApplicationScope
@@ -43,6 +44,9 @@ class ClearMovieApplication :
     lateinit var projectRepository: ProjectRepository
 
     @Inject
+    lateinit var crashLog: CrashLog
+
+    @Inject
     lateinit var mediaAccess: MediaAccess
 
     @Inject
@@ -65,8 +69,9 @@ class ClearMovieApplication :
         applyNightMode(settings.themeMode)
 
         // Autosave: write pending edits when the app goes to the background
-        // (before any low-memory kill) and when it crashes.
-        val guard = AutosaveGuard(projectRepository, appScope)
+        // (before any low-memory kill) and when it crashes; a crash is also kept,
+        // so the next launch opens Home and Settings can share it.
+        val guard = AutosaveGuard(projectRepository, appScope, crashLog = crashLog)
         guard.installCrashHandler()
         ProcessLifecycleOwner.get().lifecycle.addObserver(guard)
 

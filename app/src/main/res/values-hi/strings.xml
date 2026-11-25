@@ -23,6 +23,9 @@
     <string name="settings_version">वर्शन %1$s</string>
     <string name="settings_version_link">GitHub पर ClearMovie खोलें</string>
     <string name="settings_no_browser">इस फ़ोन में वेब पेज खोलने वाला कोई ऐप नहीं है</string>
+    <string name="settings_crash_share">क्रैश की जानकारी शेयर करें</string>
+    <string name="settings_crash_line">ClearMovie %1$s को अचानक बंद हो गया। इसकी रिपोर्ट करने के लिए जानकारी शेयर करें। शेयर किए बिना कुछ नहीं भेजा जाता।</string>
+    <string name="settings_crash_subject">ClearMovie क्रैश की जानकारी</string>
 
     <string name="preset_event_frame_name">इवेंट फ़्रेम</string>
 

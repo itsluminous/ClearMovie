@@ -1,8 +1,10 @@
 package com.itsluminous.clearmovie.di
 
 import android.content.Context
+import android.os.Build
 import android.os.StatFs
 import androidx.room.Room
+import com.itsluminous.clearmovie.BuildConfig
 import com.itsluminous.clearmovie.data.db.ClearMovieDatabase
 import com.itsluminous.clearmovie.data.files.AppFiles
 import com.itsluminous.clearmovie.data.files.StorageUsage
@@ -23,6 +25,7 @@ import com.itsluminous.clearmovie.data.preset.FrameStills
 import com.itsluminous.clearmovie.data.preset.MediaProbe
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SoundLoudness
+import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.project.ProjectRepository
 import com.itsluminous.clearmovie.render.media3.AndroidSoundTracks
 import com.itsluminous.clearmovie.render.media3.SoundTracks
@@ -34,6 +37,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.io.File
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -73,6 +77,20 @@ object StorageModule {
     fun provideAppFiles(
         @ApplicationContext context: Context,
     ): AppFiles = AppFiles(context.filesDir, context.cacheDir)
+
+    /** The last crash (cm-crash-after-media-pick), with the app, Android version and phone it happened on. */
+    @Provides
+    @Singleton
+    fun provideCrashLog(
+        @ApplicationContext context: Context,
+    ): CrashLog =
+        CrashLog(
+            dir = File(context.noBackupFilesDir, "crash"),
+            about = {
+                "ClearMovie ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${Build.VERSION.RELEASE} " +
+                    "(API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}"
+            },
+        )
 
     @Provides
     fun provideFreeSpace(

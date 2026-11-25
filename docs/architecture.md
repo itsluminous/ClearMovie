@@ -453,7 +453,8 @@ compact height. State survives rotation and process death: the back stack,
 the review's choices, the picked links until they are on MAIN, whether the
 picker was already opened (so it never opens again by itself), and the
 editor's playhead. On a fresh start, `ProjectRepository.launchDecision`
-reopens the editor when the app stopped with a video open in it.
+reopens the editor when the app stopped with a video open in it, except
+right after a crash (Recovery, below).
 
 ## Share from the gallery
 
@@ -556,7 +557,10 @@ the screen; the playhead is saved by `EditorViewModel`.
   `TimedRowGeometry` place clear of its trim handles.
 - **Gestures.** One pointer handler feeds `TimelineGestureArbiter`: a second
   finger before a long-press is a pinch (zoom around the fingers, clamped
-  between Fit all and 1 s per 240 dp, `TimelineZoom`), movement is a scroll
+  between Fit all and 1 s per 240 dp, `TimelineZoom`, but never so close that
+  the whole video is wider than `MAX_SPAN_DP`, 50,000 dp: every item is laid
+  out at its full width, and Compose cannot measure a box wider than 262,143
+  px), movement is a scroll
   (one way per gesture: up and down the rows when it starts more upright than
   sideways and the rows scroll, otherwise along the time), a trim from a
   handle (unless clearly upright) or a scrub from the ruler, a hold then a drag moves an
@@ -685,10 +689,21 @@ A draft has no name; **Save** names it in place.
 
 **Recovery.** The session row names the project open in the editor and when
 the user last saw it there (opened, or the app went to the background). At
-launch, a session left behind by a crash or a kill reopens the editor at that
-project with no question; "We brought back your last video" shows only when
-it has edits newer than that time. A session naming an unreadable project
-starts at Home.
+launch, a session left behind by a kill reopens the editor at that project
+with no question; "We brought back your last video" shows only when it has
+edits newer than that time. A session naming an unreadable project starts at
+Home. After a crash the launch starts at Home too (cm-crash-after-media-pick):
+the crash handler keeps the crash in `CrashLog` (`noBackupFilesDir/crash`,
+the app and phone, the time and the trace) with a mark the next launch takes,
+and that launch clears the session, so a video whose editor crashes on
+opening is not reopened at every launch; its edits were written and it stays
+in My videos. Settings > About then shows Share crash details, which sends
+the text through the share sheet: the app has no internet permission, so
+nothing leaves the phone unless the user shares it. The timeline lays out
+with the stored zoom fitted to the current length (`TimelineZoom.forLayout`):
+the zoom kept while the editor waits for its project is fit all of an empty
+video, and 0.0.5 drew a long video's rows at that scale in the frame the
+project arrived, too wide to lay out.
 
 **Presets.** `PresetStore` offers only stored definitions: the presets the
 user made, and on an install made before cm-home-presets the Event frame,

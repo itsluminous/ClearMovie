@@ -31,6 +31,9 @@
     <string name="settings_version">Version %1$s</string>
     <string name="settings_version_link">GitHub par ClearMovie kholein</string>
     <string name="settings_no_browser">Is phone me web page kholne wala koi app nahin hai</string>
+    <string name="settings_crash_share">Crash ki jaankari share karein</string>
+    <string name="settings_crash_line">ClearMovie %1$s ko achanak band ho gaya. Iski report karne ke liye jaankari share karein. Share kiye bina kuch nahin bheja jata.</string>
+    <string name="settings_crash_subject">ClearMovie crash ki jaankari</string>
 
     <string name="preset_event_frame_name">Event frame</string>
 
