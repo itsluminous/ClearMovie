@@ -238,6 +238,35 @@ class PackDownloadJobTest {
     }
 
     @Test
+    fun `a connection that drops after making progress keeps going, and Cancel stops before the next file`() {
+        val t = tools()
+        var calls = 0
+        val flaky =
+            object {
+                fun open(u: URL): HttpURLConnection {
+                    val name = u.path.substringAfterLast('/')
+                    val b = zips.getValue(name)
+                    val part = t.store.downloadFile(manifest.files.first { it.file == name })
+                    val have = if (part.isFile) part.length().toInt() else 0
+                    calls++
+                    // Every answer drops after one more byte: five drops in a row, each with progress.
+                    val rest = b.copyOfRange(have, b.size)
+                    val headers = if (have > 0) mapOf("Content-Range" to "bytes $have-${b.size - 1}/${b.size}") else emptyMap()
+                    return FakeHttps(u, if (have > 0) 206 else 200, headers, rest, failAfter = if (rest.size > 1) 1 else null)
+                }
+            }
+        val out = PackDownloadJob(t, PackDownloader(flaky::open), pause = {}).run(listOf("engine-x86_64.zip"), {}, { false })
+        assertThat(out).isEqualTo(PackDownloadOutcome.Done)
+        assertThat(calls).isGreaterThan(PackDownloadJob.PAUSES_MS.size + 1)
+
+        val server = Server()
+        var stop = false
+        val two = job(tools(), server).run(listOf("voices.zip", "speech-english.zip"), { if (it.checking) stop = true }, { stop })
+        assertThat(two).isEqualTo(PackDownloadOutcome.Stopped)
+        assertThat(server.asked).doesNotContain("speech-english.zip")
+    }
+
+    @Test
     fun `without room nothing is downloaded`() {
         val t = tools(free = 10)
         val server = Server()

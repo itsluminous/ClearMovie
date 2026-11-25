@@ -101,6 +101,8 @@ class VoicePackDownloadControllerTest {
         override fun cancel() {
             cancelled++
         }
+
+        override suspend fun cancelAndWait() = cancel()
     }
 
     private val notes = mutableListOf<VoiceNote>()
@@ -181,6 +183,23 @@ class VoicePackDownloadControllerTest {
         downloads.state.value = PackDownloadState.Failed("w3", PackDownloadError.NETWORK)
         c.dismissPack()
         assertThat(c.download.value).isEqualTo(PackDownloadState.Idle)
+    }
+
+    @Test
+    fun `a download that ends while the dialog asks for more keeps asking for what is still missing`() {
+        val tools = Tools()
+        val downloads = Downloads()
+        val c = controller(tools, downloads)
+        c.choose(VoiceChoice.BRITISH_FEMALE)
+        c.downloadPack()
+        downloads.state.value = PackDownloadState.Running("w1", PackProgress(30, 140))
+        c.hidePack()
+        // Meanwhile Hindi words are to be found: the dialog shows again, for the Hindi file too.
+        c.askForPack(SpokenLanguage.HINDI)
+        tools.added += listOf(voices, english, engine)
+        downloads.state.value = PackDownloadState.Done("w1")
+        assertThat(notes).containsExactly(VoiceNote.PACK_STILL_MISSING)
+        assertThat(c.packAsk.value!!.files).containsExactly(hindi)
     }
 
     @Test

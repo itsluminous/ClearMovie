@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.util.Log
 import androidx.hilt.work.HiltWorker
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -30,6 +32,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -64,6 +67,15 @@ class VoicePackDownloadWorker
         override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(PackProgress(0, 0))
 
         override suspend fun doWork(): Result {
+            active.value = true
+            try {
+                return download()
+            } finally {
+                active.value = false
+            }
+        }
+
+        private suspend fun download(): Result {
             val names = inputData.getStringArray(KEY_FILES)?.toList().orEmpty()
             notifications.cancelResult()
             try {
@@ -91,7 +103,13 @@ class VoicePackDownloadWorker
                 }
             return when (outcome) {
                 PackDownloadOutcome.Done -> {
-                    notifications.post(VoicePackNotifications.RESULT_ID, notifications.done())
+                    // With ClearMovie on screen, its own note says so; a notification as well would say it twice.
+                    val onScreen =
+                        ProcessLifecycleOwner
+                            .get()
+                            .lifecycle.currentState
+                            .isAtLeast(Lifecycle.State.STARTED)
+                    if (!onScreen) notifications.post(VoicePackNotifications.RESULT_ID, notifications.done())
                     Result.success()
                 }
 
@@ -122,6 +140,12 @@ class VoicePackDownloadWorker
             const val KEY_CHECKING = "checking"
             const val KEY_FAILURE = "failure"
             const val KEY_MISSING_BYTES = "missing_bytes"
+
+            /**
+             * True while a download worker of this process runs its job, so Cancel and Remove can wait for it
+             * to let go of the pack's files: WorkManager marks the work cancelled before the worker stops.
+             */
+            val active = MutableStateFlow(false)
 
             fun percent(p: PackProgress): Int = if (p.total <= 0) 0 else (p.done * 100 / p.total).toInt().coerceIn(0, 100)
 
@@ -197,12 +221,15 @@ class WorkPackDownloads(
     }
 
     override fun cancel() {
+        scope.launch { cancelAndWait() }
+    }
+
+    override suspend fun cancelAndWait() {
         workManager.cancelUniqueWork(VoicePackDownloadWorker.UNIQUE_NAME)
-        // Once the worker has let go of its files, what it downloaded goes too.
-        scope.launch {
-            withTimeoutOrNull(STOP_WAIT_MS) { infos.first { list -> list.all { it.state.isFinished } } }
-            tools.clearDownloads()
-        }
+        // Once the worker has let go of its files, what it downloaded goes too; not when a newer
+        // download has started meanwhile, whose part it would be.
+        withTimeoutOrNull(STOP_WAIT_MS) { VoicePackDownloadWorker.active.first { !it } }
+        if (!VoicePackDownloadWorker.active.value) tools.clearDownloads()
     }
 
     private companion object {

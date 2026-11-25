@@ -169,7 +169,8 @@ class VoiceChoiceController(
                 watched = null
                 downloadState.value = PackDownloadState.Idle
                 if (mine) {
-                    val want = downloadFor ?: askState.value
+                    // The dialog showing now (it may ask for more, such as the other language's words), else the one it answered.
+                    val want = askState.value ?: downloadFor
                     downloadFor = null
                     scope.launch { settle(want, null) }
                 }

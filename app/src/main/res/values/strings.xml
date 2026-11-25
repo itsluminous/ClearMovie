@@ -551,7 +551,7 @@
     <string name="record_stop">Stop</string>
     <string name="record_saving">Saving your recording</string>
     <string name="mic_title">Use the microphone?</string>
-    <string name="mic_body">ClearMovie records your voice only while this screen says \"Recording\". The recording stays on this phone, inside ClearMovie, and never leaves it: ClearMovie uses the internet only to download the voice pack, once.</string>
+    <string name="mic_body">ClearMovie records your voice only while this screen says \"Recording\". The recording stays inside ClearMovie and never leaves this phone: ClearMovie uses the internet only to download the voice pack, once.</string>
     <string name="mic_off_title">The microphone is off for ClearMovie</string>
     <string name="mic_off_body">To record your voice, open Settings, tap Permissions, then Microphone, and allow it while using the app.</string>
     <string name="record_kept">Recording stopped. What you said is kept.</string>
@@ -775,7 +775,7 @@
     <string name="voice_changed">The item changed meanwhile, so its voice was not changed.</string>
     <string name="action_change_voice">Change voice</string>
     <string name="pack_title">Voice pack needed</string>
-    <string name="pack_body">To use this voice, ClearMovie downloads the voice pack (%1$s) from GitHub. Once added it takes %2$s on this phone.</string>
+    <string name="pack_body">To use this voice, ClearMovie can download the voice pack (%1$s) from GitHub. Once added it takes %2$s on this phone.</string>
     <string name="pack_download">Download</string>
     <string name="pack_steps_title">Add the voice pack</string>
     <string name="pack_steps_body">1. Download these files from the page that opened.\n2. Come back and tap Add the downloaded files.\n3. Choose them in your Downloads folder.</string>
@@ -788,6 +788,7 @@
     <string name="pack_no_space">There is not enough room on this phone for the voice pack.</string>
     <string name="pack_privacy">ClearMovie uses the internet only for this download. Your recordings and videos never leave the phone.</string>
     <string name="pack_mobile_data">You are on mobile data. This download uses about %1$s of it.</string>
+    <string name="pack_metered">This connection may charge for data. This download uses about %1$s.</string>
     <string name="pack_offline">There is no internet connection now. The download starts once the phone is connected.</string>
     <string name="pack_use_browser">Download in the browser instead</string>
     <string name="pack_downloading_title">Downloading the voice pack</string>

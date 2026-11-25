@@ -44,8 +44,9 @@ class SettingsViewModel
 
         /** Removes the voice pack, stopping a download of it first. Voices already made stay in their videos. */
         fun removeVoicePack() {
-            if (packDownloads.state.value !is PackDownloadState.Idle) packDownloads.cancel()
             viewModelScope.launch(Dispatchers.IO) {
+                // A download still running would add its file back into the removed pack.
+                if (packDownloads.state.value !is PackDownloadState.Idle) packDownloads.cancelAndWait()
                 voiceTools.removePack()
                 packState.value = voiceTools.packBytes()
             }

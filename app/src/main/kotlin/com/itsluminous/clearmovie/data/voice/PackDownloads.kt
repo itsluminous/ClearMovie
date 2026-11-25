@@ -42,8 +42,14 @@ interface PackDownloads {
     /** Downloads [files] (from the app's own manifest) and adds them. */
     fun start(files: List<VoicePackFile>)
 
-    /** Stops the download and removes what it had downloaded. */
+    /** Stops the download and removes what it had downloaded, without waiting. */
     fun cancel()
+
+    /**
+     * Stops the download and waits until its worker has stopped touching the pack's files (or a
+     * minute has passed), then removes what it had downloaded. Settings' Remove waits on this first.
+     */
+    suspend fun cancelAndWait()
 
     companion object {
         /** No downloads (tests, and a build without a pack). */
@@ -54,6 +60,8 @@ interface PackDownloads {
                 override fun start(files: List<VoicePackFile>) = Unit
 
                 override fun cancel() = Unit
+
+                override suspend fun cancelAndWait() = Unit
             }
     }
 }

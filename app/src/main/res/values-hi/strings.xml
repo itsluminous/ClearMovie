@@ -721,7 +721,7 @@
     <string name="voice_changed">इस बीच आइटम बदल गया, इसलिए उसका स्वर नहीं बदला।</string>
     <string name="action_change_voice">स्वर बदलें</string>
     <string name="pack_title">आवाज़ पैक चाहिए</string>
-    <string name="pack_body">यह आवाज़ इस्तेमाल करने के लिए ClearMovie, GitHub से आवाज़ पैक (%1$s) डाउनलोड करता है। जोड़ने के बाद यह इस फ़ोन पर %2$s लेता है।</string>
+    <string name="pack_body">यह आवाज़ इस्तेमाल करने के लिए ClearMovie GitHub से आवाज़ पैक (%1$s) डाउनलोड कर सकता है। जोड़ने के बाद यह इस फ़ोन पर %2$s लेता है।</string>
     <string name="pack_download">डाउनलोड करें</string>
     <string name="pack_steps_title">आवाज़ पैक जोड़ें</string>
     <string name="pack_steps_body">1. खुले हुए पेज से ये फ़ाइलें डाउनलोड करें।\n2. वापस आकर डाउनलोड की गई फ़ाइलें जोड़ें दबाएँ।\n3. उन्हें अपने Downloads फ़ोल्डर में चुनें।</string>
@@ -734,6 +734,7 @@
     <string name="pack_no_space">इस फ़ोन पर आवाज़ पैक के लिए जगह नहीं है।</string>
     <string name="pack_privacy">ClearMovie इंटरनेट सिर्फ़ इसी डाउनलोड के लिए इस्तेमाल करता है। आपकी रिकॉर्डिंग और वीडियो कभी इस फ़ोन से बाहर नहीं जाते।</string>
     <string name="pack_mobile_data">आप मोबाइल डेटा पर हैं। यह डाउनलोड उसमें से करीब %1$s लेगा।</string>
+    <string name="pack_metered">इस कनेक्शन पर डेटा का पैसा लग सकता है। यह डाउनलोड करीब %1$s लेगा।</string>
     <string name="pack_offline">अभी इंटरनेट कनेक्शन नहीं है। फ़ोन कनेक्ट होते ही डाउनलोड शुरू होगा।</string>
     <string name="pack_use_browser">इसके बजाय ब्राउज़र में डाउनलोड करें</string>
     <string name="pack_downloading_title">आवाज़ पैक डाउनलोड हो रहा है</string>

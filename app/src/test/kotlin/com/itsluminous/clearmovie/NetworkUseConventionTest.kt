@@ -33,6 +33,7 @@ class NetworkUseConventionTest {
             Regex("""\b(Http|Https)?URLConnection\b"""),
             Regex("""\b(Datagram|Server|SSL)?Socket(Factory)?\b"""),
             Regex("""\bopen(Connection|Stream)\s*\("""),
+            Regex("""\btoURL\s*\(|\bInetAddress\b|\bgetSocketFactory\b|\bbindSocket\b|\bMediaPlayer\b"""),
             Regex("""\b(okhttp3|retrofit2|io\.ktor|org\.chromium\.net|com\.android\.volley)\b"""),
             Regex("""\bandroid\.net\.http\b"""),
             Regex("""\b(WebView|DownloadManager)\b"""),
@@ -44,8 +45,53 @@ class NetworkUseConventionTest {
         source: String,
     ): List<String> {
         if (allowed.any { path.replace('\\', '/').endsWith(it) }) return emptyList()
-        val code = source.lineSequence().filterNot { it.trimStart().startsWith("//") || it.trimStart().startsWith("*") }.joinToString("\n")
+        val code = withoutComments(source)
         return networking.mapNotNull { re -> re.find(code)?.let { "$path uses ${it.value.trim()}" } }
+    }
+
+    /** [source] with its `//` and `/* */` comments blanked out; string literals are kept as they are. */
+    private fun withoutComments(source: String): String {
+        val out = StringBuilder(source.length)
+        var i = 0
+        var quote: Char? = null
+        while (i < source.length) {
+            val c = source[i]
+            val next = source.getOrNull(i + 1)
+            when {
+                quote != null -> {
+                    out.append(c)
+                    if (c == '\\' && next != null) {
+                        out.append(next)
+                        i++
+                    } else if (c == quote) {
+                        quote = null
+                    }
+                }
+
+                c == '"' || c == '\'' -> {
+                    quote = c
+                    out.append(c)
+                }
+
+                c == '/' && next == '/' -> {
+                    while (i < source.length && source[i] != '\n') i++
+                    continue
+                }
+
+                c == '/' && next == '*' -> {
+                    val end = source.indexOf("*/", i + 2)
+                    i = if (end < 0) source.length else end + 2
+                    out.append(' ')
+                    continue
+                }
+
+                else -> {
+                    out.append(c)
+                }
+            }
+            i++
+        }
+        return out.toString()
     }
 
     private fun sources(): Sequence<File> =
@@ -69,6 +115,11 @@ class NetworkUseConventionTest {
         assertThat(violations("ui/X.kt", "val d = DefaultHttpDataSource.Factory()")).hasSize(1)
         assertThat(violations("ui/X.kt", "val w = WebView(context)")).hasSize(1)
         assertThat(violations("ui/X.kt", "import java.net.URI\n// a URL is not opened here")).isEmpty()
+        assertThat(violations("ui/X.kt", "val t = URI.create(u).toURL().readText()")).hasSize(1)
+        assertThat(violations("ui/X.kt", "val a = InetAddress.getByName(h)")).isNotEmpty()
+        assertThat(violations("ui/X.kt", "val x = 2 *\n    URL(u).openStream()")).hasSize(1)
+        assertThat(violations("ui/X.kt", "/* URL(u).openStream() */ val s = \"// not a comment\"")).isEmpty()
+        assertThat(violations("ui/X.kt", "val s = \"a\" // x\nval c = u.openConnection()")).hasSize(1)
         assertThat(violations("com/itsluminous/clearmovie/data/voice/PackDownloader.kt", "import java.net.URL")).isEmpty()
     }
 

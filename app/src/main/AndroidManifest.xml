@@ -2,8 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ClearMovie works without the internet. The permissions read the
-         phone's photos and videos, asked for once
+    <!-- ClearMovie uses the internet only to download the voice pack (below).
+         The permissions read the phone's photos and videos, asked for once
          on a plain-language screen (data/media/MediaPermissions.kt), and use
          the microphone for Record voice (below).
          Android 13+: images and videos; 14+ also lets the user choose

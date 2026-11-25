@@ -72,6 +72,7 @@ class PackDownloadJob(
         if (free < need) return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, need - free)
         var before = 0L
         for (f in todo) {
+            if (stopped()) return PackDownloadOutcome.Stopped
             val part = parts.getValue(f)
             val url = VoicePackSource.url(manifest.version, f.file) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED)
             var checks = 0
@@ -82,7 +83,7 @@ class PackDownloadJob(
                 progress(PackProgress(before + f.bytes, total, checking = true))
                 val added = tools.addDownloaded(f, part)
                 when {
-                    added.outOfSpace -> return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE)
+                    added.outOfSpace -> return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, added.missingBytes)
                     added.rejected == 0 -> break
                     ++checks >= CHECKS -> return PackDownloadOutcome.Failed(PackDownloadError.CHECK)
                 }
@@ -94,7 +95,11 @@ class PackDownloadJob(
         return PackDownloadOutcome.Done
     }
 
-    /** Downloads [f] into [part], trying a dropped connection again; null when the file is all there, or the stop. */
+    /**
+     * Downloads [f] into [part], trying a dropped connection again after a pause; a try that got some
+     * bytes counts as a fresh start, so only a connection that drops without progress ends it. Null
+     * when the file is all there, or on the stop.
+     */
     private fun fetch(
         url: String,
         part: File,
@@ -104,12 +109,14 @@ class PackDownloadJob(
     ): PackDownloadOutcome.Failed? {
         var attempt = 0
         while (true) {
+            val had = part.length()
             try {
                 downloader.fetch(url, part, f.bytes, progress, stopped)
                 return null
             } catch (e: DownloadFailure) {
                 when (e.reason) {
                     DownloadFailure.Reason.NETWORK -> {
+                        if (part.length() > had) attempt = 0
                         if (++attempt >= PAUSES_MS.size + 1) return PackDownloadOutcome.Failed(PackDownloadError.NETWORK)
                         pause(PAUSES_MS[attempt - 1])
                         if (stopped()) return null

@@ -140,8 +140,8 @@ const val SETTINGS_VERSION_TAG = "settings_version"
 
 /**
  * The intent that opens [PROJECT_PAGE_URL] in the phone's browser: a fixed
- * address, to an app that opens web links, so ClearMovie itself never goes
- * online (it has no internet permission).
+ * address, to an app that opens web links, so ClearMovie itself does not go
+ * online for it (it uses the internet only for the voice pack download).
  */
 fun projectPageIntent(): Intent = Intent(Intent.ACTION_VIEW, PROJECT_PAGE_URL.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
 

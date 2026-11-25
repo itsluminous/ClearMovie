@@ -16,6 +16,8 @@ data class PackAddResult(
     val rejected: Int,
     /** True when the phone did not have room; nothing more was added. */
     val outOfSpace: Boolean = false,
+    /** With [outOfSpace], how many more bytes were needed, when known. */
+    val missingBytes: Long = 0,
 )
 
 /**
@@ -123,25 +125,28 @@ class VoicePackStore(
      * Takes in [zip], a download of [f] in the app's own storage: its SHA-256
      * is worked out over the file and it is unzipped only when it is [f] as
      * the app's own [manifest] lists it (never a manifest from the network).
-     * The zip is deleted either way.
+     * The zip is deleted once it is added or found not to match; without room
+     * to unpack it, it is kept, so Try again does not download it again.
      */
     fun addDownloaded(
         f: VoicePackFile,
         zip: File,
     ): PackAddResult {
-        try {
-            val listed = manifest.files.firstOrNull { it == f }?.takeIf { it.part != VoicePackFile.ENGINE || it.abi == abi }
-            val sha = if (listed != null && zip.isFile && zip.length() == listed.bytes) sha256Of(zip) else null
-            return when {
-                listed == null || sha == null || !sha.equals(listed.sha256, ignoreCase = true) -> PackAddResult(emptyList(), 1)
-                isAdded(listed) -> PackAddResult(emptyList(), 0)
-                freeSpace() < listed.unpackedBytes + SPARE_BYTES -> PackAddResult(emptyList(), 0, outOfSpace = true)
-                unpack(listed, zip) -> PackAddResult(listOf(listed), 0)
-                else -> PackAddResult(emptyList(), 1)
-            }
-        } finally {
+        val listed = manifest.files.firstOrNull { it == f }?.takeIf { it.part != VoicePackFile.ENGINE || it.abi == abi }
+        val sha = if (listed != null && zip.isFile && zip.length() == listed.bytes) sha256Of(zip) else null
+        if (listed == null || sha == null || !sha.equals(listed.sha256, ignoreCase = true)) {
             zip.delete()
+            return PackAddResult(emptyList(), 1)
         }
+        val need = listed.unpackedBytes + SPARE_BYTES
+        if (!isAdded(listed) &&
+            freeSpace() < need
+        ) {
+            return PackAddResult(emptyList(), 0, outOfSpace = true, missingBytes = need - freeSpace())
+        }
+        val ok = isAdded(listed) || unpack(listed, zip)
+        zip.delete()
+        return if (ok) PackAddResult(listOf(listed), 0) else PackAddResult(emptyList(), 1)
     }
 
     private fun sha256Of(file: File): String? =

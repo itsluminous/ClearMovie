@@ -27,9 +27,13 @@
 #         downloader (data/voice/PackDownloader.kt), or one of a known list
 #         of library methods the app never reaches (Media3's HTTP and UDP
 #         sources, JNA reading its own resources). A new one fails.
+#      d. No native library in the APK, nor any voice pack engine (loaded
+#         into the app's process, where the network security config does not
+#         reach), imports socket, name lookup or TLS functions
+#         (scripts/check-native-network.py).
 #   5. With VERIFY_SIGNATURES=true, the APK passes `apksigner verify` with both
 #      a v2 and a v3 signature.
-# It needs the Android SDK build-tools (aapt2, dexdump, apksigner) under $ANDROID_HOME.
+# It needs the Android SDK build-tools (aapt2, dexdump, apksigner) under $ANDROID_HOME, and python3.
 set -euo pipefail
 
 dir="${1:-app/build/outputs/apk/release}"
@@ -184,27 +188,34 @@ shape="$(printf '%s\n' "$nsc" | sed -E 's/^ +//; s/ \(line=[0-9]+\)$//')"
 [ "$shape" = "$expected_nsc" ] || fail "the network security config in $name is not the expected one (no plain HTTP, only raw.githubusercontent.com trusted)"
 
 # 4c. The code that calls the network, as "<class> <method> -> <call>", from every dex file.
-network_calls() {
-  local tmp
-  tmp="$(mktemp -d)"
-  unzip -q -o "$1" 'classes*.dex' -d "$tmp" || fail "could not unpack the dex files of $(basename "$1")"
-  for dex in "$tmp"/classes*.dex; do
-    "$dexdump" -d "$dex" 2> /dev/null || fail "dexdump could not read $(basename "$dex")"
-  done | awk -v re='(Ljava/net/URL;\\.(openConnection|openStream)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\\.<init>|Ljavax/net/(ssl/SSL)?SocketFactory;\\.createSocket|Ljava/nio/channels/(Socket|Datagram|ServerSocket)Channel;\\.open|Landroid/webkit/WebView;\\.load|Landroid/app/DownloadManager;\\.enqueue|Landroid/net/http/)' '
-    /Class descriptor/ { cls = $NF; gsub(/\047/, "", cls) }
-    /^      name          :/ { m = $NF; gsub(/\047/, "", m) }
-    /invoke-/ && $0 ~ re { match($0, re); print cls " " m " -> " substr($0, RSTART, RLENGTH) }' | sort -u
-  rm -rf "$tmp"
-}
+# Run at the top level (not in a pipeline or $(...)), so a dexdump that fails fails the check.
+dex_dir="$(mktemp -d)"
+unzip -q -o "$apk" 'classes*.dex' -d "$dex_dir" || fail "could not unpack the dex files of $name"
+shopt -s nullglob
+dex_files=("$dex_dir"/classes*.dex)
+shopt -u nullglob
+[ "${#dex_files[@]}" -gt 0 ] || fail "$name has no dex files"
+for dex in "${dex_files[@]}"; do
+  "$dexdump" -d "$dex" > "$dex.txt" 2> /dev/null || fail "dexdump could not read $(basename "$dex") of $name"
+  [ -s "$dex.txt" ] || fail "dexdump wrote nothing for $(basename "$dex") of $name"
+done
+network_re='(Ljava/net/URL;\.(openConnection|openStream|getContent)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\.<init>|Ljava/net/InetAddress;\.(getByName|getAllByName|getLocalHost)|Ljavax/net/(ssl/SSL)?SocketFactory;\.createSocket|Ljava/nio/channels/(Asynchronous)?(Socket|Datagram|ServerSocket)Channel;\.open|Landroid/net/Network;\.(openConnection|getSocketFactory|bindSocket|getByName|getAllByName)|Landroid/media/MediaPlayer;\.setDataSource|Landroid/webkit/WebView;\.load|Landroid/app/DownloadManager;\.enqueue|Landroid/net/http/)'
+awk -v re="$network_re" '
+  /Class descriptor/ { cls = $NF; gsub(/\047/, "", cls) }
+  /^      name          :/ { m = $NF; gsub(/\047/, "", m) }
+  /invoke-/ && $0 ~ re { match($0, re); print cls " " m " -> " substr($0, RSTART, RLENGTH) }' "$dex_dir"/classes*.dex.txt | sort -u > "$dex_dir/calls.txt" ||
+  fail "could not list the network calls of $name"
+calls="$(cat "$dex_dir/calls.txt")"
+rm -rf "$dex_dir"
 expected_calls="$(sort <<'EOF'
 Lcom/itsluminous/clearmovie/data/voice/PackDownloader; connect -> Ljava/net/URL;.openConnection
 Landroidx/media3/datasource/DefaultHttpDataSource; makeConnection -> Ljava/net/URL;.openConnection
 Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/DatagramSocket;.<init>
+Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/InetAddress;.getByName
 Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/MulticastSocket;.<init>
 Lcom/sun/jna/Native; extractFromResourcePath -> Ljava/net/URL;.openStream
 EOF
 )"
-calls="$(network_calls "$apk")" || exit 1
 echo
 echo "Network calls in the code of $name:"
 printf '%s\n' "$calls" | sed 's/^/  /'
@@ -213,6 +224,15 @@ if [ "$calls" != "$expected_calls" ]; then
   diff <(printf '%s\n' "$expected_calls") <(printf '%s\n' "$calls") >&2 || true
   fail "$name has network calls other than the voice pack downloader's and the known library ones"
 fi
+
+# 4d. Native code: neither the APK's libraries nor the voice pack's engines (loaded into the app's
+# process, where the network security config does not reach) may import socket, lookup or TLS functions.
+command -v python3 > /dev/null || fail "python3 is required"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+engines=("$script_dir"/../voice-packs/v*/engine-*.zip)
+[ -f "${engines[0]}" ] || fail "no voice pack engines under voice-packs/"
+echo
+python3 "$script_dir/check-native-network.py" "$apk" "${engines[@]}" || fail "native code that ClearMovie runs imports network functions"
 echo "INTERNET only with the network security config, and only the voice pack downloader calls the network."
 
 # 5. Signatures (CI sets VERIFY_SIGNATURES=true when the signing secrets exist).

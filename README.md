@@ -9,7 +9,7 @@
 [![Stars](https://img.shields.io/github/stars/itsluminous/ClearMovie?style=flat&color=gold)](https://github.com/itsluminous/ClearMovie/stargazers)
 [![Forks](https://img.shields.io/github/forks/itsluminous/ClearMovie?style=flat&color=blue)](https://github.com/itsluminous/ClearMovie/forks)
 
-**ClearMovie** is a simple video maker for Android that works without the internet, built for people who
+**ClearMovie** is a simple, private video maker for Android, built for people who
 just want to turn the photos and videos from an event into a finished video. Pick a
 preset (an intro, a green-screen frame overlay that runs across the whole video, and
 an ending), add your photos and videos, drop in a few captions, and export. Encoding

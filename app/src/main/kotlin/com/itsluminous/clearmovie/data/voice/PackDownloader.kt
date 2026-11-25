@@ -71,7 +71,7 @@ class PackDownloader internal constructor(
         if (to.length() > bytes) to.delete()
         var have = if (to.isFile) to.length() else 0L
         progress(have)
-        if (have == bytes) return
+        if (have == bytes || stopped()) return
         val connection = connect(URL(url))
         if (connection !is HttpsURLConnection) throw DownloadFailure(DownloadFailure.Reason.REFUSED, "not HTTPS")
         try {

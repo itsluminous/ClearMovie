@@ -729,7 +729,7 @@
     <string name="voice_changed">Is beech item badal gaya, isliye uska swar nahin badla.</string>
     <string name="action_change_voice">Swar badlein</string>
     <string name="pack_title">Awaaz pack chahiye</string>
-    <string name="pack_body">Yeh awaaz use karne ke liye ClearMovie GitHub se awaaz pack (%1$s) download karta hai. Jodne ke baad yeh is phone par %2$s leta hai.</string>
+    <string name="pack_body">Yeh awaaz use karne ke liye ClearMovie GitHub se awaaz pack (%1$s) download kar sakta hai. Jodne ke baad yeh is phone par %2$s leta hai.</string>
     <string name="pack_download">Download karein</string>
     <string name="pack_steps_title">Awaaz pack jodein</string>
     <string name="pack_steps_body">1. Khule hue page se yeh files download karein.\n2. Wapas aakar Download ki gayi files jodein dabayein.\n3. Unhein apne Downloads folder mein chunein.</string>
@@ -742,6 +742,7 @@
     <string name="pack_no_space">Is phone par awaaz pack ke liye jagah nahin hai.</string>
     <string name="pack_privacy">ClearMovie internet sirf isi download ke liye use karta hai. Aapki recordings aur videos kabhi is phone se bahar nahin jaate.</string>
     <string name="pack_mobile_data">Aap mobile data par hain. Yeh download usme se lagbhag %1$s lega.</string>
+    <string name="pack_metered">Is connection par data ka paisa lag sakta hai. Yeh download lagbhag %1$s lega.</string>
     <string name="pack_offline">Abhi internet connection nahin hai. Phone connect hote hi download shuru hoga.</string>
     <string name="pack_use_browser">Iske bajaye browser mein download karein</string>
     <string name="pack_downloading_title">Awaaz pack download ho raha hai</string>

@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -47,6 +48,7 @@ import androidx.core.net.toUri
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.voice.PackDownloadError
 import com.itsluminous.clearmovie.data.voice.PackDownloadState
+import com.itsluminous.clearmovie.data.voice.VoicePackStore
 import com.itsluminous.clearmovie.domain.model.AudioClip
 import com.itsluminous.clearmovie.domain.model.Limits
 import com.itsluminous.clearmovie.domain.model.SpokenLanguage
@@ -443,11 +445,15 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
                         Text(stringResource(R.string.pack_body, size(downloadBytes), size(unpacked)))
                         Text(stringResource(R.string.pack_privacy))
                         when {
-                            current.room > 0 -> PackWarning(stringResource(R.string.pack_error_space, size(current.room)))
-                            !network.connected -> PackWarning(stringResource(R.string.pack_offline))
-                            network.metered -> PackWarning(stringResource(R.string.pack_mobile_data, size(downloadBytes)))
+                            current.room > 0 -> PackNotice(stringResource(R.string.pack_error_space, size(current.room)), error = true)
+                            !network.connected -> PackNotice(stringResource(R.string.pack_offline))
+                            network.cellular -> PackNotice(stringResource(R.string.pack_mobile_data, size(downloadBytes)))
+                            network.metered -> PackNotice(stringResource(R.string.pack_metered, size(downloadBytes)))
                         }
-                        BrowserInstead(voices::useBrowser)
+                        BrowserInstead {
+                            open(VoicePackManifest.folderUrl(current.version))
+                            voices.useBrowser()
+                        }
                     }
 
                     PackMode.PROGRESS -> {
@@ -490,12 +496,21 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
                         val error = failed?.error ?: PackDownloadError.FAILED
                         Text(
                             if (error == PackDownloadError.NO_SPACE) {
-                                stringResource(R.string.pack_error_space, size(failed?.missingBytes ?: current.room))
+                                stringResource(
+                                    R.string.pack_error_space,
+                                    size(
+                                        failed?.missingBytes?.takeIf { it > 0 } ?: current.room.takeIf { it > 0 }
+                                            ?: VoicePackStore.SPARE_BYTES,
+                                    ),
+                                )
                             } else {
                                 stringResource(VoicePackNotifications.errorText(error))
                             },
                         )
-                        BrowserInstead(voices::useBrowser)
+                        BrowserInstead {
+                            open(VoicePackManifest.folderUrl(current.version))
+                            voices.useBrowser()
+                        }
                     }
 
                     PackMode.STEPS -> {
@@ -559,23 +574,35 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
 
 private enum class PackMode { CONFIRM, PROGRESS, ERROR, STEPS }
 
-/** Something to know before downloading: mobile data, no connection, or no room. */
+/** Something to know before downloading: mobile data or no connection (information), or no room ([error]). */
 @Composable
-private fun PackWarning(text: String) {
-    Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(VOICE_PACK_WARNING_TAG))
+private fun PackNotice(
+    text: String,
+    error: Boolean = false,
+) {
+    Text(
+        text,
+        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag(VOICE_PACK_WARNING_TAG),
+    )
 }
 
 /** The older way, kept as a fallback: download the files in the browser and add them. */
 @Composable
 private fun BrowserInstead(onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_BROWSER_TAG)) {
+    TextButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 0.dp),
+        modifier = Modifier.heightIn(min = 48.dp).testTag(VOICE_PACK_BROWSER_TAG),
+    ) {
         AutoSizeLabel(stringResource(R.string.pack_use_browser))
     }
 }
 
-/** Whether the phone is online now, and whether that connection is metered (mobile data), kept up to date. */
+/** Whether the phone is online now, whether that is mobile data, and whether it is metered at all, kept up to date. */
 private data class NetworkNow(
     val connected: Boolean,
+    val cellular: Boolean,
     val metered: Boolean,
 )
 
@@ -586,8 +613,15 @@ private fun rememberNetwork(): NetworkNow {
 
     fun now(): NetworkNow {
         val caps = manager?.let { m -> m.activeNetwork?.let { m.getNetworkCapabilities(it) } }
-        val connected = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-        return NetworkNow(connected, connected && caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) != true)
+        // Validated, as WorkManager waits for: a Wi-Fi sign-in page is not a connection yet.
+        val connected =
+            caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return NetworkNow(
+            connected,
+            connected && caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true,
+            connected && caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) != true,
+        )
     }
     var state by remember { mutableStateOf(now()) }
     DisposableEffect(manager) {
