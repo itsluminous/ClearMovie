@@ -140,11 +140,12 @@ class VoiceChoiceControllerTest {
     @Test
     fun `a voice made onto the unchanged item plays, and No change plays the recording again`() {
         val tools = FakeTools(words, made)
-        tools.release.countDown()
         val c = controller(tools)
         // A volume change meanwhile does not matter: the voice depends on the file and the words.
         c.makeVoice(ClipId("rec"), words, VoiceChoice.INDIAN_FEMALE, SpokenLanguage.ENGLISH)
-        project = project.setVolume(ClipId("rec"), -6.0)
+        synchronized(this) { project = project.setVolume(ClipId("rec"), -6.0) }
+        // The voice is made only now, so the volume change is really made while it is being made.
+        tools.release.countDown()
         waitFor { rec().voiceOver?.generated != null }
         assertThat(rec().playedMedia).isEqualTo(made)
         assertThat(rec().volumeDb).isEqualTo(-6.0)
