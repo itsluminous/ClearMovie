@@ -36,7 +36,8 @@ internal fun VoiceDefaultCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         modifier = Modifier.testTag(PRESET_VOICE_TAG),
     ) {
-        Column(Modifier.padding(16.dp).fillMaxWidth()) {
+        // 24dp under the field, as under the last row of the Animation and transition card.
+        Column(Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp).fillMaxWidth()) {
             Text(stringResource(R.string.preset_voice_title), style = MaterialTheme.typography.titleMedium)
             Text(
                 stringResource(R.string.preset_voice_body),
