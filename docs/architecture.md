@@ -679,22 +679,27 @@ the screen; the playhead is saved by `EditorViewModel`.
   at the commit pinned in `VoicePackSource` (so a later push cannot change
   the bytes), follows no redirect, takes no more than the listed size, and
   resumes a part on disk with a Range request. A dropped connection is
-  tried again three times (2, 5 and 10 s), and a lost connection pauses the
-  worker until WorkManager runs it again. Each finished file goes to
+  tried again after 2, 5 and 10 s (a try that got bytes starts the count
+  again), a lost connection pauses the worker until WorkManager runs it
+  again, and Cancel stops it before the next file. Each finished file goes to
   `VoicePackStore.addDownloaded`, which works out its SHA-256 and unzips it
   only if it is the file the app's own manifest lists (a manifest is never
   fetched), then deletes the zip; a mismatch is downloaded once more from
-  the start. Before downloading, the dialog checks free space (everything
+  the start, and a match without room to unpack it is kept for Try again. Before downloading, the dialog checks free space (everything
   unpacked, the largest zip and 50 MB), and warns on mobile data or without
   a connection. Parts live in `filesDir/voice-pack/v1/.download/`; Cancel
-  and Settings' Remove delete them. The network security config
+  and Settings' Remove delete them, once the worker has stopped
+  (`VoicePackDownloadWorker.active`), so a stopping worker cannot add a
+  file back into a removed pack. The network security config
   (`res/xml/network_security_config.xml`) allows no plain HTTP and trusts
   only `raw.githubusercontent.com`. `NetworkUseConventionTest` fails the
   build if any other source uses networking APIs or a networking library
   is added; `scripts/verify-release-apks.sh` checks the release APK's exact
-  permissions, its network security config, and that every network call in
+  permissions, its network security config, that every network call in
   its code is the downloader's or a known library method the app never
-  reaches.
+  reaches, and (`scripts/check-native-network.py`) that no native library
+  in the APK or the pack's engines imports socket, name lookup or TLS
+  functions, since native code is not bound by the network security config.
 - **Fit with blur.** The export blurs the background with a separable
   Gaussian at an eighth of the window (`BlurPasses`, two passes before
   `PlacementEffect`'s own); the preview draws the picture shrunk and stretched

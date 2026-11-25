@@ -61,7 +61,9 @@ or an ABI lacks ones the others have, or if its versionCode is not `base × 10`
 list, if its network security config is not the expected one (no plain
 HTTP, only `raw.githubusercontent.com` trusted), or if any code but the
 voice pack downloader (and a known list of unused library methods) calls
-the network. Keystores are never committed
+the network, or if a native library in the APK or a voice pack engine
+imports network functions (`scripts/check-native-network.py`, which needs
+`python3`). Keystores are never committed
 (`*.jks` and `*.keystore` are gitignored).
 
 ## Instrumented tests
