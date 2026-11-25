@@ -115,12 +115,15 @@ jobs:
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
           SHARD: ${{ matrix.shard }}
+          API_LEVEL: ${{ matrix.api-level }}
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
+          # API 29's AVD gives an app only 16 MB of heap; this raises it to 64 MB.
+          pre-emulator-launch-script: bash scripts/ci-emulator-heap.sh "$API_LEVEL"
           script: bash scripts/ci-instrumented-shard.sh "$SHARD" "$INSTRUMENTED_SHARDS"
 
       # Kept on success too: the reports and per-test logcat are the proof of

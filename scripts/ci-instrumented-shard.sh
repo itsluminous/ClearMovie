@@ -30,6 +30,11 @@ if [ "$count" -lt 2 ] || [ "$shard" -lt 1 ] || [ "$shard" -gt "$count" ]; then
   exit 2
 fi
 
+# The app heap the booted emulator gives (scripts/ci-emulator-heap.sh sets it
+# for API 29), so a log shows whether that took.
+echo "App heap: dalvik.vm.heapsize=$(adb shell getprop dalvik.vm.heapsize | tr -d '\r')" \
+  "dalvik.vm.heapgrowthlimit=$(adb shell getprop dalvik.vm.heapgrowthlimit | tr -d '\r')"
+
 results=app/build/outputs/androidTest-results
 args=-Pandroid.testInstrumentationRunnerArguments
 
