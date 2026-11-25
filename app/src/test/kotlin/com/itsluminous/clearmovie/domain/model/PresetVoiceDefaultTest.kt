@@ -106,6 +106,16 @@ class PresetVoiceDefaultTest {
     }
 
     @Test
+    fun `a project with a default voice is stored as the older form plus one line, after askShape`() {
+        val text = fixture("blank-v8.json")
+        val voiced = (codec.decode(text) as ProjectDecodeResult.Ok).project.copy(defaultVoice = VoiceChoice.INDIAN_FEMALE)
+        val expected = text.replace("    \"askShape\": false\n}", "    \"askShape\": false,\n    \"defaultVoice\": \"indian_female\"\n}")
+        assertThat(expected).isNotEqualTo(text)
+        assertThat(codec.encode(voiced)).isEqualTo(expected)
+        assertThat((codec.decode(expected) as ProjectDecodeResult.Ok).project).isEqualTo(voiced)
+    }
+
+    @Test
     fun `a project from before the default voice reads as No change and is written back byte for byte`() {
         for (name in listOf("rich-v8.json", "blank-v8.json")) {
             val text = fixture(name)

@@ -125,9 +125,13 @@ class VoiceChoiceController(
     /** The voice to offer for item [clipId] whose words wait for a voice: the one they were found for. */
     fun pendingVoice(clipId: ClipId): VoiceChoice? = pending[clipId]
 
+    /** True while the choice is the preset's default voice ([preselect]), not one the user picked. */
+    private var preselected = false
+
     /** The choice for the next recording or typed words. Choosing a voice without the pack asks for it first. */
     fun choose(voice: VoiceChoice) {
         if (!available) return
+        preselected = false
         val v = voice.forLanguage(languageState.value)
         choiceState.value = v
         // The voices and engine; the speech file for the language is asked for when a recording's words are found.
@@ -143,12 +147,14 @@ class VoiceChoiceController(
      * Starts the choice at the preset's default voice (cm-preset-voice-default), when the editor opens
      * a video with no choice saved with the screen. Unlike [choose] it never asks for the voice pack:
      * a recording made without the pack is kept as it is, and the pack dialog shows once its words
-     * are to be found ([afterRecording]). Ignored where the voice pack cannot run (only No change is
-     * offered there), and for No change.
+     * are to be found ([afterRecording]). Closing that dialog without the pack sets the choice back to
+     * No change, so later recordings are not asked about a voice the user never picked. Ignored where
+     * the voice pack cannot run (only No change is offered there), and for No change.
      */
     fun preselect(voice: VoiceChoice?) {
         if (!available || voice == null || voice == VoiceChoice.NONE) return
         choiceState.value = voice.forLanguage(languageState.value)
+        preselected = true
     }
 
     /** Restores the choice saved with the screen. */
@@ -192,6 +198,11 @@ class VoiceChoiceController(
 
     fun dismissPack() {
         askState.value = null
+        // The preset's voice, declined with its pack: the next recordings play as recorded, without asking again.
+        if (preselected) {
+            preselected = false
+            choiceState.value = VoiceChoice.NONE
+        }
     }
 
     /** Takes in the files the user chose after downloading them, then checks the engine runs on this phone. */

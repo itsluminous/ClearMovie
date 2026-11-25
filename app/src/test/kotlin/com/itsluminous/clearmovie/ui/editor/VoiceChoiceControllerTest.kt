@@ -230,6 +230,24 @@ class VoiceChoiceControllerTest {
         // Its panel offers the default voice once the pack is there.
         assertThat(c.pendingVoice(ClipId("rec"))).isEqualTo(VoiceChoice.BRITISH_FEMALE)
         assertThat(notes).isEmpty()
+        // Closed without the pack: the next recording plays as recorded, and is not asked about again.
+        c.dismissPack()
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.NONE)
+        c.afterRecording(ClipId("rec"))
+        assertThat(c.packAsk.value).isNull()
+        assertThat(rec()).isEqualTo(before)
+    }
+
+    @Test
+    fun `a voice the user picked stays after the pack dialog is closed, as before`() {
+        val tools = FakeTools(words, made)
+        tools.missing = tools.manifest.files
+        val c = controller(tools)
+        c.preselect(VoiceChoice.BRITISH_FEMALE)
+        c.choose(VoiceChoice.INDIAN_MALE)
+        assertThat(c.packAsk.value).isNotNull()
+        c.dismissPack()
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.INDIAN_MALE)
     }
 
     @Test

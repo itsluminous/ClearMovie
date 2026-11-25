@@ -631,7 +631,9 @@ the screen; the playhead is saved by `EditorViewModel`.
   (`preselect`), without asking for the pack: a recording made without it
   stays as recorded, and the pack dialog shows when its words are to be
   found, right after it; once the pack is added, the item's Find the words
-  and Make voice use that voice.
+  and Make voice use that voice. Closing that dialog without the pack sets
+  the choice back to No change, so later recordings are not asked about a
+  voice the user never picked.
   The engine is Vosk (speech to words, with word times) and Kokoro
   through sherpa-onnx (words to voice; it reads phonemes, which the app
   makes itself, since it silently skips words its dictionary lacks), all
