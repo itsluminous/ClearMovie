@@ -825,7 +825,7 @@ fun EditorScreen(
                                         }
 
                                         else -> {
-                                            barActions(project, slots, selectedSlot, missing, state.zoom)
+                                            barActions(project, slots, selectedSlot, missing, state.zoom, state.spanWidth)
                                         }
                                     },
                                 onAction = ::onBar,
@@ -969,6 +969,12 @@ private fun zoomButton(
     state.zoom = TimelineZoom.zoomButton(z, zoomIn, playheadMs.toDouble(), total, width)
 }
 
+/** The closest the timeline zooms for this video: close-up, or less for a long one ([TimelineZoom.MAX_SPAN_DP]). */
+private fun closestMsPerDp(
+    slots: List<MainSlot>,
+    spanWidth: Double?,
+): Double = spanWidth?.let { TimelineZoom.minMsPerDp(slots.lastOrNull()?.endMs ?: 0L, it) } ?: TimelineZoom.closeUpMsPerDp
+
 /** Fit all: the whole video across the timeline. */
 private fun fitAll(
     state: EditorScreenState,
@@ -1020,6 +1026,7 @@ private fun barActions(
     selected: MainSlot?,
     missing: Set<ClipId>,
     zoom: ZoomState?,
+    spanWidth: Double?,
 ): List<BarAction> {
     val clip = selected?.clip
     val kind = selectionKind(clip)
@@ -1027,7 +1034,7 @@ private fun barActions(
         val actions =
             ClipActions.forSelection(
                 kind,
-                canZoomIn = zoom?.let { it.msPerDp > TimelineZoom.closeUpMsPerDp * 1.0001 } ?: true,
+                canZoomIn = zoom?.let { it.msPerDp > closestMsPerDp(slots, spanWidth) * 1.0001 } ?: true,
                 canZoomOut = zoom?.fitAll != true,
             )
         // A video with no photos or videos yet shows one big "Add photos and videos" over the timeline:

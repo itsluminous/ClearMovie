@@ -29,13 +29,25 @@ data class ZoomState(
  * - **Fit all** (the widest scale): the whole video across the width, but
  *   never so stretched that one second spans more than 40% of it (a very
  *   short video).
- * - **Close-up** (the narrowest): one second spans 240 dp.
+ * - **Close-up** (the narrowest): one second spans 240 dp, unless that would
+ *   make the whole video wider than [MAX_SPAN_DP] (a video of more than about
+ *   3.5 minutes): then the whole video at [MAX_SPAN_DP] is as close as it goes.
  * - Zooming multiplies the scale, so equal pinches change it by equal ratios.
  * - A zoom keeps the time under the focal point where it is, unless that
  *   would scroll past either end of the video.
  */
 object TimelineZoom {
     const val CLOSE_UP_DP_PER_SECOND = 240.0
+
+    /**
+     * The widest the whole video is ever laid out, in dp. Compose cannot
+     * measure a box wider than 262,143 px, and every item is laid out at its
+     * full width, so at 4.5 px per dp (the densest phones, with a large
+     * display size) the whole video must stay under 58,000 dp: at 240 dp a
+     * second a video longer than 18 minutes would not, and the editor crashed
+     * opening it (cm-crash-after-media-pick).
+     */
+    const val MAX_SPAN_DP = 50_000.0
     const val SHORT_VIDEO_MAX_SECOND_FRACTION = 0.4
 
     /** The Zoom in and Zoom out buttons change the scale by this much, around the playhead. */
@@ -60,11 +72,14 @@ object TimelineZoom {
         return max(fit, shortCap)
     }
 
-    /** The narrowest scale allowed (close-up, or fit all when that is narrower still). */
+    /** The narrowest scale allowed: close-up, or fit all when that is narrower still, never wider than [MAX_SPAN_DP]. */
     fun minMsPerDp(
         totalMs: Long,
         widthDp: Double,
-    ): Double = min(closeUpMsPerDp, fitAllMsPerDp(totalMs, widthDp))
+    ): Double {
+        val fit = fitAllMsPerDp(totalMs, widthDp)
+        return min(fit, max(min(closeUpMsPerDp, fit), totalMs.coerceAtLeast(0) / MAX_SPAN_DP))
+    }
 
     fun clampScale(
         msPerDp: Double,
@@ -165,6 +180,23 @@ object TimelineZoom {
         if (x >= marginDp && x <= widthDp - marginDp) return state
         val scroll = (timeMs - widthDp * atFraction * state.msPerDp).coerceIn(0.0, maxScrollMs(state.msPerDp, totalMs, widthDp))
         return state.copy(scrollMs = scroll)
+    }
+
+    /**
+     * The zoom to lay the timeline out with now: [state]'s scale fitted to this
+     * [totalMs] and [widthDp], its scroll as it is. A stored zoom can be from
+     * before the video's length or the width changed (the frames before the
+     * project loads keep fit all of an empty video), and the timeline is laid
+     * out in that frame, before [reclamp] can store the new zoom.
+     */
+    fun forLayout(
+        state: ZoomState,
+        totalMs: Long,
+        widthDp: Double,
+    ): ZoomState {
+        if (state.fitAll) return fitAll(totalMs, widthDp).copy(scrollMs = state.scrollMs)
+        val scale = clampScale(state.msPerDp, totalMs, widthDp)
+        return if (scale == state.msPerDp) state else state.copy(msPerDp = scale)
     }
 
     /**

@@ -134,4 +134,32 @@ class TimelineZoomTest {
         // Within the video, as before.
         assertThat(TimelineZoom.scrollBy(ZoomState(50.0, 1000.0, false), -100.0, 30_000, 300.0).scrollMs).isEqualTo(0.0)
     }
+
+    @Test
+    fun `a long video zooms in only as far as the whole video fits in MAX_SPAN_DP`() {
+        val long = 20 * 60_000L
+        var z = TimelineZoom.fitAll(long, width)
+        repeat(60) { z = TimelineZoom.zoomAround(z, 2.0, 150.0, long, width) }
+        assertThat(long / z.msPerDp).isWithin(1e-6).of(TimelineZoom.MAX_SPAN_DP)
+        // A short video still reaches the 240 dp a second close-up.
+        assertThat(TimelineZoom.minMsPerDp(total, width)).isEqualTo(TimelineZoom.closeUpMsPerDp)
+        // And the cap never asks for a scale beyond fit all, even on an absurdly wide timeline.
+        assertThat(TimelineZoom.minMsPerDp(long, 1e9)).isAtMost(TimelineZoom.fitAllMsPerDp(long, 1e9))
+    }
+
+    @Test
+    fun `the layout zoom fits the current length, whatever zoom was stored before it`() {
+        val long = 20 * 60_000L
+        // Fit all of an empty video, as stored while the editor had no project yet.
+        val stale = TimelineZoom.fitAll(0L, width)
+        assertThat(TimelineZoom.forLayout(stale, long, width).msPerDp).isWithin(1e-9).of(TimelineZoom.fitAllMsPerDp(long, width))
+        // A zoomed-in scale below the narrowest allowed is raised to it, and the scroll is kept for the clamp to settle.
+        val tooClose = ZoomState(TimelineZoom.closeUpMsPerDp / 4, 5_000.0, fitAll = false)
+        val laid = TimelineZoom.forLayout(tooClose, long, width)
+        assertThat(laid.msPerDp).isWithin(1e-9).of(TimelineZoom.minMsPerDp(long, width))
+        assertThat(laid.scrollMs).isEqualTo(5_000.0)
+        // A valid zoom is used as it is.
+        val fine = ZoomState(1_000.0, 2_000.0, fitAll = false)
+        assertThat(TimelineZoom.forLayout(fine, long, width)).isSameInstanceAs(fine)
+    }
 }

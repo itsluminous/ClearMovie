@@ -369,7 +369,9 @@ fun TimelineView(
     BoxWithConstraints(modifier.fillMaxWidth().testTag(TIMELINE_TAG)) {
         val fullWidth = maxWidth
         val spanWidth = (maxWidth.value - metrics.headerDp - START_PAD_DP - END_PAD_DP).coerceAtLeast(1.0)
-        val z = zoom ?: TimelineZoom.fitAll(totalMs, spanWidth)
+        // Never a scale stored for another length or width: a 20-minute video drawn at an empty video's scale
+        // is too wide for Compose to lay out (cm-crash-after-media-pick).
+        val z = zoom?.let { TimelineZoom.forLayout(it, totalMs, spanWidth) } ?: TimelineZoom.fitAll(totalMs, spanWidth)
         LaunchedEffect(spanWidth) { onSpanWidth(spanWidth) }
         // A new width (rotation) or length (an edit): the same zoom, clamped; fit all stays fit all.
         LaunchedEffect(spanWidth, totalMs, zoom == null) {
