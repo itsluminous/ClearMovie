@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -280,7 +281,10 @@ fun EditorRoute(
     // The screen stays on while the preview plays (not while the system holds it back, as when another app takes
     // the sound for a moment), and through a whole recording, its countdown too, so a long commentary is never cut
     // off by the screen going dark (cm-keep-screen-on). Paused, it may go dark.
-    KeepScreenOnWhile((preview.playing && !preview.suppressed) || recording != null)
+    // Read without the lifecycle (unlike `preview`): the pause made by going to the background reaches it while the
+    // app is away, so on the return the screen is not held for a frame by the playing that was (review R2-F3).
+    val live by viewModel.engine.state.collectAsState()
+    KeepScreenOnWhile((live.playing && !live.suppressed) || recording != null)
     val askToRecord = rememberRecordVoice { row, atMs -> viewModel.recordVoice(row, atMs) }
     val latestAskToRecord by rememberUpdatedState(askToRecord)
 
