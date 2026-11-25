@@ -36,10 +36,10 @@ class Phonemizer(
     fun hindi(text: String): Result {
         val byRule = mutableListOf<String>()
         val parts =
-            HINDI_WORD_OR_MARK.findAll(text).flatMap { m ->
+            HINDI_WORD_OR_MARK.findAll(hindiNumbers(text)).flatMap { m ->
                 val t = m.value
                 when {
-                    t.first() in '०'..'९' || t.first().isDigit() -> hindiDigits(t).asSequence().map(HindiPhonemes::word)
+                    t.first() in '०'..'९' || t.first().isDigit() -> hindiNumberWords(t).asSequence().map(HindiPhonemes::word)
                     t.first() in MARKS || t.first() == '\u0964' -> sequenceOf(if (t.first() == '\u0964') "." else t)
                     t.first().isLatinLetter() -> sequenceOf(word(t, byRule))
                     else -> sequenceOf(HindiPhonemes.word(t))
@@ -127,6 +127,53 @@ class Phonemizer(
             }
 
         private val HINDI_DIGITS = listOf("शून्य", "एक", "दो", "तीन", "चार", "पांच", "छह", "सात", "आठ", "नौ")
+
+        /** Hindi number words from 0 to 99 (cm-hindi-voices). */
+        private val HINDI_NUMBERS =
+            (
+                "शून्य एक दो तीन चार पाँच छह सात आठ नौ दस ग्यारह बारह तेरह चौदह पंद्रह सोलह सत्रह अठारह उन्नीस " +
+                    "बीस इक्कीस बाईस तेईस चौबीस पच्चीस छब्बीस सत्ताईस अट्ठाईस उनतीस तीस इकतीस बत्तीस तैंतीस चौंतीस " +
+                    "पैंतीस छत्तीस सैंतीस अड़तीस उनतालीस चालीस इकतालीस बयालीस तैंतालीस चवालीस पैंतालीस छियालीस सैंतालीस " +
+                    "अड़तालीस उनचास पचास इक्यावन बावन तिरपन चौवन पचपन छप्पन सत्तावन अट्ठावन उनसठ साठ इकसठ बासठ तिरसठ " +
+                    "चौंसठ पैंसठ छियासठ सड़सठ अड़सठ उनहत्तर सत्तर इकहत्तर बहत्तर तिहत्तर चौहत्तर पचहत्तर छिहत्तर सतहत्तर " +
+                    "अठहत्तर उनासी अस्सी इक्यासी बयासी तिरासी चौरासी पचासी छियासी सत्तासी अट्ठासी नवासी नब्बे इक्यानबे " +
+                    "बानबे तिरानबे चौरानबे पंचानबे छियानबे सत्तानबे अट्ठानबे निन्यानबे"
+            ).split(' ')
+
+        private val DIGIT_GROUP = Regex("(?<=\\d),(?=\\d{2})")
+        private val DECIMAL = Regex("(\\d+)\\.(\\d+)")
+
+        /** [text] with Devanagari digits as Latin ones, digit-group commas dropped, and decimals in words. */
+        private fun hindiNumbers(text: String): String {
+            val latin = text.map { if (it in '०'..'९') '0' + (it - '०') else it }.joinToString("")
+            return DECIMAL.replace(DIGIT_GROUP.replace(latin, "")) { m ->
+                (hindiNumberWords(m.groupValues[1]) + "दशमलव" + hindiDigits(m.groupValues[2])).joinToString(" ")
+            }
+        }
+
+        /**
+         * A number in Hindi words (cm-hindi-voices): "25" is "पच्चीस", "2026" is "दो हज़ार छब्बीस",
+         * 1100 to 1999 are read in hundreds as years and prices are ("1920": "उन्नीस सौ बीस"), with
+         * lakh and crore above that. A number with a leading zero or of more than nine digits (a phone
+         * number, a code) is read digit by digit.
+         */
+        fun hindiNumberWords(digits: String): List<String> {
+            val d = digits.map { if (it in '०'..'९') '0' + (it - '०') else it }.joinToString("")
+            val n = d.toLongOrNull()
+            if (n == null || d.length > 9 || (d.length > 1 && d.first() == '0')) return hindiDigits(d)
+            if (n in 1100..1999) return listOf(HINDI_NUMBERS[(n / 100).toInt()], "सौ") + hindiBelow(n % 100)
+            return hindiBelow(n).ifEmpty { listOf(HINDI_NUMBERS[0]) }
+        }
+
+        private fun hindiBelow(n: Long): List<String> =
+            when {
+                n == 0L -> emptyList()
+                n < 100 -> listOf(HINDI_NUMBERS[n.toInt()])
+                n < 1000 -> listOf(HINDI_NUMBERS[(n / 100).toInt()], "सौ") + hindiBelow(n % 100)
+                n < 100_000 -> hindiBelow(n / 1000) + "हज़ार" + hindiBelow(n % 1000)
+                n < 10_000_000 -> hindiBelow(n / 100_000) + "लाख" + hindiBelow(n % 100_000)
+                else -> hindiBelow(n / 10_000_000) + "करोड़" + hindiBelow(n % 10_000_000)
+            }
 
         /** Hindi digits (Devanagari or Latin), read one by one. */
         fun hindiDigits(digits: String): List<String> =
@@ -281,6 +328,12 @@ object HindiPhonemes {
             'ॉ' to "ɔ",
         )
     private const val HALANT = '्'
+    private val SHORT_VOWELS = setOf("ə", "ɪ", "ʊ")
+
+    /** The nasal of each consonant class, which an anusvara before it is said as. */
+    private val NASAL_OF: Map<Char, String> =
+        "कखगघ".associateWith { "ŋ" } + "चछजझ".associateWith { "ɲ" } + "टठडढ".associateWith { "ɳ" } +
+            "तथदध".associateWith { "n" } + "पफबभ".associateWith { "m" }
     private const val NUKTA = '़'
 
     private data class Part(
@@ -325,6 +378,12 @@ object HindiPhonemes {
                     units += Part(VOWELS.getValue(c), vowel = true)
                 }
 
+                // An anusvara after a short vowel, before a consonant of a class, is that class's nasal
+                // ("प्रियंका": pɾɪjəŋkaː, "हिंदी": ɦɪnd̪iː); elsewhere it nasalises the vowel (cm-hindi-voices).
+                c == 'ं' && units.lastOrNull()?.sound in SHORT_VOWELS && w.getOrNull(i + 1)?.let { NASAL_OF[it] } != null -> {
+                    units += Part(NASAL_OF.getValue(w[i + 1]), vowel = false)
+                }
+
                 c == 'ं' || c == 'ँ' -> {
                     if (units.lastOrNull()?.vowel ==
                         true
@@ -340,8 +399,8 @@ object HindiPhonemes {
             i++
         }
         val keep = BooleanArray(units.size) { true }
-        // The last schwa goes in a word of more than one letter.
-        if (units.size > 2 && units.last().schwa) keep[units.size - 1] = false
+        // The last schwa goes in a word of more than one letter; a nasalised one stays.
+        if (units.size > 2 && units.last().schwa && units.last().sound == "ə") keep[units.size - 1] = false
 
         fun kept(
             from: Int,
@@ -356,7 +415,7 @@ object HindiPhonemes {
         }
         // Between consonants with a vowel on both sides (V C ə C V), from the end of the word backwards.
         for (k in units.size - 2 downTo 2) {
-            if (!units[k].schwa || !keep[k]) continue
+            if (!units[k].schwa || !keep[k] || units[k].sound != "ə") continue
             val before = units[k - 1]
             val after = kept(k + 1, 1)
             val afterNext =

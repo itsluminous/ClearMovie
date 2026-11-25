@@ -71,6 +71,7 @@ fun SettingsRoute(
     val loaded by viewModel.settings.collectAsStateWithLifecycle()
     val storage by viewModel.storage.collectAsStateWithLifecycle()
     val voicePack by viewModel.voicePackBytes.collectAsStateWithLifecycle()
+    val hindiHd by viewModel.hindiHd.collectAsStateWithLifecycle()
     val crash by viewModel.crash.collectAsStateWithLifecycle()
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
@@ -100,6 +101,9 @@ fun SettingsRoute(
         onOpenProjectPage = { openProjectPage(context) },
         voicePackBytes = voicePack,
         onRemoveVoicePack = viewModel::removeVoicePack,
+        hindiHd = hindiHd,
+        onDownloadHindiHd = viewModel::downloadHindiHd,
+        onCancelDownload = viewModel::cancelDownload,
         crashAtMs = crash?.atMs,
         onShareCrash = { crash?.let { shareCrash(context, it.text) } },
     )
@@ -178,6 +182,9 @@ fun SettingsScreen(
     onOpenProjectPage: () -> Unit = {},
     voicePackBytes: Long = 0L,
     onRemoveVoicePack: () -> Unit = {},
+    hindiHd: HindiHdOffer? = null,
+    onDownloadHindiHd: () -> Unit = {},
+    onCancelDownload: () -> Unit = {},
     /** When ClearMovie last crashed, if a crash is kept: About then offers to share it. */
     crashAtMs: Long? = null,
     onShareCrash: () -> Unit = {},
@@ -293,6 +300,7 @@ fun SettingsScreen(
                             }
                         }
                     }
+                    hindiHd?.let { HindiHdRow(it, onDownloadHindiHd, onCancelDownload) }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 }
 

@@ -48,7 +48,9 @@ sealed interface PackDownloadOutcome {
  * when part of it is already here), checked against the app's own manifest
  * and added, one at a time, so the phone never holds more than one zip. A
  * dropped connection is tried again a few times, after a pause; a file that
- * does not match is downloaded once more from the start.
+ * does not match is downloaded once more from the start. A split zip
+ * (cm-hindi-voices) is downloaded piece by piece, each checked as it ends, and
+ * added once all its pieces are here; the phone then holds one zip's pieces.
  */
 class PackDownloadJob(
     private val tools: VoiceTools,
@@ -62,35 +64,57 @@ class PackDownloadJob(
         stopped: () -> Boolean,
     ): PackDownloadOutcome {
         val manifest = tools.manifest ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED)
-        val missing = (tools.missing(SpokenLanguage.ENGLISH) + tools.missing(SpokenLanguage.HINDI)).toSet()
+        val missing = tools.notAdded().toSet()
         val todo = manifest.files.filter { it.file in names && it in missing }
         val total = todo.sumOf { it.bytes }
-        val parts = todo.associateWith { tools.downloadFile(it) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED) }
-        val onDisk = parts.values.sumOf { if (it.isFile) it.length() else 0L }
-        val need = roomToDownload(todo, VoicePackStore.SPARE_BYTES) - onDisk
+        // Each file's downloads on disk: the zip's part file, or its pieces (cm-hindi-voices).
+        val parts =
+            todo.associateWith { f ->
+                if (f.pieces.isEmpty()) {
+                    listOf(tools.downloadFile(f) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED))
+                } else {
+                    f.pieces.map { tools.pieceFile(it.file) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED) }
+                }
+            }
+
+        fun onDisk(fs: Collection<VoicePackFile>) = fs.sumOf { f -> parts.getValue(f).sumOf { if (it.isFile) it.length() else 0L } }
+        val need = roomToDownload(todo, VoicePackStore.SPARE_BYTES) - onDisk(todo)
         val free = tools.freeBytes()
         if (free < need) return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, need - free)
         var before = 0L
         for (f in todo) {
             if (stopped()) return PackDownloadOutcome.Stopped
-            val part = parts.getValue(f)
-            val url = VoicePackSource.url(manifest.version, f.file) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED)
+            val folder = manifest.folderOf(f)
+            val files = parts.getValue(f)
+            val pieces = f.pieces.ifEmpty { null }
             var checks = 0
-            val tries = IntArray(1)
+            // Connections per downloaded file (each piece counts on its own), across the file's checks.
+            val tries = Array(f.downloads.size) { IntArray(1) }
             while (true) {
-                val failed = fetch(url, part, f, stopped, tries) { progress(PackProgress(before + it, total)) }
-                if (failed != null) return failed
-                if (stopped()) return PackDownloadOutcome.Stopped
+                // The zip, or each piece in turn: a piece that does not match is downloaded once more before giving up.
+                var at = 0L
+                for ((i, name) in f.downloads.withIndex()) {
+                    val bytes = pieces?.get(i)?.bytes ?: f.bytes
+                    val url = VoicePackSource.url(folder, name) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED)
+                    var pieceChecks = 0
+                    while (true) {
+                        val failed = fetch(url, files[i], bytes, stopped, tries[i]) { progress(PackProgress(before + at + it, total)) }
+                        if (failed != null) return failed
+                        if (stopped()) return PackDownloadOutcome.Stopped
+                        if (pieces == null || tools.checkPiece(f, i, files[i])) break
+                        if (++pieceChecks >= CHECKS) return PackDownloadOutcome.Failed(PackDownloadError.CHECK)
+                    }
+                    at += bytes
+                }
                 progress(PackProgress(before + f.bytes, total, checking = true))
-                val added = tools.addDownloaded(f, part, stopped)
+                val added = tools.addDownloaded(f, files, stopped)
                 if (stopped()) return PackDownloadOutcome.Stopped
                 when {
                     added.outOfSpace -> {
                         // Room for this file and the ones after it, less what is already downloaded.
                         val rest = todo.dropWhile { it != f }
-                        val onDiskNow = rest.sumOf { r -> parts.getValue(r).let { if (it.isFile) it.length() else 0L } }
-                        val missing = roomToDownload(rest, VoicePackStore.SPARE_BYTES) - onDiskNow - tools.freeBytes()
-                        return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, missing.coerceAtLeast(added.missingBytes))
+                        val missingBytes = roomToDownload(rest, VoicePackStore.SPARE_BYTES) - onDisk(rest) - tools.freeBytes()
+                        return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, missingBytes.coerceAtLeast(added.missingBytes))
                     }
 
                     added.rejected == 0 -> {
@@ -110,14 +134,14 @@ class PackDownloadJob(
     }
 
     /**
-     * Downloads [f] into [part], trying a dropped connection again after a pause; a try that got some
-     * bytes counts as a fresh start, so only a connection that drops without progress ends it. Null
-     * when the file is all there, or on the stop.
+     * Downloads [url] ([bytes] long) into [part], trying a dropped connection again after a pause; a try
+     * that got some bytes counts as a fresh start, so only a connection that drops without progress ends
+     * it. Null when the file is all there, or on the stop.
      */
     private fun fetch(
         url: String,
         part: File,
-        f: VoicePackFile,
+        bytes: Long,
         stopped: () -> Boolean,
         /** Connections made for this file so far, across its checks (at most [MAX_TRIES]). */
         tries: IntArray,
@@ -128,7 +152,7 @@ class PackDownloadJob(
             if (++tries[0] > MAX_TRIES) return PackDownloadOutcome.Failed(PackDownloadError.NETWORK)
             val had = part.length()
             try {
-                downloader.fetch(url, part, f.bytes, progress, stopped)
+                downloader.fetch(url, part, bytes, progress, stopped)
                 return null
             } catch (e: DownloadFailure) {
                 when (e.reason) {
@@ -155,7 +179,7 @@ class PackDownloadJob(
         /** How many times a file is downloaded when it does not match. */
         const val CHECKS = 2
 
-        /** At most this many connections for one file in one run, however many of them made progress. */
+        /** At most this many connections for one file (or one piece) in one run, however many of them made progress. */
         const val MAX_TRIES = 30
     }
 }

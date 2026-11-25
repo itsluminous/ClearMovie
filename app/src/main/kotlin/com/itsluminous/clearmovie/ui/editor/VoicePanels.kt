@@ -54,6 +54,7 @@ import com.itsluminous.clearmovie.domain.model.SpokenLanguage
 import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.VoicePhrase
 import com.itsluminous.clearmovie.domain.model.WordsSource
+import com.itsluminous.clearmovie.domain.voice.HindiModel
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.components.durationText
@@ -84,6 +85,8 @@ fun VoiceChoice.labelRes(): Int =
         VoiceChoice.BRITISH_FEMALE -> R.string.voice_british_female
         VoiceChoice.INDIAN_MALE -> R.string.voice_indian_male
         VoiceChoice.INDIAN_FEMALE -> R.string.voice_indian_female
+        VoiceChoice.INDIAN_MALE_2 -> R.string.voice_indian_male_2
+        VoiceChoice.INDIAN_FEMALE_2 -> R.string.voice_indian_female_2
         VoiceChoice.AMERICAN_MALE -> R.string.voice_american_male
         VoiceChoice.AMERICAN_FEMALE -> R.string.voice_american_female
     }
@@ -442,6 +445,13 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
                 when (mode) {
                     PackMode.CONFIRM -> {
                         Text(stringResource(R.string.pack_body, size(downloadBytes), size(unpacked)))
+                        if (current.hindiHd) {
+                            Text(
+                                stringResource(
+                                    if (voices.hindiModel == HindiModel.FULL) R.string.pack_hindi_hd_full else R.string.pack_hindi_hd_light,
+                                ),
+                            )
+                        }
                         Text(stringResource(R.string.pack_privacy))
                         when {
                             current.room > 0 -> PackNotice(stringResource(R.string.pack_error_space, size(current.room)), error = true)
@@ -450,7 +460,7 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
                             network.metered -> PackNotice(stringResource(R.string.pack_metered, size(downloadBytes)))
                         }
                         BrowserInstead {
-                            open(VoicePackManifest.folderUrl(current.version))
+                            open(VoicePackManifest.folderUrl(voices.folderOf(current.files.first())))
                             voices.useBrowser()
                         }
                     }
@@ -503,26 +513,32 @@ internal fun VoicePackDialog(voices: VoiceChoiceController) {
                             },
                         )
                         BrowserInstead {
-                            open(VoicePackManifest.folderUrl(current.version))
+                            open(VoicePackManifest.folderUrl(voices.folderOf(current.files.first())))
                             voices.useBrowser()
                         }
                     }
 
                     PackMode.STEPS -> {
                         Text(stringResource(R.string.pack_steps_body))
+                        // A split zip (Hindi HD) is listed piece by piece: each is a file of its own on the page.
                         current.files.forEach { f ->
-                            TextButton(
-                                onClick = { open(VoicePackManifest.downloadUrl(current.version, f.file)) },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.pack_file_line, f.file, size(f.bytes)),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                            val pieces = f.pieces.ifEmpty { null }
+                            f.downloads.forEachIndexed { i, name ->
+                                TextButton(
+                                    onClick = { open(VoicePackManifest.downloadUrl(voices.folderOf(f), name)) },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.pack_file_line, name, size(pieces?.get(i)?.bytes ?: f.bytes)),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
-                        Text(VoicePackManifest.folderUrl(current.version), style = MaterialTheme.typography.bodySmall)
+                        current.files.map { voices.folderOf(it) }.distinct().forEach {
+                            Text(VoicePackManifest.folderUrl(it), style = MaterialTheme.typography.bodySmall)
+                        }
                         WorkLine(work)
                     }
                 }

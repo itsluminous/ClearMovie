@@ -67,6 +67,7 @@ class VoiceEngine(
         check(load()) { "engine not loaded" }
         val words = mutableListOf<HeardWord>()
         val t0 = System.nanoTime()
+        store.prepareAsr(language)
         Model(store.asrDir(language).path).use { model ->
             // A Stop asked for while the model loaded takes effect here.
             progress(Float.NaN)
@@ -104,12 +105,14 @@ class VoiceEngine(
     /** Opens the voices for one job; release it after. */
     fun speaker(): Speaker {
         check(load()) { "engine not loaded" }
-        return Speaker(store.ttsDir)
+        return Speaker(store.ttsDir, store.voicesFile)
     }
 
     /** Kokoro, speaking phonemes in one of the pack's voices. */
     class Speaker(
         dir: File,
+        /** The voices file: the pack's, or Hindi HD's with two more Indian voices (cm-hindi-voices). */
+        voicesFile: File = File(dir, "voices.bin"),
     ) : AutoCloseable {
         private val tts =
             OfflineTts(
@@ -120,7 +123,7 @@ class VoiceEngine(
                             kokoro =
                                 OfflineTtsKokoroModelConfig(
                                     model = File(dir, "model.int8.onnx").path,
-                                    voices = File(dir, "voices.bin").path,
+                                    voices = voicesFile.path,
                                     tokens = File(dir, "tokens.txt").path,
                                     dataDir = "",
                                     lexicon = File(dir, LEXICON).path,

@@ -155,7 +155,7 @@ class VoicePackStoreTest {
         )) {
             val zip = s.downloadFile(f).apply { parentFile.mkdirs() }
             zip.writeBytes(bytes)
-            val r = s.addDownloaded(f, zip)
+            val r = s.addDownloaded(f, listOf(zip))
             assertThat(r.added).isEmpty()
             assertThat(r.rejected).isEqualTo(1)
             assertThat(zip.exists()).isFalse()
@@ -163,7 +163,7 @@ class VoicePackStoreTest {
         assertThat(s.anyAdded()).isFalse()
         val zip = s.downloadFile(listed).apply { parentFile.mkdirs() }
         zip.writeBytes(voices)
-        assertThat(s.addDownloaded(listed, zip).added).containsExactly(listed)
+        assertThat(s.addDownloaded(listed, listOf(zip)).added).containsExactly(listed)
         assertThat(zip.exists()).isFalse()
         assertThat(s.ttsDir.resolve("tokens.txt").readText()).isEqualTo("a 1")
         // Partial downloads go with Cancel, and with Remove.
@@ -178,7 +178,7 @@ class VoicePackStoreTest {
         val listed = manifest.files.first { it.file == "voices.zip" }
         val zip = s.downloadFile(listed).apply { parentFile.mkdirs() }
         zip.writeBytes(voices)
-        assertThat(s.addDownloaded(listed, zip).outOfSpace).isTrue()
+        assertThat(s.addDownloaded(listed, listOf(zip)).outOfSpace).isTrue()
         assertThat(s.anyAdded()).isFalse()
     }
 }

@@ -753,6 +753,8 @@
     <string name="voice_british_female">British female voice</string>
     <string name="voice_indian_male">Indian male voice</string>
     <string name="voice_indian_female">Indian female voice</string>
+    <string name="voice_indian_male_2">Indian male voice 2</string>
+    <string name="voice_indian_female_2">Indian female voice 2</string>
     <string name="voice_american_male">American male voice</string>
     <string name="voice_american_female">American female voice</string>
     <string name="voice_language_english">English</string>
@@ -819,4 +821,11 @@
     <string name="settings_remove_voice_pack">Remove</string>
     <string name="settings_remove_voice_pack_title">Remove the voice pack?</string>
     <string name="settings_remove_voice_pack_body">This frees %1$s. Voices you already made stay in your videos. To make new ones, add the pack again.</string>
+    <string name="pack_hindi_hd_full">This includes Hindi HD, the most accurate Hindi speech recognition, which needs a phone with 8 GB of memory.</string>
+    <string name="pack_hindi_hd_light">This includes Hindi HD speech recognition. This phone has less than 8 GB of memory, so it gets the lighter model.</string>
+    <string name="settings_hindi_hd_title">Hindi HD</string>
+    <string name="settings_hindi_hd_offer">More accurate Hindi speech recognition and two more Indian voices. Downloads %1$s; once added it takes %2$s.</string>
+    <string name="settings_hindi_hd_light_note">This phone has less than 8 GB of memory, so it gets the lighter model. The most accurate one needs 8 GB.</string>
+    <string name="settings_hindi_hd_low_memory">Hindi HD needs a phone with at least 4 GB of memory, so this phone keeps the standard Hindi speech recognition.</string>
+    <string name="settings_hindi_hd_added">Added. Hindi speech recognition uses it, and the two extra Indian voices are in the voice list.</string>
 </resources>

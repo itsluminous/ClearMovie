@@ -10,6 +10,7 @@ import com.itsluminous.clearmovie.domain.model.SpokenLanguage
 import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.VoicePhrase
 import com.itsluminous.clearmovie.domain.voice.HeardWord
+import com.itsluminous.clearmovie.domain.voice.HindiModel
 import com.itsluminous.clearmovie.domain.voice.Phonemizer
 import com.itsluminous.clearmovie.domain.voice.PhraseFit
 import com.itsluminous.clearmovie.domain.voice.Phrases
@@ -55,8 +56,20 @@ interface VoiceTools {
     /** Loads the pack's engine now; false when this phone cannot run it. */
     fun checkEngine(): Boolean = engineWorks != false
 
-    /** The pack files still to add to voice words, and to recognize speech in [speech]. */
-    fun missing(speech: SpokenLanguage?): List<VoicePackFile>
+    /** The pack files still to add to voice words (in [voice], when it needs Hindi HD), and to recognize speech in [speech]. */
+    fun missing(
+        speech: SpokenLanguage?,
+        voice: VoiceChoice? = null,
+    ): List<VoicePackFile>
+
+    /** The best Hindi recognizer this phone's memory runs (cm-hindi-voices). */
+    val hindiModel: HindiModel get() = HindiModel.SMALL
+
+    /** Hindi HD's files this phone runs and does not have yet, with the base files it needs (empty: none, or it cannot run it). */
+    fun hindiHdMissing(): List<VoicePackFile> = emptyList()
+
+    /** Every pack file this phone takes that is not added yet: what a download may add. */
+    fun notAdded(): List<VoicePackFile> = (missing(SpokenLanguage.ENGLISH) + missing(SpokenLanguage.HINDI)).distinct()
 
     fun addPackFiles(
         sources: List<() -> InputStream?>,
@@ -66,13 +79,23 @@ interface VoiceTools {
     /** Where a download of pack file [f] goes until it is added (cm-voice-pack-download); null without a pack. */
     fun downloadFile(f: VoicePackFile): File? = null
 
+    /** Where piece [name] of a split zip is downloaded to and kept until its zip is added; null without a pack. */
+    fun pieceFile(name: String): File? = null
+
+    /** Whether [file] is piece [index] of [f] as the app's manifest lists it; one that is not is deleted. */
+    fun checkPiece(
+        f: VoicePackFile,
+        index: Int,
+        file: File,
+    ): Boolean = false
+
     /**
-     * Takes in [zip], a finished download of [f], if its SHA-256 matches the app's own manifest. Nothing is
-     * added once [stopped] (Cancel, or Settings' Remove meanwhile).
+     * Takes in [files], a finished download of [f] (the zip, or its pieces in order), if each SHA-256
+     * matches the app's own manifest. Nothing is added once [stopped] (Cancel, or Settings' Remove meanwhile).
      */
     fun addDownloaded(
         f: VoicePackFile,
-        zip: File,
+        files: List<File>,
         stopped: () -> Boolean = { false },
     ): PackAddResult = PackAddResult(emptyList(), 1)
 
@@ -123,7 +146,10 @@ interface VoiceTools {
                 override val manifest: VoicePackManifest? = null
                 override val supported = false
 
-                override fun missing(speech: SpokenLanguage?) = emptyList<VoicePackFile>()
+                override fun missing(
+                    speech: SpokenLanguage?,
+                    voice: VoiceChoice?,
+                ) = emptyList<VoicePackFile>()
 
                 override fun addPackFiles(
                     sources: List<() -> InputStream?>,
@@ -171,7 +197,16 @@ class PackVoiceTools(
 
     private fun lexicon(): Map<String, String> = lexiconCache ?: VoiceEngine.lexicon(store.ttsDir).also { lexiconCache = it }
 
-    override fun missing(speech: SpokenLanguage?) = store.missing(speech)
+    override fun missing(
+        speech: SpokenLanguage?,
+        voice: VoiceChoice?,
+    ) = store.missing(speech, voice)
+
+    override val hindiModel: HindiModel get() = store.hindiModel
+
+    override fun hindiHdMissing() = store.hindiHdMissing()
+
+    override fun notAdded() = if (store.supported) store.manifest.files.filter { store.fits(it) && !store.isAdded(it) } else emptyList()
 
     override fun addPackFiles(
         sources: List<() -> InputStream?>,
@@ -183,16 +218,24 @@ class PackVoiceTools(
 
     override fun downloadFile(f: VoicePackFile): File = store.downloadFile(f)
 
+    override fun pieceFile(name: String): File = store.pieceFile(name)
+
+    override fun checkPiece(
+        f: VoicePackFile,
+        index: Int,
+        file: File,
+    ) = store.checkPiece(f, index, file)
+
     // Under the same lock as removePack, and checked for the stop inside it: a Remove that waited for the
     // download to stop never has a file added back after it.
     override fun addDownloaded(
         f: VoicePackFile,
-        zip: File,
+        files: List<File>,
         stopped: () -> Boolean,
     ) = synchronized(this) {
         if (stopped()) return@synchronized PackAddResult(emptyList(), 0)
         lexiconCache = null
-        store.addDownloaded(f, zip)
+        store.addDownloaded(f, files)
     }
 
     override fun clearDownloads() = store.clearDownloads()
@@ -251,7 +294,7 @@ class PackVoiceTools(
             val said = phrases.filter { it.text.isNotBlank() }
             if (said.isEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_WORDS)
             val t = Steps()
-            if (store.missing(null).isNotEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
+            if (store.missing(null, voice).isNotEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
             if (!engine.load()) throw VoiceFailure(VoiceFailure.Reason.NO_ENGINE)
             if ((lengthMs ?: 0) > MAX_MS) throw VoiceFailure(VoiceFailure.Reason.TOO_LONG)
             val engineMs = t.lap()

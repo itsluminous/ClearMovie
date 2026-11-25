@@ -15,7 +15,7 @@ class PackDownloaderTest {
     val tmp = TemporaryFolder()
 
     private val body = ByteArray(1000) { (it % 251).toByte() }
-    private val url = requireNotNull(VoicePackSource.url(1, "voices.zip"))
+    private val url = requireNotNull(VoicePackSource.url("v1", "voices.zip"))
 
     private fun downloader(answer: (URL) -> HttpURLConnection) = PackDownloader { answer(it) }
 
@@ -99,10 +99,10 @@ class PackDownloaderTest {
                 FakeHttps(u, 200, emptyMap(), body)
             }
         listOf(
-            "http://raw.githubusercontent.com/itsluminous/ClearMovie/${VoicePackSource.COMMITS.getValue(1)}/voice-packs/v1/voices.zip",
+            "http://raw.githubusercontent.com/itsluminous/ClearMovie/${VoicePackSource.COMMITS.getValue("v1")}/voice-packs/v1/voices.zip",
             "https://raw.githubusercontent.com/itsluminous/ClearMovie/main/voice-packs/v1/voices.zip",
-            "https://raw.githubusercontent.com/someone/ClearMovie/${VoicePackSource.COMMITS.getValue(1)}/voice-packs/v1/voices.zip",
-            "https://example.com/itsluminous/ClearMovie/${VoicePackSource.COMMITS.getValue(1)}/voice-packs/v1/voices.zip",
+            "https://raw.githubusercontent.com/someone/ClearMovie/${VoicePackSource.COMMITS.getValue("v1")}/voice-packs/v1/voices.zip",
+            "https://example.com/itsluminous/ClearMovie/${VoicePackSource.COMMITS.getValue("v1")}/voice-packs/v1/voices.zip",
             url.replace("voices.zip", "../manifest.json"),
             "$url?x=1",
         ).forEach { bad ->

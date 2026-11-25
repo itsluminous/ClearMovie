@@ -6,10 +6,13 @@ import com.itsluminous.clearmovie.data.files.StorageReport
 import com.itsluminous.clearmovie.data.files.StorageUsage
 import com.itsluminous.clearmovie.data.project.CrashLog
 import com.itsluminous.clearmovie.data.settings.SettingsRepository
+import com.itsluminous.clearmovie.data.voice.PackDownloadState
 import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AppSettings
 import com.itsluminous.clearmovie.domain.model.ThemeMode
+import com.itsluminous.clearmovie.domain.voice.HindiModel
+import com.itsluminous.clearmovie.domain.voice.VoicePackFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,9 +20,24 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+/**
+ * Hindi HD in Settings (cm-hindi-voices): the Hindi recognizer this phone's memory
+ * runs, the files still to download for it (empty: it is added), and the voice
+ * pack download now.
+ */
+data class HindiHdOffer(
+    val model: HindiModel,
+    val files: List<VoicePackFile>,
+    val download: PackDownloadState = PackDownloadState.Idle,
+) {
+    val bytes: Long get() = files.sumOf { it.bytes }
+    val unpackedBytes: Long get() = files.sumOf { it.unpackedBytes }
+}
 
 @HiltViewModel
 class SettingsViewModel
@@ -48,8 +66,38 @@ class SettingsViewModel
                 packDownloads.cancelAndWait()
                 voiceTools.removePack()
                 packState.value = voiceTools.packBytes()
+                hindiHdState.value = hindiHdOffer()
             }
         }
+
+        private val hindiHdState = MutableStateFlow<HindiHdOffer?>(null)
+
+        /** Hindi HD's row (cm-hindi-voices); null where the voice pack cannot run, or has no Hindi HD. */
+        val hindiHd: StateFlow<HindiHdOffer?> = hindiHdState.asStateFlow()
+
+        init {
+            viewModelScope.launch {
+                packDownloads.state.collect { state ->
+                    hindiHdState.update { it?.copy(download = state) }
+                    if (state is PackDownloadState.Done) refresh()
+                }
+            }
+        }
+
+        private fun hindiHdOffer(): HindiHdOffer? {
+            val manifest = voiceTools.manifest ?: return null
+            if (!voiceTools.supported || manifest.files.none { it.part == VoicePackFile.SPEECH_HI_HD }) return null
+            return HindiHdOffer(voiceTools.hindiModel, voiceTools.hindiHdMissing(), packDownloads.state.value)
+        }
+
+        /** Downloads what this phone still needs for Hindi HD, in the background (the voice pack download). */
+        fun downloadHindiHd() {
+            val files = hindiHdState.value?.files.orEmpty()
+            if (files.isNotEmpty()) packDownloads.start(files)
+        }
+
+        /** Stops the voice pack download and removes what it had downloaded. */
+        fun cancelDownload() = packDownloads.cancel()
 
         private val storageState = MutableStateFlow<StorageReport?>(null)
 
@@ -61,6 +109,7 @@ class SettingsViewModel
             viewModelScope.launch {
                 storageState.value = runCatching { storageUsage.report() }.getOrNull()
                 packState.value = withContext(Dispatchers.IO) { runCatching { voiceTools.packBytes() }.getOrDefault(0L) }
+                hindiHdState.value = withContext(Dispatchers.IO) { runCatching { hindiHdOffer() }.getOrNull() }
                 crashState.value = withContext(Dispatchers.IO) { crashLog?.last() }
             }
         }

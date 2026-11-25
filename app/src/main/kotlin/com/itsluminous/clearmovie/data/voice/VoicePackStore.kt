@@ -1,11 +1,15 @@
 package com.itsluminous.clearmovie.data.voice
 
 import com.itsluminous.clearmovie.domain.model.SpokenLanguage
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
+import com.itsluminous.clearmovie.domain.voice.HindiModel
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
 import java.io.File
 import java.io.InputStream
+import java.io.SequenceInputStream
 import java.security.MessageDigest
+import java.util.Collections
 import java.util.zip.ZipInputStream
 
 /** What adding voice pack files did. */
@@ -29,11 +33,17 @@ data class PackAddResult(
  * listed number of entries and bytes) and moved into place, and a marker
  * says that part is whole. A half-added part (the app killed mid-way) has
  * no marker, so it counts as missing and is added again over the old one.
+ *
+ * Hindi HD (cm-hindi-voices) lives in the same folder: a split zip is taken in
+ * piece by piece (each checked), then unzipped from its pieces read in order.
+ * [hindiModel] is what this phone's memory runs; files it cannot run are never
+ * taken in.
  */
 class VoicePackStore(
     filesDir: File,
     val manifest: VoicePackManifest,
     val abi: String,
+    val hindiModel: HindiModel = HindiModel.SMALL,
     private val freeSpace: () -> Long,
 ) {
     val root: File = File(filesDir, "voice-pack/v${manifest.version}")
@@ -45,16 +55,72 @@ class VoicePackStore(
     val ttsDir: File get() = File(root, VoicePackFile.folderOf(VoicePackFile.VOICES))
     val libDir: File get() = File(root, "lib/$abi")
 
+    /** The voices file: Hindi HD's, with the two extra Indian voices, once it is added. */
+    val voicesFile: File
+        get() =
+            if (partAdded(VoicePackFile.VOICES_HI_HD)) {
+                File(root, "${VoicePackFile.folderOf(VoicePackFile.VOICES_HI_HD)}/voices.bin")
+            } else {
+                File(ttsDir, "voices.bin")
+            }
+
+    /** The recognizer for [language]: for Hindi, Hindi HD once its model is added (with its rescoring files, when they are). */
     fun asrDir(language: SpokenLanguage): File =
-        File(root, VoicePackFile.folderOf(if (language == SpokenLanguage.HINDI) VoicePackFile.SPEECH_HI else VoicePackFile.SPEECH_EN))
+        when {
+            language == SpokenLanguage.HINDI && partAdded(VoicePackFile.SPEECH_HI_HD) -> File(root, VoicePackFile.HD_MODEL)
+            language == SpokenLanguage.HINDI -> File(root, VoicePackFile.folderOf(VoicePackFile.SPEECH_HI))
+            else -> File(root, VoicePackFile.folderOf(VoicePackFile.SPEECH_EN))
+        }
+
+    /**
+     * Readies [asrDir] for [language]: Hindi HD's rescoring folders are read whenever they
+     * are there, so ones left without their marker (an add cut short) are removed first.
+     */
+    fun prepareAsr(language: SpokenLanguage) {
+        if (language != SpokenLanguage.HINDI || partAdded(VoicePackFile.SPEECH_HI_HD_RESCORE)) return
+        VoicePackFile.foldersOf(VoicePackFile.SPEECH_HI_HD_RESCORE).map { File(root, it) }.filter { it.exists() }.forEach { d ->
+            d.walkTopDown().forEach { it.setWritable(true, true) }
+            d.deleteRecursively()
+        }
+    }
 
     private fun marker(f: VoicePackFile) = File(root, ".added-${f.file}")
 
     fun isAdded(f: VoicePackFile): Boolean = marker(f).let { it.isFile && it.readText().trim().equals(f.sha256, ignoreCase = true) }
 
-    /** The files still to add to voice words, and to recognize speech in [speech] (null: typed words only). */
-    fun missing(speech: SpokenLanguage?): List<VoicePackFile> =
-        if (!supported) emptyList() else manifest.needed(abi, speech).filterNot(::isAdded)
+    private fun partAdded(part: String): Boolean = manifest.files.any { it.part == part && isAdded(it) }
+
+    /** Whether [f] is for this phone: its processor type's engine, and Hindi HD only where its memory runs it. */
+    fun fits(f: VoicePackFile): Boolean = manifest.fitsPhone(f, abi, hindiModel)
+
+    /** Whether a Hindi recognizer is here: the small one or Hindi HD. */
+    fun hindiReady(): Boolean = partAdded(VoicePackFile.SPEECH_HI) || partAdded(VoicePackFile.SPEECH_HI_HD)
+
+    /**
+     * The files still to add to voice words (in [voice], when it needs Hindi HD's voices file),
+     * and to recognize speech in [speech] (null: typed words only). Hindi asks for the best
+     * recognizer this phone runs, unless one is already here.
+     */
+    fun missing(
+        speech: SpokenLanguage?,
+        voice: VoiceChoice? = null,
+    ): List<VoicePackFile> {
+        if (!supported) return emptyList()
+        val want =
+            manifest.needed(abi, if (speech == SpokenLanguage.HINDI) null else speech).toMutableSet()
+        if (voice?.needsHd == true) want += manifest.files.filter { it.part == VoicePackFile.VOICES_HI_HD }
+        if (speech == SpokenLanguage.HINDI && !hindiReady()) want += manifest.hindiSpeech(hindiModel)
+        return manifest.files.filter { it in want && fits(it) && !isAdded(it) }
+    }
+
+    /** Hindi HD's files this phone runs and does not have yet, with the base files it needs; empty where its memory runs only the small model. */
+    fun hindiHdMissing(): List<VoicePackFile> {
+        if (!supported || hindiModel == HindiModel.SMALL) return emptyList()
+        val hd = manifest.hindiSpeech(hindiModel).filter { it.part != VoicePackFile.SPEECH_HI }
+        if (hd.isEmpty() || hd.all(::isAdded)) return emptyList()
+        val want = (manifest.needed(abi, null) + hd).toSet()
+        return manifest.files.filter { it in want && fits(it) && !isAdded(it) }
+    }
 
     /** Free bytes on the phone's storage, where the pack goes. */
     fun freeBytes(): Long = freeSpace()
@@ -94,15 +160,37 @@ class VoicePackStore(
                             copy.delete()
                             return@forEachIndexed
                         }
-                val f = manifest.bySha(sha)?.takeIf { it.part != VoicePackFile.ENGINE || it.abi == abi }
-                if (f == null || copy.length() != f.bytes) {
-                    rejected++
-                } else if (!isAdded(f)) {
-                    if (freeSpace() < f.unpackedBytes + SPARE_BYTES) return PackAddResult(added, rejected, outOfSpace = true)
-                    if (unpack(f, copy)) added += f else rejected++
+                val f = manifest.bySha(sha)?.takeIf(::fits)
+                val piece = if (f == null) manifest.pieceBySha(sha)?.takeIf { fits(it.first) } else null
+                when {
+                    piece != null && copy.length() == piece.second.bytes -> {
+                        // Kept with the downloads until all its zip's pieces are here.
+                        val to = pieceFile(piece.second.file)
+                        to.parentFile?.mkdirs()
+                        to.delete()
+                        if (!copy.renameTo(to)) rejected++
+                    }
+
+                    f == null || copy.length() != f.bytes -> {
+                        rejected++
+                    }
+
+                    !isAdded(f) -> {
+                        if (freeSpace() < f.unpackedBytes + SPARE_BYTES) return PackAddResult(added, rejected, outOfSpace = true)
+                        if (unpack(f) { copy.inputStream() }) added += f else rejected++
+                    }
                 }
                 copy.delete()
                 progress((i + 1f) / sources.size)
+            }
+            // Split zips whose pieces are all here now.
+            for (f in manifest.files.filter { it.pieces.isNotEmpty() && fits(it) && !isAdded(it) }) {
+                val pieces = f.pieces.map { pieceFile(it.file) }
+                if (!pieces.all { it.isFile }) continue
+                val r = addDownloaded(f, pieces)
+                if (r.outOfSpace) return PackAddResult(added, rejected, outOfSpace = true, missingBytes = r.missingBytes)
+                added += r.added
+                rejected += r.rejected
             }
         } finally {
             incoming.deleteRecursively()
@@ -116,40 +204,59 @@ class VoicePackStore(
     /** The download of [f] in progress, resumed from where it stopped. */
     fun downloadFile(f: VoicePackFile): File = File(downloadDir, f.file + ".part")
 
+    /** Where a piece of a split zip ([VoicePackFile.pieces]) is downloaded to, and kept until its zip is added. */
+    fun pieceFile(name: String): File = File(downloadDir, name)
+
+    /** Whether [file] is piece [index] of [f] as the app's own manifest lists it; a piece that is not is deleted. */
+    fun checkPiece(
+        f: VoicePackFile,
+        index: Int,
+        file: File,
+    ): Boolean {
+        val p = manifest.files.firstOrNull { it == f }?.pieces?.getOrNull(index)
+        val ok = p != null && file.isFile && file.length() == p.bytes && sha256Of(file)?.equals(p.sha256, ignoreCase = true) == true
+        if (!ok) file.delete()
+        return ok
+    }
+
     /** Removes downloads that were stopped (Cancel). */
     fun clearDownloads() {
         downloadDir.deleteRecursively()
     }
 
     /**
-     * Takes in [zip], a download of [f] in the app's own storage: its SHA-256
-     * is worked out over the file and it is unzipped only when it is [f] as
-     * the app's own [manifest] lists it (never a manifest from the network).
-     * The zip is deleted once it is added or found not to match; without room
-     * to unpack it, it is kept, so Try again does not download it again.
+     * Takes in [files], a download of [f] in the app's own storage: the zip, or
+     * its pieces in order. Each file's SHA-256 is worked out over it, and [f]
+     * is unzipped only when every one is as the app's own [manifest] lists it
+     * (never a manifest from the network). The files are deleted once added or
+     * found not to match; without room to unpack, they are kept, so Try again
+     * does not download them again.
      */
     fun addDownloaded(
         f: VoicePackFile,
-        zip: File,
+        files: List<File>,
     ): PackAddResult {
-        val listed = manifest.files.firstOrNull { it == f }?.takeIf { it.part != VoicePackFile.ENGINE || it.abi == abi }
-        val sha = if (listed != null && zip.isFile && zip.length() == listed.bytes) sha256Of(zip) else null
-        if (listed == null || sha == null || !sha.equals(listed.sha256, ignoreCase = true)) {
-            zip.delete()
+        val listed = manifest.files.firstOrNull { it == f }?.takeIf(::fits)
+        val expected = listed?.let { l -> if (l.pieces.isEmpty()) listOf(l.bytes to l.sha256) else l.pieces.map { it.bytes to it.sha256 } }
+        val ok =
+            expected != null && files.size == expected.size &&
+                files.zip(expected).all { (file, e) ->
+                    file.isFile && file.length() == e.first && sha256Of(file)?.equals(e.second, ignoreCase = true) == true
+                }
+        if (listed == null || !ok) {
+            files.forEach { it.delete() }
             return PackAddResult(emptyList(), 1)
+        }
+        if (isAdded(listed)) {
+            files.forEach { it.delete() }
+            return PackAddResult(emptyList(), 0)
         }
         val need = listed.unpackedBytes + SPARE_BYTES
         val free = freeSpace()
-        if (!isAdded(listed) && free < need) {
-            return PackAddResult(emptyList(), 0, outOfSpace = true, missingBytes = need - free)
-        }
-        if (isAdded(listed)) {
-            zip.delete()
-            return PackAddResult(emptyList(), 0)
-        }
-        val ok = unpack(listed, zip)
-        zip.delete()
-        return if (ok) PackAddResult(listOf(listed), 0) else PackAddResult(emptyList(), 1)
+        if (free < need) return PackAddResult(emptyList(), 0, outOfSpace = true, missingBytes = need - free)
+        val added = unpack(listed) { SequenceInputStream(Collections.enumeration(files.map { it.inputStream() })) }
+        files.forEach { it.delete() }
+        return if (added) PackAddResult(listOf(listed), 0) else PackAddResult(emptyList(), 1)
     }
 
     private fun sha256Of(file: File): String? =
@@ -188,10 +295,10 @@ class VoicePackStore(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Unzips verified [zip] into its part's folder through a staging folder; false (nothing changed) when it breaks a rule. */
+    /** Unzips verified [open] (the zip's bytes) into its part's folders through a staging folder; false (nothing changed) when it breaks a rule. */
     private fun unpack(
         f: VoicePackFile,
-        zip: File,
+        open: () -> InputStream,
     ): Boolean {
         val staging = File(root, ".staging-${f.part}")
         staging.deleteRecursively()
@@ -199,7 +306,7 @@ class VoicePackStore(
             runCatching {
                 var entries = 0
                 var bytes = 0L
-                ZipInputStream(zip.inputStream().buffered()).use { z ->
+                ZipInputStream(open().buffered()).use { z ->
                     while (true) {
                         val e = z.nextEntry ?: break
                         if (e.isDirectory) continue
@@ -227,17 +334,24 @@ class VoicePackStore(
             staging.deleteRecursively()
             return false
         }
-        val folder = if (f.part == VoicePackFile.ENGINE) "lib/$abi" else VoicePackFile.folderOf(f.part)
-        val target = File(root, folder)
+        val folders = if (f.part == VoicePackFile.ENGINE) listOf("lib/$abi") else VoicePackFile.foldersOf(f.part)
+        if (!folders.all { File(staging, it).isDirectory }) {
+            staging.deleteRecursively()
+            return false
+        }
         marker(f).delete()
-        target.walkTopDown().forEach { it.setWritable(true, true) }
-        target.deleteRecursively()
-        target.parentFile?.mkdirs()
-        val moved = File(staging, folder).renameTo(target)
+        var moved = true
+        for (folder in folders) {
+            val target = File(root, folder)
+            target.walkTopDown().forEach { it.setWritable(true, true) }
+            target.deleteRecursively()
+            target.parentFile?.mkdirs()
+            moved = moved && File(staging, folder).renameTo(target)
+            // Native code is loaded only from files the app cannot write (Android warns, and will refuse, otherwise).
+            if (moved) target.walkTopDown().filter { it.isFile }.forEach { it.setWritable(false, false) }
+        }
         staging.deleteRecursively()
         if (!moved) return false
-        // Native code is loaded only from files the app cannot write (Android warns, and will refuse, otherwise).
-        target.walkTopDown().filter { it.isFile }.forEach { it.setWritable(false, false) }
         marker(f).writeText(f.sha256)
         return true
     }
@@ -250,5 +364,8 @@ class VoicePackStore(
 
         /** The app's own copy of the pack's manifest, in its assets. */
         const val MANIFEST_ASSET = "voice-pack/manifest-v1.json"
+
+        /** The app's own copy of Hindi HD's manifest (cm-hindi-voices), an add-on to the pack above. */
+        const val HINDI_HD_MANIFEST_ASSET = "voice-pack/manifest-hindi-hd-v1.json"
     }
 }

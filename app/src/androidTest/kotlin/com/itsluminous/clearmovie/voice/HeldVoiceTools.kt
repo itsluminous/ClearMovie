@@ -53,7 +53,7 @@ class HeldVoiceTools(
 
     override fun checkEngine() = true
 
-    override fun missing(speech: SpokenLanguage?) = emptyList<VoicePackFile>()
+    override fun missing(speech: SpokenLanguage?, voice: VoiceChoice?) = emptyList<VoicePackFile>()
 
     override fun addPackFiles(
         sources: List<() -> InputStream?>,

@@ -17,6 +17,8 @@ enum class VoiceChoice(
     val accent: Accent?,
     /** The speaker in the voice pack, or -1 for [NONE]. */
     val speaker: Int,
+    /** Whether this voice is in Hindi HD's voices file only (cm-hindi-voices). */
+    val needsHd: Boolean = false,
 ) {
     @SerialName("none")
     NONE("none", null, null, -1),
@@ -32,6 +34,12 @@ enum class VoiceChoice(
 
     @SerialName("indian_female")
     INDIAN_FEMALE("indian_female", Gender.FEMALE, Accent.INDIAN, 31),
+
+    @SerialName("indian_male_2")
+    INDIAN_MALE_2("indian_male_2", Gender.MALE, Accent.INDIAN, 34, needsHd = true),
+
+    @SerialName("indian_female_2")
+    INDIAN_FEMALE_2("indian_female_2", Gender.FEMALE, Accent.INDIAN, 32, needsHd = true),
 
     @SerialName("american_male")
     AMERICAN_MALE("american_male", Gender.MALE, Accent.AMERICAN, 16),

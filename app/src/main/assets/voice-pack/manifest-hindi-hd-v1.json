@@ -1,0 +1,120 @@
+{
+  "pack": "clearmovie-voice-pack",
+  "version": 1,
+  "folder": "hindi-hd-v1",
+  "files": [
+    {
+      "file": "voices-hindi-hd.zip",
+      "part": "voices-hi-hd",
+      "bytes": 3867440,
+      "unpackedBytes": 28212541,
+      "entries": 3,
+      "sha256": "6d865fc775cb9210c23151f706d6c94afbf7adad4a631b9b619408824e8050ae"
+    },
+    {
+      "file": "speech-hindi-hd.zip",
+      "part": "speech-hi-hd",
+      "bytes": 347223004,
+      "unpackedBytes": 890868039,
+      "entries": 29,
+      "sha256": "28e298d4d4467c8631867ec141db771edcc5890da8237b6f08d82f1782fbe34b",
+      "pieces": [
+        {
+          "file": "speech-hindi-hd.zip.001",
+          "bytes": 95000000,
+          "sha256": "6a1d722cfe0400c6b725161d644b7760a1a1ad8972b810a5fcb1d46177674c02"
+        },
+        {
+          "file": "speech-hindi-hd.zip.002",
+          "bytes": 95000000,
+          "sha256": "bce3d586d14132c07186323a803e4c1e44b8f3af00b40f9c538a2a909a8976af"
+        },
+        {
+          "file": "speech-hindi-hd.zip.003",
+          "bytes": 95000000,
+          "sha256": "ffe2e34ce9bd3106b75fbc1c103a99f0431f1b7c34ec20346a1195d174ea7b01"
+        },
+        {
+          "file": "speech-hindi-hd.zip.004",
+          "bytes": 62223004,
+          "sha256": "25a0fd9f36c1541288ce9829132dd0faffed408493dd56cb3d04ccfa5dcdb3c7"
+        }
+      ]
+    },
+    {
+      "file": "speech-hindi-hd-rescore.zip",
+      "part": "speech-hi-hd-rescore",
+      "bytes": 1208115221,
+      "unpackedBytes": 2106490243,
+      "entries": 9,
+      "sha256": "3424374911a36892ec9dd792ef90e36cbe769cd35f6e55ddcaa43fe5825efc81",
+      "pieces": [
+        {
+          "file": "speech-hindi-hd-rescore.zip.001",
+          "bytes": 95000000,
+          "sha256": "6a97b7ffc2c0c33b04e295bedc433b0ab0534b0f338f999c18cea22bb35a7f99"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.002",
+          "bytes": 95000000,
+          "sha256": "498c52d847c4d8499c98733824aba5c8efc5bb99a089d0941d8f1e24842943be"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.003",
+          "bytes": 95000000,
+          "sha256": "b160e2739cbcec232b2029299b6b15a7f95b9c29162862eea073a8a479de7556"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.004",
+          "bytes": 95000000,
+          "sha256": "41429a857197bac1a91f718d9cbaed94555aad87e3ea276bfb5254b5dd66515b"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.005",
+          "bytes": 95000000,
+          "sha256": "54a3889808c9837b5aa88e75240265359c7b10d13f4cf11e6f7e50535ee3ab10"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.006",
+          "bytes": 95000000,
+          "sha256": "47b8d015ad8cee7b7bda83b704ca1bf1220bfdee4e90e664e6e713c509c1f35d"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.007",
+          "bytes": 95000000,
+          "sha256": "48356c0ab8ab0e827c51211506e3af78abae84ca1b43f341882923aae8624c83"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.008",
+          "bytes": 95000000,
+          "sha256": "4940b98bd0d02dfeaf2e0a4acdd80124958ef42c5f8ea48b675c8107e2412dc1"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.009",
+          "bytes": 95000000,
+          "sha256": "82f99811f378e5016d250a3f176078e30c2c99777f45b52fe974080482eb72c4"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.010",
+          "bytes": 95000000,
+          "sha256": "3bbb39c2965106997fa33b0d44b948545aa313ecc1dc42c11d4dcaf02da8471c"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.011",
+          "bytes": 95000000,
+          "sha256": "d5458b9d12352580e172d7d8754549519767322d33afdde287d766941736bb90"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.012",
+          "bytes": 95000000,
+          "sha256": "946f9b53902905bbafa88fe20dd5d1b524f1b97c185e3dd0c4208230d4e38c29"
+        },
+        {
+          "file": "speech-hindi-hd-rescore.zip.013",
+          "bytes": 68115221,
+          "sha256": "9059e86dd5e30bb5196539c62c3d5f52a5686c5db60ff96bf26a4217f3171555"
+        }
+      ]
+    }
+  ]
+}

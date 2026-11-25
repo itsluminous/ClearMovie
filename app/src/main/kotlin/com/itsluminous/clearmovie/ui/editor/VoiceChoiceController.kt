@@ -117,11 +117,13 @@ enum class VoiceNote {
  */
 data class PackAsk(
     val files: List<VoicePackFile>,
-    val version: Int,
     val steps: Boolean = false,
     val speech: SpokenLanguage? = null,
     val room: Long = 0,
-)
+) {
+    /** Whether the files include Hindi HD's recognizer (cm-hindi-voices): the dialog says so. */
+    val hindiHd: Boolean get() = files.any { it.part == VoicePackFile.SPEECH_HI_HD || it.part == VoicePackFile.SPEECH_HI_HD_RESCORE }
+}
 
 /**
  * The voice choice of the editor (cm-voice-choice): the voice and language
@@ -294,6 +296,12 @@ class VoiceChoiceController(
         askState.value = null
     }
 
+    /** The folder under `voice-packs/` that [f] is downloaded from (`v1`, `hindi-hd-v1`). */
+    fun folderOf(f: VoicePackFile): String = tools.manifest?.folderOf(f) ?: "v1"
+
+    /** The best Hindi recognizer this phone runs (cm-hindi-voices): the dialog says when it is the lighter one. */
+    val hindiModel get() = tools.hindiModel
+
     /** The browser fallback: the steps to download the files from GitHub's page and add them. */
     fun useBrowser() {
         leaveFailure()
@@ -306,13 +314,18 @@ class VoiceChoiceController(
      */
     private fun askFiles(speech: SpokenLanguage?): List<VoicePackFile> {
         val manifest = tools.manifest ?: return emptyList()
-        val wanted = (tools.missing(speech) + tools.missing(speech ?: languageState.value)).toSet()
+        val voice = choiceState.value
+        val wanted = (tools.missing(speech, voice) + tools.missing(speech ?: languageState.value, voice)).toSet()
         return manifest.files.filter { it in wanted }
     }
 
     /** How many more bytes the phone must free before [files] can be downloaded and added (0: none). */
     private fun roomFor(files: List<VoicePackFile>): Long {
-        val partial = files.sumOf { f -> tools.downloadFile(f)?.takeIf { it.isFile }?.length() ?: 0L }
+        val partial =
+            files.sumOf { f ->
+                val onDisk = if (f.pieces.isEmpty()) listOfNotNull(tools.downloadFile(f)) else f.pieces.mapNotNull { tools.pieceFile(it.file) }
+                onDisk.sumOf { if (it.isFile) it.length() else 0L }
+            }
         return (roomToDownload(files, VoicePackStore.SPARE_BYTES) - partial - tools.freeBytes()).coerceAtLeast(0)
     }
 
@@ -361,9 +374,9 @@ class VoiceChoiceController(
             if (tools.supported && manifest != null) onNote(VoiceNote.NOT_ON_THIS_PHONE)
             return false
         }
-        if (tools.missing(speech).isEmpty()) return true
+        if (tools.missing(speech, choiceState.value).isEmpty()) return true
         val files = askFiles(speech)
-        askState.value = PackAsk(files, manifest.version, speech = speech, room = roomFor(files))
+        askState.value = PackAsk(files, speech = speech, room = roomFor(files))
         return false
     }
 
@@ -372,11 +385,10 @@ class VoiceChoiceController(
         steps: Boolean,
         speech: SpokenLanguage?,
     ) {
-        val manifest = tools.manifest ?: return
-        if (!available) return
+        if (tools.manifest == null || !available) return
         scope.launch {
-            val files = withContext(io) { if (tools.missing(speech).isEmpty()) emptyList() else askFiles(speech) }
-            if (files.isNotEmpty()) askState.value = PackAsk(files, manifest.version, steps, speech, withContext(io) { roomFor(files) })
+            val files = withContext(io) { if (tools.missing(speech, choiceState.value).isEmpty()) emptyList() else askFiles(speech) }
+            if (files.isNotEmpty()) askState.value = PackAsk(files, steps, speech, withContext(io) { roomFor(files) })
         }
     }
 
@@ -418,7 +430,7 @@ class VoiceChoiceController(
         want: PackAsk?,
         result: PackAddResult?,
     ) {
-        val missing = withContext(io) { tools.missing(want?.speech) }
+        val missing = withContext(io) { tools.missing(want?.speech, choiceState.value) }
         // Told now, not after the first voice, when the engine cannot run here.
         val works = if (missing.isEmpty() || tools.missing(null).isEmpty()) withContext(io) { tools.checkEngine() } else true
         // Only the pack's own work: a download ending while words are found must not blank their status (cm-voice-progress).

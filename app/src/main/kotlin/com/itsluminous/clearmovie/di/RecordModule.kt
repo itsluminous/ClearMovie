@@ -1,5 +1,6 @@
 package com.itsluminous.clearmovie.di
 
+import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.Process
@@ -21,6 +22,7 @@ import com.itsluminous.clearmovie.domain.model.ProjectId
 import com.itsluminous.clearmovie.domain.model.SpokenLanguage
 import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.VoicePhrase
+import com.itsluminous.clearmovie.domain.voice.HindiModel
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
 import com.itsluminous.clearmovie.domain.voice.VoicePackManifest
 import com.itsluminous.clearmovie.work.ExportWorker
@@ -84,17 +86,16 @@ object RecordModule {
         recordings: VoiceRecordings,
         freeSpace: FreeSpace,
     ): VoiceTools {
-        val manifest =
-            runCatching {
-                context.assets
-                    .open(
-                        VoicePackStore.MANIFEST_ASSET,
-                    ).bufferedReader()
-                    .use { VoicePackManifest.parse(it.readText()) }
-            }.getOrNull() ?: return if (BuildConfig.DEBUG) TestableVoiceTools(VoiceTools.NONE) else VoiceTools.NONE
+        fun asset(name: String) =
+            runCatching { context.assets.open(name).bufferedReader().use { VoicePackManifest.parse(it.readText()) } }.getOrNull()
+        val base = asset(VoicePackStore.MANIFEST_ASSET) ?: return if (BuildConfig.DEBUG) TestableVoiceTools(VoiceTools.NONE) else VoiceTools.NONE
+        // Hindi HD (cm-hindi-voices) is an add-on: without its manifest the pack works as before.
+        val manifest = asset(VoicePackStore.HINDI_HD_MANIFEST_ASSET)?.let { base + it } ?: base
         val abis = if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS
         val abi = abis.firstOrNull { manifest.supports(it) } ?: abis.firstOrNull().orEmpty()
-        val app = PackVoiceTools(VoicePackStore(context.filesDir, manifest, abi, freeSpace::bytes), files, recordings)
+        val memory = ActivityManager.MemoryInfo().also { context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(it) }.totalMem
+        val store = VoicePackStore(context.filesDir, manifest, abi, HindiModel.of(memory), freeSpace::bytes)
+        val app = PackVoiceTools(store, files, recordings)
         // The test seam only in a debug build (device tests); a release build uses the pack's engine directly.
         return if (BuildConfig.DEBUG) TestableVoiceTools(app) else app
     }
@@ -110,7 +111,24 @@ object RecordModule {
 
         override fun checkEngine() = tools.checkEngine()
 
-        override fun missing(speech: SpokenLanguage?) = tools.missing(speech)
+        override fun missing(
+            speech: SpokenLanguage?,
+            voice: VoiceChoice?,
+        ) = tools.missing(speech, voice)
+
+        override val hindiModel get() = tools.hindiModel
+
+        override fun hindiHdMissing() = tools.hindiHdMissing()
+
+        override fun notAdded() = tools.notAdded()
+
+        override fun pieceFile(name: String) = tools.pieceFile(name)
+
+        override fun checkPiece(
+            f: VoicePackFile,
+            index: Int,
+            file: File,
+        ) = tools.checkPiece(f, index, file)
 
         override fun addPackFiles(
             sources: List<() -> InputStream?>,
@@ -125,9 +143,9 @@ object RecordModule {
 
         override fun addDownloaded(
             f: VoicePackFile,
-            zip: File,
+            files: List<File>,
             stopped: () -> Boolean,
-        ) = tools.addDownloaded(f, zip, stopped)
+        ) = tools.addDownloaded(f, files, stopped)
 
         override fun clearDownloads() = tools.clearDownloads()
 

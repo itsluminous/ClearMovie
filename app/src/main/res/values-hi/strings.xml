@@ -699,6 +699,8 @@
     <string name="voice_british_female">ब्रिटिश महिला आवाज़</string>
     <string name="voice_indian_male">भारतीय पुरुष आवाज़</string>
     <string name="voice_indian_female">भारतीय महिला आवाज़</string>
+    <string name="voice_indian_male_2">भारतीय पुरुष आवाज़ 2</string>
+    <string name="voice_indian_female_2">भारतीय महिला आवाज़ 2</string>
     <string name="voice_american_male">अमेरिकी पुरुष आवाज़</string>
     <string name="voice_american_female">अमेरिकी महिला आवाज़</string>
     <string name="voice_language_english">अंग्रेज़ी</string>
@@ -765,4 +767,11 @@
     <string name="settings_remove_voice_pack">हटाएँ</string>
     <string name="settings_remove_voice_pack_title">आवाज़ पैक हटाएँ?</string>
     <string name="settings_remove_voice_pack_body">इससे %1$s खाली होगा। जो स्वर आप बना चुके हैं वे आपके वीडियो में रहेंगे। नए बनाने के लिए पैक फिर जोड़ें।</string>
+    <string name="pack_hindi_hd_full">इसमें हिंदी HD भी है, सबसे सटीक हिंदी बोली पहचान, जिसके लिए फ़ोन में 8 GB मेमोरी चाहिए।</string>
+    <string name="pack_hindi_hd_light">इसमें हिंदी HD बोली पहचान भी है। इस फ़ोन में 8 GB से कम मेमोरी है, इसलिए इसे हल्का मॉडल मिलता है।</string>
+    <string name="settings_hindi_hd_title">हिंदी HD</string>
+    <string name="settings_hindi_hd_offer">ज़्यादा सटीक हिंदी बोली पहचान और दो और भारतीय आवाज़ें। डाउनलोड %1$s; जोड़ने के बाद यह %2$s लेता है।</string>
+    <string name="settings_hindi_hd_light_note">इस फ़ोन में 8 GB से कम मेमोरी है, इसलिए इसे हल्का मॉडल मिलता है। सबसे सटीक मॉडल के लिए 8 GB चाहिए।</string>
+    <string name="settings_hindi_hd_low_memory">हिंदी HD के लिए फ़ोन में कम से कम 4 GB मेमोरी चाहिए, इसलिए यह फ़ोन सामान्य हिंदी बोली पहचान ही इस्तेमाल करता है।</string>
+    <string name="settings_hindi_hd_added">जुड़ गया। हिंदी बोली पहचान इसी से होती है, और दो नई भारतीय आवाज़ें आवाज़ों की सूची में हैं।</string>
 </resources>

@@ -80,15 +80,25 @@ class PackDownloadJobTest {
         override val manifest = store.manifest
         override val supported = true
 
-        override fun missing(speech: SpokenLanguage?) = store.missing(speech)
+        override fun missing(speech: SpokenLanguage?, voice: VoiceChoice?) = store.missing(speech)
 
         override fun downloadFile(f: VoicePackFile): File = store.downloadFile(f)
 
+        override fun pieceFile(name: String): File = store.pieceFile(name)
+
+        override fun checkPiece(
+            f: VoicePackFile,
+            index: Int,
+            file: File,
+        ) = store.checkPiece(f, index, file)
+
+        override fun notAdded() = store.manifest.files.filter { store.fits(it) && !store.isAdded(it) }
+
         override fun addDownloaded(
             f: VoicePackFile,
-            zip: File,
+            files: List<File>,
             stopped: () -> Boolean,
-        ) = if (stopped()) PackAddResult(emptyList(), 0) else store.addDownloaded(f, zip)
+        ) = if (stopped()) PackAddResult(emptyList(), 0) else store.addDownloaded(f, files)
 
         override fun freeBytes() = store.freeBytes()
 

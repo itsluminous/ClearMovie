@@ -5,21 +5,21 @@ import org.junit.Test
 
 /** Where the app downloads the voice pack from (cm-voice-pack-download). */
 class VoicePackSourceTest {
-    private val commit = VoicePackSource.COMMITS.getValue(1)
+    private val commit = VoicePackSource.COMMITS.getValue("v1")
 
     @Test
     fun `pack files come over HTTPS from the repository's raw host at a fixed commit`() {
         assertThat(commit).matches("[0-9a-f]{40}")
-        assertThat(VoicePackSource.url(1, "voices.zip"))
+        assertThat(VoicePackSource.url("v1", "voices.zip"))
             .isEqualTo("https://raw.githubusercontent.com/itsluminous/ClearMovie/$commit/voice-packs/v1/voices.zip")
-        assertThat(VoicePackSource.url(1, "../voices.zip")).isNull()
-        assertThat(VoicePackSource.url(1, "manifest.json")).isNull()
-        assertThat(VoicePackSource.url(2, "voices.zip")).isNull()
+        assertThat(VoicePackSource.url("v1", "../voices.zip")).isNull()
+        assertThat(VoicePackSource.url("v1", "manifest.json")).isNull()
+        assertThat(VoicePackSource.url("v2", "voices.zip")).isNull()
     }
 
     @Test
     fun `only pack links at the pinned commit are allowed`() {
-        assertThat(VoicePackSource.allowed(VoicePackSource.url(1, "engine-arm64-v8a.zip")!!)).isTrue()
+        assertThat(VoicePackSource.allowed(VoicePackSource.url("v1", "engine-arm64-v8a.zip")!!)).isTrue()
         assertThat(
             VoicePackSource.allowed("https://raw.githubusercontent.com/itsluminous/ClearMovie/main/voice-packs/v1/voices.zip"),
         ).isFalse()

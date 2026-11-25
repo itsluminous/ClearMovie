@@ -33,12 +33,12 @@ class PackDownloadSpaceTest {
         val store = VoicePackStore(tmp.root, VoicePackManifest(VoicePackManifest.NAME, 1, listOf(f)), "x86_64") { free }
         val zip = store.downloadFile(f).apply { parentFile.mkdirs() }
         zip.writeBytes(bytes)
-        val r = store.addDownloaded(f, zip)
+        val r = store.addDownloaded(f, listOf(zip))
         assertThat(r.outOfSpace).isTrue()
         assertThat(r.missingBytes).isEqualTo(3 + VoicePackStore.SPARE_BYTES - 10)
         assertThat(zip.readBytes()).isEqualTo(bytes)
         free = Long.MAX_VALUE
-        assertThat(store.addDownloaded(f, zip).added).containsExactly(f)
+        assertThat(store.addDownloaded(f, listOf(zip)).added).containsExactly(f)
         assertThat(zip.exists()).isFalse()
     }
 }
