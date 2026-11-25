@@ -11,6 +11,7 @@ import com.itsluminous.clearmovie.data.preset.PresetSaveResult
 import com.itsluminous.clearmovie.data.preset.PresetStatus
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.SlotStatus
+import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AnimKind
 import com.itsluminous.clearmovie.domain.model.AnimSlot
 import com.itsluminous.clearmovie.domain.model.CanvasShape
@@ -25,6 +26,7 @@ import com.itsluminous.clearmovie.domain.model.ProjectCodec
 import com.itsluminous.clearmovie.domain.model.TextRules
 import com.itsluminous.clearmovie.domain.model.Transition
 import com.itsluminous.clearmovie.domain.model.TransitionKind
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.ui.frame.keyedPicture
 import com.itsluminous.clearmovie.ui.navigation.Routes
@@ -60,6 +62,10 @@ data class PresetEditUi(
     val draftEffects: EffectDefaults? = null,
     /** A new shape (cm-aspect-ratio), for a preset the user made that no video uses yet. */
     val draftShape: CanvasShape? = null,
+    /** A new default voice for new voice recordings (cm-preset-voice-default), null while unchanged. */
+    val draftVoice: VoiceChoice? = null,
+    /** False where the voice pack cannot run on this phone: the default voice is off, and ignored here. */
+    val voiceAvailable: Boolean = false,
     /** How many videos were made from this preset; while any is, its shape stays. */
     val videosUsing: Int = 0,
     /** The frame file's picture with its green window cut out, for the caption preview. */
@@ -80,6 +86,9 @@ data class PresetEditUi(
 
     /** The transition new items get between them: the draft's, else the preset's (null is none). */
     val transition: Transition? get() = (draftEffects ?: preset?.effects)?.mainTransition
+
+    /** The default voice: the draft's, else the preset's. */
+    val voice: VoiceChoice get() = draftVoice ?: preset?.voice ?: VoiceChoice.NONE
 
     /** The shape shown: the draft's, else the preset's. */
     val shape: CanvasShape get() = draftShape ?: preset?.shape ?: CanvasShape.LANDSCAPE
@@ -115,7 +124,8 @@ sealed interface PresetEditEvent {
 /**
  * Editing a preset (cm-preset-manager): its name, the words and style a new
  * caption starts with, the animation new photos get and the transition
- * between new items (cm-preset-motion-defaults), and (on the setup screen)
+ * between new items (cm-preset-motion-defaults), the voice a new voice
+ * recording starts in (cm-preset-voice-default), and (on the setup screen)
  * its files. Changes are a
  * draft, kept across rotation and the system closing the app, until Save.
  * Any preset can be deleted; the videos made from it keep working.
@@ -127,6 +137,7 @@ class PresetEditViewModel
         private val savedState: SavedStateHandle,
         private val presetStore: PresetStore,
         private val frameStills: FrameStills,
+        voiceTools: VoiceTools,
     ) : ViewModel() {
         val presetId: PresetId = PresetId(requireNotNull(savedState.get<String>(Routes.ARG_PRESET)))
 
@@ -138,6 +149,9 @@ class PresetEditViewModel
                     draftWords = savedState[KEY_WORDS],
                     draftEffects = savedState.get<String>(KEY_EFFECTS)?.let(::decodeEffects),
                     draftShape = savedState.get<String>(KEY_SHAPE)?.let { n -> CanvasShape.entries.firstOrNull { it.name == n } },
+                    draftVoice = VoiceChoice.fromId(savedState.get<String>(KEY_VOICE)),
+                    // As in the editor's voice sheet: off where the processor has no engine, or it did not load.
+                    voiceAvailable = voiceTools.supported && voiceTools.engineWorks != false,
                 ),
             )
         val ui: StateFlow<PresetEditUi> = uiState.asStateFlow()
@@ -219,6 +233,13 @@ class PresetEditViewModel
         private fun setEffects(effects: EffectDefaults?) {
             savedState[KEY_EFFECTS] = effects?.let { ProjectCodec.json.encodeToString(EffectDefaults.serializer(), it) }
             uiState.update { it.copy(draftEffects = effects) }
+        }
+
+        /** The voice a new voice recording starts in ([VoiceChoice.NONE] for No change); kept as it is where voices are off. */
+        fun setVoice(voice: VoiceChoice) {
+            if (!uiState.value.voiceAvailable) return
+            savedState[KEY_VOICE] = voice.id
+            uiState.update { it.copy(draftVoice = voice) }
         }
 
         fun setWords(words: String) {
@@ -306,7 +327,10 @@ class PresetEditViewModel
             savedState[KEY_WORDS] = null
             savedState[KEY_SHAPE] = null
             savedState[KEY_EFFECTS] = null
-            uiState.update { it.copy(draftName = null, draftStyle = null, draftWords = null, draftShape = null, draftEffects = null) }
+            savedState[KEY_VOICE] = null
+            uiState.update {
+                it.copy(draftName = null, draftStyle = null, draftWords = null, draftShape = null, draftEffects = null, draftVoice = null)
+            }
         }
 
         private fun loadStill(
@@ -337,6 +361,7 @@ class PresetEditViewModel
             private const val KEY_WORDS = "draftWords"
             private const val KEY_SHAPE = "draftShape"
             private const val KEY_EFFECTS = "draftEffects"
+            private const val KEY_VOICE = "draftVoice"
             private const val STILL_AT_US = 1_000_000L
             private const val STILL_WIDTH = 640
 
@@ -394,7 +419,8 @@ class PresetEditViewModel
                 val style = ui.draftStyle?.takeIf { it != preset.caption }
                 val shape = ui.draftShape?.takeIf { it != preset.shape }
                 val effects = ui.draftEffects?.takeIf { it != preset.effects }
-                if (name == null && words == null && style == null && shape == null && effects == null) return null
+                val voice = ui.draftVoice?.takeIf { it != preset.voice }
+                if (name == null && words == null && style == null && shape == null && effects == null && voice == null) return null
                 return preset.copy(
                     displayName = name?.let(LocalizedText::same) ?: preset.displayName,
                     defaultText =
@@ -406,6 +432,7 @@ class PresetEditViewModel
                     caption = style ?: preset.caption,
                     shape = shape ?: preset.shape,
                     effects = effects ?: preset.effects,
+                    voice = voice ?: preset.voice,
                 )
             }
         }

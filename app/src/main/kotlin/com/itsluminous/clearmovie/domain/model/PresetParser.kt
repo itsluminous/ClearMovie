@@ -40,6 +40,7 @@ object PresetParser {
     const val MAX_CHARS = 64 * 1024
     const val MAX_DISPLAY_NAME = 60
     private val RESOURCE_NAME = Regex("^[a-z][a-z0-9_]{0,63}$")
+    internal const val DEFAULT_VOICE = "defaultVoice"
 
     fun parse(text: String): PresetParseResult {
         if (text.length > MAX_CHARS) return PresetParseResult.Invalid(listOf("the file is too large to be a preset"))
@@ -86,6 +87,7 @@ object PresetParser {
         val ducking = obj("ducking")?.readDucking() ?: DuckingSpec()
         val export = obj("export")?.readExport() ?: ExportSpec()
         val shape = enum("shape", CanvasShape.serializer()) ?: CanvasShape.LANDSCAPE
+        val voice = readVoice()
         finish()
         if (id == null || report.errors.isNotEmpty()) return null
         return Preset(
@@ -103,7 +105,27 @@ object PresetParser {
             ducking = ducking,
             export = export,
             shape = shape,
+            voice = voice,
         )
+    }
+
+    /**
+     * `defaultVoice`, the voice a new voice recording starts in (cm-preset-voice-default): a
+     * [VoiceChoice] id. Absent or null is No change, and so is an id this version does not know
+     * (a newer app's voice), with a warning, so such a preset still opens. Anything but text is
+     * an error, as for every other field.
+     */
+    private fun Fields.readVoice(): VoiceChoice {
+        if (isNull(DEFAULT_VOICE)) {
+            take(DEFAULT_VOICE)
+            return VoiceChoice.NONE
+        }
+        val v = take(DEFAULT_VOICE) ?: return VoiceChoice.NONE
+        if (v !is JsonPrimitive || !v.isString) {
+            error(DEFAULT_VOICE, "must be text")
+            return VoiceChoice.NONE
+        }
+        return VoiceChoice.fromId(v.content) ?: VoiceChoice.NONE.also { warn(DEFAULT_VOICE, "unknown voice, read as No change") }
     }
 
     private fun Fields.requireSlot(slot: String) {
@@ -314,6 +336,13 @@ object PresetParser {
             message: String,
         ) {
             report.errors += "${at(key)}: $message"
+        }
+
+        fun warn(
+            key: String,
+            message: String,
+        ) {
+            report.warnings += "${at(key)}: $message"
         }
 
         fun hasError(key: String) = report.errors.any { it.startsWith("${at(key)}:") }

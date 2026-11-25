@@ -12,10 +12,12 @@ import com.itsluminous.clearmovie.data.media.MediaStoreGateway
 import com.itsluminous.clearmovie.data.preset.PresetParts
 import com.itsluminous.clearmovie.data.preset.PresetStore
 import com.itsluminous.clearmovie.data.preset.PresetStoreTest
+import com.itsluminous.clearmovie.data.voice.VoiceTools
 import com.itsluminous.clearmovie.domain.model.AnimKind
 import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.Transition
 import com.itsluminous.clearmovie.domain.model.TransitionKind
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.testing.FakeMediaProvider
 import com.itsluminous.clearmovie.testing.FakeOtherAppProvider
 import com.itsluminous.clearmovie.testing.fileDatabase
@@ -41,7 +43,9 @@ import java.util.concurrent.Executors
 /**
  * cm-preset-motion-defaults (Robolectric): the preset editor's view model over
  * a real preset store. The default animation and transition are a draft that
- * survives the system closing the app, and Save stores them.
+ * survives the system closing the app, and Save stores them. So is the
+ * default voice (cm-preset-voice-default), which is off where the voice
+ * pack cannot run.
  */
 @RunWith(RobolectricTestRunner::class)
 class PresetEditMotionViewModelTest {
@@ -82,8 +86,11 @@ class PresetEditMotionViewModelTest {
         main.close()
     }
 
-    private fun viewModel(state: SavedStateHandle): PresetEditViewModel {
-        val vm = runBlocking(main) { PresetEditViewModel(state, store) { _, _, _ -> null } }
+    private fun viewModel(
+        state: SavedStateHandle,
+        voices: VoiceTools = VOICES,
+    ): PresetEditViewModel {
+        val vm = runBlocking(main) { PresetEditViewModel(state, store, { _, _, _ -> null }, voices) }
         await(vm) { it.preset != null }
         return vm
     }
@@ -147,5 +154,59 @@ class PresetEditMotionViewModelTest {
         assertThat(vm.ui.value.transition).isEqualTo(Transition(TransitionKind.CROSSFADE, 600))
         assertThat(vm.ui.value.draftEffects).isNull()
         assertThat(vm.ui.value.draftWords).isEqualTo("Swagat")
+    }
+
+    @Test
+    fun `the default voice is a draft that survives the app being closed, and Save stores it`() {
+        val id = made()
+        val state = SavedStateHandle(mapOf(Routes.ARG_PRESET to id.value))
+        val vm = viewModel(state)
+        // A new preset starts with No change.
+        assertThat(vm.ui.value.voice).isEqualTo(VoiceChoice.NONE)
+        assertThat(vm.ui.value.voiceAvailable).isTrue()
+        runBlocking(main) { vm.setVoice(VoiceChoice.INDIAN_FEMALE) }
+        assertThat(vm.ui.value.voice).isEqualTo(VoiceChoice.INDIAN_FEMALE)
+        val again = viewModel(state)
+        assertThat(again.ui.value.voice).isEqualTo(VoiceChoice.INDIAN_FEMALE)
+        assertThat(runBlocking { store.definition(id) }!!.preset.voice).isEqualTo(VoiceChoice.NONE)
+        runBlocking(main) { again.save("Shaadi", "") }
+        await(again) { it.draftVoice == null && !it.busy }
+        val saved = runBlocking { store.definition(id) }!!.preset
+        assertThat(saved.voice).isEqualTo(VoiceChoice.INDIAN_FEMALE)
+        // The rest of the preset is as it was.
+        assertThat(saved.effects.photoDuring).isEqualTo(AnimKind.KEN_BURNS_IN)
+        // Back to No change, and saved again (the screen reads the preset again when it shows).
+        runBlocking(main) { again.refresh() }
+        await(again) { it.preset?.voice == VoiceChoice.INDIAN_FEMALE }
+        runBlocking(main) { again.setVoice(VoiceChoice.NONE) }
+        assertThat(PresetEditViewModel.changedPreset(saved, again.ui.value, "Shaadi", "")?.voice).isEqualTo(VoiceChoice.NONE)
+        runBlocking(main) { again.save("Shaadi", "") }
+        await(again) { it.draftVoice == null && !it.busy }
+        assertThat(runBlocking { store.definition(id) }!!.preset.voice).isEqualTo(VoiceChoice.NONE)
+    }
+
+    @Test
+    fun `choosing the voice it already has changes nothing to save`() {
+        val vm = viewModel(SavedStateHandle(mapOf(Routes.ARG_PRESET to made().value)))
+        runBlocking(main) { vm.setVoice(VoiceChoice.NONE) }
+        val preset = vm.ui.value.preset!!
+        assertThat(PresetEditViewModel.changedPreset(preset, vm.ui.value, "Shaadi", "")).isNull()
+    }
+
+    @Test
+    fun `where the voice pack cannot run the default voice is off and cannot be changed`() {
+        val vm = viewModel(SavedStateHandle(mapOf(Routes.ARG_PRESET to made().value)), VoiceTools.NONE)
+        assertThat(vm.ui.value.voiceAvailable).isFalse()
+        runBlocking(main) { vm.setVoice(VoiceChoice.BRITISH_MALE) }
+        assertThat(vm.ui.value.draftVoice).isNull()
+        assertThat(vm.ui.value.voice).isEqualTo(VoiceChoice.NONE)
+    }
+
+    private companion object {
+        /** Voices that can run (the pack's files need not be there: the choice never asks for them). */
+        val VOICES: VoiceTools =
+            object : VoiceTools by VoiceTools.NONE {
+                override val supported = true
+            }
     }
 }

@@ -92,9 +92,9 @@ What ClearMovie on `main` does:
   New preset. An install that had the preset older versions came with keeps it like any other. A new
   preset can use your files where they are, or keep a copy of them. Each
   preset keeps a caption style (words, place, size, font, colour, outline, band and the
-  animation it comes in with) that new captions start from, with a live preview, and a
-  default animation for new photos and a default transition between new items, each
-  of which can still be changed in the editor.
+  animation it comes in with) that new captions start from, with a live preview, a
+  default animation for new photos, a default transition between new items, and a
+  default voice for new voice recordings, each of which can still be changed in the editor.
 - **Set up the frame** - tap the frame's screen colour (like a green screen) to remove it, and
   drag the picture area to where your photos and videos should show. A frame item on the
   timeline has Colour and Area buttons to change them for one video.
@@ -150,7 +150,7 @@ What has shipped, and what is still to come:
 - [x] Preset picker, with "Start without a preset"
 - [x] One-time preset setup (choose the intro, frame and ending files on your phone) with a friendly repair screen if a file goes missing
 - [x] Preset review: replace or skip the intro, frame or ending for this video
-- [x] Make your own presets, edit and delete any preset, each with its own caption style, default animation and default transition
+- [x] Make your own presets, edit and delete any preset, each with its own caption style, default animation, default transition and default voice
 - [x] Set up a frame: tap its screen colour to remove it and place the picture area
 - [x] Video shapes: landscape, portrait or square, per preset or asked once without one
 - [x] Presets can use your files where they are, or keep a copy

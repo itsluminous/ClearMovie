@@ -315,6 +315,9 @@ class EditorViewModel
         /** The recording in progress, or null. */
         val recording: StateFlow<RecordingUi?> = voice.state
 
+        /** Whether a voice choice was saved with the screen (a rotation or a process death), before it is written again below. */
+        private val voiceRestored = savedState.contains(KEY_VOICE)
+
         /** The voice choice (cm-voice-choice): the voice and language picked, the voice pack, and the voice jobs. */
         val voices =
             VoiceChoiceController(
@@ -437,6 +440,8 @@ class EditorViewModel
                 }
                 // Recordings an earlier visit took off the timeline go now: no undo can bring them back.
                 val first = opened.project
+                // A new recording starts in the preset's default voice, unless the screen kept the user's choice.
+                if (!voiceRestored) voices.preselect(first.defaultVoice)
                 launch(Dispatchers.IO) { runCatching { recordings.sweepUnused(first) } }
                 repository.open
                     .filterNotNull()

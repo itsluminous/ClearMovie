@@ -90,6 +90,8 @@ object PresetWriter {
             }
             // Written only when it is not the landscape every older preset is, so those read back unchanged.
             if (preset.shape != CanvasShape.LANDSCAPE) put("shape", name(CanvasShape.serializer(), preset.shape))
+            // Likewise only a voice other than No change (cm-preset-voice-default), so a preset without one reads back unchanged.
+            if (preset.voice != VoiceChoice.NONE) put(PresetParser.DEFAULT_VOICE, preset.voice.id)
         }
 
     private fun caption(

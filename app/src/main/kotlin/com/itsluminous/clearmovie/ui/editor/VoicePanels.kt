@@ -123,6 +123,33 @@ private fun <T> Dropdown(
     }
 }
 
+/**
+ * One voice dropdown with every voice, No change first, under [label]: the
+ * Record voice sheet's own field, for a preset's default voice
+ * (cm-preset-voice-default). Off, with the sheet's note, where [available] is false.
+ */
+@Composable
+internal fun VoiceChoiceField(
+    label: String,
+    voice: VoiceChoice,
+    available: Boolean,
+    tag: String,
+    onVoice: (VoiceChoice) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Dropdown(
+        label = label,
+        value = voice,
+        options = VoiceChoice.MENU,
+        name = { stringResource(it.labelRes()) },
+        tag = tag,
+        onPick = onVoice,
+        modifier = modifier,
+        enabled = available,
+        supporting = if (available) null else stringResource(R.string.voice_not_on_phone),
+    )
+}
+
 /** "Voice in the video" and "Spoken in", side by side when there is room. */
 @Composable
 internal fun VoiceFields(

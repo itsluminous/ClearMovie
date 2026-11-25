@@ -590,6 +590,8 @@
     <string name="preset_default_transition">डिफ़ॉल्ट ट्रांज़िशन</string>
     <string name="preset_animation_hint">हर नई फ़ोटो दिखते समय कैसे हिलेगी। कैप्शन का अपना एनिमेशन कैप्शन का स्टाइल बदलें में है।</string>
     <string name="preset_transition_hint">हर नया आइटम अगले पर कैसे जाएगा। बाद में हर एक के लिए इसे बदल सकते हैं।</string>
+    <string name="preset_voice_title">डिफ़ॉल्ट आवाज़</string>
+    <string name="preset_voice_body">नई आवाज़ रिकॉर्डिंग इसी आवाज़ में शुरू होंगी: शब्द बोलें, या टाइप करें। एडिटर में आप हर एक की आवाज़ बाद में भी बदल सकते हैं।</string>
     <string name="caption_box_narrower">बॉक्स पतला करें</string>
     <string name="caption_box_wider">बॉक्स चौड़ा करें</string>
     <string name="caption_colour_choice">%1$s अक्षर</string>

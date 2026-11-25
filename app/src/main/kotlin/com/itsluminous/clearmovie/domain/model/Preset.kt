@@ -15,6 +15,10 @@ import kotlinx.serialization.Serializable
  * [shape] is the shape of the videos it makes (cm-aspect-ratio); its frame
  * and intro are expected to be made for it. A `preset.json` without one is
  * landscape, as every preset was before.
+ *
+ * [voice] is the voice a new voice recording starts in (cm-preset-voice-default):
+ * [VoiceChoice.NONE], "No change", for a `preset.json` without one or with a
+ * voice this version does not know.
  */
 data class Preset(
     val id: PresetId,
@@ -31,6 +35,7 @@ data class Preset(
     val ducking: DuckingSpec = DuckingSpec(),
     val export: ExportSpec = ExportSpec(),
     val shape: CanvasShape = CanvasShape.LANDSCAPE,
+    val voice: VoiceChoice = VoiceChoice.NONE,
 ) {
     companion object {
         const val SCHEMA_VERSION = 1

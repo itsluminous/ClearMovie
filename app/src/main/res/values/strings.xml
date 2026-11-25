@@ -643,6 +643,8 @@
     <string name="preset_default_transition">Default transition</string>
     <string name="preset_animation_hint">How each new photo moves while it shows. Captions have their own, in Change caption style.</string>
     <string name="preset_transition_hint">How each new item moves into the next. You can change it for each one later.</string>
+    <string name="preset_voice_title">Default voice</string>
+    <string name="preset_voice_body">New voice recordings start in this voice: say the words, or type them. You can still change the voice for each one in the editor.</string>
     <string name="caption_box_narrower">Make the box narrower</string>
     <string name="caption_box_wider">Make the box wider</string>
     <string name="caption_colour_choice">%1$s text</string>

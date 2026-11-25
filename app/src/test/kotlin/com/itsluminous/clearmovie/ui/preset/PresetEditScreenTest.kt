@@ -4,13 +4,16 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -37,6 +40,7 @@ import com.itsluminous.clearmovie.domain.model.PresetId
 import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.Transition
 import com.itsluminous.clearmovie.domain.model.TransitionKind
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.testing.AtSize
 import com.itsluminous.clearmovie.testing.ScreenSize
 import com.itsluminous.clearmovie.ui.components.shapeOptionTag
@@ -77,6 +81,7 @@ class PresetEditScreenTest {
         var animation: AnimKind? = AnimKind.ZOOM_OUT
         var photoAnimation: AnimKind? = AnimKind.ZOOM_OUT
         var transition: TransitionKind? = null
+        var voice: VoiceChoice? = null
     }
 
     private fun show(
@@ -84,10 +89,11 @@ class PresetEditScreenTest {
         size: ScreenSize = ScreenSize.COMPACT,
         fontScale: Float = 1f,
         calls: Calls = Calls(),
+        voiceAvailable: Boolean = true,
     ): Calls {
         compose.setContent {
             var ui by androidx.compose.runtime.remember {
-                mutableStateOf(PresetEditUi(definition = definition, status = ready))
+                mutableStateOf(PresetEditUi(definition = definition, status = ready, voiceAvailable = voiceAvailable))
             }
             AtSize(size, fontScale) {
                 ClearMovieTheme(dynamicColor = false) {
@@ -125,6 +131,10 @@ class PresetEditScreenTest {
                             ui = ui.copy(draftEffects = PresetEditViewModel.withTransition(effects, definition.preset.effects, kind))
                         },
                         onRevertEffects = { ui = ui.copy(draftEffects = it) },
+                        onVoice = {
+                            calls.voice = it
+                            ui = ui.copy(draftVoice = it)
+                        },
                     )
                 }
             }
@@ -600,5 +610,58 @@ class PresetEditScreenTest {
         ui = PresetEditUi(definition = PresetDefinition(Fixtures.preset, PresetDefinition.Source.USER), status = ready)
         compose.waitForIdle()
         compose.onNodeWithTag(PRESET_SHAPE_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the default voice offers the Record voice sheet's voices, No change first, and choosing one is a draft to save`() {
+        val calls = show(PresetDefinition(own, PresetDefinition.Source.USER))
+        inSight(PRESET_VOICE_TAG).assertIsDisplayed()
+        compose.onNodeWithText(s(R.string.preset_voice_title)).assertIsDisplayed()
+        compose.onNodeWithTag(PRESET_VOICE_CHOICE_TAG).assertTextContains(s(R.string.voice_none)).performClick()
+        for (voice in VoiceChoice.MENU) compose.onNodeWithTag("${PRESET_VOICE_CHOICE_TAG}_${voice.name.lowercase()}").assertExists()
+        compose.onNodeWithText(s(R.string.voice_british_female)).performClick()
+        assertThat(calls.voice).isEqualTo(VoiceChoice.BRITISH_FEMALE)
+        compose.onNodeWithTag(PRESET_VOICE_CHOICE_TAG).assertTextContains(s(R.string.voice_british_female))
+        assertThat(PresetEditViewModel.changedPreset(own, shownUi!!, "Spasht Dhaara", "")?.voice).isEqualTo(VoiceChoice.BRITISH_FEMALE)
+        // Saving hands the draft over; leaving asks first.
+        compose.onNodeWithContentDescription(s(R.string.action_back)).performClick()
+        compose.onNodeWithText(s(R.string.preset_discard_title)).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a preset's own default voice is shown`() {
+        show(PresetDefinition(own.copy(voice = VoiceChoice.AMERICAN_MALE), PresetDefinition.Source.USER))
+        inSight(PRESET_VOICE_CHOICE_TAG).assertTextContains(s(R.string.voice_american_male))
+    }
+
+    @Test
+    fun `where the voices cannot run the default voice is off, shows No change and says why`() {
+        val calls =
+            show(PresetDefinition(own.copy(voice = VoiceChoice.AMERICAN_MALE), PresetDefinition.Source.USER), voiceAvailable = false)
+        inSight(PRESET_VOICE_CHOICE_TAG).assertIsNotEnabled().assertTextContains(s(R.string.voice_none))
+        compose.onNodeWithText(s(R.string.voice_not_on_phone)).assertIsDisplayed()
+        compose.onNodeWithTag(PRESET_VOICE_CHOICE_TAG).performClick()
+        compose.onAllNodesWithTag("${PRESET_VOICE_CHOICE_TAG}_british_male").assertCountEquals(0)
+        assertThat(calls.voice).isNull()
+    }
+
+    @Test
+    fun `the default voice sits after the animation and transition, before the files`() = voiceCardOrder(ScreenSize.COMPACT)
+
+    @Test
+    fun `in two panes the default voice also sits after the animation and transition, before the files`() =
+        voiceCardOrder(ScreenSize.EXPANDED)
+
+    private fun voiceCardOrder(size: ScreenSize) {
+        show(PresetDefinition(own, PresetDefinition.Source.USER), size = size)
+
+        // The list composes every card, so their places are compared without scrolling in between.
+        fun top(tag: String) =
+            compose
+                .onNodeWithTag(tag)
+                .fetchSemanticsNode()
+                .positionInRoot.y
+        assertThat(top(PRESET_VOICE_TAG)).isGreaterThan(top(PRESET_MOTION_TAG))
+        assertThat(top(PRESET_FILES_TAG)).isGreaterThan(top(PRESET_VOICE_TAG))
     }
 }

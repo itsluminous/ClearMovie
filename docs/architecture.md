@@ -345,9 +345,16 @@ lays it out for players:
   (None or any kind, keeping the preset's length, which the row shows). Both
   choices show the editor's own tiles (`AnimationChoices`,
   `TransitionChoices`) on sample pictures. New preset opens this editor right
-  after Create, so they are chosen there, as the caption style is. A project
-  copies the preset's defaults when it is made, so a later change to the
-  preset reaches only videos made after it.
+  after Create, so they are chosen there, as the caption style is. Its
+  Default voice card (cm-preset-voice-default) sets `Preset.voice`, the voice
+  a new voice recording starts in, from the Record voice sheet's own list
+  (`VoiceChoiceField`); `preset.json` keeps it as `defaultVoice`, a
+  `VoiceChoice` id written only when it is not No change, and a file without
+  one, or with an id this version does not know, reads as No change. A project
+  copies the preset's defaults when it is made (the voice as
+  `Project.defaultVoice`, left out of the JSON while null, so older projects
+  keep their bytes and schema), so a later change to the preset reaches only
+  videos made after it.
 
 `LayeredPreviewEngine` keeps the followers within 200 ms of MAIN. In the last
 1.5 s before one of its parts (the frame after the intro, the outgoing video of
@@ -619,7 +626,12 @@ the screen; the playhead is saved by `EditorViewModel`.
   up to 1.3x faster if it would run into the next, and ends where the next
   starts. `VoiceChoiceController` (owned by the view model) runs one job
   at a time off the main thread and applies it as one undo step only if
-  the item is unchanged.
+  the item is unchanged. When the editor opens a video with no choice kept
+  with the screen, the sheet starts at the video's `defaultVoice`
+  (`preselect`), without asking for the pack: a recording made without it
+  stays as recorded, and the pack dialog shows when its words are to be
+  found, right after it; once the pack is added, the item's Find the words
+  and Make voice use that voice.
   The engine is Vosk (speech to words, with word times) and Kokoro
   through sherpa-onnx (words to voice; it reads phonemes, which the app
   makes itself, since it silently skips words its dictionary lacks), all

@@ -88,6 +88,7 @@ import com.itsluminous.clearmovie.domain.model.PresetSlot
 import com.itsluminous.clearmovie.domain.model.ProjectCodec
 import com.itsluminous.clearmovie.domain.model.TextClip
 import com.itsluminous.clearmovie.domain.model.TransitionKind
+import com.itsluminous.clearmovie.domain.model.VoiceChoice
 import com.itsluminous.clearmovie.domain.model.refitBox
 import com.itsluminous.clearmovie.ui.components.AutoSizeLabel
 import com.itsluminous.clearmovie.ui.editor.AnimationChoices
@@ -156,6 +157,7 @@ fun PresetEditRoute(
         onCaptionAnimation = viewModel::setCaptionAnimation,
         onPhotoAnimation = viewModel::setPhotoAnimation,
         onTransition = viewModel::setTransition,
+        onVoice = viewModel::setVoice,
         onFiles = { onFiles(viewModel.presetId) },
         onSave = viewModel::save,
         onDelete = viewModel::delete,
@@ -178,7 +180,8 @@ private fun shownWords(preset: Preset): String {
  * The preset editor (cm-preset-manager): the name, the captions (a picture
  * of the frame with a new caption on it, and Change caption style), the
  * animation new photos get and the transition between new items, each
- * opening its choices (cm-preset-motion-defaults), the files (opening
+ * opening its choices (cm-preset-motion-defaults), the voice a new voice
+ * recording starts in (cm-preset-voice-default), the files (opening
  * setup), and Save. Every preset has Delete in the top bar
  * (its videos keep working). Change caption
  * style turns the screen into the caption editor's tabs over the same
@@ -204,6 +207,7 @@ fun PresetEditScreen(
     onPhotoAnimation: (AnimKind?) -> Unit = {},
     onTransition: (TransitionKind) -> Unit = {},
     onRevertEffects: (EffectDefaults?) -> Unit = {},
+    onVoice: (VoiceChoice) -> Unit = {},
 ) {
     // Captions are drawn for the preset's own shape (cm-aspect-ratio).
     CompositionLocalProvider(LocalCanvasShape provides ui.shape) {
@@ -223,6 +227,7 @@ fun PresetEditScreen(
             onPhotoAnimation,
             onTransition,
             onRevertEffects,
+            onVoice,
         )
     }
 }
@@ -245,6 +250,7 @@ private fun PresetEditContent(
     onPhotoAnimation: (AnimKind?) -> Unit,
     onTransition: (TransitionKind) -> Unit,
     onRevertEffects: (EffectDefaults?) -> Unit,
+    onVoice: (VoiceChoice) -> Unit,
 ) {
     val definition = ui.definition
     val preset = ui.preset
@@ -470,6 +476,7 @@ private fun PresetEditContent(
                 }
             }
             val motionCard: @Composable () -> Unit = { MotionCard(ui.photoAnimation, ui.transition, ::openMotion) }
+            val voiceCard: @Composable () -> Unit = { VoiceDefaultCard(ui.voice, ui.voiceAvailable, onVoice) }
             val files: @Composable () -> Unit = { FilesCard(ui.status, onFiles) }
             val save: @Composable () -> Unit = {
                 Button(
@@ -492,6 +499,7 @@ private fun PresetEditContent(
                         shapeCard()
                         CaptionsCard(preview = null, onChange = openCaption)
                         motionCard()
+                        voiceCard()
                         files()
                         save()
                     }
@@ -510,6 +518,7 @@ private fun PresetEditContent(
                         shapeCard()
                         captions()
                         motionCard()
+                        voiceCard()
                         files()
                         save()
                     }

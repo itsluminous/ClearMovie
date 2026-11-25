@@ -58,8 +58,8 @@ object ProjectFactory {
      * MAIN starts with the intro and ending. The frame and its music follow the
      * frame span (after the intro, to the end, or to the ending when the frame
      * does not cover it); the closing message follows a spoken ending. The
-     * preset's shape, caption style, photo length, fit, effects and ducking are
-     * copied into the project. A bound file whose length is under
+     * preset's shape, caption style, photo length, fit, effects, ducking and
+     * default voice are copied into the project. A bound file whose length is under
      * [Limits.MIN_CLIP_MS] or over [Limits.MAX_MEDIA_MS] is refused with
      * [IllegalArgumentException].
      */
@@ -154,6 +154,7 @@ object ProjectFactory {
             effectDefaults = preset.effects,
             ducking = preset.ducking,
             shape = preset.shape,
+            defaultVoice = preset.voice.takeUnless { it == VoiceChoice.NONE },
         ).normalized()
     }
 }

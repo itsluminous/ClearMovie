@@ -139,6 +139,18 @@ class VoiceChoiceController(
         choiceState.value = choiceState.value.forLanguage(language)
     }
 
+    /**
+     * Starts the choice at the preset's default voice (cm-preset-voice-default), when the editor opens
+     * a video with no choice saved with the screen. Unlike [choose] it never asks for the voice pack:
+     * a recording made without the pack is kept as it is, and the pack dialog shows once its words
+     * are to be found ([afterRecording]). Ignored where the voice pack cannot run (only No change is
+     * offered there), and for No change.
+     */
+    fun preselect(voice: VoiceChoice?) {
+        if (!available || voice == null || voice == VoiceChoice.NONE) return
+        choiceState.value = voice.forLanguage(languageState.value)
+    }
+
     /** Restores the choice saved with the screen. */
     fun restore(
         voice: VoiceChoice?,

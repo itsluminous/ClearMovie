@@ -46,6 +46,11 @@ data class EffectDefaults(
  * chosen for a video made without one. [askShape] is set on a new video made
  * without a preset until its shape is chosen, so the editor asks once.
  *
+ * [defaultVoice] is the preset's default voice (cm-preset-voice-default),
+ * copied in like its other defaults: the voice a new voice recording's sheet
+ * starts with. Null is No change, and is left out of the stored JSON, so
+ * every project from before it reads and writes the same bytes.
+ *
  * The schema version is not a field: `ProjectCodec` writes it.
  */
 @Serializable
@@ -64,6 +69,7 @@ data class Project(
     val transitionForAll: Transition? = null,
     val shape: CanvasShape = CanvasShape.LANDSCAPE,
     val askShape: Boolean = false,
+    val defaultVoice: VoiceChoice? = null,
 ) {
     /** The MAIN row. Every valid project has exactly one. */
     val main: Track get() = tracks.first { it.type == TrackType.MAIN }

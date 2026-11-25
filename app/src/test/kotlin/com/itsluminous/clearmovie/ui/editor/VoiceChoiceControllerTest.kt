@@ -210,4 +210,66 @@ class VoiceChoiceControllerTest {
         c.choose(VoiceChoice.BRITISH_MALE)
         assertThat(c.choice.value).isEqualTo(VoiceChoice.NONE)
     }
+
+    @Test
+    fun `the preset's default voice is preselected without asking for the pack, and asked for once the recording's words are wanted`() {
+        val tools = FakeTools(words, made)
+        tools.missing = tools.manifest.files
+        val c = controller(tools)
+        c.preselect(VoiceChoice.BRITISH_FEMALE)
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.BRITISH_FEMALE)
+        // Preselecting never shows the pack dialog: recording is not blocked.
+        assertThat(c.packAsk.value).isNull()
+        val before = rec()
+        c.afterRecording(ClipId("rec"))
+        // The recording stays as it was made, and the dialog asks for what finding its words needs.
+        assertThat(rec()).isEqualTo(before)
+        assertThat(rec().playedMedia).isEqualTo(recording)
+        assertThat(c.packAsk.value?.speech).isEqualTo(SpokenLanguage.ENGLISH)
+        assertThat(c.work.value).isNull()
+        // Its panel offers the default voice once the pack is there.
+        assertThat(c.pendingVoice(ClipId("rec"))).isEqualTo(VoiceChoice.BRITISH_FEMALE)
+        assertThat(notes).isEmpty()
+    }
+
+    @Test
+    fun `with the pack a preselected voice finds the recording's words, as a chosen one does`() {
+        val tools = FakeTools(words, made)
+        tools.release.countDown()
+        val c = controller(tools)
+        c.preselect(VoiceChoice.AMERICAN_MALE)
+        c.afterRecording(ClipId("rec"))
+        waitFor { checked.isNotEmpty() }
+        assertThat(rec().voiceOver?.phrases).isEqualTo(words)
+        assertThat(c.pendingVoice(ClipId("rec"))).isEqualTo(VoiceChoice.AMERICAN_MALE)
+        // The user can still change the voice for the next recording.
+        c.choose(VoiceChoice.NONE)
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.NONE)
+    }
+
+    @Test
+    fun `no default, No change, or a phone where the voices cannot run leaves the choice at No change`() {
+        val tools = FakeTools(words, made)
+        val c = controller(tools)
+        c.preselect(null)
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.NONE)
+        c.preselect(VoiceChoice.NONE)
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.NONE)
+        tools.engineWorks = false
+        val off = controller(tools)
+        off.preselect(VoiceChoice.INDIAN_MALE)
+        assertThat(off.choice.value).isEqualTo(VoiceChoice.NONE)
+        assertThat(off.packAsk.value).isNull()
+        val none = controller(VoiceTools.NONE)
+        none.preselect(VoiceChoice.INDIAN_MALE)
+        assertThat(none.choice.value).isEqualTo(VoiceChoice.NONE)
+    }
+
+    @Test
+    fun `a default voice is said in the language chosen, so an English-only voice becomes the Indian one for Hindi`() {
+        val c = controller(FakeTools(words, made))
+        c.speakIn(SpokenLanguage.HINDI)
+        c.preselect(VoiceChoice.BRITISH_FEMALE)
+        assertThat(c.choice.value).isEqualTo(VoiceChoice.INDIAN_FEMALE)
+    }
 }
