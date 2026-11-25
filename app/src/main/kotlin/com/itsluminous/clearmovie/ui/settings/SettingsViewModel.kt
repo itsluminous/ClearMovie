@@ -37,6 +37,9 @@ data class HindiHdOffer(
 ) {
     val bytes: Long get() = files.sumOf { it.bytes }
     val unpackedBytes: Long get() = files.sumOf { it.unpackedBytes }
+
+    /** Whether the download includes the voice pack Hindi HD needs (the phone does not have it yet). */
+    val withPack: Boolean get() = files.any { it.folder == null }
 }
 
 @HiltViewModel
@@ -78,7 +81,16 @@ class SettingsViewModel
         init {
             viewModelScope.launch {
                 packDownloads.state.collect { state ->
-                    hindiHdState.update { it?.copy(download = state) }
+                    // Idle right after Download is the worker not started yet: the row keeps showing it starting.
+                    hindiHdState.update { o ->
+                        if (o?.download is PackDownloadState.Waiting && (o.download as PackDownloadState.Waiting).id == STARTING &&
+                            state == PackDownloadState.Idle
+                        ) {
+                            o
+                        } else {
+                            o?.copy(download = state)
+                        }
+                    }
                     if (state is PackDownloadState.Done) refresh()
                 }
             }
@@ -87,13 +99,19 @@ class SettingsViewModel
         private fun hindiHdOffer(): HindiHdOffer? {
             val manifest = voiceTools.manifest ?: return null
             if (!voiceTools.supported || manifest.files.none { it.part == VoicePackFile.SPEECH_HI_HD }) return null
-            return HindiHdOffer(voiceTools.hindiModel, voiceTools.hindiHdMissing(), packDownloads.state.value)
+            val now = packDownloads.state.value
+            // A download just started from here stays shown as starting until the worker reports it.
+            val starting = (hindiHdState.value?.download as? PackDownloadState.Waiting)?.id == STARTING && now == PackDownloadState.Idle
+            return HindiHdOffer(voiceTools.hindiModel, voiceTools.hindiHdMissing(), if (starting) hindiHdState.value!!.download else now)
         }
 
         /** Downloads what this phone still needs for Hindi HD, in the background (the voice pack download). */
         fun downloadHindiHd() {
             val files = hindiHdState.value?.files.orEmpty()
-            if (files.isNotEmpty()) packDownloads.start(files)
+            if (files.isEmpty()) return
+            // Shown at once; the worker's own state follows when it starts.
+            hindiHdState.update { it?.copy(download = PackDownloadState.Waiting(STARTING)) }
+            packDownloads.start(files)
         }
 
         /** Stops the voice pack download and removes what it had downloaded. */
@@ -112,6 +130,11 @@ class SettingsViewModel
                 hindiHdState.value = withContext(Dispatchers.IO) { runCatching { hindiHdOffer() }.getOrNull() }
                 crashState.value = withContext(Dispatchers.IO) { crashLog?.last() }
             }
+        }
+
+        private companion object {
+            /** The download Settings started, before the worker reports it. */
+            const val STARTING = "settings"
         }
 
         /** Null until the stored settings are read, so the screen never shows defaults first. */

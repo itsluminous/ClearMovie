@@ -93,7 +93,14 @@ internal fun HindiHdRow(
             }
 
             else -> {
-                Text(stringResource(R.string.settings_hindi_hd_offer, sizeText(offer.bytes), sizeText(offer.unpackedBytes)), color = muted)
+                Text(
+                    stringResource(
+                        if (offer.withPack) R.string.settings_hindi_hd_offer_with_pack else R.string.settings_hindi_hd_offer,
+                        sizeText(offer.bytes),
+                        sizeText(offer.unpackedBytes),
+                    ),
+                    color = muted,
+                )
                 if (offer.model == HindiModel.LIGHT) Text(stringResource(R.string.settings_hindi_hd_light_note), color = muted)
                 val failed = download as? PackDownloadState.Failed
                 if (failed != null) {

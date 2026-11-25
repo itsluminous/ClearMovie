@@ -138,7 +138,8 @@ class HindiHdPackTest {
     fun `a phone's memory picks its Hindi recognizer`() {
         assertThat(HindiModel.of(2_800_000_000)).isEqualTo(HindiModel.SMALL)
         assertThat(HindiModel.of(3_700_000_000)).isEqualTo(HindiModel.LIGHT)
-        assertThat(HindiModel.of(5_600_000_000)).isEqualTo(HindiModel.LIGHT)
+        assertThat(HindiModel.of(5_800_000_000)).isEqualTo(HindiModel.LIGHT)
+        assertThat(HindiModel.of(6_800_000_000)).isEqualTo(HindiModel.FULL)
         assertThat(HindiModel.of(7_300_000_000)).isEqualTo(HindiModel.FULL)
         assertThat(manifest.hindiSpeech(HindiModel.SMALL).map { it.file }).containsExactly("speech-hindi.zip")
         assertThat(manifest.hindiSpeech(HindiModel.LIGHT).map { it.file }).containsExactly("voices-hindi-hd.zip", "speech-hindi-hd.zip")
@@ -187,9 +188,9 @@ class HindiHdPackTest {
         assertThat(s.checkPiece(f, 1, pieces[0])).isFalse()
         assertThat(pieces[0].exists()).isFalse()
         val again = f.downloads.map(::write)
-        // Out of order: refused, and the files are deleted.
+        // Out of order: refused, and only the files in the wrong place are deleted.
         assertThat(s.addDownloaded(f, listOf(again[1], again[0], again[2])).rejected).isEqualTo(1)
-        assertThat(again.none { it.exists() }).isTrue()
+        assertThat(again.map { it.exists() }).containsExactly(false, false, true).inOrder()
         addAll(s, hd)
         val model = s.root.resolve(VoicePackFile.HD_MODEL)
         assertThat(model.resolve("graph/HCLG.fst").readText()).startsWith("graph bytes")
@@ -201,6 +202,47 @@ class HindiHdPackTest {
         addAll(s, hd)
         assertThat(model.resolve("rnnlm/final.raw").readText()).isEqualTo("rnnlm")
         assertThat(s.downloadDir.listFiles().orEmpty()).isEmpty()
+    }
+
+    @Test
+    fun `a phone with too little memory for Hindi HD's recognizer still takes its voices file for the two voices`() {
+        val s = store(HindiModel.SMALL)
+        addAll(s, voices, engine)
+        assertThat(s.missing(null, VoiceChoice.INDIAN_MALE_2).map { it.file }).containsExactly("voices-hindi-hd.zip")
+        assertThat(s.hdVoicesReady()).isFalse()
+        addAll(s, hdVoices)
+        assertThat(s.hdVoicesReady()).isTrue()
+        assertThat(s.missing(SpokenLanguage.HINDI).map { it.file }).containsExactly("speech-hindi.zip")
+    }
+
+    @Test
+    fun `one bad piece is deleted alone, and a checked piece moves to its own name`() {
+        val s = store(HindiModel.LIGHT)
+        val f = listed(hd)
+        val pieces = f.downloads.map(::write)
+        pieces[1].writeBytes(byteArrayOf(1, 2, 3))
+        assertThat(s.addDownloaded(f, pieces).rejected).isEqualTo(1)
+        assertThat(pieces[0].exists()).isTrue()
+        assertThat(pieces[1].exists()).isFalse()
+        assertThat(pieces[2].exists()).isTrue()
+        // A part file that matches is moved to the piece's own name; one that does not is deleted.
+        val part = s.piecePart(f.downloads[1]).also { it.parentFile?.mkdirs() }
+        part.writeBytes(all.getValue(f.downloads[1]))
+        assertThat(s.checkPiece(f, 1, part)).isTrue()
+        assertThat(part.exists()).isFalse()
+        assertThat(s.pieceFile(f.downloads[1]).readBytes()).isEqualTo(all.getValue(f.downloads[1]))
+        part.writeBytes(byteArrayOf(9))
+        assertThat(s.checkPiece(f, 1, part)).isFalse()
+        assertThat(part.exists()).isFalse()
+    }
+
+    @Test
+    fun `an add-on may not bring an engine, a file or a part the pack has`() {
+        val withEngine = addOn.copy(files = addOn.files + engine.file.copy(file = "engine-x.zip"))
+        assertThat(runCatching { base + withEngine }.isFailure).isTrue()
+        val clash = addOn.copy(files = addOn.files + small.file)
+        assertThat(runCatching { base + clash }.isFailure).isTrue()
+        assertThat(runCatching { base + base }.isFailure).isTrue()
     }
 
     @Test
@@ -267,6 +309,8 @@ class HindiHdPackTest {
         override fun downloadFile(f: VoicePackFile): File = store.downloadFile(f)
 
         override fun pieceFile(name: String): File = store.pieceFile(name)
+
+        override fun piecePart(name: String): File = store.piecePart(name)
 
         override fun checkPiece(
             f: VoicePackFile,

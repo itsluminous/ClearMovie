@@ -35,6 +35,21 @@ class HindiHdRulesTest {
     }
 
     @Test
+    fun `dates, times and lists are read as a person says them`() {
+        fun same(
+            a: String,
+            b: String,
+        ) = assertThat(phonemizer.hindi(a).phonemes).isEqualTo(phonemizer.hindi(b).phonemes)
+        same("10.5.2026 को", "दस पाँच दो हज़ार छब्बीस को")
+        same("शादी 10.5.2026.", "शादी दस पाँच दो हज़ार छब्बीस.")
+        same("11:35 बजे", "ग्यारह बजकर पैंतीस मिनट बजे")
+        same("05:00", "पाँच बजे")
+        same("10,20 और 30", "दस, बीस और तीस")
+        same("1,000,000", "दस लाख")
+        same("तीन 3.5.", "तीन तीन दशमलव पांच.")
+    }
+
+    @Test
     fun `an anusvara before a consonant is that consonant's nasal, and a nasalised schwa stays`() {
         assertThat(HindiPhonemes.word("प्रियंका")).isEqualTo("pɾɪjəŋkaː")
         assertThat(HindiPhonemes.word("हिंदी")).isEqualTo("ɦɪnd̪iː")

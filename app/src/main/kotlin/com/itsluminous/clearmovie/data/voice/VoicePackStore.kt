@@ -93,6 +93,9 @@ class VoicePackStore(
     /** Whether [f] is for this phone: its processor type's engine, and Hindi HD only where its memory runs it. */
     fun fits(f: VoicePackFile): Boolean = manifest.fitsPhone(f, abi, hindiModel)
 
+    /** Whether Hindi HD's voices file, with the two extra Indian voices, is here. */
+    fun hdVoicesReady(): Boolean = partAdded(VoicePackFile.VOICES_HI_HD)
+
     /** Whether a Hindi recognizer is here: the small one or Hindi HD. */
     fun hindiReady(): Boolean = partAdded(VoicePackFile.SPEECH_HI) || partAdded(VoicePackFile.SPEECH_HI_HD)
 
@@ -207,7 +210,13 @@ class VoicePackStore(
     /** Where a piece of a split zip ([VoicePackFile.pieces]) is downloaded to, and kept until its zip is added. */
     fun pieceFile(name: String): File = File(downloadDir, name)
 
-    /** Whether [file] is piece [index] of [f] as the app's own manifest lists it; a piece that is not is deleted. */
+    /** Where piece [name] is downloaded to until it is checked; only a checked piece gets its own name ([pieceFile]). */
+    fun piecePart(name: String): File = File(downloadDir, "$name.part")
+
+    /**
+     * Whether [file] is piece [index] of [f] as the app's own manifest lists it. A match is moved to the
+     * piece's own name ([pieceFile]), so only checked pieces wait there; a file that does not match is deleted.
+     */
     fun checkPiece(
         f: VoicePackFile,
         index: Int,
@@ -218,10 +227,27 @@ class VoicePackStore(
                 .firstOrNull { it == f }
                 ?.pieces
                 ?.getOrNull(index)
-        val ok = p != null && file.isFile && file.length() == p.bytes && sha256Of(file)?.equals(p.sha256, ignoreCase = true) == true
-        if (!ok) file.delete()
-        return ok
+        if (p == null || !pieceMatches(file, p.bytes, p.sha256)) {
+            file.delete()
+            return false
+        }
+        val to = pieceFile(p.file)
+        if (file != to) {
+            to.parentFile?.mkdirs()
+            to.delete()
+            if (!file.renameTo(to)) {
+                file.delete()
+                return false
+            }
+        }
+        return true
     }
+
+    private fun pieceMatches(
+        file: File,
+        bytes: Long,
+        sha256: String,
+    ) = file.isFile && file.length() == bytes && sha256Of(file)?.equals(sha256, ignoreCase = true) == true
 
     /** Removes downloads that were stopped (Cancel). */
     fun clearDownloads() {
@@ -242,17 +268,24 @@ class VoicePackStore(
     ): PackAddResult {
         val listed = manifest.files.firstOrNull { it == f }?.takeIf(::fits)
         val expected = listed?.let { l -> if (l.pieces.isEmpty()) listOf(l.bytes to l.sha256) else l.pieces.map { it.bytes to it.sha256 } }
-        val ok =
-            expected != null && files.size == expected.size &&
-                files.zip(expected).all { (file, e) ->
-                    file.isFile && file.length() == e.first && sha256Of(file)?.equals(e.second, ignoreCase = true) == true
-                }
-        if (listed == null || !ok) {
-            files.forEach { it.delete() }
+        // Each file is checked on its own and only the ones that do not match are deleted, so one bad
+        // piece never costs the good ones (they may be most of 1.2 GB).
+        val bad =
+            if (expected != null && files.size == expected.size) {
+                files.zip(expected).filterNot { (file, e) -> pieceMatches(file, e.first, e.second) }.map { it.first }
+            } else {
+                files
+            }
+        if (listed == null || bad.isNotEmpty()) {
+            bad.forEach { it.delete() }
             return PackAddResult(emptyList(), 1)
         }
+
+        // Once the zip is in, its pieces waiting with the downloads are not needed, wherever these copies came from.
+        fun clearPieces() = listed.pieces.forEach { pieceFile(it.file).delete() }
         if (isAdded(listed)) {
             files.forEach { it.delete() }
+            clearPieces()
             return PackAddResult(emptyList(), 0)
         }
         val need = listed.unpackedBytes + SPARE_BYTES
@@ -260,6 +293,7 @@ class VoicePackStore(
         if (free < need) return PackAddResult(emptyList(), 0, outOfSpace = true, missingBytes = need - free)
         val added = unpack(listed) { SequenceInputStream(Collections.enumeration(files.map { it.inputStream() })) }
         files.forEach { it.delete() }
+        if (added) clearPieces()
         return if (added) PackAddResult(listOf(listed), 0) else PackAddResult(emptyList(), 1)
     }
 
@@ -350,9 +384,11 @@ class VoicePackStore(
             target.walkTopDown().forEach { it.setWritable(true, true) }
             target.deleteRecursively()
             target.parentFile?.mkdirs()
-            moved = moved && File(staging, folder).renameTo(target)
+            moved = File(staging, folder).renameTo(target)
+            // A move that fails stops here, so no folder after it is deleted for nothing; the part stays unmarked.
+            if (!moved) break
             // Native code is loaded only from files the app cannot write (Android warns, and will refuse, otherwise).
-            if (moved) target.walkTopDown().filter { it.isFile }.forEach { it.setWritable(false, false) }
+            target.walkTopDown().filter { it.isFile }.forEach { it.setWritable(false, false) }
         }
         staging.deleteRecursively()
         if (!moved) return false

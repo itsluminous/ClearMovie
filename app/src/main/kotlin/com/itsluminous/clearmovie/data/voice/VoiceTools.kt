@@ -79,10 +79,13 @@ interface VoiceTools {
     /** Where a download of pack file [f] goes until it is added (cm-voice-pack-download); null without a pack. */
     fun downloadFile(f: VoicePackFile): File? = null
 
-    /** Where piece [name] of a split zip is downloaded to and kept until its zip is added; null without a pack. */
+    /** Where piece [name] of a split zip is kept, once checked, until its zip is added; null without a pack. */
     fun pieceFile(name: String): File? = null
 
-    /** Whether [file] is piece [index] of [f] as the app's manifest lists it; one that is not is deleted. */
+    /** Where piece [name] is downloaded to until it is checked; null without a pack. */
+    fun piecePart(name: String): File? = null
+
+    /** Whether [file] is piece [index] of [f] as the app's manifest lists it; a match moves to [pieceFile], one that is not is deleted. */
     fun checkPiece(
         f: VoicePackFile,
         index: Int,
@@ -220,6 +223,8 @@ class PackVoiceTools(
 
     override fun pieceFile(name: String): File = store.pieceFile(name)
 
+    override fun piecePart(name: String): File = store.piecePart(name)
+
     override fun checkPiece(
         f: VoicePackFile,
         index: Int,
@@ -295,6 +300,8 @@ class PackVoiceTools(
             if (said.isEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_WORDS)
             val t = Steps()
             if (store.missing(null, voice).isNotEmpty()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
+            // Hindi HD's voices are only in its voices file; the pack's own has nothing at their places.
+            if (voice.needsHd && !store.hdVoicesReady()) throw VoiceFailure(VoiceFailure.Reason.NO_PACK)
             if (!engine.load()) throw VoiceFailure(VoiceFailure.Reason.NO_ENGINE)
             if ((lengthMs ?: 0) > MAX_MS) throw VoiceFailure(VoiceFailure.Reason.TOO_LONG)
             val engineMs = t.lap()

@@ -39,14 +39,22 @@ None of these files uses Git LFS. A pack that changes gets a new folder
 
 ## Licences
 
-All parts are open source, and each zip carries its licence and a `NOTICE.txt`:
+All parts are open source:
 
 - Vosk `vosk-model-hi-0.22` (Alpha Cephei), Apache-2.0, from
   [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)
   (upstream zip SHA-256
   `eaf9bdbd703c79e957f7ea893502e12b336f98d7cd420138bcb224b36ccf86ac`), split
   into the model and its rescoring files with nothing changed.
-- Kokoro-82M voices (hexgrad), Apache-2.0, from the int8 export in
-  [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0).
+- Kokoro-82M voices (hexgrad), Apache-2.0, from `voices.bin` of the sherpa-onnx
+  release asset `kokoro-int8-multi-lang-v1_0.tar.bz2`
+  ([sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), Apache-2.0; that
+  `voices.bin`'s SHA-256 is
+  `1c5a5b983d3d50d8586d437a51f3faa2da7919ce76a013c081e65671a3447c29`). Only the
+  eight voices the app uses are kept; the other places in the file are zeros,
+  which is why it unzips to 28 MB.
+
+Each zip carries its `LICENSE.txt` and `NOTICE.txt` inside the folder it unzips
+into (`tts-hd/`, `asr/hi-hd/conf/`, `asr/hi-hd/rescore/`).
 
 The recordings and words never leave the phone.

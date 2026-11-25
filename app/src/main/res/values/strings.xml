@@ -821,11 +821,12 @@
     <string name="settings_remove_voice_pack">Remove</string>
     <string name="settings_remove_voice_pack_title">Remove the voice pack?</string>
     <string name="settings_remove_voice_pack_body">This frees %1$s. Voices you already made stay in your videos. To make new ones, add the pack again.</string>
-    <string name="pack_hindi_hd_full">This includes Hindi HD, the most accurate Hindi speech recognition, which needs a phone with 8 GB of memory.</string>
-    <string name="pack_hindi_hd_light">This includes Hindi HD speech recognition. This phone has less than 8 GB of memory, so it gets the lighter model.</string>
+    <string name="pack_hindi_hd_full">This includes Hindi HD: the most accurate Hindi speech recognition, which this phone has enough RAM for, and two more Indian voices.</string>
+    <string name="pack_hindi_hd_light">This includes Hindi HD: better Hindi speech recognition and two more Indian voices. This phone has less than 8 GB of RAM, so it gets the lighter model.</string>
     <string name="settings_hindi_hd_title">Hindi HD</string>
-    <string name="settings_hindi_hd_offer">More accurate Hindi speech recognition and two more Indian voices. Downloads %1$s; once added it takes %2$s.</string>
-    <string name="settings_hindi_hd_light_note">This phone has less than 8 GB of memory, so it gets the lighter model. The most accurate one needs 8 GB.</string>
-    <string name="settings_hindi_hd_low_memory">Hindi HD needs a phone with at least 4 GB of memory, so this phone keeps the standard Hindi speech recognition.</string>
+    <string name="settings_hindi_hd_offer">More accurate Hindi speech recognition and two more Indian voices. Download: %1$s. Once added it takes %2$s of space.</string>
+    <string name="settings_hindi_hd_offer_with_pack">More accurate Hindi speech recognition and two more Indian voices. Download: %1$s, with the voice pack it needs. Once added it takes %2$s of space.</string>
+    <string name="settings_hindi_hd_light_note">This phone has less than 8 GB of RAM, so it gets the lighter model.</string>
+    <string name="settings_hindi_hd_low_memory">Hindi HD speech recognition needs at least 4 GB of RAM, so this phone keeps the standard one. The two extra Indian voices still work: choose one in a voice row to add them.</string>
     <string name="settings_hindi_hd_added">Added. Hindi speech recognition uses it, and the two extra Indian voices are in the voice list.</string>
 </resources>

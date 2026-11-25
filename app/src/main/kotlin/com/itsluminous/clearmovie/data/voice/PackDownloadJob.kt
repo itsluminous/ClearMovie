@@ -67,7 +67,7 @@ class PackDownloadJob(
         val missing = tools.notAdded().toSet()
         val todo = manifest.files.filter { it.file in names && it in missing }
         val total = todo.sumOf { it.bytes }
-        // Each file's downloads on disk: the zip's part file, or its pieces (cm-hindi-voices).
+        // Each file's downloads on disk: the zip's part file, or its checked pieces (cm-hindi-voices).
         val parts =
             todo.associateWith { f ->
                 if (f.pieces.isEmpty()) {
@@ -77,7 +77,14 @@ class PackDownloadJob(
                 }
             }
 
-        fun onDisk(fs: Collection<VoicePackFile>) = fs.sumOf { f -> parts.getValue(f).sumOf { if (it.isFile) it.length() else 0L } }
+        // A piece still downloading is in its part file ([VoiceTools.piecePart]) until it is checked.
+        fun onDisk(fs: Collection<VoicePackFile>) =
+            fs.sumOf { f ->
+                parts.getValue(f).sumOf { file ->
+                    val part = if (f.pieces.isEmpty()) null else tools.piecePart(file.name)
+                    (if (file.isFile) file.length() else 0L) + (part?.takeIf { it.isFile }?.length() ?: 0L)
+                }
+            }
         val need = roomToDownload(todo, VoicePackStore.SPARE_BYTES) - onDisk(todo)
         val free = tools.freeBytes()
         if (free < need) return PackDownloadOutcome.Failed(PackDownloadError.NO_SPACE, need - free)
@@ -98,10 +105,20 @@ class PackDownloadJob(
                     val url = VoicePackSource.url(folder, name) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED)
                     var pieceChecks = 0
                     while (true) {
-                        val failed = fetch(url, files[i], bytes, stopped, tries[i]) { progress(PackProgress(before + at + it, total)) }
+                        // A piece already checked (its own name) is kept; one still to finish downloads to its part file.
+                        if (pieces != null && files[i].isFile && files[i].length() == bytes) break
+                        val into =
+                            if (pieces ==
+                                null
+                            ) {
+                                files[i]
+                            } else {
+                                tools.piecePart(name) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED)
+                            }
+                        val failed = fetch(url, into, bytes, stopped, tries[i]) { progress(PackProgress(before + at + it, total)) }
                         if (failed != null) return failed
                         if (stopped()) return PackDownloadOutcome.Stopped
-                        if (pieces == null || tools.checkPiece(f, i, files[i])) break
+                        if (pieces == null || tools.checkPiece(f, i, into)) break
                         if (++pieceChecks >= CHECKS) return PackDownloadOutcome.Failed(PackDownloadError.CHECK)
                     }
                     at += bytes

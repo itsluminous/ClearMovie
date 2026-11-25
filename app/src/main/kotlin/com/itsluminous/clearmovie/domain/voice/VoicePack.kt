@@ -3,6 +3,7 @@ package com.itsluminous.clearmovie.domain.voice
 import com.itsluminous.clearmovie.domain.model.SpokenLanguage
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.util.Locale
 
 /**
  * The voice pack (cm-voice-choice): the engine, its voices and the speech
@@ -31,8 +32,13 @@ data class VoicePackManifest(
      * marked with the add-on's folder; they unpack into this pack's folder on
      * the phone, so one Remove takes everything away.
      */
-    operator fun plus(addOn: VoicePackManifest): VoicePackManifest =
-        copy(files = files + addOn.files.map { it.copy(folder = it.folder ?: addOn.folderName) })
+    operator fun plus(addOn: VoicePackManifest): VoicePackManifest {
+        // An add-on brings models and voices, never native code, and never a file or part this pack has.
+        require(addOn.pack == pack && addOn.folderName != folderName) { "not an add-on of this pack" }
+        require(addOn.files.none { it.part == VoicePackFile.ENGINE }) { "an add-on may not bring an engine" }
+        require(addOn.files.none { a -> files.any { it.file == a.file || it.part == a.part } }) { "an add-on file clashes with the pack" }
+        return copy(files = files + addOn.files.map { it.copy(folder = it.folder ?: addOn.folderName) })
+    }
 
     /**
      * The Hindi speech files for [model]: the small recognizer, or Hindi HD (its
@@ -57,8 +63,14 @@ data class VoicePackManifest(
     ): Boolean =
         when (f.part) {
             VoicePackFile.ENGINE -> f.abi == abi
-            VoicePackFile.VOICES_HI_HD, VoicePackFile.SPEECH_HI_HD -> model != HindiModel.SMALL
+
+            // The voices file is small (4 MB) and does not change Kokoro's memory: every phone takes it.
+            VoicePackFile.VOICES_HI_HD -> true
+
+            VoicePackFile.SPEECH_HI_HD -> model != HindiModel.SMALL
+
             VoicePackFile.SPEECH_HI_HD_RESCORE -> model == HindiModel.FULL
+
             else -> true
         }
 
@@ -145,7 +157,8 @@ data class VoicePackFile(
             } else {
                 bytes in 1..MAX_SPLIT_BYTES && pieces.size <= MAX_PIECES && pieces.sumOf { it.bytes } == bytes &&
                     pieces.withIndex().all { (i, p) ->
-                        p.file == "$file.%03d".format(i + 1) && p.bytes in 1..MAX_FILE_BYTES && SHA.matches(p.sha256)
+                        p.file == String.format(Locale.ROOT, "%s.%03d", file, i + 1) && p.bytes in 1..MAX_FILE_BYTES &&
+                            SHA.matches(p.sha256)
                     }
             }
 
@@ -244,8 +257,8 @@ enum class HindiModel {
         /** Phones sold with 4 GB report about 3.6 to 3.8 GB in all. */
         const val LIGHT_MIN_MEMORY = 3_400L * 1000 * 1000
 
-        /** Phones sold with 8 GB report about 7.2 to 7.6 GB; those with 6 GB, about 5.5. */
-        const val FULL_MIN_MEMORY = 7_000L * 1000 * 1000
+        /** Phones sold with 8 GB report about 7 to 7.8 GB; those with 6 GB, about 5.5 to 5.8. */
+        const val FULL_MIN_MEMORY = 6_500L * 1000 * 1000
 
         /** The model for a phone with [totalMemory] bytes of memory in all. */
         fun of(totalMemory: Long): HindiModel =

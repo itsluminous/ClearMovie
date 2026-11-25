@@ -89,6 +89,8 @@ class PackDownloadJobTest {
 
         override fun pieceFile(name: String): File = store.pieceFile(name)
 
+        override fun piecePart(name: String): File = store.piecePart(name)
+
         override fun checkPiece(
             f: VoicePackFile,
             index: Int,

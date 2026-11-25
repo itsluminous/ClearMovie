@@ -96,11 +96,13 @@ object RecordModule {
         val base =
             asset(VoicePackStore.MANIFEST_ASSET) ?: return if (BuildConfig.DEBUG) TestableVoiceTools(VoiceTools.NONE) else VoiceTools.NONE
         // Hindi HD (cm-hindi-voices) is an add-on: without its manifest the pack works as before.
-        val manifest = asset(VoicePackStore.HINDI_HD_MANIFEST_ASSET)?.let { base + it } ?: base
+        val manifest = asset(VoicePackStore.HINDI_HD_MANIFEST_ASSET)?.let { runCatching { base + it }.getOrNull() } ?: base
         val abis = if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS
         val abi = abis.firstOrNull { manifest.supports(it) } ?: abis.firstOrNull().orEmpty()
         val memory = ActivityManager.MemoryInfo().also { context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(it) }.totalMem
-        val store = VoicePackStore(context.filesDir, manifest, abi, HindiModel.of(memory), freeSpace::bytes)
+        // A 32-bit app cannot hold the full model's 3.5 GB: at most the light one.
+        val model = HindiModel.of(memory).let { if (Process.is64Bit() || it != HindiModel.FULL) it else HindiModel.LIGHT }
+        val store = VoicePackStore(context.filesDir, manifest, abi, model, freeSpace::bytes)
         val app = PackVoiceTools(store, files, recordings)
         // The test seam only in a debug build (device tests); a release build uses the pack's engine directly.
         return if (BuildConfig.DEBUG) TestableVoiceTools(app) else app
@@ -129,6 +131,8 @@ object RecordModule {
         override fun notAdded() = tools.notAdded()
 
         override fun pieceFile(name: String) = tools.pieceFile(name)
+
+        override fun piecePart(name: String) = tools.piecePart(name)
 
         override fun checkPiece(
             f: VoicePackFile,

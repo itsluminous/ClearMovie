@@ -767,11 +767,12 @@
     <string name="settings_remove_voice_pack">हटाएँ</string>
     <string name="settings_remove_voice_pack_title">आवाज़ पैक हटाएँ?</string>
     <string name="settings_remove_voice_pack_body">इससे %1$s खाली होगा। जो स्वर आप बना चुके हैं वे आपके वीडियो में रहेंगे। नए बनाने के लिए पैक फिर जोड़ें।</string>
-    <string name="pack_hindi_hd_full">इसमें हिंदी HD भी है, सबसे सटीक हिंदी बोली पहचान, जिसके लिए फ़ोन में 8 GB मेमोरी चाहिए।</string>
-    <string name="pack_hindi_hd_light">इसमें हिंदी HD बोली पहचान भी है। इस फ़ोन में 8 GB से कम मेमोरी है, इसलिए इसे हल्का मॉडल मिलता है।</string>
+    <string name="pack_hindi_hd_full">इसमें हिंदी HD है: बोले गए हिंदी शब्दों की सबसे सटीक पहचान, जितनी RAM इसके लिए चाहिए वह इस फ़ोन में है, और दो और भारतीय आवाज़ें।</string>
+    <string name="pack_hindi_hd_light">इसमें हिंदी HD है: बोले गए हिंदी शब्दों की बेहतर पहचान और दो और भारतीय आवाज़ें। इस फ़ोन में 8 GB से कम RAM है, इसलिए इसे हल्का मॉडल मिलता है।</string>
     <string name="settings_hindi_hd_title">हिंदी HD</string>
-    <string name="settings_hindi_hd_offer">ज़्यादा सटीक हिंदी बोली पहचान और दो और भारतीय आवाज़ें। डाउनलोड %1$s; जोड़ने के बाद यह %2$s लेता है।</string>
-    <string name="settings_hindi_hd_light_note">इस फ़ोन में 8 GB से कम मेमोरी है, इसलिए इसे हल्का मॉडल मिलता है। सबसे सटीक मॉडल के लिए 8 GB चाहिए।</string>
-    <string name="settings_hindi_hd_low_memory">हिंदी HD के लिए फ़ोन में कम से कम 4 GB मेमोरी चाहिए, इसलिए यह फ़ोन सामान्य हिंदी बोली पहचान ही इस्तेमाल करता है।</string>
-    <string name="settings_hindi_hd_added">जुड़ गया। हिंदी बोली पहचान इसी से होती है, और दो नई भारतीय आवाज़ें आवाज़ों की सूची में हैं।</string>
+    <string name="settings_hindi_hd_offer">बोले गए हिंदी शब्दों की ज़्यादा सटीक पहचान और दो और भारतीय आवाज़ें। डाउनलोड: %1$s। जोड़ने के बाद यह फ़ोन पर %2$s जगह लेगा।</string>
+    <string name="settings_hindi_hd_offer_with_pack">बोले गए हिंदी शब्दों की ज़्यादा सटीक पहचान और दो और भारतीय आवाज़ें। डाउनलोड: %1$s, ज़रूरी आवाज़ पैक के साथ। जोड़ने के बाद यह फ़ोन पर %2$s जगह लेगा।</string>
+    <string name="settings_hindi_hd_light_note">इस फ़ोन में 8 GB से कम RAM है, इसलिए इसे हल्का मॉडल मिलता है।</string>
+    <string name="settings_hindi_hd_low_memory">हिंदी HD पहचान के लिए कम से कम 4 GB RAM चाहिए, इसलिए यह फ़ोन सामान्य पहचान ही इस्तेमाल करता है। दो नई भारतीय आवाज़ें फिर भी चलती हैं: उन्हें जोड़ने के लिए आवाज़ की पंक्ति में कोई एक चुनें।</string>
+    <string name="settings_hindi_hd_added">जुड़ गया। बोले गए हिंदी शब्दों की पहचान इसी से होती है, और दो नई भारतीय आवाज़ें आवाज़ों की सूची में हैं।</string>
 </resources>

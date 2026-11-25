@@ -140,15 +140,36 @@ class Phonemizer(
                     "बानबे तिरानबे चौरानबे पंचानबे छियानबे सत्तानबे अट्ठानबे निन्यानबे"
             ).split(' ')
 
-        private val DIGIT_GROUP = Regex("(?<=\\d),(?=\\d{2})")
-        private val DECIMAL = Regex("(\\d+)\\.(\\d+)")
+        /** A grouped number, Indian (1,00,000) or international (100,000), and nothing like a list ("10,20"). */
+        private val DIGIT_GROUP = Regex("(?<![\\d,])(\\d{1,3}(?:,\\d{2})*,\\d{3}|\\d{1,3}(?:,\\d{3})+)(?!\\d|,\\d)")
 
-        /** [text] with Devanagari digits as Latin ones, digit-group commas dropped, and decimals in words. */
+        /** A date (10.5.2026, 10/05/26, 10-5-2026), read before a decimal could take its first two numbers. */
+        private val DATE = Regex("(?<![\\d.])(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})(?!\\d|\\.\\d)")
+
+        /** A time of day (11:35, 05:30). */
+        private val TIME = Regex("(?<!\\d)([01]?\\d|2[0-3]):([0-5]\\d)(?!\\d)")
+        private val DECIMAL = Regex("(?<![\\d.])(\\d+)\\.(\\d+)(?!\\d|\\.\\d)")
+
+        private fun said(n: String) = hindiNumberWords(n).joinToString(" ")
+
+        /**
+         * [text] with Devanagari digits as Latin ones and dates, times, grouped numbers and decimals in words:
+         * "10.5.2026" is "दस पाँच दो हज़ार छब्बीस", "11:35" is "ग्यारह बजकर पैंतीस मिनट", "1,00,000" is "एक लाख",
+         * "3.5" is "तीन दशमलव पांच".
+         */
         private fun hindiNumbers(text: String): String {
-            val latin = text.map { if (it in '०'..'९') '0' + (it - '०') else it }.joinToString("")
-            return DECIMAL.replace(DIGIT_GROUP.replace(latin, "")) { m ->
-                (hindiNumberWords(m.groupValues[1]) + "दशमलव" + hindiDigits(m.groupValues[2])).joinToString(" ")
-            }
+            var t = text.map { if (it in '०'..'९') '0' + (it - '०') else it }.joinToString("")
+            t = DATE.replace(t) { m -> m.groupValues.drop(1).joinToString(" ") { said(it.trimStart('0').ifEmpty { "0" }) } }
+            t =
+                TIME.replace(t) { m ->
+                    val h = said(m.groupValues[1].trimStart('0').ifEmpty { "0" })
+                    val min = m.groupValues[2].trimStart('0').ifEmpty { "0" }
+                    if (min == "0") "$h बजे" else "$h बजकर ${said(min)} मिनट"
+                }
+            t = DIGIT_GROUP.replace(t) { it.value.replace(",", "") }
+            return DECIMAL.replace(
+                t,
+            ) { m -> (hindiNumberWords(m.groupValues[1]) + "दशमलव" + hindiDigits(m.groupValues[2])).joinToString(" ") }
         }
 
         /**
