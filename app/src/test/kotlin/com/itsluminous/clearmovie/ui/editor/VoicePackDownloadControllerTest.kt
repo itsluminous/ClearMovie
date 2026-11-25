@@ -47,7 +47,10 @@ class VoicePackDownloadControllerTest {
         override val supported = true
         override val engineWorks: Boolean? = null
 
-        override fun missing(speech: SpokenLanguage?, voice: VoiceChoice?): List<VoicePackFile> =
+        override fun missing(
+            speech: SpokenLanguage?,
+            voice: VoiceChoice?,
+        ): List<VoicePackFile> =
             listOfNotNull(
                 voices,
                 english.takeIf { speech == SpokenLanguage.ENGLISH },

@@ -72,7 +72,10 @@ class VoiceWorkStatesTest {
         override val supported = true
         override var engineWorks: Boolean? = true
 
-        override fun missing(speech: SpokenLanguage?, voice: VoiceChoice?) = missing
+        override fun missing(
+            speech: SpokenLanguage?,
+            voice: VoiceChoice?,
+        ) = missing
 
         override fun addPackFiles(
             sources: List<() -> InputStream?>,

@@ -62,9 +62,21 @@ internal fun HindiHdRow(
                 val progress = (download as? PackDownloadState.Running)?.progress
                 Text(
                     when {
-                        progress?.checking == true -> stringResource(R.string.pack_checking)
-                        progress != null && progress.total > 0 -> stringResource(R.string.pack_progress, sizeText(progress.done), sizeText(progress.total))
-                        else -> stringResource(R.string.pack_starting)
+                        progress?.checking == true -> {
+                            stringResource(R.string.pack_checking)
+                        }
+
+                        progress != null && progress.total > 0 -> {
+                            stringResource(
+                                R.string.pack_progress,
+                                sizeText(progress.done),
+                                sizeText(progress.total),
+                            )
+                        }
+
+                        else -> {
+                            stringResource(R.string.pack_starting)
+                        }
                     },
                     color = muted,
                 )

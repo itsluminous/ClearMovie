@@ -257,6 +257,9 @@ enum class HindiModel {
     }
 }
 
+/** The commit that added `voice-packs/hindi-hd-v1/` ("feat(voice): Add the Hindi HD voice pack"). */
+internal const val HINDI_HD_COMMIT = "4ffa7dae44bf6bac7af2e2928dbdeb78abf596f0"
+
 /**
  * Where the app itself downloads the voice pack from (cm-voice-pack-download):
  * the repository's raw file host over HTTPS, at one fixed commit, so a later
@@ -264,9 +267,6 @@ enum class HindiModel {
  * still checked against the app's own manifest before anything is unzipped.
  * This host is the only one the app's network security config trusts.
  */
-/** The commit that added `voice-packs/hindi-hd-v1/` ("feat(voice): Add the Hindi HD voice pack"). */
-internal const val HINDI_HD_COMMIT = "4ffa7dae44bf6bac7af2e2928dbdeb78abf596f0"
-
 object VoicePackSource {
     const val HOST = "raw.githubusercontent.com"
     const val REPOSITORY = "itsluminous/ClearMovie"

@@ -80,7 +80,10 @@ class PackDownloadJobTest {
         override val manifest = store.manifest
         override val supported = true
 
-        override fun missing(speech: SpokenLanguage?, voice: VoiceChoice?) = store.missing(speech)
+        override fun missing(
+            speech: SpokenLanguage?,
+            voice: VoiceChoice?,
+        ) = store.missing(speech, voice)
 
         override fun downloadFile(f: VoicePackFile): File = store.downloadFile(f)
 

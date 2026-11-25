@@ -63,7 +63,10 @@ class HindiHdPackTest {
         val bytes = zip(*entries.toTypedArray())
         val unpacked = entries.sumOf { it.second.length.toLong() }
         if (pieces == 1) {
-            return Built(VoicePackFile(name, part, bytes.size.toLong(), unpacked, entries.size, sha(bytes), abi, folder), mapOf(name to bytes))
+            return Built(
+                VoicePackFile(name, part, bytes.size.toLong(), unpacked, entries.size, sha(bytes), abi, folder),
+                mapOf(name to bytes),
+            )
         }
         val size = (bytes.size + pieces - 1) / pieces
         val cut = (0 until pieces).map { i -> bytes.copyOfRange(i * size, minOf(bytes.size, (i + 1) * size)) }
@@ -122,7 +125,9 @@ class HindiHdPackTest {
     fun `the add-on's files are marked with its folder and the pack's own keep theirs`() {
         assertThat(manifest.folderOf(listed(voices))).isEqualTo("v1")
         assertThat(manifest.folderOf(listed(hd))).isEqualTo("hindi-hd-v1")
-        assertThat(listed(hd).downloads).containsExactly("speech-hindi-hd.zip.001", "speech-hindi-hd.zip.002", "speech-hindi-hd.zip.003").inOrder()
+        assertThat(
+            listed(hd).downloads,
+        ).containsExactly("speech-hindi-hd.zip.001", "speech-hindi-hd.zip.002", "speech-hindi-hd.zip.003").inOrder()
         assertThat(manifest.files.all { it.valid() }).isTrue()
         // A split file is only taken in by its pieces.
         assertThat(manifest.bySha(listed(hd).sha256)).isNull()

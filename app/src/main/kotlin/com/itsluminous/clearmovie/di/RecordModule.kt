@@ -87,8 +87,14 @@ object RecordModule {
         freeSpace: FreeSpace,
     ): VoiceTools {
         fun asset(name: String) =
-            runCatching { context.assets.open(name).bufferedReader().use { VoicePackManifest.parse(it.readText()) } }.getOrNull()
-        val base = asset(VoicePackStore.MANIFEST_ASSET) ?: return if (BuildConfig.DEBUG) TestableVoiceTools(VoiceTools.NONE) else VoiceTools.NONE
+            runCatching {
+                context.assets
+                    .open(name)
+                    .bufferedReader()
+                    .use { VoicePackManifest.parse(it.readText()) }
+            }.getOrNull()
+        val base =
+            asset(VoicePackStore.MANIFEST_ASSET) ?: return if (BuildConfig.DEBUG) TestableVoiceTools(VoiceTools.NONE) else VoiceTools.NONE
         // Hindi HD (cm-hindi-voices) is an add-on: without its manifest the pack works as before.
         val manifest = asset(VoicePackStore.HINDI_HD_MANIFEST_ASSET)?.let { base + it } ?: base
         val abis = if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS

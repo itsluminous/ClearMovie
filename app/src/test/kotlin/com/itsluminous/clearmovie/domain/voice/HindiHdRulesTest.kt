@@ -53,7 +53,9 @@ class HindiHdRulesTest {
         assertThat(commit).matches("[0-9a-f]{40}")
         assertThat(commit).isNotEqualTo("0".repeat(40))
         val url = VoicePackSource.url("hindi-hd-v1", "speech-hindi-hd.zip.001")
-        assertThat(url).isEqualTo("https://raw.githubusercontent.com/itsluminous/ClearMovie/$commit/voice-packs/hindi-hd-v1/speech-hindi-hd.zip.001")
+        assertThat(
+            url,
+        ).isEqualTo("https://raw.githubusercontent.com/itsluminous/ClearMovie/$commit/voice-packs/hindi-hd-v1/speech-hindi-hd.zip.001")
         assertThat(VoicePackSource.allowed(url!!)).isTrue()
         assertThat(VoicePackSource.allowed(url.replace(commit, VoicePackSource.COMMITS.getValue("v1")))).isFalse()
         assertThat(VoicePackSource.allowed(url.replace("hindi-hd-v1", "hindi-hd-v2"))).isFalse()
@@ -66,14 +68,22 @@ class HindiHdRulesTest {
     @Test
     fun `the app takes exactly the Hindi HD pack in its repo folder, every piece under GitHub's 100 MB limit`() {
         val inRepo = repoFile("voice-packs/hindi-hd-v1/manifest.json")
-        val asset = listOf(File("src/main/assets/voice-pack/manifest-hindi-hd-v1.json"), File("app/src/main/assets/voice-pack/manifest-hindi-hd-v1.json"))
-            .first { it.isFile }
+        val asset =
+            listOf(
+                File("src/main/assets/voice-pack/manifest-hindi-hd-v1.json"),
+                File("app/src/main/assets/voice-pack/manifest-hindi-hd-v1.json"),
+            ).first { it.isFile }
         assertThat(asset.readText()).isEqualTo(inRepo.readText())
         val m = requireNotNull(VoicePackManifest.parse(inRepo.readText()))
         assertThat(m.folderName).isEqualTo("hindi-hd-v1")
         assertThat(m.files.map { it.part })
             .containsExactly(VoicePackFile.VOICES_HI_HD, VoicePackFile.SPEECH_HI_HD, VoicePackFile.SPEECH_HI_HD_RESCORE)
-        val folder = inRepo.parentFile.listFiles().orEmpty().map { it.name }.toSet()
+        val folder =
+            inRepo.parentFile
+                .listFiles()
+                .orEmpty()
+                .map { it.name }
+                .toSet()
         assertThat(folder).isEqualTo(m.files.flatMap { it.downloads }.toSet() + setOf("manifest.json", "README.md"))
         for (f in m.files) {
             for ((i, name) in f.downloads.withIndex()) {

@@ -213,7 +213,11 @@ class VoicePackStore(
         index: Int,
         file: File,
     ): Boolean {
-        val p = manifest.files.firstOrNull { it == f }?.pieces?.getOrNull(index)
+        val p =
+            manifest.files
+                .firstOrNull { it == f }
+                ?.pieces
+                ?.getOrNull(index)
         val ok = p != null && file.isFile && file.length() == p.bytes && sha256Of(file)?.equals(p.sha256, ignoreCase = true) == true
         if (!ok) file.delete()
         return ok

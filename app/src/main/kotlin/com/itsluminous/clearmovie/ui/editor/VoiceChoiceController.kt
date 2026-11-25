@@ -323,7 +323,14 @@ class VoiceChoiceController(
     private fun roomFor(files: List<VoicePackFile>): Long {
         val partial =
             files.sumOf { f ->
-                val onDisk = if (f.pieces.isEmpty()) listOfNotNull(tools.downloadFile(f)) else f.pieces.mapNotNull { tools.pieceFile(it.file) }
+                val onDisk =
+                    if (f.pieces.isEmpty()) {
+                        listOfNotNull(
+                            tools.downloadFile(f),
+                        )
+                    } else {
+                        f.pieces.mapNotNull { tools.pieceFile(it.file) }
+                    }
                 onDisk.sumOf { if (it.isFile) it.length() else 0L }
             }
         return (roomToDownload(files, VoicePackStore.SPARE_BYTES) - partial - tools.freeBytes()).coerceAtLeast(0)
