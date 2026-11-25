@@ -153,9 +153,17 @@ class KeepScreenOnDeviceTest {
             ?.getString(ExportWorker.KEY_URI)
             ?.let(android.net.Uri::parse)
 
-    private fun openFromMyVideos(name: String) {
+    /**
+     * Opens [name] from My videos. The first time, Home is waited on until it has read the presets (their
+     * cards go in above My videos); back on Home later they are read, and Home keeps where it was scrolled
+     * to, so on a small screen the preset card is not even composed.
+     */
+    private fun openFromMyVideos(
+        name: String,
+        firstTime: Boolean = true,
+    ) {
         waitFor(hasTestTag(HOME_LIST_TAG))
-        waitFor(hasTestTag(presetEditTag(h.presetId)))
+        if (firstTime) waitFor(hasTestTag(presetEditTag(h.presetId)))
         val card = hasText(name) and hasClickAction()
         var missed: AssertionError? = null
         try {
@@ -216,7 +224,7 @@ class KeepScreenOnDeviceTest {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             waitFor(hasTestTag(HOME_LIST_TAG))
             expectFlag(scenario, on = false, step = "left the editor for Home while it played")
-            openFromMyVideos("Keep it on")
+            openFromMyVideos("Keep it on", firstTime = false)
             waitFor(hasTestTag(PLAY_TAG) and isEnabled(), timeoutMs = 30_000)
             holdsFlag(scenario, on = false, step = "editor open again, paused")
 
