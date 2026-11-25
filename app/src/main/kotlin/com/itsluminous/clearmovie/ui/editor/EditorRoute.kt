@@ -277,9 +277,10 @@ fun EditorRoute(
     BackHandler(enabled = atTop && screen.panel != null) { screen.panel = null }
     // While a voice is recorded, Back is Stop: what was said is kept (cm-record-voice).
     BackHandler(enabled = recording != null, onBack = viewModel::stopRecording)
-    // The screen stays on while the preview plays, and through a whole recording, its countdown too, so a
-    // long commentary is never cut off by the screen going dark (cm-keep-screen-on). Paused, it may go dark.
-    KeepScreenOnWhile(preview.playing || recording != null)
+    // The screen stays on while the preview plays (not while the system holds it back, as when another app takes
+    // the sound for a moment), and through a whole recording, its countdown too, so a long commentary is never cut
+    // off by the screen going dark (cm-keep-screen-on). Paused, it may go dark.
+    KeepScreenOnWhile((preview.playing && !preview.suppressed) || recording != null)
     val askToRecord = rememberRecordVoice { row, atMs -> viewModel.recordVoice(row, atMs) }
     val latestAskToRecord by rememberUpdatedState(askToRecord)
 

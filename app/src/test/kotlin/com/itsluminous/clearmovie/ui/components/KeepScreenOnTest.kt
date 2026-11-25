@@ -30,7 +30,7 @@ class KeepScreenOnTest {
     fun playingIsPlayingOrLoadingToPlay() {
         assertThat(KeepScreenOn.playing(isPlaying = true, playWhenReady = true, buffering = false)).isTrue()
         assertThat(KeepScreenOn.playing(isPlaying = false, playWhenReady = true, buffering = true)).isTrue()
-        // Paused while loading, ended or failed (playWhenReady stays set there), or held back by the system.
+        // Paused while loading; ended, failed or held back by the system (playWhenReady stays set there); paused.
         assertThat(KeepScreenOn.playing(isPlaying = false, playWhenReady = false, buffering = true)).isFalse()
         assertThat(KeepScreenOn.playing(isPlaying = false, playWhenReady = true, buffering = false)).isFalse()
         assertThat(KeepScreenOn.playing(isPlaying = false, playWhenReady = false, buffering = false)).isFalse()
@@ -51,13 +51,36 @@ class KeepScreenOnTest {
     }
 
     @Test
-    fun goingToTheBackgroundClearsItAtOnceAndComingBackSetsItAgain() {
+    fun goingToTheBackgroundClearsItAtOnce() {
         awake.visible = true
         awake.hold()
+        awake.exporting = true
         awake.visible = false
         assertThat(applied).containsExactly(true, false).inOrder()
+    }
+
+    @Test
+    fun backOnScreenNothingStaleSetsItUntilTheScreensAndTheExportAnswerAgain() {
         awake.visible = true
-        assertThat(applied).containsExactly(true, false, true).inOrder()
+        val stale = awake.hold()
+        awake.exporting = true
+        val before = awake.generation
+        awake.visible = false
+        // A preview paused by going to the background still holds, and the export may have ended meanwhile.
+        awake.visible = true
+        assertThat(applied).containsExactly(true, false).inOrder()
+        assertThat(awake.generation).isNotEqualTo(before)
+        // The old hold goes as the screen asks again; releasing it changes nothing.
+        stale.release()
+        assertThat(awake.on).isFalse()
+        // The screen asks again, still playing: on.
+        val fresh = awake.hold()
+        assertThat(awake.on).isTrue()
+        fresh.release()
+        assertThat(awake.on).isFalse()
+        // The export answers again, still saving: on.
+        awake.exporting = true
+        assertThat(applied).containsExactly(true, false, true, false, true).inOrder()
     }
 
     @Test

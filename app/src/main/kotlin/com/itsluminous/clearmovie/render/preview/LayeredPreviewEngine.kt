@@ -32,6 +32,12 @@ data class PreviewState(
     val positionUs: Long = 0,
     val durationUs: Long = 0,
     val playing: Boolean = false,
+    /**
+     * Playing, but held back by the system for a moment (audio focus lost to a
+     * call or an assistant): the picture does not move, so the screen need not
+     * stay on (cm-keep-screen-on).
+     */
+    val suppressed: Boolean = false,
     /** Index into [PreviewSchedule.main], or -1 with nothing to play. */
     val mainIndex: Int = -1,
     /** The MAIN player's picture size for the current video, or null before it is known. */
@@ -622,6 +628,7 @@ class LayeredPreviewEngine(
                 positionUs = t,
                 durationUs = s.durationUs,
                 playing = p?.playWhenReady == true && p.playbackState != Player.STATE_ENDED,
+                suppressed = p?.playbackSuppressed == true,
                 mainIndex = p?.currentMediaItemIndex ?: -1,
                 overlayVisible = overlayShown,
             )
@@ -654,6 +661,8 @@ class LayeredPreviewEngine(
             }
             publish()
         }
+
+        override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) = publish()
 
         override fun onPlayerError(error: PlaybackException) {
             // A file that fails mid-play never stops the app: the preview pauses and moves on to

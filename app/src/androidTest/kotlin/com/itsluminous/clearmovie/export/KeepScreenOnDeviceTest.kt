@@ -46,9 +46,9 @@ import org.junit.runner.RunWith
 /**
  * cm-keep-screen-on: the activity window's FLAG_KEEP_SCREEN_ON while the
  * editor preview plays, while an export waits or saves, and while the
- * app's own player plays the result; cleared on pause, when the export
- * ends or is stopped, when the player closes, and the moment the app goes
- * to the background. Each step is also logged under the tag KeepScreenOnTest.
+ * app's own player plays the result; cleared on pause, at the end, when
+ * the editor is left, when the export ends or is stopped, when the player
+ * closes, and the moment the app goes to the background. Each step is also logged under the tag KeepScreenOnTest.
  */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
@@ -56,6 +56,9 @@ class KeepScreenOnDeviceTest {
     private companion object {
         const val TAG = "KeepScreenOnTest"
         const val FLAG_TIMEOUT_MS = 10_000L
+
+        /** Longer than the whole video plays. */
+        const val END_TIMEOUT_MS = 90_000L
         const val NO_NODE = "could not find any node"
     }
 
@@ -160,7 +163,7 @@ class KeepScreenOnDeviceTest {
         waitFor(hasTestTag(EXPORT_SAVE_TAG))
         compose.onNodeWithTag(exportQualityTag(quality)).performScrollTo().performClick()
         compose.onNodeWithTag(EXPORT_SAVE_TAG).performClick()
-        waitFor(hasTestTag(EXPORT_PROGRESS_TAG))
+        waitFor(hasTestTag(EXPORT_PROGRESS_TAG) or hasText(s(R.string.export_done_title)))
     }
 
     @Test
@@ -179,6 +182,22 @@ class KeepScreenOnDeviceTest {
             expectFlag(scenario, on = false, step = "editor preview paused")
             holdsFlag(scenario, on = false, step = "editor stays paused")
 
+            // Played to the end, it stops there by itself, and so does the flag.
+            compose.onNodeWithTag(PLAY_TAG).performClick()
+            expectFlag(scenario, on = true, step = "editor preview playing to the end")
+            compose.waitUntil(END_TIMEOUT_MS) { !flag(scenario) }
+            expectFlag(scenario, on = false, step = "editor preview reached the end")
+
+            // Leaving the editor while it plays: the screen it showed on is gone.
+            compose.onNodeWithTag(PLAY_TAG).performClick()
+            expectFlag(scenario, on = true, step = "editor preview playing before Back")
+            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            waitFor(hasTestTag(HOME_LIST_TAG))
+            expectFlag(scenario, on = false, step = "left the editor for Home while it played")
+            openFromMyVideos("Keep it on")
+            waitFor(hasTestTag(PLAY_TAG) and isEnabled(), timeoutMs = 30_000)
+            holdsFlag(scenario, on = false, step = "editor open again, paused")
+
             // Playing, then the app goes to the background: cleared at once, not when Compose next runs.
             compose.onNodeWithTag(PLAY_TAG).performClick()
             expectFlag(scenario, on = true, step = "editor preview playing again")
@@ -192,15 +211,16 @@ class KeepScreenOnDeviceTest {
             // An export: on while it waits or saves, off in the background, on again when the app is back.
             startExport(ExportQuality.SMALL)
             expectFlag(scenario, on = true, step = "export saving")
-            compose.onNodeWithTag(EXPORT_PROGRESS_TAG).assertExists()
             scenario.moveToState(Lifecycle.State.CREATED)
             assertWithMessage("background while exporting").that(flag(scenario)).isFalse()
             Log.i(TAG, "background while exporting: FLAG_KEEP_SCREEN_ON=clear")
             Thread.sleep(1_000)
             // The export itself carries on in the background, as before.
-            assertThat(exportState()).isAnyOf(WorkInfo.State.RUNNING, WorkInfo.State.SUCCEEDED)
+            assertThat(exportState()).isAnyOf(WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.SUCCEEDED)
             scenario.moveToState(Lifecycle.State.RESUMED)
-            if (exportState() == WorkInfo.State.RUNNING) expectFlag(scenario, on = true, step = "back while still exporting")
+            // Back on screen while it still saves, it is set again (a fast export may have finished meanwhile).
+            compose.waitUntil(FLAG_TIMEOUT_MS) { flag(scenario) || exportState()?.isFinished == true }
+            if (exportState()?.isFinished != true) expectFlag(scenario, on = true, step = "back while still exporting")
 
             // Done: cleared.
             waitFor(hasText(s(R.string.export_done_title)), timeoutMs = 600_000)

@@ -42,6 +42,7 @@ class FakePreviewPlayer(
 ) : PreviewPlayer {
     override var playWhenReady = false
     override var playbackState = Player.STATE_IDLE
+    override var playbackSuppressed = false
     override var currentMediaItemIndex = 0
     override var currentPosition = 0L
     override var volume = 1f
@@ -212,6 +213,23 @@ class LayeredPreviewEngineTest {
         assertThat(main().playWhenReady).isFalse()
         assertThat(sounds().none { it.playWhenReady }).isTrue()
         assertThat(engine.state.value.playing).isFalse()
+    }
+
+    @Test
+    fun `playing held back by the system is told apart, so the screen need not stay on (cm-keep-screen-on)`() {
+        engine.load(schedule, resolver, startUs = 0, play = false)
+        engine.play()
+        assertThat(engine.state.value.suppressed).isFalse()
+        // Audio focus lost for a moment: ExoPlayer keeps playWhenReady and stops moving.
+        main().playbackSuppressed = true
+        main().listeners.forEach { it.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS) }
+        assertThat(engine.state.value.playing).isTrue()
+        assertThat(engine.state.value.suppressed).isTrue()
+        // Focus back: it plays on, and says so.
+        main().playbackSuppressed = false
+        main().listeners.forEach { it.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_NONE) }
+        assertThat(engine.state.value.suppressed).isFalse()
+        assertThat(engine.state.value.playing).isTrue()
     }
 
     @Test

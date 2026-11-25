@@ -2,6 +2,7 @@ package com.itsluminous.clearmovie.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
@@ -23,9 +24,9 @@ object KeepScreenOn {
     fun exporting(finished: List<Boolean>): Boolean = finished.any { !it }
 
     /**
-     * Whether a player counts as playing: playing now, or asked to play and
-     * still loading. Paused, ended, failed (idle) or held back by the system
-     * (lost audio focus) does not count.
+     * Whether a player counts as playing: playing now (ExoPlayer's isPlaying,
+     * which is false while the system holds it back), or asked to play and
+     * still loading. Paused, ended or failed (idle) does not count.
      */
     fun playing(
         isPlaying: Boolean,
@@ -37,17 +38,34 @@ object KeepScreenOn {
 /**
  * Keeps the activity window's screen-on flag in step with [KeepScreenOn]:
  * [apply] gets true to set FLAG_KEEP_SCREEN_ON and false to clear it, only
- * when the answer changes. Main thread only.
+ * when the answer changes. Main thread only (the activity's lifecycle and
+ * the composition both call it there).
+ *
+ * The screens' holds count only from the activity's latest start: when it
+ * stops, the holds and the export answer are dropped, because Compose
+ * stops updating while the activity is stopped, so what they said then may
+ * be stale (a preview paused by going to the background still holds).
+ * Back on screen, each screen asks again ([generation]) and the export is
+ * read again, so the flag is never set from a stale answer.
  */
 class ScreenAwake(
     private val apply: (Boolean) -> Unit,
 ) {
     private var holds = 0
     private var applied = false
+    private val generationState = mutableIntStateOf(0)
+
+    /** Moves on each time the activity stops; a screen's hold from an earlier one no longer counts. */
+    val generation: Int get() = generationState.intValue
 
     /** Whether the activity is started (on screen); set by its lifecycle. */
     var visible = false
         set(value) {
+            if (field && !value) {
+                generationState.intValue++
+                holds = 0
+                exporting = false
+            }
             field = value
             update()
         }
@@ -66,7 +84,7 @@ class ScreenAwake(
     fun hold(): Hold {
         holds++
         update()
-        return Hold()
+        return Hold(generation)
     }
 
     private fun update() {
@@ -76,13 +94,16 @@ class ScreenAwake(
         apply(wanted)
     }
 
-    /** A screen's request; releasing it twice counts once. */
-    inner class Hold internal constructor() {
+    /** A screen's request; releasing it twice, or after the activity stopped, changes nothing. */
+    inner class Hold internal constructor(
+        private val taken: Int,
+    ) {
         private var released = false
 
         fun release() {
             if (released) return
             released = true
+            if (taken != generation) return
             holds--
             update()
         }
@@ -96,7 +117,9 @@ val LocalScreenAwake = staticCompositionLocalOf<ScreenAwake?> { null }
 @Composable
 fun KeepScreenOnWhile(active: Boolean) {
     val awake = LocalScreenAwake.current
-    DisposableEffect(awake, active) {
+    // Read here, so the hold is asked for again after the activity was stopped and started.
+    val generation = awake?.generation
+    DisposableEffect(awake, active, generation) {
         val hold = if (active) awake?.hold() else null
         onDispose { hold?.release() }
     }

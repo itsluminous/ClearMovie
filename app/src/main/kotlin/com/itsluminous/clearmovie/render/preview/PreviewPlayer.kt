@@ -56,6 +56,9 @@ enum class PlayerRole {
 interface PreviewPlayer {
     var playWhenReady: Boolean
     val playbackState: Int
+
+    /** Asked to play but held back by the system (audio focus lost for a moment): it does not move. */
+    val playbackSuppressed: Boolean get() = false
     val currentMediaItemIndex: Int
     val currentPosition: Long
     var volume: Float
@@ -144,6 +147,7 @@ class ExoPreviewPlayers(
                 p.playWhenReady = value
             }
         override val playbackState: Int get() = p.playbackState
+        override val playbackSuppressed: Boolean get() = p.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
         override val currentMediaItemIndex: Int get() = p.currentMediaItemIndex
         override val currentPosition: Long get() = p.currentPosition
         override var volume: Float
