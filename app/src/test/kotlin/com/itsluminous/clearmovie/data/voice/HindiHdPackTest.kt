@@ -237,6 +237,15 @@ class HindiHdPackTest {
     }
 
     @Test
+    fun `a zip added meanwhile is not checked or fetched again`() {
+        val s = store(HindiModel.LIGHT)
+        addAll(s, hd)
+        val r = s.addDownloaded(listed(hd), listed(hd).downloads.map { File(tmp.root, "gone-$it") })
+        assertThat(r.rejected).isEqualTo(0)
+        assertThat(r.added).isEmpty()
+    }
+
+    @Test
     fun `an add-on may not bring an engine, a file or a part the pack has`() {
         val withEngine = addOn.copy(files = addOn.files + engine.file.copy(file = "engine-x.zip"))
         assertThat(runCatching { base + withEngine }.isFailure).isTrue()

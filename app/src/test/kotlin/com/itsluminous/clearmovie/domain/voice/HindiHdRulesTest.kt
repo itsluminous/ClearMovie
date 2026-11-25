@@ -47,6 +47,10 @@ class HindiHdRulesTest {
         same("10,20 और 30", "दस, बीस और तीस")
         same("1,000,000", "दस लाख")
         same("तीन 3.5.", "तीन तीन दशमलव पांच.")
+        same("00:30", "बारह बजकर तीस मिनट")
+        // Not a date (month 13, or two separators that differ): read as separate numbers, never a decimal.
+        same("10.13.2026", "दस. तेरह. दो हज़ार छब्बीस")
+        assertThat(phonemizer.hindi("10.5/2026").phonemes).isNotEqualTo(phonemizer.hindi("दस पाँच दो हज़ार छब्बीस").phonemes)
     }
 
     @Test

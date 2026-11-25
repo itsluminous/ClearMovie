@@ -15,6 +15,7 @@ import com.itsluminous.clearmovie.domain.voice.HindiModel
 import com.itsluminous.clearmovie.domain.voice.VoicePackFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +40,7 @@ data class HindiHdOffer(
     val unpackedBytes: Long get() = files.sumOf { it.unpackedBytes }
 
     /** Whether the download includes the voice pack Hindi HD needs (the phone does not have it yet). */
-    val withPack: Boolean get() = files.any { it.folder == null }
+    val withPack: Boolean get() = files.any { it.part !in VoicePackFile.HINDI_HD_PARTS }
 }
 
 @HiltViewModel
@@ -112,10 +113,21 @@ class SettingsViewModel
             // Shown at once; the worker's own state follows when it starts.
             hindiHdState.update { it?.copy(download = PackDownloadState.Waiting(STARTING)) }
             packDownloads.start(files)
+            // A worker that never reports (another download already queued) must not leave the row starting.
+            viewModelScope.launch {
+                delay(STARTING_MS)
+                hindiHdState.update { o ->
+                    val w = o?.download as? PackDownloadState.Waiting
+                    if (w?.id == STARTING) o.copy(download = packDownloads.state.value) else o
+                }
+            }
         }
 
         /** Stops the voice pack download and removes what it had downloaded. */
-        fun cancelDownload() = packDownloads.cancel()
+        fun cancelDownload() {
+            packDownloads.cancel()
+            hindiHdState.update { it?.copy(download = PackDownloadState.Idle) }
+        }
 
         private val storageState = MutableStateFlow<StorageReport?>(null)
 
@@ -135,6 +147,7 @@ class SettingsViewModel
         private companion object {
             /** The download Settings started, before the worker reports it. */
             const val STARTING = "settings"
+            const val STARTING_MS = 20_000L
         }
 
         /** Null until the stored settings are read, so the screen never shows defaults first. */

@@ -268,6 +268,19 @@ class VoicePackStore(
     ): PackAddResult {
         val listed = manifest.files.firstOrNull { it == f }?.takeIf(::fits)
         val expected = listed?.let { l -> if (l.pieces.isEmpty()) listOf(l.bytes to l.sha256) else l.pieces.map { it.bytes to it.sha256 } }
+        if (listed == null) {
+            files.forEach { it.delete() }
+            return PackAddResult(emptyList(), 1)
+        }
+
+        // Once the zip is in, its pieces waiting with the downloads are not needed, wherever these copies came from.
+        fun clearPieces() = listed.pieces.forEach { pieceFile(it.file).delete() }
+        // Added meanwhile (by hand, or by another run): nothing to check or download again.
+        if (isAdded(listed)) {
+            files.forEach { it.delete() }
+            clearPieces()
+            return PackAddResult(emptyList(), 0)
+        }
         // Each file is checked on its own and only the ones that do not match are deleted, so one bad
         // piece never costs the good ones (they may be most of 1.2 GB).
         val bad =
@@ -276,23 +289,17 @@ class VoicePackStore(
             } else {
                 files
             }
-        if (listed == null || bad.isNotEmpty()) {
+        if (bad.isNotEmpty()) {
             bad.forEach { it.delete() }
             return PackAddResult(emptyList(), 1)
         }
 
-        // Once the zip is in, its pieces waiting with the downloads are not needed, wherever these copies came from.
-        fun clearPieces() = listed.pieces.forEach { pieceFile(it.file).delete() }
-        if (isAdded(listed)) {
-            files.forEach { it.delete() }
-            clearPieces()
-            return PackAddResult(emptyList(), 0)
-        }
         val need = listed.unpackedBytes + SPARE_BYTES
         val free = freeSpace()
         if (free < need) return PackAddResult(emptyList(), 0, outOfSpace = true, missingBytes = need - free)
         val added = unpack(listed) { SequenceInputStream(Collections.enumeration(files.map { it.inputStream() })) }
-        files.forEach { it.delete() }
+        // Matching pieces stay when unpacking fails (a disk problem): trying again unpacks them without downloading.
+        if (added || listed.pieces.isEmpty()) files.forEach { it.delete() }
         if (added) clearPieces()
         return if (added) PackAddResult(listOf(listed), 0) else PackAddResult(emptyList(), 1)
     }

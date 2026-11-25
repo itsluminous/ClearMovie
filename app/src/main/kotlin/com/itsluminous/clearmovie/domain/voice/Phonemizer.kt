@@ -144,10 +144,10 @@ class Phonemizer(
         private val DIGIT_GROUP = Regex("(?<![\\d,])(\\d{1,3}(?:,\\d{2})*,\\d{3}|\\d{1,3}(?:,\\d{3})+)(?!\\d|,\\d)")
 
         /** A date (10.5.2026, 10/05/26, 10-5-2026), read before a decimal could take its first two numbers. */
-        private val DATE = Regex("(?<![\\d.])(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})(?!\\d|\\.\\d)")
+        private val DATE = Regex("(?<![\\d./-])(\\d{1,2})([./-])(\\d{1,2})\\2(\\d{4}|\\d{2})(?!\\d|\\.\\d)")
 
         /** A time of day (11:35, 05:30). */
-        private val TIME = Regex("(?<!\\d)([01]?\\d|2[0-3]):([0-5]\\d)(?!\\d)")
+        private val TIME = Regex("(?<![\\d:])([01]?\\d|2[0-3]):([0-5]\\d)(?![\\d:])")
         private val DECIMAL = Regex("(?<![\\d.])(\\d+)\\.(\\d+)(?!\\d|\\.\\d)")
 
         private fun said(n: String) = hindiNumberWords(n).joinToString(" ")
@@ -159,10 +159,17 @@ class Phonemizer(
          */
         private fun hindiNumbers(text: String): String {
             var t = text.map { if (it in '०'..'९') '0' + (it - '०') else it }.joinToString("")
-            t = DATE.replace(t) { m -> m.groupValues.drop(1).joinToString(" ") { said(it.trimStart('0').ifEmpty { "0" }) } }
+            t =
+                DATE.replace(t) { m ->
+                    val (d, _, mo, y) = m.destructured
+                    // Not a date (a version, a code): left for the rules below.
+                    if (d.toInt() !in 1..31 || mo.toInt() !in 1..12) return@replace m.value
+                    listOf(d, mo, y).joinToString(" ") { said(it.trimStart('0').ifEmpty { "0" }) }
+                }
             t =
                 TIME.replace(t) { m ->
-                    val h = said(m.groupValues[1].trimStart('0').ifEmpty { "0" })
+                    // Midnight is said as twelve.
+                    val h = said(m.groupValues[1].trimStart('0').ifEmpty { "12" })
                     val min = m.groupValues[2].trimStart('0').ifEmpty { "0" }
                     if (min == "0") "$h बजे" else "$h बजकर ${said(min)} मिनट"
                 }

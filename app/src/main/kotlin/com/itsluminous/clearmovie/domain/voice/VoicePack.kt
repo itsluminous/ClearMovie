@@ -175,6 +175,9 @@ data class VoicePackFile(
         private val PARTS = setOf(VOICES, ENGINE, SPEECH_EN, SPEECH_HI, VOICES_HI_HD, SPEECH_HI_HD, SPEECH_HI_HD_RESCORE)
         private val HD_PARTS = setOf(SPEECH_HI_HD, SPEECH_HI_HD_RESCORE)
 
+        /** Hindi HD's own parts. */
+        val HINDI_HD_PARTS = setOf(VOICES_HI_HD, SPEECH_HI_HD, SPEECH_HI_HD_RESCORE)
+
         /** GitHub refuses files over 100 MB. */
         const val MAX_FILE_BYTES = 100L * 1000 * 1000
         const val MAX_UNPACKED_BYTES = 400L * 1000 * 1000
