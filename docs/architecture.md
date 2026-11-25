@@ -426,6 +426,19 @@ killed, WorkManager runs it again from the start and the sheet says so.
 7. shows the entry in the gallery only when it is complete. A Stop or a
    failure removes the entry and the temporary file.
 
+**Keeping the screen on** (cm-keep-screen-on). `MainActivity` sets
+`FLAG_KEEP_SCREEN_ON` on its own window (no wake lock, no permission) through
+`ScreenAwake` while it is started and either an export of any video is
+waiting or saving (the unique `export` work, unfinished) or a screen holds it:
+`KeepScreenOnWhile` in the editor while the preview plays or a voice is
+recorded, and in `PlayFileDialog` while its player plays (the preset review,
+an editor part, the exported video). `KeepScreenOn` holds the pure rules.
+The flag follows the activity's lifecycle directly, because Compose's
+recomposer is paused once the activity stops, so it goes the moment the app
+leaves the screen; pausing, an ending, a failed file, a finished, failed or
+stopped export, or leaving the screen clears it as well. The export itself
+runs on in the background as before.
+
 The gallery name comes from the project's name (`ExportFileName`): path and
 reserved characters become spaces, invisible and direction-changing
 characters are dropped, a leading dot cannot hide it, letters of every script

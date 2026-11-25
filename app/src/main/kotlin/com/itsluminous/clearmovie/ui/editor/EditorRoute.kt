@@ -40,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -69,6 +68,7 @@ import com.itsluminous.clearmovie.domain.model.Project
 import com.itsluminous.clearmovie.domain.model.Side
 import com.itsluminous.clearmovie.domain.model.TrackId
 import com.itsluminous.clearmovie.domain.model.TrackType
+import com.itsluminous.clearmovie.ui.components.KeepScreenOnWhile
 import com.itsluminous.clearmovie.ui.components.PlayFileDialog
 import com.itsluminous.clearmovie.ui.editor.timeline.InsertSide
 import com.itsluminous.clearmovie.ui.editor.timeline.itemName
@@ -277,13 +277,9 @@ fun EditorRoute(
     BackHandler(enabled = atTop && screen.panel != null) { screen.panel = null }
     // While a voice is recorded, Back is Stop: what was said is kept (cm-record-voice).
     BackHandler(enabled = recording != null, onBack = viewModel::stopRecording)
-    // A long commentary must not be cut off by the screen going dark.
-    val view = LocalView.current
-    DisposableEffect(recording != null) {
-        val on = recording != null
-        if (on) view.keepScreenOn = true
-        onDispose { if (on) view.keepScreenOn = false }
-    }
+    // The screen stays on while the preview plays, and through a whole recording, its countdown too, so a
+    // long commentary is never cut off by the screen going dark (cm-keep-screen-on). Paused, it may go dark.
+    KeepScreenOnWhile(preview.playing || recording != null)
     val askToRecord = rememberRecordVoice { row, atMs -> viewModel.recordVoice(row, atMs) }
     val latestAskToRecord by rememberUpdatedState(askToRecord)
 

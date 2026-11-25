@@ -151,7 +151,7 @@ What ClearMovie on `main` does:
   already saved to the gallery stay there.
 - **Hardware-accelerated export** - tap Export in the play bar under the preview, then choose Best
   (1080p), Good (720p) or Small (480p). The video is saved to your gallery, ready to play
-  or share.
+  or share. While ClearMovie is open, the screen stays on as a video plays or saves.
 
 ## Feature checklist
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,7 @@ import kotlinx.coroutines.delay
  * Plays one file in a dialog: a preset part on the review screen or in the
  * editor. It starts playing at once; Play/Pause and Close are large
  * labelled buttons. [audioOnly] shows a sound icon instead of a picture.
+ * While it plays, the screen is kept on (cm-keep-screen-on).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,6 +74,9 @@ fun PlayFileDialog(
             }
         }
     var playing by remember(player) { mutableStateOf(savedPlaying) }
+    // From the player itself, never the button's label: paused, ended or a file that fails lets the screen go dark.
+    var awake by remember(player) { mutableStateOf(false) }
+    KeepScreenOnWhile(awake)
     // The picture's own shape (cm-aspect-ratio: an upright or square video too), so it is never stretched.
     var videoAspect by remember(player) { mutableFloatStateOf(16f / 9f) }
     // Kept up to date while it plays: the saved state is written before the dialog goes away.
@@ -87,6 +92,13 @@ fun PlayFileDialog(
             object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     playing = isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
+                }
+
+                override fun onEvents(
+                    player: Player,
+                    events: Player.Events,
+                ) {
+                    awake = KeepScreenOn.playing(player.isPlaying, player.playWhenReady, player.playbackState == Player.STATE_BUFFERING)
                 }
 
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -141,18 +153,23 @@ fun PlayFileDialog(
                             player.playWhenReady = !player.playWhenReady
                             playing = player.playWhenReady
                         },
-                        modifier = Modifier.heightIn(min = 56.dp),
+                        modifier = Modifier.heightIn(min = 56.dp).testTag(PLAY_FILE_TOGGLE_TAG),
                     ) {
                         Icon(painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play), contentDescription = null)
                         Text(stringResource(if (playing) R.string.action_pause else R.string.action_play), Modifier.padding(start = 8.dp))
                     }
                     Box(Modifier.weight(1f))
-                    TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 56.dp)) { Text(stringResource(R.string.action_close)) }
+                    TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 56.dp).testTag(PLAY_FILE_CLOSE_TAG)) {
+                        Text(stringResource(R.string.action_close))
+                    }
                 }
             }
         }
     }
 }
+
+const val PLAY_FILE_TOGGLE_TAG = "play_file_toggle"
+const val PLAY_FILE_CLOSE_TAG = "play_file_close"
 
 private const val SAVE_MS = 300L
 
