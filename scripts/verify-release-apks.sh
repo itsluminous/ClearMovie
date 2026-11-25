@@ -207,7 +207,9 @@ done
 # C function (socket, connect) through JNA.
 network_re='(Ljava/net/URL;\.(openConnection|openStream|getContent)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\.<init>|Ljava/net/InetAddress;\.(getByName|getAllByName|getLocalHost)|Ljavax/net/(ssl/SSL)?SocketFactory;\.createSocket|Ljava/nio/channels/(Asynchronous)?(Socket|Datagram|ServerSocket)Channel;\.open|Landroid/net/Network;\.(openConnection|getSocketFactory|bindSocket|getByName|getAllByName)|Ljava/net/InetSocketAddress;\.<init>:\(Ljava/lang/String;|Landroid/media/MediaPlayer;\.setDataSource|Landroid/widget/VideoView;\.setVideo(URI|Path)|Lcom/sun/jna/(Native;\.(load|loadLibrary|register)|NativeLibrary;\.getInstance|Function;\.getFunction)|Landroid/webkit/WebView;\.load|Landroid/app/DownloadManager;\.enqueue|Landroid/net/http/)'
 # The pattern goes through the environment: awk -v would treat its backslashes as escapes.
-NETWORK_RE="$network_re" awk 'BEGIN { re = ENVIRON["NETWORK_RE"] }
+# Bytes, not characters (LC_ALL=C): dexdump prints strings in modified UTF-8 (a NUL is C0 80), which
+# macOS awk refuses in a UTF-8 locale; the pattern is plain ASCII, so nothing else changes.
+LC_ALL=C NETWORK_RE="$network_re" awk 'BEGIN { re = ENVIRON["NETWORK_RE"] }
   
   /Class descriptor/ { cls = $NF; gsub(/\047/, "", cls) }
   /^      name          :/ { m = $NF; gsub(/\047/, "", m) }
