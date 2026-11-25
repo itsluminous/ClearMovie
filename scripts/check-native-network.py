@@ -110,7 +110,10 @@ def check_manifest(manifest_path, paths, bad):
     """Each given zip the manifest lists has its bytes; every listed engine is given."""
     with open(manifest_path) as f:
         files = {e["file"]: e for e in json.load(f)["files"]}
-    given = {os.path.basename(p): p for p in paths}
+    # Only the zips in the manifest's own pack folder (voice-packs/v<n>/, by its version) are its files.
+    with open(manifest_path) as f:
+        version = json.load(f)["version"]
+    given = {os.path.basename(p): p for p in paths if os.path.basename(os.path.dirname(os.path.abspath(p))) == f"v{version}"}
     for name, entry in files.items():
         if entry.get("part") == "engine" and name not in given:
             bad.append(f"{manifest_path}: the engine {name} was not checked")
@@ -118,14 +121,18 @@ def check_manifest(manifest_path, paths, bad):
         entry = files.get(name)
         if entry is None:
             continue
-        data = open(path, "rb").read()
+        with open(path, "rb") as f:
+            data = f.read()
         if len(data) != entry["bytes"] or hashlib.sha256(data).hexdigest() != entry["sha256"].lower():
             bad.append(f"{path}: not the bytes {manifest_path} lists")
 
 
 def main(args) -> int:
     manifest = None
-    if args[:1] == ["--manifest"] and len(args) >= 2:
+    if args[:1] == ["--manifest"]:
+        if len(args) < 3 or not args[1].endswith(".json"):
+            print("--manifest needs a manifest .json and then the files to check", file=sys.stderr)
+            return 2
         manifest, args = args[1], args[2:]
     paths = args
     if not paths:

@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.itsluminous.clearmovie.R
 import com.itsluminous.clearmovie.data.preset.FrameSample
+import com.itsluminous.clearmovie.data.voice.PackDownloadWatchers
 import com.itsluminous.clearmovie.domain.model.ArgbColor
 import com.itsluminous.clearmovie.domain.model.CanvasShape
 import com.itsluminous.clearmovie.domain.model.ClipId
@@ -291,6 +292,11 @@ fun EditorRoute(
         return
     }
     VoicePackDialog(viewModel.voices)
+    // While the editor is on screen it reports the voice pack download's end itself (not the notification).
+    DisposableEffect(Unit) {
+        PackDownloadWatchers.count.incrementAndGet()
+        onDispose { PackDownloadWatchers.count.decrementAndGet() }
+    }
     val title = ui.project?.name ?: ui.preset?.let { presetName(it) } ?: stringResource(R.string.editor_title_new)
     val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
     val actions =

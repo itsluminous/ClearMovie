@@ -30,7 +30,7 @@ sealed interface PackDownloadState {
     ) : PackDownloadState
 }
 
-/** How many editors follow the download now: with one on screen, it reports the end itself, not the notification. */
+/** How many editor screens are composed now: with one on screen, it reports the download's end itself, not the notification. */
 object PackDownloadWatchers {
     val count =
         java.util.concurrent.atomic

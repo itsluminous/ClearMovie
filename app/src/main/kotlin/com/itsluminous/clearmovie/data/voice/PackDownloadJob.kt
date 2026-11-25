@@ -76,8 +76,9 @@ class PackDownloadJob(
             val part = parts.getValue(f)
             val url = VoicePackSource.url(manifest.version, f.file) ?: return PackDownloadOutcome.Failed(PackDownloadError.FAILED)
             var checks = 0
+            val tries = IntArray(1)
             while (true) {
-                val failed = fetch(url, part, f, stopped) { progress(PackProgress(before + it, total)) }
+                val failed = fetch(url, part, f, stopped, tries) { progress(PackProgress(before + it, total)) }
                 if (failed != null) return failed
                 if (stopped()) return PackDownloadOutcome.Stopped
                 progress(PackProgress(before + f.bytes, total, checking = true))
@@ -118,12 +119,13 @@ class PackDownloadJob(
         part: File,
         f: VoicePackFile,
         stopped: () -> Boolean,
+        /** Connections made for this file so far, across its checks (at most [MAX_TRIES]). */
+        tries: IntArray,
         progress: (Long) -> Unit,
     ): PackDownloadOutcome.Failed? {
         var attempt = 0
-        var tries = 0
         while (true) {
-            if (++tries > MAX_TRIES) return PackDownloadOutcome.Failed(PackDownloadError.NETWORK)
+            if (++tries[0] > MAX_TRIES) return PackDownloadOutcome.Failed(PackDownloadError.NETWORK)
             val had = part.length()
             try {
                 downloader.fetch(url, part, f.bytes, progress, stopped)
@@ -153,7 +155,7 @@ class PackDownloadJob(
         /** How many times a file is downloaded when it does not match. */
         const val CHECKS = 2
 
-        /** At most this many connections for one file, however many of them made progress. */
+        /** At most this many connections for one file in one run, however many of them made progress. */
         const val MAX_TRIES = 30
     }
 }

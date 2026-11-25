@@ -201,9 +201,11 @@ for dex in "${dex_files[@]}"; do
   [ -s "$dex.txt" ] || fail "dexdump wrote nothing for $(basename "$dex") of $name"
 done
 # MediaExtractor and MediaMetadataRetriever.setDataSource(String) are left out: the app reads its own
-# files with them, in code R8 merges into other classes, and NetworkUseConventionTest checks the sources
-# never give them a web address.
-network_re='(Ljava/net/URL;\.(openConnection|openStream|getContent)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\.<init>|Ljava/net/InetAddress;\.(getByName|getAllByName|getLocalHost)|Ljavax/net/(ssl/SSL)?SocketFactory;\.createSocket|Ljava/nio/channels/(Asynchronous)?(Socket|Datagram|ServerSocket)Channel;\.open|Landroid/net/Network;\.(openConnection|getSocketFactory|bindSocket|getByName|getAllByName)|Ljava/net/InetSocketAddress;\.<init>:\(Ljava/lang/String;|Landroid/media/MediaPlayer;\.setDataSource|Landroid/widget/VideoView;\.setVideo(URI|Path)|Landroid/webkit/WebView;\.load|Landroid/app/DownloadManager;\.enqueue|Landroid/net/http/)'
+# files with them, in code R8 merges into other classes. NetworkUseConventionTest flags a web address
+# given to them as a literal; every link the app reads media from is content:// or a file.
+# JNA calls are listed: JNA's own internals and Vosk's registration only, so no other code can reach a
+# C function (socket, connect) through JNA.
+network_re='(Ljava/net/URL;\.(openConnection|openStream|getContent)|Ljava/net/(Socket|DatagramSocket|MulticastSocket|ServerSocket);\.<init>|Ljava/net/InetAddress;\.(getByName|getAllByName|getLocalHost)|Ljavax/net/(ssl/SSL)?SocketFactory;\.createSocket|Ljava/nio/channels/(Asynchronous)?(Socket|Datagram|ServerSocket)Channel;\.open|Landroid/net/Network;\.(openConnection|getSocketFactory|bindSocket|getByName|getAllByName)|Ljava/net/InetSocketAddress;\.<init>:\(Ljava/lang/String;|Landroid/media/MediaPlayer;\.setDataSource|Landroid/widget/VideoView;\.setVideo(URI|Path)|Lcom/sun/jna/(Native;\.(load|loadLibrary|register)|NativeLibrary;\.getInstance|Function;\.getFunction)|Landroid/webkit/WebView;\.load|Landroid/app/DownloadManager;\.enqueue|Landroid/net/http/)'
 # The pattern goes through the environment: awk -v would treat its backslashes as escapes.
 NETWORK_RE="$network_re" awk 'BEGIN { re = ENVIRON["NETWORK_RE"] }
   
@@ -220,6 +222,19 @@ Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/DatagramSocket;.<in
 Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/InetAddress;.getByName
 Landroidx/media3/datasource/UdpDataSource; open -> Ljava/net/MulticastSocket;.<init>
 Lcom/sun/jna/Native; extractFromResourcePath -> Ljava/net/URL;.openStream
+Lcom/sun/jna/Function; getFunction -> Lcom/sun/jna/Function;.getFunction
+Lcom/sun/jna/Function; getFunction -> Lcom/sun/jna/NativeLibrary;.getInstance
+Lcom/sun/jna/Library$Handler; <init> -> Lcom/sun/jna/NativeLibrary;.getInstance
+Lcom/sun/jna/Native; <clinit> -> Lcom/sun/jna/Native;.load
+Lcom/sun/jna/Native; getLibraryOptions -> Lcom/sun/jna/Native;.loadLibrary
+Lcom/sun/jna/Native; load -> Lcom/sun/jna/Native;.load
+Lcom/sun/jna/Native; loadLibrary -> Lcom/sun/jna/Native;.loadLibrary
+Lcom/sun/jna/Native; loadNativeDispatchLibrary -> Lcom/sun/jna/Native;.load
+Lcom/sun/jna/Native; register -> Lcom/sun/jna/Native;.register
+Lcom/sun/jna/Native; register -> Lcom/sun/jna/NativeLibrary;.getInstance
+Lcom/sun/jna/NativeLibrary; getInstance -> Lcom/sun/jna/NativeLibrary;.getInstance
+Lcom/sun/jna/NativeLibrary; getProcess -> Lcom/sun/jna/NativeLibrary;.getInstance
+Lorg/vosk/LibVosk; <clinit> -> Lcom/sun/jna/Native;.register
 EOF
 )"
 echo

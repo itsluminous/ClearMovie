@@ -69,11 +69,11 @@ class VoicePackDownloadWorker
         override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(PackProgress(0, 0))
 
         override suspend fun doWork(): Result {
-            runs.update { it.copy(running = it.running + 1, started = it.started + 1) }
+            synchronized(RUNS_LOCK) { runs.update { it.copy(running = it.running + 1, started = it.started + 1) } }
             try {
                 return download()
             } finally {
-                runs.update { it.copy(running = it.running - 1) }
+                synchronized(RUNS_LOCK) { runs.update { it.copy(running = it.running - 1) } }
             }
         }
 
@@ -124,6 +124,8 @@ class VoicePackDownloadWorker
                 }
 
                 is PackDownloadOutcome.Failed -> {
+                    // No editor on screen to offer Try again: a file kept for it would only take up the room.
+                    if (outcome.error == PackDownloadError.NO_SPACE && PackDownloadWatchers.count.get() == 0) tools.clearDownloads()
                     notifications.post(VoicePackNotifications.RESULT_ID, notifications.failed(outcome.error))
                     Result.failure(workDataOf(KEY_FAILURE to outcome.error.name, KEY_MISSING_BYTES to outcome.missingBytes))
                 }
@@ -158,6 +160,9 @@ class VoicePackDownloadWorker
              * start a new worker while the old one is still stopping.
              */
             val runs = MutableStateFlow(Runs())
+
+            /** Held while a run is counted and while Cancel clears the files, so neither happens inside the other. */
+            val RUNS_LOCK = Any()
 
             fun percent(p: PackProgress): Int = if (p.total <= 0) 0 else (p.done * 100 / p.total).toInt().coerceIn(0, 100)
 
@@ -242,8 +247,10 @@ class WorkPackDownloads(
         // Once every worker has let go of its files, what they downloaded goes too; not when a newer
         // download has started meanwhile, whose part it would be.
         val stopped = withTimeoutOrNull(STOP_WAIT_MS) { VoicePackDownloadWorker.runs.first { it.running == 0 } } != null
-        val now = VoicePackDownloadWorker.runs.value
-        if (stopped && now.running == 0 && now.started == before) tools.clearDownloads()
+        synchronized(VoicePackDownloadWorker.RUNS_LOCK) {
+            val now = VoicePackDownloadWorker.runs.value
+            if (stopped && now.running == 0 && now.started == before) tools.clearDownloads()
+        }
     }
 
     private companion object {

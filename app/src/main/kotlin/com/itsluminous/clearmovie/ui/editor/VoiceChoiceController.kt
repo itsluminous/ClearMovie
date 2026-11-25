@@ -3,7 +3,6 @@ package com.itsluminous.clearmovie.ui.editor
 import com.itsluminous.clearmovie.data.voice.PackAddResult
 import com.itsluminous.clearmovie.data.voice.PackDownloadError
 import com.itsluminous.clearmovie.data.voice.PackDownloadState
-import com.itsluminous.clearmovie.data.voice.PackDownloadWatchers
 import com.itsluminous.clearmovie.data.voice.PackDownloads
 import com.itsluminous.clearmovie.data.voice.VoiceFailure
 import com.itsluminous.clearmovie.data.voice.VoicePackStore
@@ -152,13 +151,12 @@ class VoiceChoiceController(
     private var downloadFor: PackAsk? = null
 
     init {
-        PackDownloadWatchers.count.incrementAndGet()
         scope.launch { downloads.state.collect(::onDownload) }
     }
 
-    /** The editor closed: the download's end is told by its notification from now on. */
+    /** The editor closed: a "not enough room" file kept for Try again goes, since no one can try again now. */
     fun close() {
-        PackDownloadWatchers.count.decrementAndGet()
+        leaveFailure()
     }
 
     /**
@@ -212,6 +210,7 @@ class VoiceChoiceController(
         // Room is checked again on each tap: the user may have freed some since the dialog opened.
         val ask = current.copy(steps = false, room = roomFor(current.files))
         if (ask.room > 0) {
+            leaveFailure()
             watched = null
             downloadState.value = PackDownloadState.Idle
             askState.value = ask

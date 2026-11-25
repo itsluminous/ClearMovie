@@ -40,6 +40,8 @@ class NetworkUseConventionTest {
             Regex("""\bandroid\.net\.http\b"""),
             Regex("""\b(WebView|DownloadManager)\b"""),
             Regex("""\b(Default)?HttpDataSource\b|\bUdpDataSource\b|\bRtmpDataSource\b"""),
+            // JNA reaches any C function by name (socket and connect too); only the Vosk library itself uses it.
+            Regex("""\bcom\.sun\.jna\b|\bNative\.(load|register|loadLibrary)\b|\bNativeLibrary\b"""),
         )
 
     fun violations(
@@ -85,9 +87,26 @@ class NetworkUseConventionTest {
                         }
 
                         at("/*") -> {
-                            val end = source.indexOf("*/", i + 2)
-                            i = if (end < 0) source.length else end + 2
+                            // Kotlin block comments nest.
+                            var depth = 0
+                            while (i < source.length) {
+                                if (at("/*")) {
+                                    depth++
+                                    i += 2
+                                } else if (at("*/")) {
+                                    i += 2
+                                    if (--depth == 0) break
+                                } else {
+                                    i++
+                                }
+                            }
                             out.append(' ')
+                        }
+
+                        c == '`' -> {
+                            // A `backtick name` is one token, whatever it holds.
+                            val close = source.indexOf('`', i + 1)
+                            copy(if (close < 0) 1 else close + 1 - i)
                         }
 
                         at("\"\"\"") -> {
@@ -105,7 +124,9 @@ class NetworkUseConventionTest {
                             var j = i + 1
                             if (source.getOrNull(j) == '\\') j += 2 else j += 1
                             val close = source.indexOf('\'', j)
-                            copy(if (close < 0) 1 else close + 1 - i)
+                            // A char literal is short; anything longer is not one, and must not swallow code.
+                            require(close in j..j + 6) { "not a char literal at $i" }
+                            copy(close + 1 - i)
                         }
 
                         c == '{' -> {
@@ -207,6 +228,9 @@ class NetworkUseConventionTest {
         assertThat(violations("ui/X.kt", "val p = \"\"\"C:\\\"\"\"\nval q = \"a/*\"\nval c = u.openConnection()")).hasSize(1)
         assertThat(violations("ui/X.kt", "val q = '\"'\nval c = u.openConnection() // '\"'")).hasSize(1)
         assertThat(violations("ui/X.kt", "val a = InetSocketAddress(host, 443)")).hasSize(1)
+        assertThat(violations("ui/X.kt", "interface C : com.sun.jna.Library\nval c = Native.load(\"c\", C::class.java)")).isNotEmpty()
+        assertThat(violations("ui/X.kt", "/* a /* nested */ don't */ val c = u.openConnection()")).hasSize(1)
+        assertThat(violations("ui/X.kt", "fun `it's fine`() = 1\nval c = u.openConnection()")).hasSize(1)
         assertThat(violations("com/itsluminous/clearmovie/data/voice/PackDownloader.kt", "import java.net.URL")).isEmpty()
     }
 
