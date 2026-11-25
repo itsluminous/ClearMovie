@@ -218,7 +218,8 @@ class VoiceChoiceDeviceTest {
             assertThat(phrases).isNotEmpty()
             val none = export(plain, "voice-$code-none.mp4")
             log("$code none file=${none.name} bytes=${none.length()}")
-            for (voice in VoiceChoice.forLanguage(lang).filter { it != VoiceChoice.NONE }) {
+            // Hindi HD's two voices need its own voices file (HindiHdDeviceTest).
+            for (voice in VoiceChoice.forLanguage(lang).filter { it != VoiceChoice.NONE && !it.needsHd }) {
                 var spokenMs = 0L
                 val (voiced, voicedClip) =
                     projectWith(recording, "voice-$code-${voice.id}") { _, id, c ->
