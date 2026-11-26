@@ -23,7 +23,7 @@ uses your phone's hardware, and everything stays on your device.
   <img alt="Get it on GitHub" height="80"
        src="docs/badges/get-it-on-github.png" />
 </a>
-<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.itsluminous.ClearMovie%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fitsluminous%2FClearMovie%22%2C%22author%22%3A%22itsluminous%22%2C%22name%22%3A%22ClearMovie%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22ClearMovie-%5B0-9.%5D%2B%28-arm64-v8a%29%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D">
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.itsluminous.ClearMovie%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fitsluminous%2FClearMovie%22%2C%22author%22%3A%22itsluminous%22%2C%22name%22%3A%22ClearMovie%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5EClearMovie-%5B0-9.%5D%2B%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D">
   <img alt="Get it on Obtainium" height="80"
        src="docs/badges/get-it-on-obtainium.png" />
 </a>
@@ -38,13 +38,14 @@ Website: [itsluminous.github.io/ClearMovie](https://itsluminous.github.io/ClearM
 ### Download
 
 [Download the latest release](https://github.com/itsluminous/ClearMovie/releases/latest)
-and open the APK on your phone to install. Each release is a single
-`ClearMovie-<version>.apk` that works on every phone; the first release alone had
-one file per processor type.
-Obtainium (the button above) installs it and keeps it up to date. If your Obtainium
-entry for ClearMovie has the APK filter `arm64-v8a` (what the button used to set),
-edit it in Obtainium and clear the filter, because the single APK will not match it.
-ClearMovie needs Android 10 or newer.
+and open the APK on your phone to install it. Each release is one file,
+`ClearMovie-<version>.apk`, that works on every phone. (The first release alone had
+one file per processor type.) ClearMovie needs Android 10 or newer.
+
+Obtainium (the button above) installs ClearMovie and keeps it up to date. When
+ClearMovie first came out, the button set the APK filter `arm64-v8a`, and no file in a
+newer release matches it. If your ClearMovie entry in Obtainium has that filter, edit
+the entry and clear it.
 
 ## Screenshots
 
@@ -107,7 +108,9 @@ What ClearMovie on `main` does:
   icon, rows can be rearranged, and you choose which one shows on top. Pinch to zoom, or
   use the zoom buttons. Each row, the frame row too, has a "+" at its right end to add to it.
   A selected photo or video has a "+" before and after it to add something right there, and
-  a selected item has a handle at each end to trim it.
+  a selected item has a handle at each end to trim it. With the video stopped, tap a photo,
+  video, caption, frame or picture-in-picture item to see that moment in the preview. While
+  the video plays, tap any item to carry on from there.
 - **Big, labelled buttons** - tap any item for a toolbar of icons with names under them
   (trim, split, speed, loop, photo duration, volume, text, transition, animation, replace,
   delete). It scrolls sideways when there are more.
@@ -128,16 +131,25 @@ What ClearMovie on `main` does:
   video plays, lined up with the picture.
 - **Voice in the video** - say a voice item in a British, Indian or American voice, male or
   female, like a TV anchor: speak the words, or type them. Spoken words are found on the
-  phone and shown to check first. Hindi words are said in the Indian voices. It needs the
-  free voice pack (about 150 MB): when you first choose a voice, ClearMovie offers to
-  download it, once, from this repository's [voice-packs](voice-packs/v1/) folder, with a
-  progress bar and a warning on mobile data. You can also download the files in a browser
-  and add them. No change keeps your own recording.
+  phone and shown to check first. Hindi words are said in the Indian voices, and numbers,
+  dates and times among them are said in Hindi words. While ClearMovie finds the words or
+  makes the voice, it shows what it is doing, with a progress bar and Stop. No change keeps
+  your own recording.
+- **The voice pack** - every voice except No change, and finding spoken words, need the
+  free voice pack (about 150 MB). When a voice first needs it, ClearMovie offers to download it from this
+  repository's [voice-packs](voice-packs/v1/) folder. Tap Download, then Hide to keep
+  editing while it works. ClearMovie tells you first when you are on mobile data, and
+  shows a progress bar. If the connection drops, trying again carries on from where it
+  stopped. You can also download the files in a browser and add them.
 - **Hindi HD** - more accurate Hindi speech recognition and two more Indian voices, from
-  the [hindi-hd-v1](voice-packs/hindi-hd-v1/) folder. ClearMovie offers it when Hindi
-  words are to be found, and in Settings > Storage. A phone with 8 GB of memory gets the
-  most accurate model (about 1.6 GB to download), one with 4 GB or more a lighter one
-  (about 350 MB), and one with less keeps the standard Hindi recognition.
+  the [hindi-hd-v1](voice-packs/hindi-hd-v1/) folder. On a phone with 4 GB of memory or
+  more, the first time Hindi words are needed (when you record or type in Hindi),
+  ClearMovie offers Hindi HD instead of the standard Hindi files. If you already added the
+  standard ones, get Hindi HD from Settings > Storage. That download starts as soon as you
+  tap Download, so use Wi-Fi. A phone with 8 GB of memory or more gets the most accurate
+  model (about 1.6 GB to download), and one with 4 GB or more a lighter one (about
+  350 MB). A phone with less keeps the standard Hindi recognition, and can still use the
+  two extra voices.
 - **Light and dark, with your colours** - follows your phone's dark mode, takes its
   colours from your wallpaper on Android 12+, and has a themed icon.
 - **Portrait and landscape** - in the editor, landscape puts the preview on the left and the
@@ -173,6 +185,7 @@ What has shipped, and what is still to come:
 - [x] Several rows of each kind (text, music, picture in picture, frame), with type icons, rearranging, and "Show on top" / "Send backward"
 - [x] "+" at the end of each row, and before and after a selected photo or video, to insert photos, videos, text cards or music
 - [x] Pinch to zoom the timeline, plus zoom buttons and Fit all
+- [x] Tap an item on the timeline to go to that moment
 - [x] Transitions between items and animations on items
 - [x] Trim, split, join, speed (0.25x-4x), loop
 - [x] Photo duration
@@ -182,16 +195,21 @@ What has shipped, and what is still to come:
 - [x] Trim handles at both ends of a selected item
 - [x] Record voice: speak over the video as it plays, lined up with the picture
 - [x] Voice in the video: say a voice item in another voice, spoken or typed, in English or Hindi
+- [x] A progress bar, with Stop, while words are found or a voice is made
+- [x] Download the voice pack in the app, or add files downloaded in a browser
+- [x] Hindi HD: better Hindi speech recognition and two more Indian voices
 - [x] Captions with preset defaults, drag-to-place, drag-to-resize, fonts, size, colours, outline and background
 - [x] Undo and redo for every change
 - [x] Preview that shrinks, or floats as a small window, when all rows need room
 
 **Saving and export**
 - [x] Autosave and crash recovery
+- [x] After a crash, start at Home, with crash details to share from Settings if you want
 - [x] Named projects in "My videos": tap the title in the editor, or More options > Rename video
 - [x] Delete a video from More options; what you saved to the gallery stays
 - [x] Export at Best, Good or Small size with hardware encoding; keeps running if you rotate or leave the app
 - [x] Saved to Movies/ClearMovie, then Play and Share buttons
+- [x] The screen stays on while a video plays or saves
 
 **Everywhere**
 - [ ] Portrait and landscape on every screen; tablets and foldables
@@ -201,11 +219,12 @@ What has shipped, and what is still to come:
 ## Privacy Principles
 
 - **The internet only for the voice pack.** ClearMovie uses the internet for one thing:
-  downloading the optional voice pack (and Hindi HD, if you want it), once, from this
-  repository on GitHub, when you first choose a voice. Each file is checked against a SHA-256 fingerprint built into the
-  app before it is used. Nothing is ever uploaded: no servers, no accounts, no telemetry,
-  no analytics, no ads. CI fails any build in which other code uses the network, or that
-  trusts any other site.
+  downloading the optional voice pack (and Hindi HD, if you want it) from this repository
+  on GitHub, after you tap Download. Each file is checked against a SHA-256 fingerprint
+  built into the app before it is used. Like any website, GitHub sees your phone's
+  internet address, model and Android version when it sends the files. Nothing is ever
+  uploaded: no servers, no accounts, no telemetry, no analytics, no ads. CI fails any
+  build in which other code uses the network, or that trusts any other site.
 - **Your media stays put.** Photos and videos are read from your gallery where they are.
   The only files copied into the app are preset files you chose to keep a copy of, and
   items the gallery can't share permanently.
@@ -214,6 +233,8 @@ What has shipped, and what is still to come:
   inside the app and never leave the phone. Another voice is made on the phone, by the voice pack's engine running
   inside ClearMovie; its words and sound never leave the phone.
 - **No proprietary dependencies.** It is built on AndroidX and Jetpack Media3, with no Firebase or Play Services.
+  The voice pack uses open-source engines: Vosk finds spoken words, and Kokoro (run by
+  sherpa-onnx) makes the other voices.
 - **No watermarks.**
 
 ## Building
